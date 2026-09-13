@@ -15,26 +15,33 @@
  * limitations under the License.
  */
 
-import { hsbToRgb, hslToRgb, parseHex, rgbToHsb, rgbToHsl, toHex6, type RGBA } from './color';
+import { clampColor, hsbToRgb, hslToRgb, p3ToSrgb, parseHex, rgbToHsb, rgbToHsl, srgbToP3, toHex6, type ColorProfile, type RGBA } from './color';
+import { formatCssColor, parseCssColor } from './css-color';
 
 /** Color picker input formats. */
-export type ColorFormat = 'hex' | 'rgb' | 'hsl' | 'hsb';
+export type ColorFormat = 'hex' | 'rgb' | 'css' | 'hsl' | 'hsb';
 
-export const COLOR_FORMAT_LABELS: Record<ColorFormat, string> = { hex: 'Hex', rgb: 'RGB', hsl: 'HSL', hsb: 'HSB' };
+export const COLOR_FORMAT_LABELS: Record<ColorFormat, string> = { hex: 'Hex', rgb: 'RGB', css: 'CSS', hsl: 'HSL', hsb: 'HSB' };
 
 /** Field labels per format. */
 export const COLOR_FORMAT_FIELDS: Record<ColorFormat, readonly string[]> = {
   hex: ['Hex'],
   rgb: ['R', 'G', 'B'],
+  css: ['CSS'],
   hsl: ['H', 'S', 'L'],
   hsb: ['H', 'S', 'B'],
 };
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-/** Field values for a color: hex digits, 0–255 channels, or hue in degrees with percentages. */
-export function formatColorFields(color: RGBA, format: ColorFormat): string[] {
+/**
+ * Field values for a color: hex digits, 0–255 channels, hue in degrees with percentages, or (CSS)
+ * one CSS color including `opacity`, written for the file's color profile.
+ */
+export function formatColorFields(color: RGBA, format: ColorFormat, options: { opacity?: number | undefined; profile?: ColorProfile | undefined } = {}): string[] {
   switch (format) {
+    case 'css':
+      return [formatCssColor(color, options.opacity ?? 1, options.profile ?? 'SRGB')];
     case 'hex':
       return [toHex6(color)];
     case 'rgb':
@@ -52,9 +59,17 @@ export function formatColorFields(color: RGBA, format: ColorFormat): string[] {
 
 /**
  * Parses field values in a format into an opaque color (alpha comes from the separate alpha
- * control). Numbers are clamped to their ranges; returns null for malformed input.
+ * control). Numbers are clamped to their ranges; returns null for malformed input. The CSS format
+ * accepts any CSS color, returns its alpha in `a`, and converts colors written in the other color
+ * space to the file's `profile` (clipping to the gamut).
  */
-export function parseColorFields(values: readonly string[], format: ColorFormat): RGBA | null {
+export function parseColorFields(values: readonly string[], format: ColorFormat, profile: ColorProfile = 'SRGB'): RGBA | null {
+  if (format === 'css') {
+    const parsed = parseCssColor(values[0] ?? '');
+    if (!parsed) return null;
+    if (profile === 'DISPLAY_P3') return parsed.space === 'display-p3' ? parsed.color : clampColor(srgbToP3(parsed.color));
+    return parsed.space === 'display-p3' ? clampColor(p3ToSrgb(parsed.color)) : parsed.color;
+  }
   if (format === 'hex') {
     const parsed = parseHex(values[0] ?? '');
     return parsed ? { ...parsed, a: 1 } : null;

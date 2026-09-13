@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { Fragment, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useMemo, useRef, useState, type ReactNode } from 'react';
+import { documentColors } from '@/core/color/document-colors';
 import { selectionColors, showsSelectionColors, updateSelectionColor, type ColorPaint, type PaintUsage, type SelectionColor } from '@/core/color/selection-colors';
 import { ColorPicker } from '../../primitives/ColorPicker';
 import type { Box } from '../../primitives/position';
@@ -1573,6 +1574,8 @@ function ColorControl({ label, color, opacity, onColor, onOpacity, onGestureStar
   const [draft, setDraft] = useState<string | null>(null);
   const text = draft ?? hex;
   const [pickerAnchor, setPickerAnchor] = useState<Box | null>(null);
+  // Collected when the picker opens, so swatches stay put while the color is being edited.
+  const swatches = useMemo(() => (pickerAnchor ? documentColors(editor.doc) : null), [pickerAnchor, editor]);
 
   const commitHex = () => {
     if (draft === null) return;
@@ -1615,6 +1618,7 @@ function ColorControl({ label, color, opacity, onColor, onOpacity, onGestureStar
           getContrastBackground={getContrastBackground}
           colorProfile={profile}
           onBlendMode={onBlendMode}
+          documentColors={swatches ?? undefined}
         />
       )}
       <input

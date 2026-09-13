@@ -17,7 +17,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { hsbToRgb, parseHex, rgbToHsb, toCss, type RGBA } from '@/core/color/color';
+import { hsbToRgb, parseHex, rgbToHsb, toCss, toHex6, type RGBA } from '@/core/color/color';
 import { COLOR_FORMAT_FIELDS, COLOR_FORMAT_LABELS, formatColorFields, parseColorFields, type ColorFormat } from '@/core/color/format';
 import styles from './ColorPicker.module.css';
 import { placeFloating, type Box } from './position';
@@ -67,10 +67,12 @@ export interface ColorPickerProps {
   readonly getContrastBackground?: (() => RGBA) | undefined;
   /** The file's color profile (swatches and contrast math follow it). */
   readonly colorProfile?: ColorProfile | undefined;
+  /** Solid colors used in the file, shown as swatches at the bottom (click applies color and opacity). */
+  readonly documentColors?: readonly { readonly color: RGBA; readonly opacity: number }[] | undefined;
 }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
-const FORMATS: readonly ColorFormat[] = ['hex', 'rgb', 'hsl', 'hsb'];
+const FORMATS: readonly ColorFormat[] = ['hex', 'rgb', 'css', 'hsl', 'hsb'];
 
 /**
  * Color picker popover: saturation/brightness area, hue and alpha sliders, Hex/RGB/HSL/HSB
@@ -155,14 +157,18 @@ export function ColorPicker(props: ColorPickerProps) {
     const parsed = parseColorFields(
       inputs.map((input) => input.value),
       format,
-    );    if (parsed) {
+      props.colorProfile,
+    );
+    if (parsed) {
       const nextHsb = rgbToHsb(parsed);
       if (nextHsb.s > 0 && nextHsb.b > 0) setHueMemory(nextHsb.h);
-      onColor(parsed);
+      onColor({ ...parsed, a: 1 });
+      // A CSS color carries its own alpha.
+      if (format === 'css' && Math.abs(parsed.a - opacity) > 1e-3) onOpacity(parsed.a);
     }
   };
 
-  const values = formatColorFields(color, format);
+  const values = formatColorFields(color, format, { opacity, profile: props.colorProfile });
 
   return createPortal(
     <div
@@ -293,6 +299,34 @@ export function ColorPicker(props: ColorPickerProps) {
           </button>
         )}
       </div>
+      {props.documentColors && props.documentColors.length > 0 && (
+        <div className={styles.documentColors}>
+          <span className={styles.sectionLabel} id="document-colors-label">
+            Document colors
+          </span>
+          <div className={styles.swatches} role="group" aria-labelledby="document-colors-label">
+            {props.documentColors.map((swatch) => {
+              const name = `#${toHex6(swatch.color)}${swatch.opacity < 1 ? `, ${Math.round(swatch.opacity * 100)}%` : ''}`;
+              return (
+                <button
+                  key={`${toHex6(swatch.color)}:${swatch.opacity}`}
+                  type="button"
+                  className={styles.swatch}
+                  aria-label={`Document color ${name}`}
+                  title={name}
+                  style={{ background: toCss({ ...swatch.color, a: swatch.opacity }, props.colorProfile) }}
+                  onClick={() => {
+                    const nextHsb = rgbToHsb(swatch.color);
+                    if (nextHsb.s > 0 && nextHsb.b > 0) setHueMemory(nextHsb.h);
+                    onColor({ ...swatch.color, a: 1 });
+                    if (Math.abs(swatch.opacity - opacity) > 1e-3) onOpacity(swatch.opacity);
+                  }}
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
       {props.getContrastBackground && <ContrastSection color={color} getBackground={props.getContrastBackground} onColor={onColor} profile={props.colorProfile ?? 'SRGB'} />}
     </div>,
     document.body,

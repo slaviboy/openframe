@@ -428,7 +428,9 @@ The overlay never touches the CanvasKit scene, so pointer feedback costs no scen
   - Effects (not for slices): add, type (drop shadow, inner shadow, layer blur, background blur), visibility and remove per row. Shadows show X, Y, blur, spread and a color with opacity; drop shadows add **Show behind transparent areas**. Blurs show a blur radius.
 
 **Color picker** ([`ColorPicker.tsx`](../src/ui/primitives/ColorPicker.tsx))
-- Clicking a color swatch opens a popover: a saturation/brightness area (drag, or arrow keys with Shift for 10% steps), a hue slider, an alpha slider, a Hex / RGB / HSL / HSB field row (Enter or blur applies), and **Pick color from screen** in browsers that provide the EyeDropper API.
+- Clicking a color swatch opens a popover: a saturation/brightness area (drag, or arrow keys with Shift for 10% steps), a hue slider, an alpha slider, a Hex / RGB / CSS / HSL / HSB field row (Enter or blur applies), and **Pick color from screen** in browsers that provide the EyeDropper API.
+- **CSS** is one field holding the color with its opacity (`rgba(255, 128, 0, 0.5)`, or `color(display-p3 …)` in Display P3 files). It accepts any CSS color ([`css-color.ts`](../src/core/color/css-color.ts)); a color written in the other color space is converted to the file's profile, and its alpha sets the paint opacity.
+- **Document colors** lists the distinct visible solid fill and stroke colors in the file (most used first, up to 48), collected when the picker opens by `documentColors` ([`document-colors.ts`](../src/core/color/document-colors.ts)). Clicking a swatch applies its color and opacity within the picker's undo step.
 - The whole session, from opening to closing (Esc or a click outside), is one undo step.
 - Grays keep the last chosen hue so the area doesn't jump back to red.
 
