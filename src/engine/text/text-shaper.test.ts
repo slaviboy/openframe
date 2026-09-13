@@ -87,6 +87,26 @@ describe('text shaping', () => {
     expect(shaper.measure({ ...three, maxLines: 2 }, null).height).toBeLessThan(shaper.measure(three, null).height * 0.8);
   });
 
+  test('list items indent by level with hanging wrapped lines, and list spacing separates items', () => {
+    const node = text({ characters: 'one two three four five six\nnext', listType: 'UNORDERED', textAutoResize: 'HEIGHT', size: { width: 140, height: 0 } });
+    const sized = { ...node, size: { width: 140, height: shaper.measure(node, 140).height } };
+    expect(shaper.caretAt(sized, 0).x).toBeCloseTo(30, 0);
+    // A wrapped line starts where the first one does.
+    const down = shaper.offsetOnAdjacentLine(sized, 0, 1, 0);
+    expect(down).toBeGreaterThan(0);
+    expect(down).toBeLessThan(27);
+    expect(shaper.caretAt(sized, down).x).toBeCloseTo(30, 0);
+    // Deeper levels indent further; text that isn't a list isn't indented.
+    expect(shaper.caretAt({ ...sized, indentation: 2 }, 0).x).toBeCloseTo(60, 0);
+    expect(shaper.caretAt({ ...sized, listType: 'NONE' }, 0).x).toBeCloseTo(0, 0);
+    expect(shaper.offsetAt(sized, { x: 31, y: 5 })).toBe(0);
+    // Auto width includes the indentation; list spacing adds space between items.
+    const plain = shaper.measure(text({ characters: 'one' }), null).width;
+    expect(shaper.measure(text({ characters: 'one', listType: 'ORDERED' }), null).width).toBeCloseTo(plain + 30, 0);
+    const items = text({ characters: 'a\nb', listType: 'UNORDERED' });
+    expect(shaper.measure({ ...items, listSpacing: 10 }, null).height).toBeCloseTo(shaper.measure(items, null).height + 10, 0);
+  });
+
   test('letter case changes the shaped text and max lines limits the height', () => {
     const lower = shaper.measure(text({ characters: 'hello' }), null).width;
     expect(shaper.measure(text({ characters: 'hello', textCase: 'UPPER' }), null).width).toBeGreaterThan(lower);

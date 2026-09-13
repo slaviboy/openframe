@@ -45,6 +45,12 @@ export function paragraphRanges(text: string): ParagraphRange[] {
   }
 }
 
+/**
+ * The character a paragraph's properties (list type, indentation, the style of an empty paragraph)
+ * come from: its first character, or for an empty paragraph the line break before it.
+ */
+export const paragraphStyleOffset = (range: { readonly start: number; readonly end: number }): number => (range.end > range.start ? range.start : Math.max(0, range.start - 1));
+
 /** The paragraph containing a text offset (an offset right after a line break belongs to the next paragraph). */
 export function paragraphAt(ranges: readonly ParagraphRange[], offset: number): ParagraphRange {
   for (const range of ranges) if (offset <= range.end) return range;

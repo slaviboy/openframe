@@ -153,6 +153,9 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
   - A first-line indent is a zero-height placeholder before the paragraph's first character, for left-aligned and justified text. Paragraph-local offsets are shifted by that one placeholder.
   - An empty paragraph shapes a zero-width space in the style of the character before it.
   - `maxLines` is shared in order (`lineBudgets`), and truncation hides every paragraph after the first one it cuts. The first paragraph always keeps at least one line.
+  - **Lists** ([`core/text/lists.ts`](../src/core/text/lists.ts)): a paragraph's `listType` and `indentation` come from its first character (`paragraphStyleOffset`). A list item is laid out narrower and drawn shifted right by level × 1.5 em (the `left` of its layout), so wrapped lines hang under the first; carets, hit testing and selection rectangles add the same offset. It takes no first-line indent.
+    - The marker ("•", or "1." / "a." / "i." by level from `listCounters`) is a separate one-line SkParagraph in the item's style without decoration or letter case. It is drawn 0.4 em before the text, on the first line's baseline.
+    - `listSpacing` replaces `paragraphSpacing` between two consecutive list items.
 - **Layout by `textAutoResize`:**
   - Auto width is laid out at its natural width (never narrower than the box).
   - Everything else wraps to the box width.

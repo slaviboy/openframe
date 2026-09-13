@@ -26,7 +26,8 @@ import type { FontFamilyInfo, TextCaretBox, TextLayoutService } from '@/core/tex
 import { isFallbackFamily } from './font-files';
 import { textSegments, textStyleAt, type TextSegment, type TextStyle as RunsStyle } from '@/core/text/style-runs';
 import { applyTextCase } from '@/core/text/letter-case';
-import { fromParagraphOffset, lineBudgets, paragraphAt, paragraphRanges, toParagraphOffset, type ParagraphRange } from '@/core/text/paragraphs';
+import { fromParagraphOffset, lineBudgets, paragraphAt, paragraphRanges, paragraphStyleOffset, toParagraphOffset, type ParagraphRange } from '@/core/text/paragraphs';
+import { clampLevel, listCounters, listMarker, type ListItem } from '@/core/text/lists';
 
 /** Font bytes to register under a family name. */
 export interface FontSource {
@@ -54,6 +55,10 @@ const EMPTY = '​';
 /** Laid-out text kept for caret and hit queries. */
 const CACHE_LIMIT = 256;
 const VERTICAL: Record<TextAlignVertical, number> = { TOP: 0, CENTER: 0.5, BOTTOM: 1 };
+/** List indentation per level, in ems of the item's font size. */
+const LIST_INDENT_EM = 1.5;
+/** Gap between a list marker and its item's text, in ems. */
+const LIST_MARKER_GAP_EM = 0.4;
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -63,6 +68,10 @@ interface ParagraphLayout {
   readonly paragraph: Paragraph;
   /** Placeholder characters before the paragraph's own (a first-line indent). */
   readonly prefix: number;
+  /** Left edge of every line (list indentation), in the layer. */
+  readonly left: number;
+  /** The list marker, positioned in the block. */
+  readonly marker: { readonly paragraph: Paragraph; readonly x: number; readonly y: number } | null;
   /** Top within the text block, before vertical alignment. */
   readonly top: number;
   readonly height: number;
@@ -209,11 +218,11 @@ export class TextShaper implements TextLayoutService {
    * placeholder when the layer has one. With a `painter`, segments are painted with the paints it
    * returns. Not laid out; the caller deletes it.
    */
-  private buildParagraph(node: TextNode, range: ParagraphRange, painter: TextPainter | undefined, maxLines?: number): Paragraph {
+  private buildParagraph(node: TextNode, range: ParagraphRange, indent: number, painter: TextPainter | undefined, maxLines?: number): Paragraph {
     const ck = this.ck;
     const align = { LEFT: ck.TextAlign.Left, CENTER: ck.TextAlign.Center, RIGHT: ck.TextAlign.Right, JUSTIFIED: ck.TextAlign.Justify }[node.textAlignHorizontal];
     // An empty paragraph takes the style of the character before it (what typing there would get).
-    const emptyStyle = textStyleAt(node, range.start > 0 ? range.start - 1 : range.start);
+    const emptyStyle = textStyleAt(node, paragraphStyleOffset(range));
     const style = new ck.ParagraphStyle({
       textStyle: this.textStyle(range.end > range.start ? textStyleAt(node, range.start) : emptyStyle),
       textAlign: align,
@@ -223,7 +232,6 @@ export class TextShaper implements TextLayoutService {
       ...(maxLines !== undefined ? { maxLines } : {}),
     });
     const builder = ck.ParagraphBuilder.MakeFromFontProvider(style, this.provider);
-    const indent = this.indentOf(node);
     if (indent > 0) builder.addPlaceholder(indent, 0, ck.PlaceholderAlignment.Baseline, ck.TextBaseline.Alphabetic, 0);
     const add = (segment: TextSegment, text: string) => {
       const textStyle = this.textStyle(segment, painter?.decorationColor?.(segment));
@@ -257,18 +265,27 @@ export class TextShaper implements TextLayoutService {
   private stack(node: TextNode, width: number | null | 'box', painter?: TextPainter): BlockLayout {
     const ranges = paragraphRanges(node.characters);
     const spacing = node.paragraphSpacing ?? 0;
-    const prefix = this.indentOf(node) > 0 ? 1 : 0;
-    const paragraphs = ranges.map((range) => this.buildParagraph(node, range, painter));
+    const listSpacing = node.listSpacing ?? 0;
+    const styles = ranges.map((range) => textStyleAt(node, paragraphStyleOffset(range)));
+    const items: ListItem[] = styles.map((s) => ({ type: s.listType, level: s.indentation }));
+    const counters = listCounters(items);
+    // List items indent every line by level (wrapped lines hang); other paragraphs take the first-line indent.
+    const lefts = items.map((item, i) => (item.type === 'NONE' ? 0 : clampLevel(item.level) * Math.round(styles[i]!.fontSize * LIST_INDENT_EM)));
+    const indents = items.map((item) => (item.type === 'NONE' ? this.indentOf(node) : 0));
+    const paragraphs = ranges.map((range, i) => this.buildParagraph(node, range, indents[i]!, painter));
     let naturalWidth = 0;
     let layoutWidth: number;
     if (width === null || (width === 'box' && node.textAutoResize === 'WIDTH_AND_HEIGHT')) {
       for (const p of paragraphs) p.layout(UNBOUNDED);
-      naturalWidth = Math.max(0, ...paragraphs.map((p) => p.getMaxIntrinsicWidth()));
+      naturalWidth = Math.max(0, ...paragraphs.map((p, i) => p.getMaxIntrinsicWidth() + lefts[i]!));
       layoutWidth = (width === 'box' ? Math.max(node.size.width, naturalWidth) : naturalWidth) + 0.01;
     } else {
       layoutWidth = Math.max(0, width === 'box' ? node.size.width : width);
     }
-    for (const p of paragraphs) p.layout(layoutWidth);
+    const widthOf = (i: number) => Math.max(1, layoutWidth - lefts[i]!);
+    paragraphs.forEach((p, i) => p.layout(widthOf(i)));
+    // List spacing separates consecutive list items; paragraph spacing everything else.
+    const gapBetween = (previous: number, next: number) => (items[previous]!.type !== 'NONE' && items[next]!.type !== 'NONE' ? listSpacing : spacing);
     const counts = paragraphs.map((p) => p.getLineMetrics().length);
     let budgets = lineBudgets(counts, node.maxLines);
     if (width === 'box' && node.textAutoResize === 'TRUNCATE') {
@@ -284,13 +301,13 @@ export class TextShaper implements TextLayoutService {
           .filter((l) => top + l.baseline + l.descent <= node.size.height + 0.5).length;
         const lines = i === 0 ? Math.max(1, fit) : fit;
         if (lines < counts[i]!) cut = true;
-        top += p.getHeight() + spacing;
+        top += p.getHeight() + (i + 1 < paragraphs.length ? gapBetween(i, i + 1) : 0);
         return lines;
       });
     }
     const layouts: ParagraphLayout[] = [];
     let top = 0;
-    let visible = 0;
+    let previous = -1;
     paragraphs.forEach((original, i) => {
       let paragraph = original;
       const budget = budgets[i]!;
@@ -298,25 +315,57 @@ export class TextShaper implements TextLayoutService {
       const hidden = budget === 0 && i > 0;
       if (!hidden && budget < counts[i]!) {
         paragraph.delete();
-        paragraph = this.buildParagraph(node, ranges[i]!, painter, Math.max(1, budget));
-        paragraph.layout(layoutWidth);
+        paragraph = this.buildParagraph(node, ranges[i]!, indents[i]!, painter, Math.max(1, budget));
+        paragraph.layout(widthOf(i));
       }
-      if (!hidden && visible > 0) top += spacing;
+      if (!hidden && previous >= 0) top += gapBetween(previous, i);
       const height = hidden ? 0 : paragraph.getHeight();
-      layouts.push({ range: ranges[i]!, paragraph, prefix, top, height, hidden });
+      let marker: ParagraphLayout['marker'] = null;
+      if (!hidden && items[i]!.type !== 'NONE') {
+        const style = styles[i]!;
+        const markerParagraph = this.buildMarker(style, listMarker(items[i]!, counters[i]!), painter);
+        const firstLine = paragraph.getLineMetrics()[0];
+        const baseline = firstLine ? firstLine.baseline : paragraph.getAlphabeticBaseline();
+        marker = {
+          paragraph: markerParagraph,
+          x: lefts[i]! - markerParagraph.getMaxIntrinsicWidth() - style.fontSize * LIST_MARKER_GAP_EM,
+          y: top + baseline - markerParagraph.getAlphabeticBaseline(),
+        };
+      }
+      layouts.push({ range: ranges[i]!, paragraph, prefix: indents[i]! > 0 ? 1 : 0, left: lefts[i]!, marker, top, height, hidden });
       if (!hidden) {
         top += height;
-        visible++;
+        previous = i;
       }
     });
     const fixed = width === 'box' && (node.textAutoResize === 'NONE' || node.textAutoResize === 'TRUNCATE');
     return { paragraphs: layouts, naturalWidth, height: top, dy: fixed ? (node.size.height - top) * VERTICAL[node.textAlignVertical] : 0 };
   }
 
-  /** Draws a text layer's glyphs, each mixed-style segment painted by `painter`. */
+  /** A list marker ("•", "3.", "c.") in its item's style, without decoration or letter case, on one line. */
+  private buildMarker(style: RunsStyle, text: string, painter: TextPainter | undefined): Paragraph {
+    const ck = this.ck;
+    const markerStyle = { ...style, textDecoration: 'NONE' as const, textCase: 'ORIGINAL' as const };
+    const textStyle = this.textStyle(markerStyle);
+    const builder = ck.ParagraphBuilder.MakeFromFontProvider(new ck.ParagraphStyle({ textStyle, applyRoundingHack: false }), this.provider);
+    if (painter) builder.pushPaintStyle(textStyle, painter.paint({ ...markerStyle, start: 0, end: 0 }), painter.background);
+    else builder.pushStyle(textStyle);
+    builder.addText(text);
+    builder.pop();
+    const paragraph = builder.build();
+    builder.delete();
+    paragraph.layout(UNBOUNDED);
+    return paragraph;
+  }
+
+  /** Draws a text layer's glyphs and list markers, each mixed-style segment painted by `painter`. */
   draw(canvas: Canvas, node: TextNode, painter: TextPainter): void {
     const block = this.stack(node, 'box', painter);
-    for (const p of block.paragraphs) if (!p.hidden) canvas.drawParagraph(p.paragraph, 0, block.dy + p.top);
+    for (const p of block.paragraphs) {
+      if (p.hidden) continue;
+      canvas.drawParagraph(p.paragraph, p.left, block.dy + p.top);
+      if (p.marker) canvas.drawParagraph(p.marker.paragraph, p.marker.x, block.dy + p.marker.y);
+    }
     deleteBlock(block);
   }
 
@@ -374,7 +423,7 @@ export class TextShaper implements TextLayoutService {
     // The paragraph under the point; the gap between two belongs to the nearer one.
     let target = visible[0]!;
     for (const p of visible) if (y >= p.top - spacing / 2) target = p;
-    const local = target.paragraph.getGlyphPositionAtCoordinate(point.x, y - target.top).pos;
+    const local = target.paragraph.getGlyphPositionAtCoordinate(point.x - target.left, y - target.top).pos;
     return this.clamp(node, fromParagraphOffset(target.range, local, target.prefix));
   }
 
@@ -395,15 +444,15 @@ export class TextShaper implements TextLayoutService {
     const rect = (start: number, end: number) => paragraph.getRectsForRange(start, end, this.ck.RectHeightStyle.Tight, this.ck.RectWidthStyle.Tight)[0]?.rect;
     if (at < range.end) {
       const r = rect(local(at), local(nextGrapheme(text, at)));
-      if (r) return { x: r[0]!, ...box(local(at)) };
+      if (r) return { x: layout.left + r[0]!, ...box(local(at)) };
     }
     if (at > range.start) {
       const r = rect(local(previousGrapheme(text, at)), local(at));
-      if (r) return { x: r[2]!, ...box(local(at) - 1) };
+      if (r) return { x: layout.left + r[2]!, ...box(local(at) - 1) };
     }
     // An empty paragraph.
     const width = paragraph.getMaxWidth();
-    const x = node.textAlignHorizontal === 'CENTER' ? width / 2 : node.textAlignHorizontal === 'RIGHT' ? width : this.indentOf(node);
+    const x = layout.left + (node.textAlignHorizontal === 'CENTER' ? width / 2 : node.textAlignHorizontal === 'RIGHT' ? width : prefix > 0 ? this.indentOf(node) : 0);
     return { x, ...box(local(at)) };
   }
 
@@ -417,7 +466,7 @@ export class TextShaper implements TextLayoutService {
       if (layout.hidden || to <= from) continue;
       const y = block.dy + layout.top;
       for (const { rect: r } of layout.paragraph.getRectsForRange(toParagraphOffset(layout.range, from, layout.prefix), toParagraphOffset(layout.range, to, layout.prefix), this.ck.RectHeightStyle.Max, this.ck.RectWidthStyle.Tight)) {
-        rects.push({ x: r[0]!, y: r[1]! + y, width: r[2]! - r[0]!, height: r[3]! - r[1]! });
+        rects.push({ x: layout.left + r[0]!, y: r[1]! + y, width: r[2]! - r[0]!, height: r[3]! - r[1]! });
       }
     }
     return rects;
@@ -429,7 +478,7 @@ export class TextShaper implements TextLayoutService {
     const lines = layout.paragraph.getLineMetrics();
     const line = this.lineIndex(lines, toParagraphOffset(layout.range, this.clamp(node, offset), layout.prefix)) + direction;
     if (line >= 0 && line < lines.length) {
-      return this.clamp(node, fromParagraphOffset(layout.range, layout.paragraph.getGlyphPositionAtCoordinate(x, lines[line]!.baseline).pos, layout.prefix));
+      return this.clamp(node, fromParagraphOffset(layout.range, layout.paragraph.getGlyphPositionAtCoordinate(x - layout.left, lines[line]!.baseline).pos, layout.prefix));
     }
     // Into the paragraph above or below.
     const visible = block.paragraphs.filter((p) => !p.hidden);
@@ -438,7 +487,7 @@ export class TextShaper implements TextLayoutService {
     const nextLines = next.paragraph.getLineMetrics();
     const nextLine = direction > 0 ? nextLines[0] : nextLines[nextLines.length - 1];
     if (!nextLine) return direction > 0 ? next.range.start : next.range.end;
-    return this.clamp(node, fromParagraphOffset(next.range, next.paragraph.getGlyphPositionAtCoordinate(x, nextLine.baseline).pos, next.prefix));
+    return this.clamp(node, fromParagraphOffset(next.range, next.paragraph.getGlyphPositionAtCoordinate(x - next.left, nextLine.baseline).pos, next.prefix));
   }
 
   lineRange(node: TextNode, offset: number): [number, number] {
@@ -453,5 +502,8 @@ export class TextShaper implements TextLayoutService {
 }
 
 function deleteBlock(block: BlockLayout): void {
-  for (const p of block.paragraphs) p.paragraph.delete();
+  for (const p of block.paragraphs) {
+    p.paragraph.delete();
+    p.marker?.paragraph.delete();
+  }
 }

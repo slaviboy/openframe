@@ -446,6 +446,9 @@ export const TextDecorationSchema = z.enum(['NONE', 'UNDERLINE', 'STRIKETHROUGH'
 /** Letter case, applied when displaying (the characters stay as typed); small caps uses the font's `smcp` feature. */
 export const TextCaseSchema = z.enum(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE', 'SMALL_CAPS']);
 
+/** A paragraph's list: none, bulleted (unordered) or numbered (ordered). */
+export const ListTypeSchema = z.enum(['NONE', 'UNORDERED', 'ORDERED']);
+
 /** Properties a range of characters can override in a text layer (mixed styles). */
 export const TextStyleOverridesSchema = z.object({
   fontName: FontNameSchema.optional(),
@@ -455,6 +458,9 @@ export const TextStyleOverridesSchema = z.object({
   fills: z.array(PaintSchema).max(256).optional(),
   textDecoration: TextDecorationSchema.optional(),
   textCase: TextCaseSchema.optional(),
+  /** List properties of the paragraphs whose style comes from these characters. */
+  listType: ListTypeSchema.optional(),
+  indentation: z.number().int().min(1).max(5).optional(),
 });
 /** Overrides on the characters [start, end) (UTF-16 offsets). */
 export const TextStyleRunSchema = z.object({ start: z.number().int().min(0), end: z.number().int().min(1), style: TextStyleOverridesSchema });
@@ -486,6 +492,12 @@ export const TextNodeSchema = z.object({
   paragraphSpacing: z.number().min(0).max(10_000).optional(),
   /** First-line indent of every paragraph, in pixels (left-aligned and justified text only). Absent means 0. */
   paragraphIndent: z.number().min(0).max(10_000).optional(),
+  /** Default list type of paragraphs (style runs override it per paragraph). Absent means no list. */
+  listType: ListTypeSchema.optional(),
+  /** Default list indentation level, 1–5. Absent means 1. */
+  indentation: z.number().int().min(1).max(5).optional(),
+  /** Space between consecutive list items, in pixels. Absent means 0. */
+  listSpacing: z.number().min(0).max(10_000).optional(),
 });
 
 export const NodeSchema = z.discriminatedUnion('type', [
@@ -561,6 +573,7 @@ export type TextAlignVertical = z.infer<typeof TextAlignVerticalSchema>;
 export type TextAutoResize = z.infer<typeof TextAutoResizeSchema>;
 export type TextDecoration = z.infer<typeof TextDecorationSchema>;
 export type TextCase = z.infer<typeof TextCaseSchema>;
+export type ListType = z.infer<typeof ListTypeSchema>;
 export type TextNode = z.infer<typeof TextNodeSchema>;
 export type SceneNode = FrameNode | GroupNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | SectionNode | SliceNode | TextNode;
 export type Node = z.infer<typeof NodeSchema>;

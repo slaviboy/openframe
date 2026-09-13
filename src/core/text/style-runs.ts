@@ -16,7 +16,7 @@
  */
 
 import { valuesEqual } from '../ops/equality';
-import type { FontName, LetterSpacing, LineHeight, Paint, TextCase, TextDecoration, TextNode } from '../schema/document';
+import type { FontName, LetterSpacing, LineHeight, ListType, Paint, TextCase, TextDecoration, TextNode } from '../schema/document';
 
 /**
  * Mixed styles within a text layer. The layer's own properties are the default style; `styleRuns`
@@ -34,6 +34,9 @@ export interface TextStyle {
   readonly fills: readonly Paint[];
   readonly textDecoration: TextDecoration;
   readonly textCase: TextCase;
+  readonly listType: ListType;
+  /** List indentation level, 1–5. */
+  readonly indentation: number;
 }
 
 export type TextStyleKey = keyof TextStyle;
@@ -51,12 +54,14 @@ export interface TextSegment extends TextStyle {
   readonly end: number;
 }
 
-export const TEXT_STYLE_KEYS: readonly TextStyleKey[] = ['fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'fills', 'textDecoration', 'textCase'];
+export const TEXT_STYLE_KEYS: readonly TextStyleKey[] = ['fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'fills', 'textDecoration', 'textCase', 'listType', 'indentation'];
 
 type RunsNode = Pick<TextNode, 'characters' | 'fontName' | 'fontSize' | 'lineHeight' | 'letterSpacing' | 'fills'> & {
   readonly styleRuns?: readonly TextStyleRun[] | undefined;
   readonly textDecoration?: TextDecoration | undefined;
   readonly textCase?: TextCase | undefined;
+  readonly listType?: ListType | undefined;
+  readonly indentation?: number | undefined;
 };
 
 /** The layer's default style. */
@@ -69,12 +74,14 @@ export function baseTextStyle(node: RunsNode): TextStyle {
     fills: node.fills,
     textDecoration: node.textDecoration ?? 'NONE',
     textCase: node.textCase ?? 'ORIGINAL',
+    listType: node.listType ?? 'NONE',
+    indentation: node.indentation ?? 1,
   };
 }
 
 /** The layer field value for a style value: defaults (no decoration, as typed) are stored as absent. */
 export function layerFieldValue<K extends TextStyleKey>(key: K, value: TextStyle[K]): TextStyle[K] | undefined {
-  if ((key === 'textDecoration' && value === 'NONE') || (key === 'textCase' && value === 'ORIGINAL')) return undefined;
+  if ((key === 'textDecoration' && value === 'NONE') || (key === 'textCase' && value === 'ORIGINAL') || (key === 'listType' && value === 'NONE') || (key === 'indentation' && value === 1)) return undefined;
   return value;
 }
 

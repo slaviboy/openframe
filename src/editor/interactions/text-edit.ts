@@ -18,7 +18,12 @@
 import type { Id } from '@/core/ids/ids';
 import type { Vec2 } from '@/core/math/vec';
 import { hitTestDeepest, selectionTarget } from '@/core/scene/hit-test';
-import type { TextNode } from '@/core/schema/document';
+import type { ListType, TextNode } from '@/core/schema/document';
+import type { Transaction } from '@/core/history/history';
+import { valuesEqual } from '@/core/ops/equality';
+import { listTrigger } from '@/core/text/lists';
+import { paragraphAt, paragraphRanges, paragraphStyleOffset } from '@/core/text/paragraphs';
+import { changeIndentation, setListType, toggleListType } from '../commands/text';
 import {
   caret,
   clampSelection,
@@ -35,7 +40,7 @@ import {
   type TextEdit,
   type TextSelection,
 } from '@/core/text/text-editing';
-import { runsAfterEdit, textChange, type TextStyleRun } from '@/core/text/style-runs';
+import { runsAfterEdit, textChange, textStyleAt, type TextStyleRun } from '@/core/text/style-runs';
 import type { Editor } from '../editor';
 import type { ToolId } from '../stores/editor-store';
 import type { CursorKind, PointerInfo, Tool } from '../tools/types';
@@ -56,7 +61,17 @@ interface Session {
 
 interface Snapshot extends TextEdit {
   readonly runs: readonly TextStyleRun[] | undefined;
+  readonly listType: ListType | undefined;
+  readonly indentation: number | undefined;
 }
+
+const snapshotOf = (node: TextNode, selection: TextSelection): Snapshot => ({
+  text: node.characters,
+  selection,
+  runs: node.styleRuns,
+  listType: node.listType,
+  indentation: node.indentation,
+});
 
 const sessions = new WeakMap<Editor, Session>();
 let lastKey = 0;
@@ -150,20 +165,23 @@ export function watchTextEdit(editor: Editor): () => void {
  * unless a snapshot restores them exactly.
  */
 function apply(editor: Editor, session: Session, node: TextNode, selection: TextSelection, edit: TextEdit | Snapshot, record = true): void {
-  if (edit.text !== node.characters) {
+  const restoring = 'runs' in edit;
+  const changed =
+    edit.text !== node.characters || (restoring && (!valuesEqual(edit.runs, node.styleRuns) || edit.listType !== node.listType || edit.indentation !== node.indentation));
+  if (changed) {
     if (editor.history.inTransaction) return;
-    if (record) {
-      session.undo.push({ text: node.characters, selection, runs: node.styleRuns });
-      if (session.undo.length > UNDO_LIMIT) session.undo.shift();
-      session.redo.length = 0;
-    }
+    if (record) remember(session, node, selection);
     const change = textChange(node.characters, edit.text);
-    const runs = 'runs' in edit ? edit.runs : runsAfterEdit(node, change.start, change.end, change.insertedLength);
+    const runs = restoring ? edit.runs : runsAfterEdit(node, change.start, change.end, change.insertedLength);
     editor.history.run(
       'Edit text',
       (tx) => {
         tx.set(node.id, 'characters', edit.text);
         tx.set(node.id, 'styleRuns', runs);
+        if (restoring) {
+          tx.set(node.id, 'listType', edit.listType);
+          tx.set(node.id, 'indentation', edit.indentation);
+        }
       },
       { mergeKey: session.key },
     );
@@ -173,16 +191,100 @@ function apply(editor: Editor, session: Session, node: TextNode, selection: Text
   editor.requestRender();
 }
 
-/** Types or pastes text over the selection (line breaks normalized to \n). */
-export function insertText(editor: Editor, text: string): void {
-  const a = active(editor);
-  if (a) apply(editor, a.session, a.node, a.selection, replaceSelection(a.node.characters, a.selection, text.replace(/\r\n?/g, '\n')));
+function remember(session: Session, node: TextNode, selection: TextSelection): void {
+  session.undo.push(snapshotOf(node, selection));
+  if (session.undo.length > UNDO_LIMIT) session.undo.shift();
+  session.redo.length = 0;
 }
 
-/** Backspace / Delete, by grapheme, word (⌥) or to the paragraph edge (⌘). */
+type Active = { session: Session; node: TextNode; selection: TextSelection };
+
+/** Commits a change of list properties (no text change) within the session's undo step. */
+function changeList(editor: Editor, a: Active, change: (tx: Transaction) => void): void {
+  if (editor.history.inTransaction) return;
+  remember(a.session, a.node, a.selection);
+  editor.history.run('Edit text', change, { mergeKey: a.session.key });
+  a.session.goalX = null;
+  editor.requestRender();
+}
+
+/** The list item holding an offset: its paragraph and indentation level, or null outside lists. */
+function listItemAt(node: TextNode, offset: number): { start: number; end: number; level: number } | null {
+  const range = paragraphAt(paragraphRanges(node.characters), offset);
+  const style = textStyleAt(node, paragraphStyleOffset(range));
+  return style.listType === 'NONE' ? null : { start: range.start, end: range.end, level: style.indentation };
+}
+
+/**
+ * Types or pastes text over the selection (line breaks normalized to \n). In lists, Return on an
+ * empty item moves it out a level (or ends the list at the first level), and "- ", "* ", "1. " or
+ * "1) " typed at the start of a paragraph starts a list.
+ */
+export function insertText(editor: Editor, text: string): void {
+  const a = active(editor);
+  if (!a) return;
+  const typed = text.replace(/\r\n?/g, '\n');
+  if (typed === '\n' && isCollapsed(a.selection)) {
+    const item = listItemAt(a.node, a.selection.focus);
+    if (item && item.start === item.end) {
+      const at = { start: a.selection.focus, end: a.selection.focus };
+      changeList(editor, a, (tx) => {
+        if (item.level > 1) changeIndentation(tx, a.node, -1, at);
+        else setListType(tx, a.node, 'NONE', at);
+      });
+      return;
+    }
+  }
+  apply(editor, a.session, a.node, a.selection, replaceSelection(a.node.characters, a.selection, typed));
+  if (typed !== ' ') return;
+  const after = active(editor);
+  if (!after || !isCollapsed(after.selection)) return;
+  const caretAt = after.selection.focus;
+  const paragraph = paragraphAt(paragraphRanges(after.node.characters), caretAt);
+  const trigger = listTrigger(after.node.characters.slice(paragraph.start, caretAt));
+  if (!trigger || listItemAt(after.node, caretAt)) return;
+  apply(editor, after.session, after.node, after.selection, replaceSelection(after.node.characters, { anchor: paragraph.start, focus: caretAt }, ''));
+  const cleared = active(editor);
+  if (cleared) changeList(editor, cleared, (tx) => setListType(tx, cleared.node, trigger.type, { start: paragraph.start, end: paragraph.start }));
+}
+
+/** Tab / ⇧Tab (⌘] / ⌘[) inside a list: changes the indentation of the selected items. Returns false outside lists. */
+export function indentListItem(editor: Editor, delta: 1 | -1): boolean {
+  const a = active(editor);
+  if (!a || !listItemAt(a.node, selectionStart(a.selection))) return false;
+  const range = { start: selectionStart(a.selection), end: selectionEnd(a.selection) };
+  changeList(editor, a, (tx) => {
+    changeIndentation(tx, a.node, delta, range);
+  });
+  return true;
+}
+
+/** ⌘⇧8 / ⌘⇧7 (⌥8 for bullets on macOS) while editing: toggles the list type of the selected paragraphs. */
+export function toggleList(editor: Editor, type: 'UNORDERED' | 'ORDERED'): void {
+  const a = active(editor);
+  if (!a) return;
+  const range = { start: selectionStart(a.selection), end: selectionEnd(a.selection) };
+  changeList(editor, a, (tx) => toggleListType(tx, a.node, type, range));
+}
+
+/** The text selection of a layer being edited, including a collapsed caret, or null. */
+export function textSelectionRange(editor: Editor, id: Id): { start: number; end: number } | null {
+  const target = textEditTarget(editor);
+  return target && target.node.id === id ? { start: selectionStart(target.selection), end: selectionEnd(target.selection) } : null;
+}
+
+/** Backspace / Delete, by grapheme, word (⌥) or to the paragraph edge (⌘). Backspace at the start of a list item removes its marker. */
 export function deleteText(editor: Editor, direction: 'backward' | 'forward', unit: 'grapheme' | 'word' | 'paragraph' = 'grapheme'): void {
   const a = active(editor);
   if (!a) return;
+  if (direction === 'backward' && isCollapsed(a.selection)) {
+    const item = listItemAt(a.node, a.selection.focus);
+    if (item && a.selection.focus === item.start) {
+      const at = { start: item.start, end: item.start };
+      changeList(editor, a, (tx) => setListType(tx, a.node, 'NONE', at));
+      return;
+    }
+  }
   const edit = direction === 'backward' ? deleteBackward(a.node.characters, a.selection, unit) : deleteForward(a.node.characters, a.selection, unit);
   apply(editor, a.session, a.node, a.selection, edit);
 }
@@ -265,7 +367,7 @@ export function undoTextEdit(editor: Editor): boolean {
   const a = active(editor);
   const previous = a?.session.undo.pop();
   if (!a || !previous) return false;
-  a.session.redo.push({ text: a.node.characters, selection: a.selection, runs: a.node.styleRuns });
+  a.session.redo.push(snapshotOf(a.node, a.selection));
   apply(editor, a.session, a.node, a.selection, previous, false);
   return true;
 }
@@ -274,7 +376,7 @@ export function redoTextEdit(editor: Editor): boolean {
   const a = active(editor);
   const next = a?.session.redo.pop();
   if (!a || !next) return false;
-  a.session.undo.push({ text: a.node.characters, selection: a.selection, runs: a.node.styleRuns });
+  a.session.undo.push(snapshotOf(a.node, a.selection));
   apply(editor, a.session, a.node, a.selection, next, false);
   return true;
 }

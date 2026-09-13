@@ -23,6 +23,11 @@ import { Editor } from '../editor';
 import { applyScale, captureScale } from '../interactions/scale';
 import { setSize } from './properties';
 import {
+  changeIndentation,
+  listSpan,
+  paragraphListTypes,
+  setListSpacing,
+  toggleListType,
   resizedTextMode,
   setFontFamily,
   setFontSize,
@@ -163,6 +168,25 @@ describe('text properties', () => {
     expect(get().letterSpacing).toEqual({ unit: 'PERCENT', value: -0.1 });
     editor.history.run('lh', (tx) => stepTextProperty(tx, get(), 'lineHeight', 1, context));
     expect(get().lineHeight).toEqual({ unit: 'PIXELS', value: 26 });
+  });
+
+  test('lists apply to whole paragraphs, toggle, and indent within five levels', () => {
+    editor.history.run('type', (tx) => tx.set(id, 'characters', 'one\ntwo\nthree'));
+    editor.history.run('list', (tx) => toggleListType(tx, get(), 'UNORDERED', { start: 5, end: 5 }));
+    expect(paragraphListTypes(get(), null)).toEqual(['NONE', 'UNORDERED', 'NONE']);
+    editor.history.run('list', (tx) => toggleListType(tx, get(), 'ORDERED'));
+    expect(paragraphListTypes(get(), null)).toEqual(['ORDERED', 'ORDERED', 'ORDERED']);
+    expect(get().listType).toBe('ORDERED');
+    expect(get().styleRuns).toBeUndefined();
+    for (let i = 0; i < 7; i++) editor.history.run('indent', (tx) => changeIndentation(tx, get(), 1, { start: 9, end: 9 }));
+    expect(textStyleValue(get(), 'indentation', { start: 8, end: 13 })).toBe(5);
+    expect(textStyleValue(get(), 'indentation', { start: 0, end: 3 })).toBe(1);
+    editor.history.run('list', (tx) => toggleListType(tx, get(), 'ORDERED'));
+    expect(paragraphListTypes(get(), null)).toEqual(['NONE', 'NONE', 'NONE']);
+    editor.history.run('spacing', (tx) => setListSpacing(tx, get(), 8));
+    expect(get().listSpacing).toBe(8);
+    expect(listSpan('one\n\nthree', { start: 4, end: 4 })).toEqual({ start: 3, end: 5 });
+    expect(listSpan('one\ntwo', { start: 1, end: 5 })).toEqual({ start: 0, end: 7 });
   });
 
   test('the Scale tool scales font size and pixel spacing', () => {

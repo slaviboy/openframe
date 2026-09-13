@@ -41,8 +41,10 @@ import {
   redoTextEdit,
   selectAllText,
   selectedText,
+  indentListItem,
   textEditTarget,
   textStyleRange,
+  toggleList,
   undoTextEdit,
   type CaretMove,
 } from '@/editor/interactions/text-edit';
@@ -424,7 +426,8 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
           return move(e.ctrlKey ? 'textEnd' : 'lineEnd');
         case 'Tab':
           e.preventDefault();
-          insertText(editor, '\t');
+          // In a list, Tab and ⇧Tab change the indentation; elsewhere Tab types a tab.
+          if (!indentListItem(editor, e.shiftKey ? -1 : 1) && !e.shiftKey) insertText(editor, '\t');
           schedule();
           return;
         // Handled here rather than in beforeinput: WebKit fires no beforeinput when the hidden textarea is empty.
@@ -479,6 +482,17 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
         return run('Underline', (tx) => toggleTextDecoration(tx, target.node, 'UNDERLINE', range));
       }
       if (e.code === 'KeyX' && mod && e.shiftKey && !e.altKey) return run('Strikethrough', (tx) => toggleTextDecoration(tx, target.node, 'STRIKETHROUGH', range));
+      // Lists: ⌘⇧8 bullets (also ⌥8 on macOS), ⌘⇧7 numbers, ⌘] / ⌘[ indentation of list items.
+      if ((mod && e.shiftKey && !e.altKey && (e.code === 'Digit8' || e.code === 'Digit7')) || (IS_MAC && e.altKey && !mod && !e.shiftKey && e.code === 'Digit8')) {
+        e.preventDefault();
+        toggleList(editor, e.code === 'Digit7' ? 'ORDERED' : 'UNORDERED');
+        return true;
+      }
+      if (mod && !e.altKey && !e.shiftKey && (e.code === 'BracketRight' || e.code === 'BracketLeft')) {
+        if (!indentListItem(editor, e.code === 'BracketRight' ? 1 : -1)) return false;
+        e.preventDefault();
+        return true;
+      }
       if (e.code !== 'Period' && e.code !== 'Comma') return false;
       const direction = e.code === 'Period' ? 1 : -1;
       const property = mod && e.shiftKey && !e.altKey ? 'fontSize' : mod && e.altKey && !e.shiftKey ? 'fontWeight' : !mod && e.altKey && e.shiftKey ? 'lineHeight' : !mod && e.altKey ? 'letterSpacing' : null;

@@ -47,7 +47,15 @@ import {
 } from '@/editor/commands/text';
 import { TEXT_CASE_LABELS } from '@/core/text/letter-case';
 import type { TextCase } from '@/core/schema/document';
-import { textStyleRange } from '@/editor/interactions/text-edit';
+import { textSelectionRange, textStyleRange } from '@/editor/interactions/text-edit';
+import { changeIndentation, paragraphListTypes, setListSpacing, setListType } from '@/editor/commands/text';
+import type { ListType } from '@/core/schema/document';
+
+const LIST_OPTIONS: readonly (readonly [ListType, string])[] = [
+  ['NONE', 'No list'],
+  ['UNORDERED', 'Bulleted list'],
+  ['ORDERED', 'Numbered list'],
+];
 import type { IconName } from '../../icons/Icon';
 import { useEditor, useEditorState } from '../../hooks/useEditor';
 import { useGesture } from '../../hooks/useGesture';
@@ -140,6 +148,10 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
   const maxLines = maxLinesValues.length === 1 ? maxLinesValues[0] : undefined;
   const paragraphSpacing = single([...new Set(nodes.map((n) => n.paragraphSpacing ?? 0))]);
   const paragraphIndent = single([...new Set(nodes.map((n) => n.paragraphIndent ?? 0))]);
+  // Lists belong to paragraphs: while editing, the paragraphs under the caret or selection.
+  const listRange = nodes.length === 1 ? textSelectionRange(editor, nodes[0]!.id) : null;
+  const listType = single([...new Set(nodes.flatMap((n) => paragraphListTypes(n, listRange)))]);
+  const listSpacing = single([...new Set(nodes.map((n) => n.listSpacing ?? 0))]);
   const hAlign = shared(nodes, (n) => n.textAlignHorizontal);
   const vAlign = shared(nodes, (n) => n.textAlignVertical);
   const run = (label: string, apply: (tx: Transaction, node: TextNode) => void) => editor.history.run(label, (tx) => nodes.forEach((n) => apply(tx, n)));
@@ -215,6 +227,45 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
               </option>
             ))}
           </select>
+          <div className={styles.grid2}>
+            <select className={primitives.select} aria-label="List style" value={listType ?? ''} onChange={(e) => run('Change list style', (tx, n) => setListType(tx, n, e.target.value as ListType, listRange))}>
+              {listType === undefined && <option value="">Mixed</option>}
+              {LIST_OPTIONS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <div className={styles.buttonRow} role="group" aria-label="Indentation">
+              <IconButton
+                icon="outdent"
+                label="Decrease indentation"
+                onClick={() =>
+                  run('Decrease indentation', (tx, n) => {
+                    changeIndentation(tx, n, -1, listRange);
+                  })
+                }
+              />
+              <IconButton
+                icon="indent"
+                label="Increase indentation"
+                onClick={() =>
+                  run('Increase indentation', (tx, n) => {
+                    changeIndentation(tx, n, 1, listRange);
+                  })
+                }
+              />
+            </div>
+          </div>
+          <NumberField
+            label="•↕"
+            ariaLabel="List spacing"
+            testId="field-list-spacing"
+            min={0}
+            max={10_000}
+            value={listSpacing}
+            onChange={(v) => run('Change list spacing', (tx, n) => setListSpacing(tx, n, v))}
+          />
           <div className={styles.grid2}>
             <NumberField
               label="¶↕"

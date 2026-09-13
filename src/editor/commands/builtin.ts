@@ -321,7 +321,7 @@ const COLOR_PROFILE_COMMANDS: CommandDefinition[] = (['SRGB', 'DISPLAY_P3'] as c
 }));
 
 import { beginTextEdit } from '../interactions/text-edit';
-import { stepTextProperty, toggleFontStyle, toggleTextDecoration } from './text';
+import { stepTextProperty, toggleFontStyle, toggleListType, toggleTextDecoration } from './text';
 import type { SceneNode as TextTarget } from '@/core/schema/document';
 
 /** Text layers in the selection when not editing text (while editing, the text input applies these to the selected characters). */
@@ -336,6 +336,21 @@ export function autoLineHeight(e: Editor, fontSize: number): number {
 }
 
 const TEXT_FORMAT_COMMANDS: CommandDefinition[] = [
+  ...(
+    [
+      ['text.bulletedList', 'Bulleted list', 'UNORDERED', 'Mod+Shift+8'],
+      ['text.numberedList', 'Numbered list', 'ORDERED', 'Mod+Shift+7'],
+    ] as const
+  ).map(
+    ([id, label, type, shortcut]): CommandDefinition => ({
+      id,
+      label,
+      category: 'Text',
+      shortcuts: [shortcut],
+      enabled: (e) => selectedTextLayers(e).length > 0,
+      run: (e) => e.history.run(label, (tx) => selectedTextLayers(e).forEach((n) => toggleListType(tx, n, type))),
+    }),
+  ),
   ...(
     [
       ['text.underline', 'Underline', 'UNDERLINE', ['Alt+U', 'Ctrl+U']],

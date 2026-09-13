@@ -21,6 +21,10 @@ import type { LetterSpacing, LineHeight, Paint, SceneNode, TextAlignHorizontal, 
 import { fontStyleName, parseFontStyle } from '@/core/text/font-style';
 import { clearRunKeys, layerFieldValue, rangeValues, styleRange, TEXT_STYLE_KEYS, textSegments, type TextStyle, type TextStyleKey, type TextStyleOverrides } from '@/core/text/style-runs';
 import { stepFontSize, stepFontWeight, stepLetterSpacing, stepLineHeight } from '@/core/text/typography-steps';
+import { clampLevel } from '@/core/text/lists';
+import { paragraphAt, paragraphRanges, paragraphStyleOffset } from '@/core/text/paragraphs';
+import { textStyleAt } from '@/core/text/style-runs';
+import type { ListType } from '@/core/schema/document';
 import type { FontFamilyInfo } from '@/core/text/text-layout';
 
 /**
@@ -127,6 +131,55 @@ export function setTextDecoration(tx: Transaction, node: SceneNode, decoration: 
 
 export function setTextCase(tx: Transaction, node: SceneNode, textCase: TextCase, range: TextRange = null): void {
   setTextStyle(tx, node, { textCase }, range);
+}
+
+/**
+ * The characters a list change covers: every paragraph the range touches, each with its line break
+ * (which carries the list on to a new empty paragraph after it). An empty first paragraph takes its
+ * list from the line break before it.
+ */
+export function listSpan(text: string, range: { readonly start: number; readonly end: number }): { start: number; end: number } {
+  const ranges = paragraphRanges(text);
+  const first = paragraphAt(ranges, Math.min(range.start, range.end));
+  const last = paragraphAt(ranges, Math.max(range.start, range.end));
+  const start = first.end === first.start && first.start > 0 ? first.start - 1 : first.start;
+  return { start, end: last.end + (last.hasBreak ? 1 : 0) };
+}
+
+/** The list type of each paragraph a range touches (every paragraph without a range). */
+export function paragraphListTypes(node: TextNode, range: TextRange): ListType[] {
+  const ranges = paragraphRanges(node.characters);
+  const from = range ? paragraphAt(ranges, Math.min(range.start, range.end)).index : 0;
+  const to = range ? paragraphAt(ranges, Math.max(range.start, range.end)).index : ranges.length - 1;
+  return ranges.slice(from, to + 1).map((r) => textStyleAt(node, paragraphStyleOffset(r)).listType);
+}
+
+/** Makes the paragraphs a range touches (or the whole layer) a list of a type, or no list. */
+export function setListType(tx: Transaction, node: SceneNode, type: ListType, range: TextRange = null): void {
+  const text = textOf(tx, node);
+  if (text) setTextStyle(tx, node, { listType: type }, range ? listSpan(text.characters, range) : null);
+}
+
+/** ⌘⇧8 / ⌘⇧7: makes the paragraphs a list of that type, or removes the list when they all are one already. */
+export function toggleListType(tx: Transaction, node: SceneNode, type: Exclude<ListType, 'NONE'>, range: TextRange = null): void {
+  const text = textOf(tx, node);
+  if (text) setListType(tx, node, paragraphListTypes(text, range).every((t) => t === type) ? 'NONE' : type, range);
+}
+
+/** Tab / ⇧Tab: the list indentation of each paragraph, within levels 1–5. Returns whether anything changed. */
+export function changeIndentation(tx: Transaction, node: SceneNode, delta: 1 | -1, range: TextRange = null): boolean {
+  const text = textOf(tx, node);
+  if (!text) return false;
+  return stepTextStyle(tx, node, 'indentation', range ? listSpan(text.characters, range) : null, (level) => {
+    const next = clampLevel(level + delta);
+    return next === level ? null : next;
+  });
+}
+
+/** Space between consecutive list items in pixels (0 removes it). */
+export function setListSpacing(tx: Transaction, node: SceneNode, spacing: number): void {
+  const value = Math.min(10_000, Math.max(0, Math.round(spacing * 100) / 100));
+  if (textOf(tx, node)) tx.set(node.id, 'listSpacing', value > 0 ? value : undefined);
 }
 
 /** Space between paragraphs in pixels (0 removes it). */

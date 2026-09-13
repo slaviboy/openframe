@@ -24,7 +24,9 @@ import { BUILTIN_COMMANDS } from '../commands/builtin';
 import { Editor } from '../editor';
 import { ToolManager } from '../tools/tool-manager';
 import type { PointerInfo } from '../tools/types';
-import { beginTextEdit, deleteText, endTextEdit, insertText, moveTextCaret, selectedText, textEditTarget, undoTextEdit } from './text-edit';
+import { beginTextEdit, deleteText, endTextEdit, indentListItem, insertText, moveTextCaret, selectedText, setTextSelection, textEditTarget, undoTextEdit } from './text-edit';
+import { caret } from '@/core/text/text-editing';
+import { paragraphListTypes, textStyleValue } from '../commands/text';
 
 /** Monospace fake: 10 wide per character, 20 per line; no wrapping. */
 const layout: TextLayoutService = {
@@ -71,6 +73,38 @@ beforeEach(() => {
   editor.setViewport({ x: 0, y: 0, zoom: 1 });
   editor.setTextLayout(layout);
   tools = new ToolManager(editor);
+});
+
+describe('lists while editing', () => {
+  test('"- " starts a list; Return continues it and ends it on an empty item; Backspace removes a marker; Tab indents', () => {
+    editor.state.setTool('text');
+    click(100, 100);
+    insertText(editor, '-');
+    insertText(editor, ' ');
+    expect(texts()[0]).toMatchObject({ characters: '', listType: 'UNORDERED' });
+    insertText(editor, 'Apples');
+    insertText(editor, '\n');
+    insertText(editor, 'Pears');
+    expect(paragraphListTypes(texts()[0]!, null)).toEqual(['UNORDERED', 'UNORDERED']);
+    expect(indentListItem(editor, 1)).toBe(true);
+    expect(textStyleValue(texts()[0]!, 'indentation', { start: 7, end: 12 })).toBe(2);
+    // An empty item moves out a level, then ends the list.
+    insertText(editor, '\n');
+    insertText(editor, '\n');
+    insertText(editor, '\n');
+    expect(texts()[0]!.characters).toBe('Apples\nPears\n');
+    expect(paragraphListTypes(texts()[0]!, null)).toEqual(['UNORDERED', 'UNORDERED', 'NONE']);
+    // Backspace at the start of an item removes its marker, and undo brings it back.
+    setTextSelection(editor, caret(7));
+    deleteText(editor, 'backward');
+    expect(texts()[0]!.characters).toBe('Apples\nPears\n');
+    expect(paragraphListTypes(texts()[0]!, null)).toEqual(['UNORDERED', 'NONE', 'NONE']);
+    expect(undoTextEdit(editor)).toBe(true);
+    expect(paragraphListTypes(texts()[0]!, null)).toEqual(['UNORDERED', 'UNORDERED', 'NONE']);
+    // Outside a list, Tab isn't an indent.
+    setTextSelection(editor, caret(13));
+    expect(indentListItem(editor, 1)).toBe(false);
+  });
 });
 
 describe('text editing', () => {
