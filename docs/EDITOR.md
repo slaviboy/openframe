@@ -132,6 +132,32 @@ Positions snap to whole pixels for axis-aligned layers while **Snap to pixel gri
 - The start point and the dragged corner snap to the edges and centers of layers in the target container, shown by red guides. Hold Control to draw without snapping.
 - After drawing, the editor returns to the Move tool.
 
+### Text (T)
+
+- **Creating** ([`text-tool.ts`](../src/editor/tools/text-tool.ts)):
+  - A click creates an auto-width text layer (Inter Regular 12, black) with its first line vertically centered on the click.
+  - A drag creates a fixed-size box.
+  - The layer goes into the frame under the start point, the Move tool returns, and editing starts.
+  - The creation commit and every edit of the session share a history merge key, so creating and typing undo as one step.
+- **Editing** ([`interactions/text-edit.ts`](../src/editor/interactions/text-edit.ts)):
+  - `editorState.textEdit = { nodeId, anchor, focus }` is exclusive with crop mode and gradient or blur editing.
+  - Starting it: Return (`text.edit`, before Select children) selects all the text. A double-click with the Move tool places the caret at the click.
+  - While it is set, the ToolManager routes pointer input to `TextEditController`: click places the caret, Shift-click extends, double-click selects a word, triple-click a paragraph, and dragging selects. Clicking another text layer edits it; clicking anything else ends editing and selects what was clicked.
+  - **Keyboard input** goes to a hidden textarea in the canvas host, which follows the caret so IME candidate windows appear next to it:
+    - `beforeinput` handles typing, line breaks, and deletion by grapheme, word or line.
+    - `compositionend` inserts IME text.
+    - `keydown` handles arrows (Shift extends, ⌥/Ctrl by word, ⌘ to line or text edges), Home/End, ⌘A, ⌘Z/⇧⌘Z, Tab and Esc.
+    - Clipboard events copy, cut and paste plain text.
+  - Each edit is its own commit, merged into the session's undo step, so properties can still change while editing. ⌘Z while editing steps back through the session's own edits.
+  - Ending (Esc, clicking elsewhere, or any selection or page change, via `watchTextEdit`) keeps the layer selected. A new layer left empty is removed with `history.revert`, leaving no undo or redo step; an existing layer emptied is deleted.
+- **Fitting:** a history finalizer ([`core/text/text-resize.ts`](../src/core/text/text-resize.ts)) runs at every commit. It fits auto-width and auto-height boxes through the layout service; centered and right-aligned auto width grows around its anchor edge. It also renames layers whose `autoRename` is set to their first line. Renaming a layer in the layers panel or with batch rename clears `autoRename`.
+- **Overlay:** while editing, it draws the text box, the selection highlight, and a caret that blinks every 530 ms and restarts on each change.
+- **Resizing** follows `resizedTextMode` ([`commands/text.ts`](../src/editor/commands/text.ts)):
+  - Typing W, or dragging a side handle, turns auto-width text into auto height.
+  - Typing H, or dragging a handle that changes the height, makes an auto-width or auto-height box fixed.
+  - Fixed and truncated boxes keep their mode.
+  - The Scale tool scales font size, and line height and letter spacing given in pixels.
+
 ### Place image (⇧⌘K)
 
 - The command opens the system file picker, which accepts multiple files. Chosen images are imported ([`ui/images/import-image.ts`](../src/ui/images/import-image.ts)), added to `editor.images` (which persists them), and loaded into the tool.
@@ -434,6 +460,7 @@ The overlay never touches the CanvasKit scene, so pointer feedback costs no scen
   - Position: X, Y, rotation (not for sections)
   - Layout: W, H (H disabled for lines), Constrain proportions, "space between" for smart selections, and Clip content for frames
   - Appearance: opacity, layer blend mode, corner radius, polygon/star Count and star Ratio, and corner smoothing (0–100% slider with an **iOS** 60% preset button) (hidden for slices)
+  - Typography (text layers only, [`TypographyFields.tsx`](../src/ui/panels/inspector/TypographyFields.tsx)): font family and style, size, line height and letter spacing (typed values such as `Auto`, `24`, `150%`, `2px`, parsed by [`core/text/text-values.ts`](../src/core/text/text-values.ts)), and horizontal and vertical alignment buttons. Text layers also get resizing buttons in Layout (Auto width, Auto height, Fixed size, Truncate text) and no Stroke section yet.
   - Fill and Stroke: paint type (Solid, Linear, Radial, Angular, Diamond), color or gradient preview, opacity, visibility and remove on each row; gradient rows add a stops editor. Stroke adds weight and position (lines add start and end points instead), then style (solid or dashed with dash, gap and dash cap), join and miter angle, and — for frames and rectangles — stroke sides with per-side weights.
   - Effects (not for slices): add, type (drop shadow, inner shadow, layer blur, background blur), visibility and remove per row. Shadows show X, Y, blur, spread and a color with opacity; drop shadows add **Show behind transparent areas**. Blurs show a blur radius.
 

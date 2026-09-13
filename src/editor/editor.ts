@@ -22,6 +22,8 @@ import { History, type ChangeSet } from '@/core/history/history';
 import type { Id, IdGenerator } from '@/core/ids/ids';
 import { unionAll, type Rect } from '@/core/math/rect';
 import { SceneIndex } from '@/core/scene/scene-index';
+import type { TextLayoutService } from '@/core/text/text-layout';
+import { createTextFinalizer } from '@/core/text/text-resize';
 import type { Color, Transform } from '@/core/schema/document';
 import type { Vec2 } from '@/core/math/vec';
 import { CommandRegistry } from './commands/registry';
@@ -79,6 +81,13 @@ export class Editor {
   pickColorFromCanvas: (() => Promise<Color | null>) | null = null;
   /** Lets the UI pick a layer by clicking the canvas (without selecting it); set by the tool manager. */
   pickLayerFromCanvas: (() => Promise<Id | null>) | null = null;
+  /** Text shaping and layout; installed by the canvas host once the engine and fonts load. */
+  textLayout: TextLayoutService | null = null;
+
+  /** Installs (or removes) the text layout service used to fit text boxes, place carets and hit-test text. */
+  setTextLayout(layout: TextLayoutService | null): void {
+    this.textLayout = layout;
+  }
 
   /** Installs (or removes, with null) the canvas pixel reader used by the eyedropper. */
   setCanvasSampler(sampler: ((screen: Vec2) => Color | null) | null): void {
@@ -112,7 +121,8 @@ export class Editor {
         if (this.doc.has(meta.pageId) && meta.pageId !== this.state.activePageId) this.state.setActivePage(meta.pageId);
         this.state.select(meta.selection.filter((id) => this.doc.has(id)));
       },
-      finalizers: [groupFinalizer],
+      // Text boxes fit their content before groups measure their children.
+      finalizers: [createTextFinalizer(() => this.textLayout), groupFinalizer],
       ...(options.validate ? { validate: assertDocumentInvariants } : {}),
     });
     // The scene index must learn about every change before anything renders or hit-tests.

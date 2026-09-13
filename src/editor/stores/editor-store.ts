@@ -21,7 +21,7 @@ import type { CropAspect } from '@/core/image/crop';
 import { DEFAULT_VIEWPORT, type Viewport } from '../viewport/viewport';
 import { Observable } from './observable';
 
-export type ToolId = 'move' | 'hand' | 'scale' | 'frame' | 'section' | 'slice' | 'rectangle' | 'line' | 'arrow' | 'ellipse' | 'polygon' | 'star' | 'image' | 'eyedropper' | 'pickLayer';
+export type ToolId = 'move' | 'hand' | 'scale' | 'frame' | 'section' | 'slice' | 'rectangle' | 'line' | 'arrow' | 'ellipse' | 'polygon' | 'star' | 'text' | 'image' | 'eyedropper' | 'pickLayer';
 
 /** Fixed point for the Scale panel: one of nine positions on the selection bounds. */
 export type ScaleAnchor = 'nw' | 'n' | 'ne' | 'w' | 'c' | 'e' | 'sw' | 's' | 'se';
@@ -65,6 +65,15 @@ export interface EditorState {
   readonly gradientEdit: GradientEditRef | null;
   /** Progressive blur being edited with on-canvas handles, or null. */
   readonly blurEdit: BlurEditRef | null;
+  /** Text layer whose content is being edited, with the text selection (UTF-16 offsets), or null. */
+  readonly textEdit: TextEditRef | null;
+}
+
+/** Text editing: the layer and its text selection (`anchor` stays, `focus` moves). */
+export interface TextEditRef {
+  readonly nodeId: Id;
+  readonly anchor: number;
+  readonly focus: number;
 }
 
 /** A progressive blur effect on a layer, by index in its effects list. */
@@ -104,7 +113,15 @@ export class EditorStore extends Observable<EditorState> {
       cropAspect: 'FREE',
       gradientEdit: null,
       blurEdit: null,
+      textEdit: null,
     });
+  }
+
+  /** Text editing is exclusive with crop mode and on-canvas gradient or blur editing. */
+  setTextEdit(textEdit: TextEditRef | null): void {
+    const current = this.state.textEdit;
+    if (current === textEdit || (current && textEdit && current.nodeId === textEdit.nodeId && current.anchor === textEdit.anchor && current.focus === textEdit.focus)) return;
+    this.setState(textEdit ? { textEdit, croppingId: null, gradientEdit: null, blurEdit: null } : { textEdit });
   }
 
   setCropAspect(cropAspect: CropAspect): void {
@@ -118,14 +135,27 @@ export class EditorStore extends Observable<EditorState> {
   /** Crop mode and on-canvas gradient editing are mutually exclusive. */
   setCropping(croppingId: Id | null): void {
     if (this.state.croppingId !== croppingId) {
-      this.setState({ croppingId, cropAspect: 'FREE', gradientEdit: croppingId ? null : this.state.gradientEdit, blurEdit: croppingId ? null : this.state.blurEdit });
+      this.setState({
+        croppingId,
+        cropAspect: 'FREE',
+        gradientEdit: croppingId ? null : this.state.gradientEdit,
+        blurEdit: croppingId ? null : this.state.blurEdit,
+        textEdit: croppingId ? null : this.state.textEdit,
+      });
     }
   }
 
   setGradientEdit(gradientEdit: GradientEditRef | null): void {
     const current = this.state.gradientEdit;
     const same = current === gradientEdit || (current && gradientEdit && current.nodeId === gradientEdit.nodeId && current.field === gradientEdit.field && current.index === gradientEdit.index);
-    if (!same) this.setState({ gradientEdit, croppingId: gradientEdit ? null : this.state.croppingId, blurEdit: gradientEdit ? null : this.state.blurEdit });
+    if (!same) {
+      this.setState({
+        gradientEdit,
+        croppingId: gradientEdit ? null : this.state.croppingId,
+        blurEdit: gradientEdit ? null : this.state.blurEdit,
+        textEdit: gradientEdit ? null : this.state.textEdit,
+      });
+    }
   }
 
   setBlurEdit(blurEdit: BlurEditRef | null): void {
@@ -136,6 +166,7 @@ export class EditorStore extends Observable<EditorState> {
       blurEdit,
       croppingId: blurEdit ? null : this.state.croppingId,
       gradientEdit: blurEdit ? null : this.state.gradientEdit,
+      textEdit: blurEdit ? null : this.state.textEdit,
     });
   }
 
@@ -161,7 +192,7 @@ export class EditorStore extends Observable<EditorState> {
 
   setActivePage(pageId: Id): void {
     if (this.doc.get(pageId)?.type !== 'PAGE') return;
-    this.setState({ activePageId: pageId, selection: [], selectedGuide: null, hoverId: null, renamingId: null, croppingId: null, gradientEdit: null, blurEdit: null });
+    this.setState({ activePageId: pageId, selection: [], selectedGuide: null, hoverId: null, renamingId: null, croppingId: null, gradientEdit: null, blurEdit: null, textEdit: null });
   }
 
   setViewport(viewport: Viewport, pageId: Id = this.state.activePageId): void {
@@ -209,12 +240,14 @@ export class EditorStore extends Observable<EditorState> {
     const keepCrop = only !== null && only === this.state.croppingId;
     const keepGradient = only !== null && only === this.state.gradientEdit?.nodeId;
     const keepBlur = only !== null && only === this.state.blurEdit?.nodeId;
+    const keepText = only !== null && only === this.state.textEdit?.nodeId;
     this.setState({
       selection: normalized,
       selectedGuide: null,
       croppingId: keepCrop ? this.state.croppingId : null,
       gradientEdit: keepGradient ? this.state.gradientEdit : null,
       blurEdit: keepBlur ? this.state.blurEdit : null,
+      textEdit: keepText ? this.state.textEdit : null,
     });
     this.revealInLayers(normalized);
   }

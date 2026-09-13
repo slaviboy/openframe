@@ -28,6 +28,7 @@ const FILTERS: readonly [FindCategory, string][] = [
   ['frame', 'Frames'],
   ['section', 'Sections'],
   ['group', 'Groups'],
+  ['text', 'Text'],
   ['shape', 'Shapes'],
   ['slice', 'Slices'],
 ];

@@ -29,6 +29,22 @@ import { screenToWorld } from '@/editor/viewport/viewport';
 import type { ColorProfile } from '@/core/color/color';
 import { documentColorProfile } from '@/core/color/color-profile';
 import { SceneRenderer, type RenderOptions } from '@/engine/render/scene-renderer';
+import { loadBundledFonts } from '@/engine/text/bundled-fonts';
+import { TextShaper } from '@/engine/text/text-shaper';
+import { apply } from '@/core/math/matrix';
+import { worldToScreen } from '@/editor/viewport/viewport';
+import {
+  deleteText,
+  endTextEdit,
+  insertText,
+  moveTextCaret,
+  redoTextEdit,
+  selectAllText,
+  selectedText,
+  textEditTarget,
+  undoTextEdit,
+  type CaretMove,
+} from '@/editor/interactions/text-edit';
 import { imageFilesOf } from '../images/import-image';
 import { IS_MAC } from '../keyboard/keyboard-controller';
 import { ClickCounter } from './click-counter';
@@ -77,6 +93,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
+  const textInputRef = useRef<HTMLTextAreaElement>(null);
   const themeRef = useRef(theme);
   const rulersRef = useRef(rulers);
   const contextMenuRef = useRef(onContextMenu);
@@ -135,6 +152,11 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
     let ck: CanvasKit | null = null;
     let surface: Surface | null = null;
     let renderer: SceneRenderer | null = null;
+    let shaper: TextShaper | null = null;
+    const textInput = textInputRef.current!;
+    // Caret blink phase while editing text; restarts visible whenever the selection changes.
+    let caretVisible = true;
+    let lastTextEdit = editor.state.getSnapshot().textEdit;
     let frame = 0;
     let disposed = false;
     let size = { width: 0, height: 0, dpr: 1 };
@@ -184,7 +206,8 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
       drawOverlay(overlay, {
         editor,
         theme: themeRef.current === 'dark' ? DARK_CHROME : LIGHT_CHROME,
-        marquee: tools.moveTool.marquee,
+        marquee: tools.moveTool.marquee ?? tools.textTool.draftRect,
+        textEdit: editor.state.getSnapshot().textEdit ? { caretVisible } : null,
         rotation: tools.moveTool.rotationLabel,
         radiusHandles: tools.moveTool.radiusHandleView,
         radiusLabel: tools.moveTool.radiusLabel,
@@ -235,11 +258,14 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
     sceneCanvas.addEventListener('webglcontextlost', onContextLost);
     sceneCanvas.addEventListener('webglcontextrestored', onContextRestored);
 
-    loadCanvasKit()
-      .then((instance) => {
+    Promise.all([loadCanvasKit(), loadBundledFonts()])
+      .then(([instance, fonts]) => {
         if (disposed) return;
         ck = instance;
         renderer = new SceneRenderer(instance, editor.images);
+        shaper = new TextShaper(instance, fonts);
+        renderer.setTextShaper(shaper);
+        editor.setTextLayout(shaper);
         resize();
         setStatus({ kind: 'ready' });
       })
@@ -270,8 +296,161 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
       overlayCanvas.setPointerCapture(e.pointerId);
       (document.activeElement as HTMLElement | null)?.blur?.();
       tools.pointerDown(sample(e, clicks.press(e.clientX, e.clientY, e.timeStamp, e.button)));
+      // Clicks inside the text being edited keep keyboard input going to it.
+      if (editor.state.getSnapshot().textEdit) textInput.focus({ preventScroll: true });
       schedule();
     };
+
+    // Text editing input: a hidden textarea receives typing, IME composition and clipboard events.
+    const syncTextInput = () => {
+      const textEdit = editor.state.getSnapshot().textEdit;
+      if (textEdit !== lastTextEdit) {
+        caretVisible = true;
+        lastTextEdit = textEdit;
+        schedule();
+      }
+      if (textEdit && document.activeElement !== textInput) textInput.focus({ preventScroll: true });
+      if (!textEdit && document.activeElement === textInput) textInput.blur();
+      // Keep the textarea at the caret so IME candidate windows appear next to it.
+      const target = textEdit && textEditTarget(editor);
+      if (target && editor.textLayout) {
+        const c = editor.textLayout.caretAt(target.node, target.selection.focus);
+        const p = worldToScreen(editor.state.viewport, apply(editor.scene.worldTransform(target.node.id), { x: c.x, y: c.top }));
+        textInput.style.transform = `translate(${Math.round(p.x)}px, ${Math.round(p.y)}px)`;
+      }
+    };
+    const unsubscribeText = editor.state.subscribe(syncTextInput);
+    const blink = window.setInterval(() => {
+      if (!editor.state.getSnapshot().textEdit) return;
+      caretVisible = !caretVisible;
+      schedule();
+    }, 530);
+    const onBeforeInput = (e: InputEvent) => {
+      if (e.isComposing || !editor.state.getSnapshot().textEdit) return;
+      e.preventDefault();
+      switch (e.inputType) {
+        case 'insertText':
+        case 'insertReplacementText':
+          insertText(editor, e.data ?? e.dataTransfer?.getData('text/plain') ?? '');
+          break;
+        case 'insertLineBreak':
+        case 'insertParagraph':
+          insertText(editor, '\n');
+          break;
+        case 'deleteContentBackward':
+          deleteText(editor, 'backward');
+          break;
+        case 'deleteWordBackward':
+          deleteText(editor, 'backward', 'word');
+          break;
+        case 'deleteSoftLineBackward':
+        case 'deleteHardLineBackward':
+          deleteText(editor, 'backward', 'paragraph');
+          break;
+        case 'deleteContentForward':
+          deleteText(editor, 'forward');
+          break;
+        case 'deleteWordForward':
+          deleteText(editor, 'forward', 'word');
+          break;
+        case 'deleteSoftLineForward':
+        case 'deleteHardLineForward':
+          deleteText(editor, 'forward', 'paragraph');
+          break;
+        case 'historyUndo':
+          undoTextEdit(editor);
+          break;
+        case 'historyRedo':
+          redoTextEdit(editor);
+          break;
+      }
+      schedule();
+    };
+    const onCompositionEnd = (e: CompositionEvent) => {
+      if (e.data) insertText(editor, e.data);
+      textInput.value = '';
+      schedule();
+    };
+    const onTextKeyDown = (e: KeyboardEvent) => {
+      if (!editor.state.getSnapshot().textEdit || e.isComposing) return;
+      const mod = IS_MAC ? e.metaKey : e.ctrlKey;
+      const extend = e.shiftKey;
+      const word = IS_MAC ? e.altKey : e.ctrlKey;
+      const move = (m: CaretMove, w = false) => {
+        e.preventDefault();
+        moveTextCaret(editor, m, { extend, word: w });
+        schedule();
+      };
+      switch (e.key) {
+        case 'Escape':
+          e.preventDefault();
+          e.stopPropagation();
+          endTextEdit(editor);
+          schedule();
+          return;
+        case 'ArrowLeft':
+          return IS_MAC && e.metaKey ? move('lineStart') : move('left', word);
+        case 'ArrowRight':
+          return IS_MAC && e.metaKey ? move('lineEnd') : move('right', word);
+        case 'ArrowUp':
+          return IS_MAC && e.metaKey ? move('textStart') : move('up');
+        case 'ArrowDown':
+          return IS_MAC && e.metaKey ? move('textEnd') : move('down');
+        case 'Home':
+          return move(e.ctrlKey ? 'textStart' : 'lineStart');
+        case 'End':
+          return move(e.ctrlKey ? 'textEnd' : 'lineEnd');
+        case 'Tab':
+          e.preventDefault();
+          insertText(editor, '\t');
+          schedule();
+          return;
+        // Handled here rather than in beforeinput: WebKit fires no beforeinput when the hidden textarea is empty.
+        case 'Backspace':
+        case 'Delete': {
+          e.preventDefault();
+          const unit = IS_MAC ? (e.metaKey ? 'paragraph' : e.altKey ? 'word' : 'grapheme') : e.ctrlKey ? 'word' : 'grapheme';
+          deleteText(editor, e.key === 'Backspace' ? 'backward' : 'forward', unit);
+          schedule();
+          return;
+        }
+      }
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key === 'a') {
+        e.preventDefault();
+        selectAllText(editor);
+      } else if (key === 'z') {
+        e.preventDefault();
+        if (e.shiftKey) redoTextEdit(editor);
+        else undoTextEdit(editor);
+      } else if (key === 'y' && !IS_MAC) {
+        e.preventDefault();
+        redoTextEdit(editor);
+      }
+      schedule();
+    };
+    const onTextCopy = (e: ClipboardEvent) => {
+      if (!editor.state.getSnapshot().textEdit) return;
+      e.preventDefault();
+      e.clipboardData?.setData('text/plain', selectedText(editor));
+      if (e.type === 'cut') {
+        deleteText(editor, 'backward');
+        schedule();
+      }
+    };
+    const onTextPaste = (e: ClipboardEvent) => {
+      if (!editor.state.getSnapshot().textEdit) return;
+      e.preventDefault();
+      insertText(editor, e.clipboardData?.getData('text/plain') ?? '');
+      schedule();
+    };
+    textInput.addEventListener('beforeinput', onBeforeInput);
+    textInput.addEventListener('compositionend', onCompositionEnd);
+    textInput.addEventListener('keydown', onTextKeyDown);
+    textInput.addEventListener('copy', onTextCopy);
+    textInput.addEventListener('cut', onTextCopy);
+    textInput.addEventListener('paste', onTextPaste);
     const onPointerMove = (e: PointerEvent) => {
       const events = e.getCoalescedEvents?.() ?? [];
       tools.pointerMove(sample(events.at(-1) ?? e));
@@ -328,7 +507,17 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
       overlayCanvas.removeEventListener('wheel', onWheel);
       overlayCanvas.removeEventListener('contextmenu', onContextMenu);
       editor.setCanvasSampler(null);
+      unsubscribeText();
+      window.clearInterval(blink);
+      textInput.removeEventListener('beforeinput', onBeforeInput);
+      textInput.removeEventListener('compositionend', onCompositionEnd);
+      textInput.removeEventListener('keydown', onTextKeyDown);
+      textInput.removeEventListener('copy', onTextCopy);
+      textInput.removeEventListener('cut', onTextCopy);
+      textInput.removeEventListener('paste', onTextPaste);
+      editor.setTextLayout(null);
       renderer?.dispose();
+      shaper?.dispose();
       surface?.delete();
     };
   }, [editor, tools]);
@@ -344,6 +533,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
         aria-roledescription="canvas"
         tabIndex={-1}
       />
+      <textarea ref={textInputRef} className={styles.textInput} aria-label="Text editor" data-testid="text-input" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} tabIndex={-1} />
       {status.kind === 'error' && (
         <div className={styles.message} role="alert">
           {status.message}

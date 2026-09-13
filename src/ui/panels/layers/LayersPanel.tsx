@@ -27,6 +27,7 @@ import { IconButton } from '../../primitives/IconButton';
 import { Menu } from '../../primitives/Menu';
 import { LAYER_INDENT, LAYER_ROW_HEIGHT } from '../../tokens';
 import { flattenLayers, rowRange, type LayerRow } from './layer-rows';
+import { renameLayer } from '@/core/text/text-resize';
 import styles from './LayersPanel.module.css';
 
 const OVERSCAN = 8;
@@ -271,7 +272,7 @@ export function LayersPanel() {
                     onDone={(name) => {
                       editor.state.setRenaming(null);
                       const trimmed = name.trim();
-                      if (trimmed && trimmed !== node.name) editor.history.run('Rename', (tx) => tx.set(row.id, 'name', trimmed));
+                      if (trimmed && trimmed !== node.name) editor.history.run('Rename', (tx) => renameLayer(tx, row.id, trimmed));
                     }}
                   />
                 ) : (

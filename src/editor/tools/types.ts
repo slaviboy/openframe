@@ -58,7 +58,8 @@ export type CursorKind =
   | 'rotate-nw'
   | 'rotate-ne'
   | 'rotate-se'
-  | 'rotate-sw';
+  | 'rotate-sw'
+  | 'text';
 
 export interface Tool {
   readonly id: ToolId;

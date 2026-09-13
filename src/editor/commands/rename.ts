@@ -41,6 +41,8 @@ export function previewRename(editor: Editor, spec: RenameSpec): RenamePreview {
   return { ids, from, to: result.names.map((name, i) => (name === '' ? from[i]! : name)), error: result.error };
 }
 
+import { renameLayer } from '@/core/text/text-resize';
+
 /** Renames the selected layers in one undo step. Returns how many names changed. */
 export function applyRename(editor: Editor, spec: RenameSpec): number {
   const preview = previewRename(editor, spec);
@@ -48,7 +50,7 @@ export function applyRename(editor: Editor, spec: RenameSpec): number {
   const changes = preview.ids.map((id, i) => ({ id, name: preview.to[i]! })).filter((c, i) => c.name !== preview.from[i]);
   if (changes.length === 0) return 0;
   editor.history.run('Rename layers', (tx) => {
-    for (const { id, name } of changes) if (tx.store.has(id)) tx.set(id, 'name', name);
+    for (const { id, name } of changes) if (tx.store.has(id)) renameLayer(tx, id, name);
   });
   return changes.length;
 }

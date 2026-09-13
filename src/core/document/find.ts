@@ -20,13 +20,14 @@ import { isSceneNode, type SceneNode } from '../schema/document';
 import type { DocumentStore } from './store';
 
 /** Layer type filters offered by Find. */
-export type FindCategory = 'frame' | 'section' | 'group' | 'shape' | 'slice';
+export type FindCategory = 'frame' | 'section' | 'group' | 'text' | 'shape' | 'slice';
 
 export const FIND_CATEGORY: Record<SceneNode['type'], FindCategory> = {
   FRAME: 'frame',
   SECTION: 'section',
   GROUP: 'group',
   SLICE: 'slice',
+  TEXT: 'text',
   RECTANGLE: 'shape',
   ELLIPSE: 'shape',
   POLYGON: 'shape',

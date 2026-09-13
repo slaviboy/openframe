@@ -33,6 +33,8 @@ import { measureBetween, type MeasureLine } from '@/core/scene/measure';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
 import { isSceneNode } from '@/core/schema/document';
 import { beginCrop } from '../interactions/crop';
+import { beginTextEditAt } from '../interactions/text-edit';
+import { resizedTextMode } from '../commands/text';
 import { resolveCornerRadii } from '@/core/geometry/corners';
 import type { CornerRadii } from '@/core/schema/document';
 import { applyDraggedRadius, draggedRadius, hitRadiusHandle, radiusHandles, radiusHandleScreen, radiusTarget, type RadiusHandle } from '../interactions/radius-handles';
@@ -428,8 +430,10 @@ export class MoveTool implements Tool {
           }
         }
         if (p.clickCount >= 2) {
-          // Double-clicking a layer with an image fill (and no children) starts cropping it.
           const only = editor.selection.length === 1 ? editor.selection[0]! : null;
+          // Double-clicking a text layer edits its text with the caret at the click.
+          if (only && editor.doc.get(only)?.type === 'TEXT' && beginTextEditAt(editor, only, p.world)) break;
+          // Double-clicking a layer with an image fill (and no children) starts cropping it.
           if (only && editor.doc.children(only).length === 0 && beginCrop(editor, only)) break;
           this.enterChild(p);
         }
@@ -704,6 +708,13 @@ export class MoveTool implements Tool {
     }
     if (g.frame.nodeId && g.starts.length === 1) {
       resizeSingle(g.tx, g.starts[0]!, result);
+      const resized = g.tx.store.get(g.frame.nodeId);
+      if (resized?.type === 'TEXT') {
+        // A side handle wraps auto-width text; handles that change the height fix the box.
+        const [ax, ay] = HANDLE_AXES[g.handle];
+        const mode = resizedTextMode(resized.textAutoResize, { width: ax !== 0, height: ay !== 0 });
+        if (mode !== resized.textAutoResize) g.tx.set(resized.id, 'textAutoResize', mode);
+      }
     } else {
       const from = { x: g.frame.toWorld.e, y: g.frame.toWorld.f, width: g.frame.width, height: g.frame.height };
       resizeMany(g.tx, g.starts, from, {

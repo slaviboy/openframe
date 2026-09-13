@@ -45,6 +45,8 @@ import { IOS_CORNER_SMOOTHING } from '@/core/geometry/corners';
 import { backgroundColorBehind } from '@/core/color/contrast';
 import { useColorProfile } from '../../hooks/useColorProfile';
 import { ReorderHandle } from './ReorderHandle';
+import { TextResizingButtons, TypographyFields } from './TypographyFields';
+import type { TextNode } from '@/core/schema/document';
 import { beginBlurEdit, endBlurEdit } from '@/editor/interactions/blur-edit';
 import { canonicalStringify } from '@/core/serialize/serialize';
 import gradientStyles from './Gradient.module.css';
@@ -134,6 +136,7 @@ const TYPE_LABELS: Record<SceneNode['type'], string> = {
   LINE: 'Line',
   SECTION: 'Section',
   SLICE: 'Slice',
+  TEXT: 'Text',
 };
 
 const CAP_OPTIONS: readonly [StrokeCap, string][] = [
@@ -512,6 +515,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
   const lines = nodes.filter((n): n is LineNode => n.type === 'LINE');
   const pointed = nodes.filter((n) => n.type === 'POLYGON' || n.type === 'STAR');
   const stars = nodes.filter((n) => n.type === 'STAR');
+  const texts = nodes.filter((n): n is TextNode => n.type === 'TEXT');
   // Sections never rotate; slices are invisible, so they have no appearance.
   const hasSection = nodes.some((n) => n.type === 'SECTION');
   const allSlices = nodes.every((n) => n.type === 'SLICE');
@@ -579,6 +583,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             />
           </div>
         )}
+        {texts.length === nodes.length && <TextResizingButtons nodes={texts} />}
         {lines.length === 0 && (
           <IconButton
             icon={nodes.every((n) => n.constrainProportions) ? 'lock' : 'unlock'}
@@ -747,11 +752,16 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         )}
       </Section>
       )}
+      {texts.length === nodes.length && (
+        <Section title="Typography">
+          <TypographyFields nodes={texts} />
+        </Section>
+      )}
       {nodes.every((n) => n.isMask) && <MaskSection nodes={nodes} />}
       {geometryNodes.length === nodes.length && (
         <>
           {lines.length === 0 && <PaintSection title="Fill" field="fills" nodes={geometryNodes} defaultPaint={() => solid(DEFAULT_SHAPE_FILL)} />}
-          <PaintSection title="Stroke" field="strokes" nodes={geometryNodes} defaultPaint={() => solid(BLACK)} />
+          {nodes.every((n) => n.type !== 'TEXT') && <PaintSection title="Stroke" field="strokes" nodes={geometryNodes} defaultPaint={() => solid(BLACK)} />}
         </>
       )}
       <SelectionColorsSection nodes={nodes} />

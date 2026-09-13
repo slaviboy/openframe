@@ -64,6 +64,11 @@ export function setSize(tx: Transaction, node: SceneNode, axis: 'width' | 'heigh
   const current = tx.store.getOrThrow(node.id) as SceneNode;
   // Lines have no height; their thickness is the stroke weight.
   if (current.type === 'LINE' && axis === 'height') return;
+  // Typing a width wraps auto-width text (auto height); typing a height fixes the text box.
+  if (current.type === 'TEXT') {
+    const mode = resizedTextMode(current.textAutoResize, { width: axis === 'width', height: axis === 'height' });
+    if (mode !== current.textAutoResize) tx.set(node.id, 'textAutoResize', mode);
+  }
   const next = Math.max(0, value);
   const other = axis === 'width' ? 'height' : 'width';
   if (current.constrainProportions && current.type !== 'LINE' && current.size[axis] > 0) {
@@ -103,6 +108,8 @@ export function setOpacity(tx: Transaction, node: SceneNode, percent: number): v
 export function setBlendMode(tx: Transaction, node: SceneNode, mode: BlendMode): void {
   tx.set(node.id, 'blendMode', mode);
 }
+
+import { resizedTextMode } from './text';
 
 /** Uniform corner radius for frames, rectangles, polygons and stars (clears independent corners). */
 export function setCornerRadius(tx: Transaction, node: SceneNode, radius: number): void {

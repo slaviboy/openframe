@@ -193,8 +193,10 @@ export function nodeContainsLocal(node: SceneNode, p: Vec2, tolerance: number): 
   switch (node.type) {
     case 'GROUP':
       return false;
+    // Sections, slices and text layers are picked anywhere in their box, like the reference editor.
     case 'SECTION':
     case 'SLICE':
+    case 'TEXT':
       return containsPoint({ x: -tolerance, y: -tolerance, width: w + tolerance * 2, height: h + tolerance * 2 }, p);
     case 'LINE':
       return distanceToSegment(p, { x: 0, y: 0 }, { x: w, y: 0 }) <= node.strokeWeight / 2 + tolerance;

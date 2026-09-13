@@ -71,6 +71,7 @@ const TOOL_COMMANDS: CommandDefinition[] = (
     ['tools.ellipse', 'Ellipse', 'ellipse', ['O']],
     ['tools.polygon', 'Polygon', 'polygon', []],
     ['tools.star', 'Star', 'star', []],
+    ['tools.text', 'Text', 'text', ['T']],
     ['tools.eyedropper', 'Eyedropper', 'eyedropper', ['I']],
   ] as const
 ).map(([id, label, tool, shortcuts]) => ({
@@ -319,6 +320,8 @@ const COLOR_PROFILE_COMMANDS: CommandDefinition[] = (['SRGB', 'DISPLAY_P3'] as c
   },
 }));
 
+import { beginTextEdit } from '../interactions/text-edit';
+
 export const BUILTIN_COMMANDS: CommandDefinition[] = [
   ...COLOR_PROFILE_COMMANDS,
   // Listed first so Return applies a crop before it selects children.
@@ -339,6 +342,17 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     enabled: (e) => e.selection.length === 1 && cropTarget(e, e.selection[0]!) !== null,
     run: (e) => {
       beginCrop(e, e.selection[0]!);
+    },
+  },
+  // Before Select children, so Return on a text layer edits its text.
+  {
+    id: 'text.edit',
+    label: 'Edit text',
+    category: 'Edit',
+    shortcuts: ['Enter'],
+    enabled: (e) => e.state.getSnapshot().textEdit === null && e.selection.length === 1 && e.doc.get(e.selection[0]!)?.type === 'TEXT',
+    run: (e) => {
+      beginTextEdit(e, e.selection[0]!);
     },
   },
   ...TOOL_COMMANDS,

@@ -41,3 +41,21 @@
   color: var(--fg-secondary);
   font: var(--weight-regular) var(--text-md) / var(--line-ui) var(--font-ui);
 }
+
+/* Hidden input for text editing: follows the caret (for IME windows) but is never visible. */
+.textInput {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2px;
+  height: 1em;
+  padding: 0;
+  border: 0;
+  margin: 0;
+  overflow: hidden;
+  opacity: 0;
+  resize: none;
+  pointer-events: none;
+  font-size: 16px;
+  white-space: pre;
+}

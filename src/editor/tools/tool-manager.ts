@@ -31,6 +31,8 @@ import { EyedropperTool, type EyedropperSample } from './eyedropper-tool';
 import { LayerPickTool } from './layer-pick-tool';
 import { ImagePlaceTool } from './image-tool';
 import { LineTool } from './line-tool';
+import { TextTool } from './text-tool';
+import { TextEditController, watchTextEdit } from '../interactions/text-edit';
 import { MoveTool } from './move-tool';
 import { ShapeTool } from './shape-tool';
 import type { CursorKind, ModifierState, PointerInfo, Tool, ToolEnvironment } from './types';
@@ -94,6 +96,8 @@ export class ToolManager {
   readonly gradientEdit: GradientEditController;
   /** On-canvas progressive blur handles (active while `blurEdit` is set). */
   readonly blurEdit: BlurEditController;
+  /** Caret and text selection pointer handling (active while `textEdit` is set). */
+  readonly textEdit: TextEditController;
   /** Guide under the pointer, for the overlay. */
   hoveredGuide: GuideRef | null = null;
   private readonly tools: Record<ToolId, Tool>;
@@ -110,6 +114,8 @@ export class ToolManager {
     this.crop = new CropController(editor, this.env.hitTolerancePx);
     this.gradientEdit = new GradientEditController(editor, this.env.hitTolerancePx);
     this.blurEdit = new BlurEditController(editor, this.env.hitTolerancePx);
+    this.textEdit = new TextEditController(editor, this.env.hitTolerancePx);
+    watchTextEdit(editor);
     editor.pickLayerFromCanvas = () => {
       const current = editor.state.getSnapshot().tool;
       return (this.tools.pickLayer as LayerPickTool).pick(current === 'pickLayer' ? 'move' : current);
@@ -131,6 +137,7 @@ export class ToolManager {
       ellipse: new ShapeTool('ellipse', this.env),
       polygon: new ShapeTool('polygon', this.env),
       star: new ShapeTool('star', this.env),
+      text: new TextTool(this.env),
       image: new ImagePlaceTool(this.env),
       eyedropper: new EyedropperTool(this.env),
       pickLayer: new LayerPickTool(this.env),
@@ -168,6 +175,11 @@ export class ToolManager {
   /** The Place image tool, which holds imported images until they are placed. */
   get imageTool(): ImagePlaceTool {
     return this.tools.image as ImagePlaceTool;
+  }
+
+  /** The Text tool (its dragged-out box is drawn by the overlay). */
+  get textTool(): TextTool {
+    return this.tools.text as TextTool;
   }
 
   /** The selection tool in use (Move or Scale), for overlay feedback such as the marquee. */
@@ -359,6 +371,7 @@ export class ToolManager {
   /** Crop mode or on-canvas gradient editing, which take pointer input ahead of the active tool. */
   private get canvasEditor(): Tool | null {
     const state = this.editor.state.getSnapshot();
+    if (state.textEdit !== null) return this.textEdit;
     if (state.croppingId !== null) return this.crop;
     if (state.gradientEdit !== null) return this.gradientEdit;
     if (state.blurEdit !== null) return this.blurEdit;

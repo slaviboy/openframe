@@ -27,6 +27,8 @@ import type { SnapGuide } from '@/core/scene/snapping';
 import { isSceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 import { cropImageWorldQuad } from '../interactions/crop';
+import { textEditTarget } from '../interactions/text-edit';
+import { selectionEnd, selectionStart } from '@/core/text/text-editing';
 import { gradientEditChrome, type GradientChrome } from '../interactions/gradient-edit';
 import { blurEditChrome } from '../interactions/blur-edit';
 import { toCss, toHex6, type ColorProfile } from '@/core/color/color';
@@ -52,6 +54,8 @@ export interface OverlayInput {
   readonly radiusHandles?: { readonly points: readonly Vec2[]; readonly active: number } | null;
   /** Live radius label while dragging a radius handle. */
   readonly radiusLabel?: { radius: number; screen: Vec2 } | null;
+  /** Text editing chrome; `caretVisible` is the blink phase. */
+  readonly textEdit?: { readonly caretVisible: boolean } | null;
   /** Snapping guides of the current move, in world coordinates. */
   readonly guides?: readonly SnapGuide[];
   /** ⌥ distance measurements, in world coordinates. */
@@ -205,6 +209,8 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
   const cropQuad = cropImageWorldQuad(editor);
   if (cropQuad) drawCropChrome(ctx, editor, cropQuad, theme);
 
+  if (input.textEdit) drawTextEditChrome(ctx, editor, theme, input.textEdit.caretVisible);
+
   if (input.rulers) drawRulers(ctx, input);
 }
 
@@ -292,6 +298,45 @@ function drawGradientChrome(ctx: CanvasRenderingContext2D, editor: Editor, g: Gr
 }
 
 /** Crop mode: dashed outline of the whole image with round scale handles on its corners. */
+/** Text editing: the text box, the selection highlight, and the caret (blinking, via `caretVisible`). */
+function drawTextEditChrome(ctx: CanvasRenderingContext2D, editor: Editor, theme: ChromeTheme, caretVisible: boolean): void {
+  const target = textEditTarget(editor);
+  const layout = editor.textLayout;
+  if (!target || !layout) return;
+  const { node, selection } = target;
+  editor.scene.ensure(editor.pageId);
+  const world = editor.scene.worldTransform(node.id);
+  const v = editor.state.viewport;
+  const at = (x: number, y: number) => worldToScreen(v, apply(world, { x, y }));
+  const { width: w, height: h } = node.size;
+  strokeQuad(ctx, [at(0, 0), at(w, 0), at(w, h), at(0, h)], theme.selection, 1);
+  const start = selectionStart(selection);
+  const end = selectionEnd(selection);
+  if (start < end) {
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.fillStyle = theme.selection;
+    for (const r of layout.selectionRects(node, start, end)) {
+      const quad = [at(r.x, r.y), at(r.x + r.width, r.y), at(r.x + r.width, r.y + r.height), at(r.x, r.y + r.height)];
+      ctx.beginPath();
+      quad.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.restore();
+  } else if (caretVisible) {
+    const c = layout.caretAt(node, selection.focus);
+    const top = at(c.x, c.top);
+    const bottom = at(c.x, c.bottom);
+    ctx.beginPath();
+    ctx.moveTo(top.x, top.y);
+    ctx.lineTo(bottom.x, bottom.y);
+    ctx.strokeStyle = theme.selection;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+}
+
 function drawCropChrome(ctx: CanvasRenderingContext2D, editor: Editor, quad: readonly Vec2[], theme: ChromeTheme): void {
   const v = editor.state.viewport;
   const points = quad.map((p) => worldToScreen(v, p));

@@ -29,6 +29,7 @@ export const LAYER_TYPE_ICONS: Record<SceneNode['type'], IconName> = {
   POLYGON: 'polygon',
   STAR: 'star',
   LINE: 'line',
+  TEXT: 'text',
 };
 
 /** Icon for a specific layer: masks show the mask icon, rectangles filled with an image the image icon. */

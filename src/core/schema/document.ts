@@ -422,6 +422,42 @@ export const SectionNodeSchema = z.object({ ...SceneFields, ...GeometryFields, t
 /** Export region. Slices are not rendered; only content within their bounds is exported. */
 export const SliceNodeSchema = z.object({ ...SceneFields, type: z.literal('SLICE') });
 
+/** A font by family and style name (e.g. `{ family: 'Inter', style: 'Semi Bold Italic' }`). */
+export const FontNameSchema = z.object({ family: z.string().min(1).max(200), style: z.string().min(1).max(200) });
+/** Line height: the font's own (AUTO), a fixed size in pixels, or a percentage of the font size. */
+export const LineHeightSchema = z.discriminatedUnion('unit', [
+  z.object({ unit: z.literal('AUTO') }),
+  z.object({ unit: z.literal('PIXELS'), value: z.number().min(0).max(100_000) }),
+  z.object({ unit: z.literal('PERCENT'), value: z.number().min(0).max(100_000) }),
+]);
+/** Extra space between characters, in pixels or as a percentage of the font size. */
+export const LetterSpacingSchema = z.object({ unit: z.enum(['PIXELS', 'PERCENT']), value: z.number().min(-100_000).max(100_000) });
+export const TextAlignHorizontalSchema = z.enum(['LEFT', 'CENTER', 'RIGHT', 'JUSTIFIED']);
+export const TextAlignVerticalSchema = z.enum(['TOP', 'CENTER', 'BOTTOM']);
+/**
+ * Resizing: WIDTH_AND_HEIGHT (auto width — the box fits the text, lines break only at line breaks),
+ * HEIGHT (auto height — fixed width, text wraps and the height fits), NONE (fixed size — text wraps
+ * and may overflow) and TRUNCATE (fixed size, overflowing text ends in an ellipsis).
+ */
+export const TextAutoResizeSchema = z.enum(['WIDTH_AND_HEIGHT', 'HEIGHT', 'NONE', 'TRUNCATE']);
+
+/** Text layer. Fills color the glyphs; `size` follows `textAutoResize`. */
+export const TextNodeSchema = z.object({
+  ...SceneFields,
+  ...GeometryFields,
+  type: z.literal('TEXT'),
+  characters: z.string().max(1_000_000),
+  fontName: FontNameSchema,
+  fontSize: z.number().min(1).max(10_000),
+  lineHeight: LineHeightSchema,
+  letterSpacing: LetterSpacingSchema,
+  textAlignHorizontal: TextAlignHorizontalSchema,
+  textAlignVertical: TextAlignVerticalSchema,
+  textAutoResize: TextAutoResizeSchema,
+  /** The layer name follows the first line of the text until the layer is renamed. Absent means off. */
+  autoRename: z.boolean().optional(),
+});
+
 export const NodeSchema = z.discriminatedUnion('type', [
   DocumentNodeSchema,
   PageNodeSchema,
@@ -434,6 +470,7 @@ export const NodeSchema = z.discriminatedUnion('type', [
   LineNodeSchema,
   SectionNodeSchema,
   SliceNodeSchema,
+  TextNodeSchema,
 ]);
 
 export const DocumentMetaSchema = z.object({
@@ -486,20 +523,28 @@ export type LineNode = z.infer<typeof LineNodeSchema>;
 export type StrokeCap = z.infer<typeof StrokeCapSchema>;
 export type SectionNode = z.infer<typeof SectionNodeSchema>;
 export type SliceNode = z.infer<typeof SliceNodeSchema>;
-export type SceneNode = FrameNode | GroupNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | SectionNode | SliceNode;
+export type FontName = z.infer<typeof FontNameSchema>;
+export type LineHeight = z.infer<typeof LineHeightSchema>;
+export type LetterSpacing = z.infer<typeof LetterSpacingSchema>;
+export type TextAlignHorizontal = z.infer<typeof TextAlignHorizontalSchema>;
+export type TextAlignVertical = z.infer<typeof TextAlignVerticalSchema>;
+export type TextAutoResize = z.infer<typeof TextAutoResizeSchema>;
+export type TextNode = z.infer<typeof TextNodeSchema>;
+export type SceneNode = FrameNode | GroupNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | SectionNode | SliceNode | TextNode;
 export type Node = z.infer<typeof NodeSchema>;
 export type NodeType = Node['type'];
 export type DocumentMeta = z.infer<typeof DocumentMetaSchema>;
 export type SerializedDocument = z.infer<typeof DocumentSchema>;
 
 export const isSceneNode = (n: Node): n is SceneNode => n.type !== 'DOCUMENT' && n.type !== 'PAGE';
-export const hasGeometry = (n: Node): n is FrameNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | SectionNode =>
+export const hasGeometry = (n: Node): n is FrameNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | SectionNode | TextNode =>
   n.type === 'FRAME' ||
   n.type === 'RECTANGLE' ||
   n.type === 'ELLIPSE' ||
   n.type === 'POLYGON' ||
   n.type === 'STAR' ||
   n.type === 'LINE' ||
-  n.type === 'SECTION';
+  n.type === 'SECTION' ||
+  n.type === 'TEXT';
 export const isContainer = (n: Node): boolean =>
   n.type === 'DOCUMENT' || n.type === 'PAGE' || n.type === 'FRAME' || n.type === 'GROUP' || n.type === 'SECTION';

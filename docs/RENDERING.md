@@ -140,6 +140,22 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
 - The body stops at a triangle arrow's base, so the butt end cannot poke through the tip.
 - Paint bounds add half the marker size when a marker is present.
 
+**Text**
+- `TextShaper` ([`engine/text/text-shaper.ts`](../src/engine/text/text-shaper.ts)) builds an SkParagraph per text layer from a `TypefaceFontProvider`. It uses HarfBuzz shaping and ICU line breaking. `applyRoundingHack` is off, so auto-width text laid out at its exact natural width doesn't wrap.
+- **Fonts:** the bundled Inter variable font (weight axis 100–900, upright and italic) loads with CanvasKit before the canvas reports ready ([`bundled-fonts.ts`](../src/engine/text/bundled-fonts.ts)). The font files are embedded as base64 in a lazily imported chunk (`bundled-font-data.ts`) and decoded in memory, because app code never uses `fetch`, not even for same-origin assets.
+  - The Latin subset is registered as `Inter`. Latin-extended, Cyrillic, Greek and Vietnamese subsets are registered under internal family names and listed after the layer's family as fallbacks.
+  - Style names map to a `FontWeight` plus a `wght` font variation, and italic to `FontSlant.Italic` ([`core/text/font-style.ts`](../src/core/text/font-style.ts)).
+- **Text style:**
+  - Line height: auto is the font's own; pixels and percent become a height multiplier with half leading.
+  - Letter spacing in percent is relative to the font size.
+- **Layout by `textAutoResize`:**
+  - Auto width is laid out at its natural width (never narrower than the box).
+  - Everything else wraps to the box width.
+  - Fixed and truncated boxes are offset vertically by `textAlignVertical`.
+  - Truncated boxes are rebuilt with `maxLines` set to the lines that fit and an ellipsis.
+- **Drawing:** each visible fill is drawn as a paragraph built with `pushPaintStyle`, so gradients, images and patterns shade the glyphs. Outline mode paints the glyphs with the hairline paint. A background blur on text uses the text box.
+- **Editing and measuring:** the same shaper implements the editor's `TextLayoutService` (measure, caret, hit, selection rectangles, line navigation). Paragraphs are cached per layer by node identity (up to 256), so what is measured is what is drawn.
+
 **Corner radii**
 - Radii are clamped to half the shorter side.
 - `cornerRadii`, when present, overrides the uniform radius.

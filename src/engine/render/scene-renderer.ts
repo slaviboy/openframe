@@ -43,6 +43,8 @@ import { hasGeometry, isSceneNode, type PatternPaint } from '@/core/schema/docum
 import type { DocumentStore } from '@/core/document/store';
 import { clampCornerRadius, lineCapSize, polygonPoints, starPoints } from '@/core/geometry/shapes';
 import { rectangleCorners, resolveCornerRadii, roundedPolygon, type PathCommand } from '@/core/geometry/corners';
+import type { TextNode } from '@/core/schema/document';
+import type { TextShaper } from '../text/text-shaper';
 import { adjustmentValues, hasAdjustments } from '@/core/image/adjustments';
 import { imageQuad } from '@/core/image/crop';
 import { imagePlacement } from '@/core/image/image-fit';
@@ -399,6 +401,14 @@ export class SceneRenderer {
   private drawGeometry(canvas: Canvas, node: GeometryNode, _pixelSize: number): void {
     if (node.type === 'LINE') {
       this.drawLine(canvas, node);
+      return;
+    }
+    if (node.type === 'TEXT') {
+      for (const paint of node.fills) {
+        if (!paint.visible || paint.opacity <= 0) continue;
+        this.configurePaint(this.fillPaint, paint, node.size);
+        this.drawText(canvas, node, this.fillPaint);
+      }
       return;
     }
     const path = this.shapePath(node);
@@ -776,6 +786,8 @@ export class SceneRenderer {
     switch (node.type) {
       case 'SLICE':
         return null;
+      case 'TEXT':
+        return new ck.PathBuilder().addRect(ck.LTRBRect(0, 0, node.size.width, node.size.height)).detachAndDelete();
       case 'LINE': {
         if (node.strokeWeight <= 0 || node.size.width <= 0) return null;
         const line = new ck.PathBuilder().moveTo(0, 0).lineTo(node.size.width, 0).detachAndDelete();
@@ -871,8 +883,35 @@ export class SceneRenderer {
     if (box) canvas.drawRRect(box, paint);
   }
 
+  private textShaper: TextShaper | null = null;
+  private clearPaint: CkPaint | null = null;
+
+  /** Installs the text shaper that lays out and paints text layers (they don't draw until then). */
+  setTextShaper(shaper: TextShaper | null): void {
+    this.textShaper = shaper;
+  }
+
+  /** Draws a text layer's glyphs painted with `paint` (a fill, or the hairline outline paint). */
+  private drawText(canvas: Canvas, node: TextNode, paint: CkPaint): void {
+    const shaper = this.textShaper;
+    if (!shaper || node.characters === '') return;
+    this.clearPaint ??= (() => {
+      const p = new this.ck.Paint();
+      p.setColor(this.ck.TRANSPARENT);
+      return p;
+    })();
+    const colors = { foreground: paint, background: this.clearPaint };
+    const { paragraph, dy } = shaper.layOut(node, shaper.build(node, colors), (maxLines) => shaper.build(node, colors, maxLines));
+    canvas.drawParagraph(paragraph, 0, dy);
+    paragraph.delete();
+  }
+
   /** Outline mode: a hairline (one device pixel at any zoom) along the layer's geometry. */
   private drawOutline(canvas: Canvas, node: GeometryNode): void {
+    if (node.type === 'TEXT') {
+      this.drawText(canvas, node, this.outlinePaint);
+      return;
+    }
     if (node.type === 'LINE') {
       canvas.drawLine(0, 0, node.size.width, 0, this.outlinePaint);
       return;

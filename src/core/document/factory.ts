@@ -181,6 +181,25 @@ export const makeSlice = (init: ShapeInit): SliceNode => ({ ...sceneDefaults(ini
 
 export const makeGroup = (init: ShapeInit): GroupNode => ({ ...sceneDefaults(init), type: 'GROUP' });
 
+/** An empty auto-width text layer in Inter Regular 12, black, as the reference editor creates them. */
+export const makeText = (init: ShapeInit): TextNode => ({
+  ...sceneDefaults(init),
+  type: 'TEXT',
+  fills: [solid(BLACK)],
+  strokes: [],
+  strokeWeight: 1,
+  strokeAlign: 'OUTSIDE',
+  characters: '',
+  fontName: { family: 'Inter', style: 'Regular' },
+  fontSize: 12,
+  lineHeight: { unit: 'AUTO' },
+  letterSpacing: { unit: 'PERCENT', value: 0 },
+  textAlignHorizontal: 'LEFT',
+  textAlignVertical: 'TOP',
+  textAutoResize: 'WIDTH_AND_HEIGHT',
+});
+import type { TextNode } from '../schema/document';
+
 export function makePage(id: Id, name: string, key: string, canvas: Color = LIGHT_CANVAS): PageNode {
   return { id, type: 'PAGE', name, parent: { id: ROOT_ID, key }, visible: true, locked: false, backgroundColor: canvas };
 }

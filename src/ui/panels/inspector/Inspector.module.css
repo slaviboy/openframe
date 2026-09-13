@@ -197,3 +197,39 @@
   align-items: center;
   gap: var(--space-2);
 }
+
+.buttonRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+}
+
+.valueField {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-control);
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+}
+
+.valueField input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--fg-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  outline: none;
+}
+
+.valueField:focus-within {
+  border-color: var(--accent, #0d99ff);
+}
