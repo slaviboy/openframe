@@ -107,6 +107,17 @@ describe('text shaping', () => {
     expect(shaper.measure({ ...items, listSpacing: 10 }, null).height).toBeCloseTo(shaper.measure(items, null).height + 10, 0);
   });
 
+  test('OpenType features change shaping, and support is detected per font', () => {
+    const digits = text({ characters: '1111' });
+    expect(shaper.measure({ ...digits, openTypeFeatures: { tnum: true } }, null).width).toBeGreaterThan(shaper.measure(digits, null).width + 2);
+    const supported = shaper.supportedFeatures({ family: 'Inter', style: 'Regular' });
+    expect(supported).toEqual(expect.arrayContaining(['tnum', 'frac', 'calt', 'kern']));
+    // The bundled Inter subset has no slashed zero or stylistic sets.
+    expect(supported).not.toContain('zero');
+    expect(supported).not.toContain('ss01');
+    expect(shaper.supportedFeatures({ family: 'Inter', style: 'Regular' })).toBe(supported);
+  });
+
   test('letter case changes the shaped text and max lines limits the height', () => {
     const lower = shaper.measure(text({ characters: 'hello' }), null).width;
     expect(shaper.measure(text({ characters: 'hello', textCase: 'UPPER' }), null).width).toBeGreaterThan(lower);

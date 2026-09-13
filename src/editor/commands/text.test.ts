@@ -23,6 +23,7 @@ import { Editor } from '../editor';
 import { applyScale, captureScale } from '../interactions/scale';
 import { setSize } from './properties';
 import {
+  updateOpenTypeFeatures,
   setHyperlink,
   changeIndentation,
   listSpan,
@@ -204,6 +205,20 @@ describe('text properties', () => {
     editor.history.run('unlink', (tx) => setHyperlink(tx, get(), null));
     expect(get().hyperlink).toBeUndefined();
     expect(get().textDecoration).toBeUndefined();
+  });
+
+  test('OpenType features change per range, keeping other settings, and move to the layer when uniform', () => {
+    editor.history.run('type', (tx) => tx.set(id, 'characters', '1234 5678'));
+    editor.history.run('zero', (tx) => updateOpenTypeFeatures(tx, get(), (f) => ({ ...f, zero: true }), { start: 0, end: 4 }));
+    editor.history.run('tnum', (tx) => updateOpenTypeFeatures(tx, get(), (f) => ({ ...f, tnum: true }), { start: 2, end: 9 }));
+    expect(textStyleValue(get(), 'openTypeFeatures', { start: 0, end: 2 })).toEqual({ zero: true });
+    expect(textStyleValue(get(), 'openTypeFeatures', { start: 2, end: 4 })).toEqual({ zero: true, tnum: true });
+    expect(textStyleValue(get(), 'openTypeFeatures', { start: 5, end: 9 })).toEqual({ tnum: true });
+    editor.history.run('all', (tx) => updateOpenTypeFeatures(tx, get(), () => ({ kern: false })));
+    expect(get().openTypeFeatures).toEqual({ kern: false });
+    expect(get().styleRuns).toBeUndefined();
+    editor.history.run('reset', (tx) => updateOpenTypeFeatures(tx, get(), () => ({})));
+    expect(get().openTypeFeatures).toBeUndefined();
   });
 
   test('the Scale tool scales font size and pixel spacing', () => {

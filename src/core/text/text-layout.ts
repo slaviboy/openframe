@@ -17,7 +17,7 @@
 
 import type { Rect } from '../math/rect';
 import type { Vec2 } from '../math/vec';
-import type { Size, TextNode } from '../schema/document';
+import type { FontName, Size, TextNode } from '../schema/document';
 
 /** A caret: its x position and the vertical extent of its line, in layer coordinates. */
 export interface TextCaretBox {
@@ -57,4 +57,6 @@ export interface TextLayoutService {
   availableFonts(): readonly FontFamilyInfo[];
   /** The family name inside a font file, or null when the engine can't read it. */
   fontFamilyOf?(bytes: Uint8Array): string | null;
+  /** The OpenType feature tags that change how a font shapes text. */
+  supportedFeatures?(font: FontName): readonly string[];
 }

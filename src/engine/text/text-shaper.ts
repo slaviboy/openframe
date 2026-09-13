@@ -19,7 +19,8 @@ import type { Canvas, CanvasKit, EmbindEnumEntity, LineMetrics, Paint as CkPaint
 import type { Id } from '@/core/ids/ids';
 import type { Rect } from '@/core/math/rect';
 import type { Vec2 } from '@/core/math/vec';
-import type { Size, TextAlignVertical, TextNode } from '@/core/schema/document';
+import type { FontName, OpenTypeFeatures, Size, TextAlignVertical, TextNode } from '@/core/schema/document';
+import { FEATURE_PROBE_TEXT, isDefaultOnFeature, PROBED_FEATURES, toFontFeatures } from '@/core/text/opentype';
 import { parseFontStyle, VARIABLE_FONT_STYLES } from '@/core/text/font-style';
 import { nextGrapheme, previousGrapheme } from '@/core/text/text-editing';
 import type { FontFamilyInfo, TextCaretBox, TextLayoutService } from '@/core/text/text-layout';
@@ -46,6 +47,7 @@ export interface TextPainter {
 type RunStyle = Pick<RunsStyle, 'fontName' | 'fontSize' | 'lineHeight' | 'letterSpacing'> & {
   readonly textDecoration?: RunsStyle['textDecoration'] | undefined;
   readonly textCase?: RunsStyle['textCase'] | undefined;
+  readonly openTypeFeatures?: RunsStyle['openTypeFeatures'] | undefined;
 };
 
 /** Layout width for text that never wraps. */
@@ -105,6 +107,8 @@ export class TextShaper implements TextLayoutService {
   private readonly families: string[] = [];
   private readonly userFamilies = new Map<string, { styles: Set<string>; variable: boolean }>();
   private readonly layouts = new Map<Id, CachedLayout>();
+  /** Supported OpenType features by "family\nstyle". */
+  private readonly featureSupport = new Map<string, readonly string[]>();
 
   constructor(
     private readonly ck: CanvasKit,
@@ -151,7 +155,41 @@ export class TextShaper implements TextLayoutService {
       entry.variable ||= font.variable;
       this.userFamilies.set(font.family, entry);
     }
+    this.featureSupport.clear();
     this.clearCache();
+  }
+
+  /**
+   * The OpenType features that change how a font shapes text: sample text is shaped with each
+   * feature switched from its default, and a feature counts when any glyph or position changes.
+   * Cached per family and style.
+   */
+  supportedFeatures(font: FontName): readonly string[] {
+    const key = `${font.family}\n${font.style}`;
+    const cached = this.featureSupport.get(key);
+    if (cached) return cached;
+    const ck = this.ck;
+    const signature = (openTypeFeatures: OpenTypeFeatures) => {
+      const textStyle = this.textStyle({ fontName: font, fontSize: 32, lineHeight: { unit: 'AUTO' }, letterSpacing: { unit: 'PIXELS', value: 0 }, openTypeFeatures });
+      const builder = ck.ParagraphBuilder.MakeFromFontProvider(new ck.ParagraphStyle({ textStyle, applyRoundingHack: false }), this.provider);
+      builder.addText(FEATURE_PROBE_TEXT);
+      const paragraph = builder.build();
+      builder.delete();
+      paragraph.layout(UNBOUNDED);
+      const parts: number[] = [];
+      for (const line of paragraph.getShapedLines()) {
+        for (const run of line.runs) {
+          parts.push(...run.glyphs);
+          for (const v of run.positions) parts.push(Math.round(v * 4));
+        }
+      }
+      paragraph.delete();
+      return parts.join(',');
+    };
+    const base = signature({});
+    const supported = PROBED_FEATURES.filter((tag) => signature({ [tag]: !isDefaultOnFeature(tag) }) !== base);
+    this.featureSupport.set(key, supported);
+    return supported;
   }
 
   fontFamilyOf(bytes: Uint8Array): string | null {
@@ -196,7 +234,7 @@ export class TextShaper implements TextLayoutService {
       fontVariations: [{ axis: 'wght', value: weight }],
       letterSpacing: style.letterSpacing.unit === 'PIXELS' ? style.letterSpacing.value : (style.letterSpacing.value / 100) * style.fontSize,
       ...(lineHeight !== null ? { heightMultiplier: lineHeight, halfLeading: true } : {}),
-      ...(style.textCase === 'SMALL_CAPS' ? { fontFeatures: [{ name: 'smcp', value: 1 }] } : {}),
+      fontFeatures: toFontFeatures(style.openTypeFeatures ?? {}, style.textCase === 'SMALL_CAPS'),
       ...(style.textDecoration === 'UNDERLINE' || style.textDecoration === 'STRIKETHROUGH'
         ? {
             decoration: style.textDecoration === 'UNDERLINE' ? ck.UnderlineDecoration : ck.LineThroughDecoration,

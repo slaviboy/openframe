@@ -24,6 +24,30 @@ import { stepFontSize, stepFontWeight, stepLetterSpacing, stepLineHeight } from 
 import { clampLevel } from '@/core/text/lists';
 import { paragraphAt, paragraphRanges, paragraphStyleOffset } from '@/core/text/paragraphs';
 import { textStyleAt } from '@/core/text/style-runs';
+import type { OpenTypeFeatures } from '@/core/text/opentype';
+
+/**
+ * Changes the OpenType features of a range (or the whole layer). Each stretch of text keeps its
+ * other feature settings; when the whole layer ends up the same, the setting moves to the layer.
+ */
+export function updateOpenTypeFeatures(tx: Transaction, node: SceneNode, update: (features: OpenTypeFeatures) => OpenTypeFeatures, range: TextRange = null): void {
+  const text = textOf(tx, node);
+  if (!text) return;
+  const length = text.characters.length;
+  const from = range ? Math.max(0, Math.min(range.start, range.end)) : 0;
+  const to = range ? Math.min(length, Math.max(range.start, range.end)) : length;
+  const whole = from <= 0 && to >= length;
+  // An empty range inside the text changes nothing (empty text still takes the layer setting).
+  if (to <= from && !whole) return;
+  const segments = textSegments(text);
+  const covered = to > from ? segments.filter((s) => s.end > from && s.start < to) : segments.slice(0, 1);
+  const next = covered.map((s) => update(s.openTypeFeatures));
+  if (whole && next.every((f) => valuesEqual(f, next[0]))) {
+    setTextStyle(tx, node, { openTypeFeatures: next[0]! }, null);
+    return;
+  }
+  covered.forEach((segment, i) => setTextStyle(tx, node, { openTypeFeatures: next[i]! }, { start: Math.max(from, segment.start), end: Math.min(to, segment.end) }));
+}
 import type { ListType } from '@/core/schema/document';
 
 /**

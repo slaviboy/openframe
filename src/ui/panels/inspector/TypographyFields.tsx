@@ -21,6 +21,7 @@ import { FONT_ACCEPT, readFontFiles } from '../../fonts/import-fonts';
 import { canListInstalledFonts, knownInstalledFamilies, listInstalledFamilies, readInstalledFamily } from '../../fonts/local-fonts';
 import type { Box } from '../../primitives/position';
 import { FontPicker, type FontPickerFamily } from './FontPicker';
+import { OpenTypeFields } from './OpenTypeFields';
 import type { Transaction } from '@/core/history/history';
 import { valuesEqual } from '@/core/ops/equality';
 import type { TextAlignHorizontal, TextAlignVertical, TextAutoResize, TextNode } from '@/core/schema/document';
@@ -304,6 +305,7 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
             />
             {maxLines !== undefined && <IconButton icon="minus" label="Remove max lines" onClick={() => run('Remove max lines', (tx, n) => setMaxLines(tx, n, undefined))} />}
           </div>
+          <OpenTypeFields nodes={nodes} range={range} fonts={fontNames} />
         </div>
       )}
     </>

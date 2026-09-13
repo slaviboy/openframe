@@ -16,7 +16,7 @@
  */
 
 import { valuesEqual } from '../ops/equality';
-import type { FontName, Hyperlink, LetterSpacing, LineHeight, ListType, Paint, TextCase, TextDecoration, TextNode } from '../schema/document';
+import type { FontName, Hyperlink, LetterSpacing, LineHeight, ListType, OpenTypeFeatures, Paint, TextCase, TextDecoration, TextNode } from '../schema/document';
 
 /**
  * Mixed styles within a text layer. The layer's own properties are the default style; `styleRuns`
@@ -39,6 +39,8 @@ export interface TextStyle {
   readonly indentation: number;
   /** The link on the text, or null. */
   readonly hyperlink: Hyperlink | null;
+  /** OpenType features set on or off; absent tags use the font's default. */
+  readonly openTypeFeatures: OpenTypeFeatures;
 }
 
 export type TextStyleKey = keyof TextStyle;
@@ -56,7 +58,7 @@ export interface TextSegment extends TextStyle {
   readonly end: number;
 }
 
-export const TEXT_STYLE_KEYS: readonly TextStyleKey[] = ['fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'fills', 'textDecoration', 'textCase', 'listType', 'indentation', 'hyperlink'];
+export const TEXT_STYLE_KEYS: readonly TextStyleKey[] = ['fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'fills', 'textDecoration', 'textCase', 'listType', 'indentation', 'hyperlink', 'openTypeFeatures'];
 
 export type RunsNode = Pick<TextNode, 'characters' | 'fontName' | 'fontSize' | 'lineHeight' | 'letterSpacing' | 'fills'> & {
   readonly styleRuns?: readonly TextStyleRun[] | undefined;
@@ -65,7 +67,10 @@ export type RunsNode = Pick<TextNode, 'characters' | 'fontName' | 'fontSize' | '
   readonly listType?: ListType | undefined;
   readonly indentation?: number | undefined;
   readonly hyperlink?: Hyperlink | undefined;
+  readonly openTypeFeatures?: OpenTypeFeatures | undefined;
 };
+
+const NO_FEATURES: OpenTypeFeatures = {};
 
 /** The layer's default style. */
 export function baseTextStyle(node: RunsNode): TextStyle {
@@ -80,12 +85,14 @@ export function baseTextStyle(node: RunsNode): TextStyle {
     listType: node.listType ?? 'NONE',
     indentation: node.indentation ?? 1,
     hyperlink: node.hyperlink ?? null,
+    openTypeFeatures: node.openTypeFeatures ?? NO_FEATURES,
   };
 }
 
 /** The layer field value for a style value: defaults (no decoration, as typed) are stored as absent. */
 export function layerFieldValue<K extends TextStyleKey>(key: K, value: TextStyle[K]): TextStyle[K] | undefined {
   if ((key === 'textDecoration' && value === 'NONE') || (key === 'textCase' && value === 'ORIGINAL') || (key === 'listType' && value === 'NONE') || (key === 'indentation' && value === 1) || (key === 'hyperlink' && value === null)) return undefined;
+  if (key === 'openTypeFeatures' && Object.keys(value as OpenTypeFeatures).length === 0) return undefined;
   return value;
 }
 

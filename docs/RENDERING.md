@@ -164,6 +164,9 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
 - **Decoration, case and max lines:**
   - Underline and strikethrough become SkParagraph decorations. Their thickness is the font size ÷ 16 (at least 1). Their color is the segment's top visible fill: the paint's color, a gradient's first stop, or black for images and patterns. Decorations don't take the glyph paint.
   - Letter case is applied to each segment's characters when building the paragraph (`applyTextCase`). Characters whose case would change their length stay as typed, so offsets still match. Small caps enables the `smcp` feature.
+  - **OpenType features:** a run's `openTypeFeatures` become SkParagraph `fontFeatures` (1 on, 0 off), together with `smcp` for small caps ([`core/text/opentype.ts`](../src/core/text/opentype.ts)).
+    - `TextShaper.supportedFeatures(fontName)` shapes `FEATURE_PROBE_TEXT` (printable ASCII plus fractions, ligature pairs, ordinals and capitals with punctuation) in that family alone. It then shapes the text again with each probed tag switched from its default. A tag is supported when any glyph ID or position changes.
+    - Results are cached per family and style, and cleared when fonts are registered. Font files are never parsed for their GSUB/GPOS feature lists, so compressed WOFF2 fonts work the same way.
   - `maxLines` sets the paragraph's max lines and an ellipsis.
 - **Drawing:** each visible fill is drawn as a paragraph built with `pushPaintStyle`, so gradients, images and patterns shade the glyphs. Outline mode paints the glyphs with the hairline paint. A background blur on text uses the text box.
 - **Editing and measuring:** the same shaper implements the editor's `TextLayoutService` (measure, caret, hit, selection rectangles, line navigation). Paragraphs are cached per layer by node identity (up to 256), so what is measured is what is drawn.
