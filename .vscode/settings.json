@@ -1,0 +1,5 @@
+{
+  // VS Code Live Server serves the production build: run `npm run build` (or `npm run build:watch`) first.
+  "liveServer.settings.root": "/dist",
+  "liveServer.settings.ignoreFiles": [".vscode/**", "src/**", "e2e/**", "tests/**", "node_modules/**", "docs-mirror/**", "**/*.ts", "**/*.tsx"]
+}

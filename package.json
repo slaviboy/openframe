@@ -1,0 +1,49 @@
+{
+  "name": "openframe",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Offline, local-first browser design editor (Design, Draw, Dev Mode, Motion workflows).",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run typecheck && vite build",
+    "build:watch": "vite build --watch",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.core.json && tsc -p tsconfig.app.json && tsc -p tsconfig.test.json && tsc -p tsconfig.sw.json && tsc -p tsconfig.node.json",
+    "icons": "node scripts/generate-icons.mjs",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "check": "npm run typecheck && npm run lint && npm run test"
+  },
+  "dependencies": {
+    "canvaskit-wasm": "0.42.0",
+    "fflate": "0.8.3",
+    "idb": "8.0.3",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "4.6.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.0",
+    "@fontsource-variable/inter": "^5.2.0",
+    "@playwright/test": "1.63.0",
+    "@types/node": "^24.0.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.1",
+    "eslint": "10.10.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "fake-indexeddb": "6.2.5",
+    "fast-check": "4.10.0",
+    "globals": "^16.0.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.70.0",
+    "vite": "8.3.0",
+    "vitest": "5.0.0"
+  }
+}

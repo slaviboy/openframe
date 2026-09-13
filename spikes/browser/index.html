@@ -1,0 +1,33 @@
+<!doctype html>
+<html>
+  <body>
+    <canvas id="c" width="200" height="200"></canvas>
+    <script type="module">
+      import CanvasKitInit from 'canvaskit-wasm/bin/full/canvaskit.js';
+      import wasmUrl from 'canvaskit-wasm/bin/full/canvaskit.wasm?url';
+      const t0 = performance.now();
+      try {
+        const CK = await CanvasKitInit({ locateFile: () => wasmUrl });
+        const initMs = Math.round(performance.now() - t0);
+        const surface = CK.MakeWebGLCanvasSurface('c');
+        const gpu = !!surface;
+        const s = surface ?? CK.MakeSWCanvasSurface('c');
+        const canvas = s.getCanvas();
+        canvas.clear(CK.WHITE);
+        const paint = new CK.Paint();
+        paint.setColor(CK.Color(13, 153, 255, 1));
+        canvas.drawRect(CK.LTRBRect(0, 0, 100, 100), paint);
+        const blur = CK.ImageFilter.MakeBlur(6, 6, CK.TileMode.Clamp, null);
+        canvas.saveLayer(null, CK.LTRBRect(50, 50, 150, 150), blur);
+        canvas.restore();
+        s.flush();
+        const pixel = Array.from(
+          canvas.readPixels(10, 10, { width: 1, height: 1, colorType: CK.ColorType.RGBA_8888, alphaType: CK.AlphaType.Unpremul, colorSpace: CK.ColorSpace.SRGB }) ?? [],
+        );
+        window.__spike = { ok: pixel[2] > 200 && pixel[0] < 50, initMs, gpu, pixel };
+      } catch (e) {
+        window.__spike = { ok: false, initMs: 0, gpu: false, pixel: [], error: String(e) };
+      }
+    </script>
+  </body>
+</html>

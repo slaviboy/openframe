@@ -1,0 +1,55 @@
+/*
+ * Copyright (C) 2026 Stanislav Georgiev
+ * https://github.com/slaviboy
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { createHash } from 'node:crypto';
+import type { Plugin } from 'vite';
+
+/**
+ * Builds src/pwa/sw.ts as `/sw.js` and injects the precache manifest (every emitted
+ * file plus the app shell) and a content-derived version. Runs only for production builds;
+ * the dev server never registers a service worker.
+ */
+export function serviceWorkerPlugin(): Plugin {
+  let isBuild = false;
+  return {
+    name: 'openframe-sw',
+    configResolved(config) {
+      isBuild = config.command === 'build';
+    },
+    buildStart() {
+      if (!isBuild) return;
+      this.emitFile({ type: 'chunk', id: '/src/pwa/sw.ts', fileName: 'sw.js' });
+    },
+    generateBundle(_options, bundle) {
+      if (!isBuild) return;
+      const sw = bundle['sw.js'];
+      if (!sw || sw.type !== 'chunk') throw new Error('openframe-sw: sw.js chunk missing');
+      const files = Object.keys(bundle)
+        .filter((name) => name !== 'sw.js' && !name.endsWith('.map'))
+;
+      // Paths are relative to the service worker's scope (the app's base path).
+      const precache = [...new Set(['./', 'index.html', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', ...files])].sort();
+      const version = createHash('sha256').update(precache.join('\n')).update(Object.values(bundle).map((b) => (b.type === 'chunk' ? b.code : '')).join('')).digest('hex').slice(0, 12);
+      if (!sw.code.includes('__OPENFRAME_PRECACHE__') || !sw.code.includes('__OPENFRAME_VERSION__')) {
+        throw new Error('openframe-sw: placeholders not found in sw.js');
+      }
+      sw.code = sw.code
+        .replace('__OPENFRAME_PRECACHE__', JSON.stringify(precache).replace(/\\/g, '\\\\').replace(/'/g, "\\'"))
+        .replace('__OPENFRAME_VERSION__', version);
+    },
+  };
+}

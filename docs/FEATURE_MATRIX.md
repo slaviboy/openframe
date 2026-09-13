@@ -1,0 +1,315 @@
+# Feature Matrix
+
+The documentation mirror at `../docs-mirror/` is the functional specification.
+In-scope products are **Design mode, Draw mode, Dev Mode and Motion mode**. Slides, Make and FigJam are out of scope.
+Doc paths below are relative to that mirror.
+
+**Priority**
+- **P0**: required for a usable editor
+- **P1**: important advanced feature
+- **P2**: advanced or edge feature
+- **P3**: nice to have
+
+**Status values**
+- `Implemented`
+- `In progress`
+- `Planned`
+- `Browser limitation`: works only where the browser supports it; a fallback is noted
+- `Not feasible offline`: needs cloud, accounts or AI; the local equivalent is noted
+
+**Milestone** refers to the roadmap in [ARCHITECTURE.md](ARCHITECTURE.md#roadmap).
+
+A row moves to `Implemented` only when the whole chain works:
+UI → command → document mutation → history → persistence → renderer → reload restores state.
+Its **Tests** column must then name the covering tests.
+
+---
+
+## 1. Editor shell and navigation
+
+| Feature | Documentation | Pri | Dependency | M | Status | Tests |
+|---|---|---:|---|---|---|---|
+| Navigation bar (main menu, File, Assets, Variables tabs) | explore/explore-the-navigation-bar-and-left-sidebar.html | P0 | UI shell | M1 | In progress (main menu with Edit/View/Object/Arrange/Page submenus, shortcut labels and full keyboard navigation; File tab; Assets tab M7, Variables tab M8) | src/ui/primitives/position.test.ts, e2e/menus.spec.ts |
+| Left sidebar: file name menu, Pages, Layers, resizable | explore/explore-the-navigation-bar-and-left-sidebar.html | P0 | Scene graph | M1 | In progress (file rename, save status, pages, layers, resizable, Find ⌘F; file menu pending) | e2e/foundation.spec.ts, e2e/find.spec.ts |
+| Right sidebar Design / Prototype tabs (⇧E) | explore/design-prototype-and-explore-layer-properties-in-the-right-sidebar.html | P0 | Inspector | M1 | In progress (Design tab; Prototype tab M10) | e2e/foundation.spec.ts |
+| Floating bottom toolbar with tool groups and dropdowns | explore/access-design-tools-from-the-toolbar.html | P0 | Tools | M1 | In progress (Move/Hand, Frame, Rectangle/Ellipse groups with dropdown menus) | e2e/foundation.spec.ts |
+| Mode switcher Draw / Design / Motion / Dev (⇧D) | explore/access-design-tools-from-the-toolbar.html | P0 | Modes | M11–M13 | Planned | |
+| Zoom / view options menu (zoom presets, pixel preview, pixel grid, snap to pixel grid, layout guides, rulers, outlines, property labels) | file-utilities/adjust-your-zoom-and-view-options.html | P0 | Viewport | M2 | In progress (menu on the zoom readout: zoom in/out, to fit, to selection, 50/100/200%; pixel grid ⌘' (drawn at 400%+) and snap to pixel grid ⌘⇧', both on by default; rulers; outlines; property labels (text captions on properties panel number fields). Pixel preview and layout guides are added as each ships) | e2e/view.spec.ts, e2e/guides.spec.ts, e2e/outlines.spec.ts, e2e/pixel-grid.spec.ts |
+| Pan (Space-drag, H, trackpad, middle mouse), zoom (⌘-scroll, pinch, ⇧0/⇧1/⇧2, ⌘± around cursor) | explore/explore-design-files.html | P0 | Viewport | M1 | Implemented | src/editor/tools/tools.test.ts, src/editor/commands/commands.test.ts, src/editor/editor.test.ts |
+| Minimize UI (⌘⇧\) / Hide UI (⌘\) | file-utilities/hide-or-minimize-the-ui.html | P1 | UI shell | M2 | Implemented (hide shows only the canvas; minimize collapses the sidebars, brings back the properties panel while layers are selected, and offers a Show UI button) | e2e/view.spec.ts |
+| Light / dark theme (follows OS, dark fallback) | file-utilities/use-the-actions-menu-in-reference-design.html | P0 | Tokens | M1 | Implemented (System, Light and Dark preference from the main menu or command palette; System follows the OS with a dark fallback; persisted locally) | e2e/view.spec.ts |
+| Canvas background color per page | explore/change-the-background-color-of-the-canvas.html | P0 | Page node | M1 | In progress (editable in Page section; needs E2E coverage) | src/engine/render/scene-renderer.test.ts |
+| Actions menu / command palette (⌘K; also ⌘/) | file-utilities/use-the-actions-menu-in-reference-design.html | P0 | Command registry | M2 | In progress (command palette: fuzzy search over every command with its shortcut; disabled commands shown but not runnable; ⌘K and ⌘/. The Assets tab arrives with M7; AI actions are not feasible offline) | src/editor/commands/fuzzy.test.ts, e2e/menus.spec.ts |
+| Context menus on canvas, layers and pages (only working actions) | work-with-layers/select-layers-and-objects.html | P0 | Command registry | M2 | Implemented (right-click selects the target and keeps a multi-selection that contains it; object, empty-canvas and page menus built from commands; unavailable actions shown disabled) | src/editor/tools/tools.test.ts, e2e/menus.spec.ts |
+| Keyboard-only use (F6 toolbar focus, place object with Return, keyboard box selection) | file-utilities/use-reference-products-with-a-keyboard.html | P1 | Keymap | M2 | In progress (F6 / Ctrl+F6 focuses the active tool button, ←/→ move between tool buttons and Enter activates one, returning focus to the canvas; with a frame, section, slice or shape tool active, Return places a 100×100 layer centered in the visible canvas; shared keys run the first enabled command. Arrow-key panning with nothing selected and the ⌥Space keyboard box selection tool pending) | src/editor/keymap/keymap.test.ts, src/editor/tools/place-object.test.ts, e2e/keyboard.spec.ts |
+| Keyboard shortcuts panel, configurable bindings | file-utilities/use-reference-products-with-a-keyboard.html | P1 | Keymap | M2 | In progress (⌃⇧? or Main menu → Help: panel docked along the bottom while you keep working, tabs per category listing every registered shortcut, shortcuts already pressed highlighted live and remembered per device. Configurable bindings UI pending; the keymap already supports user overrides) | src/ui/shortcuts/shortcut-groups.test.ts, e2e/shortcuts.spec.ts |
+| Nudge amounts (small/big) preference | file-utilities/set-small-and-big-nudge-values.html | P1 | Preferences | M2 | Implemented (Main menu → Preferences → Nudge amount: small and big distances, validated positive up to 10,000 px, stored per device) | src/editor/commands/nudge.test.ts, e2e/nudge.spec.ts |
+| Rulers and guides (drag from ruler, ⌥-drag duplicate, delete, frame-relative) | file-utilities/add-guides-to-the-canvas-or-frames.html | P1 | Viewport, Snapping | M2 | In progress (rulers ⇧R beside the floating panels with 1/2/5 tick steps and a selection highlight; drag guides from rulers, move, ⌥-drag copy, drop on a ruler or Delete or right-click → Remove guide; page guides snap to whole pixels and layer edges; a new guide dropped over a top-level frame becomes a frame guide; guides persist in the document and undo. ⌥ distances to guides and layers snapping to guides pending) | src/editor/interactions/guides.test.ts, src/editor/chrome/rulers.test.ts, e2e/guides.spec.ts |
+| Outline mode (⌘⇧O), include hidden layers, object bounds | file-utilities/view-layer-outlines-in-reference-design.html | P1 | Renderer | M2 | In progress (⌘⇧O and zoom menu: hairline outlines of every layer's geometry, black or white by canvas brightness, without fills, strokes or clipping; "Include hidden layers in outlines"; per-device preference. Selecting hidden layers in outline mode, stroke placement detail and "Include object bounds" pending) | src/engine/render/outline-render.test.ts, e2e/outlines.spec.ts |
+| Find and replace (text, layer types, all pages) | file-utilities/find-and-replace-in-reference.html | P1 | Scene graph | M2 | In progress (Find ⌘F or the search button in the layers header: case-insensitive layer-name search on this page or all pages, type filters for frames, sections, groups, shapes and slices, ↑/↓/Enter step through results, clicking selects and brings the layer into view across pages, Esc returns to layers. Text content search and Replace arrive with text layers in M4) | src/core/document/find.test.ts, e2e/find.spec.ts |
+| Custom file thumbnail (frame → thumbnail) | file-utilities/set-custom-thumbnails-for-files.html | P2 | Export | M9 | Planned | |
+| Local file browser (recents, drafts, trash, import) | import-and-export/import-files-to-the-file-browser.html | P0 | Persistence | M9 | Planned | |
+| AI actions, the reference agent, First Draft, generate/edit images, remove background | explore/use-ai-tools-in-reference-design.html, explore/work-with-the-reference-agent-in-design-files.html | — | Cloud AI | — | Not feasible offline | |
+| Plugins, widgets, Tools tab, shaders marketplace | explore/explore-the-navigation-bar-and-left-sidebar.html | — | Cloud | — | Not feasible offline (local equivalent: built-in command palette) | |
+
+## 2. Layers, selection and organization
+
+| Feature | Documentation | Pri | Dependency | M | Status | Tests |
+|---|---|---:|---|---|---|---|
+| Scene graph (document → pages → nodes; parent/child/sibling) | work-with-layers/parent-child-and-sibling-relationships.html | P0 | Document model | M1 | Implemented | src/core/document/document.test.ts, src/core/scene/scene.test.ts |
+| Pages: add, rename, delete, duplicate, reorder, switch | explore/explore-design-files.html | P0 | Scene graph | M1 | In progress (add/rename/switch in UI; delete/duplicate as commands until the context menu in M2; reorder M2) | e2e/foundation.spec.ts, src/editor/commands/commands.test.ts |
+| Layers panel: virtualized tree, type icons, expand/collapse, collapse all, bold top-level frames | explore/explore-the-navigation-bar-and-left-sidebar.html | P0 | Scene graph | M1 | In progress (virtualized tree, type icons, expand/collapse with ⌥ for all descendants, Collapse layers button, bold top-level frames and sections, context menu; layer search through Find ⌘F) | e2e/foundation.spec.ts, e2e/navigation.spec.ts, src/ui/panels/layers/layer-rows.test.ts |
+| Rename (double-click, ⌘R batch rename with regex, numbering, preview) | work-with-layers/rename-layers.html | P0 / P2 | Commands | M1 / M2 | Implemented (inline rename by double-click, Enter, F2 or ⌘R with one layer; ⌘R with several layers opens Rename layers: Match as a regular expression, Rename to with Current name `$&`, capture groups, Number ↑ `$n`/`$nnn`, Number ↓ `$N`/`$NNN`, Start from, live preview, invalid expressions reported; one undo step. AI renaming not feasible offline) | e2e/foundation.spec.ts, e2e/rename.spec.ts, src/core/document/batch-rename.test.ts, src/editor/commands/rename.test.ts |
+| Lock / unlock (⌘⇧L, drag across rows) | work-with-layers/lock-and-unlock-layers.html | P0 | Commands | M1 | In progress (⌘⇧L and row toggle; drag across rows M2) | src/core/scene/scene.test.ts |
+| Hide / show (⌘⇧H, eye icon) | work-with-layers/toggle-visibility-to-hide-layers.html | P0 | Commands | M1 | Implemented | src/editor/commands/commands.test.ts, e2e/foundation.spec.ts |
+| Drag to reorder and reparent in the layers panel | explore/explore-the-navigation-bar-and-left-sidebar.html | P0 | Fractional index | M1 | Implemented | src/editor/commands/panel-logic.test.ts, e2e/foundation.spec.ts |
+| Click / ⇧-click / ⌘-click deep select, marquee, ⌘-marquee nested | work-with-layers/select-layers-and-objects.html | P0 | Hit testing | M1 | Implemented | src/core/scene/scene.test.ts, src/editor/tools/tools.test.ts, e2e/foundation.spec.ts |
+| Hierarchy navigation (Enter child, ⇧Enter parent, Tab / ⇧Tab siblings), select all, inverse, deselect | work-with-layers/select-layers-and-objects.html | P0 | Selection | M2 | Implemented (Enter selects children, ⇧Enter the parent, Tab / ⇧Tab siblings in layers order with wrap-around; select all ⌘A, inverse ⇧⌘A, deselect Esc; navigation keys act only when focus is on the canvas, and unavailable commands leave keys to the browser) | src/editor/commands/commands.test.ts, e2e/navigation.spec.ts |
+| Right-click → Select layer (layers under cursor) | work-with-layers/select-layers-and-objects.html | P1 | Hit testing | M2 | Implemented (canvas context menu lists every visible, unlocked layer under the pointer in layers-panel order, including groups whose content is hit and excluding clipped-out content; the current selection is checked) | src/editor/commands/select-similar.test.ts, e2e/select.spec.ts |
+| Select matching layers (⌥⌘A), select all with same fill/stroke/effect/font/instance | work-with-layers/identify-matching-objects.html | P1 | Selection | M2 | In progress (⌥⌘A matches the same chain of layer types and names in sibling top-level frames or groups of the same page or section; select all with same fill, stroke or properties on the current page. Same effect arrives with M3, font with M4, instance with M7; ⇧-marquee restricted to matches pending) | src/editor/commands/select-similar.test.ts, e2e/select.spec.ts |
+| Groups (⌘G, ⇧⌘G), frame selection (⌥⌘G) | create-and-edit-layers/the-difference-between-frames-and-groups.html | P0 | Scene graph | M2 | Implemented (groups hug children and are removed when emptied; ungroup also removes frames) | src/editor/commands/structure.test.ts, e2e/structure.spec.ts |
+| Frames: presets, clip content, nested frames, resize ignores children with ⌘, hover + to duplicate | create-and-edit-layers/frames-in-reference-design.html | P0 | Scene graph | M1 / M2 | Planned | |
+| Auto-parenting when drawing or dropping into frames; Space to prevent | work-with-layers/parent-child-and-sibling-relationships.html | P0 | Hit testing | M1 | Planned | |
+| Sections (⇧S, wrap in section, title, fill/stroke, delete keeps content, ready for dev) | work-with-layers/organize-your-canvas-with-sections.html | P1 | Scene graph | M2 | In progress (Section tool; drawing, moving or resizing a section over layers adopts the ones it fully covers; dragging layers in and out; nested sections; never inside frames or groups (enforced for drawing, dragging, layer drops, paste and file load); title pill selects, drags and double-click renames; fill and stroke; wrap in new section ⌥⌘S; remove section keeping contents ⌘⌫; no rotation or flip. Ready for dev arrives with Dev Mode in M13; section links are not feasible offline) | src/editor/commands/sections.test.ts, e2e/sections.spec.ts |
+| Slices | import-and-export/export-static-designs-from-reference.html | P1 | Export | M2 | In progress (Slice tool S; slices are not rendered, show a dashed outline when hovered or selected, can be moved and resized, and only take clicks where no painted layer is hit. Exporting a slice's region arrives with export settings in M9) | src/editor/commands/sections.test.ts, e2e/sections.spec.ts |
+| Masks (⌃⌘M; alpha / vector / luminance; mask outlines) | create-and-edit-layers/masks.html | P1 | Renderer | M3 | Implemented (Use as mask from the context menu or ⌃⌘M / Ctrl+Alt+M: one layer becomes a mask for the siblings above it; several layers become a "Mask group" whose bottom layer is the mask; the same command removes masks. A mask applies to siblings above it up to the next mask; hidden masks mask nothing. Mask section with Alpha / Vector / Luminance type and Remove mask; mask icon in the layers panel; masked content can only be clicked inside the mask; View › Mask outlines draws masks in green. Hover preview of mask types not implemented) | src/editor/commands/masks.test.ts, src/engine/render/mask-render.test.ts, e2e/masks.spec.ts |
+| Multi-edit text and variants (Enter, Q) | work-with-layers/edit-objects-on-the-canvas-in-bulk.html | P2 | Selection | M7 | Planned | |
+| Smart selection (spacing handles, swap, reflow on duplicate) | work-with-layers/arrange-layers-with-smart-selection.html | P2 | Snapping | M2 | In progress (1D smart selections — two or more layers in a row or column with equal gaps within 0.5 px — show pink center rings and gap handles; dragging a handle or editing "space between" in the Layout section respaces every gap in one undo step. Marking, reordering and swapping, reflow on duplicate or delete, resizing within the selection and 2D grids pending) | src/core/scene/smart-selection.test.ts, src/editor/commands/smart-selection.test.ts, e2e/smart-selection.spec.ts |
+| Accessible canvas representation (layer tree mirrors the canvas for screen readers) | view-prototypes/accessible-prototypes-in-reference.html | P1 | Accessibility | M1 | Planned | |
+
+## 3. Transform, arrange, snapping
+
+| Feature | Documentation | Pri | Dependency | M | Status | Tests |
+|---|---|---:|---|---|---|---|
+| Move / resize handles (⇧ aspect, ⌥ from center), dimension label | work-with-layers/adjust-alignment-rotation-position-and-dimensions.html | P0 | Transforms | M1 | Implemented | src/editor/tools/tools.test.ts, e2e/foundation.spec.ts |
+| X/Y/W/H/rotation inputs with math expressions, Mixed, scrubbing labels | work-with-layers/adjust-alignment-rotation-position-and-dimensions.html | P0 | Inspector | M1 | Implemented | src/editor/commands/panel-logic.test.ts, e2e/foundation.spec.ts |
+| Rotation (handle, ⇧ 15° steps, ⌥R origin), flip ⇧H / ⇧V | work-with-layers/adjust-alignment-rotation-position-and-dimensions.html | P0 | Transforms | M2 | In progress (rotation handles outside corners with ⇧ 15° snapping and a live angle label, flip ⇧H/⇧V, rotation field; ⌥R rotation origin pending) | src/editor/tools/tools.test.ts, src/editor/commands/structure.test.ts, src/editor/commands/panel-logic.test.ts, e2e/transform.spec.ts, e2e/structure.spec.ts |
+| Aspect ratio lock | work-with-layers/adjust-alignment-rotation-position-and-dimensions.html | P0 | Transforms | M2 | Implemented (Constrain proportions lock between W and H, stored per layer as `constrainProportions`; W/H edits scale the other dimension; handle resizes keep the ratio when every selected layer is constrained, and Shift inverts it; not offered for lines) | src/editor/commands/proportions.test.ts, e2e/proportions.spec.ts |
+| Scale tool (K) with multiplier and anchor | work-with-layers/scale-layers-while-maintaining-proportions.html | P1 | Transforms | M2 | Implemented (K or the Move tools menu; handle drags scale layers and their contents proportionally, including stroke weights and corner radii, from the opposite side or the center with ⌥; Scale panel with typed multiplier, presets, proportional W/H and a 3×3 anchor box; locked layers are skipped; effects scale too — shadow offsets, blur radii and spread) | src/editor/commands/scale.test.ts, e2e/scale.spec.ts |
+| Nudge with arrows (⇧ for big) | file-utilities/set-small-and-big-nudge-values.html | P0 | Commands | M1 | Implemented (arrow keys nudge by the small amount and ⇧ + arrows by the big amount, one undo step per press, locked layers stay put; arrows act only with focus on the canvas) | src/editor/commands/nudge.test.ts, e2e/structure.spec.ts, e2e/nudge.spec.ts |
+| Layer order (⌘] ⌘[ ⌥⌘] ⌥⌘[) | work-with-layers/adjust-alignment-rotation-position-and-dimensions.html | P0 | Commands | M1 | Implemented | src/editor/commands/commands.test.ts |
+| Align (⌥A/D/W/S/H/V), ⇧ aligns to parent, distribute, tidy up | work-with-layers/adjust-alignment-rotation-position-and-dimensions.html | P0 | Commands | M2 | In progress (six align commands, ⇧ aligns each layer to its parent, distribute horizontal/vertical spacing ⌃⌥H/⌃⌥V; tidy up ⌃⌥T arranges the selection into rows by vertical overlap with the median existing gap, top-left anchored, whole pixels, one undo step) | src/editor/commands/align.test.ts, src/core/scene/tidy.test.ts, src/editor/commands/tidy.test.ts, e2e/arrange.spec.ts, e2e/tidy-paste.spec.ts |
+| Snapping to geometry, objects, pixel grid; smart guides; spacing and equal-gap indicators; ⌃ disables | work-with-layers/adjust-alignment-rotation-position-and-dimensions.html | P0 | Spatial index | M2 | In progress (moving, resizing and drawing snap edges and centers to visible siblings and the parent frame within 5 screen px, with red guides; ⌃ disables; ⇧ axis lock respected; positions land on whole pixels while "Snap to pixel grid" is on and on 0.01 px when it is off (rotated layers always 0.01; frames and sections do not yet force pixel snapping when it is off); while moving, a layer between two neighbors in its row or column snaps to equal gaps on axes that didn't snap to an edge, with pink spacing indicators and labels; ⌥-hover shows red distances from the selection to the hovered layer or to its parent frame's edges; snapping for rotated resizes and matching gaps elsewhere on the canvas pending) | src/core/scene/snapping.test.ts, src/core/scene/equal-gaps.test.ts, src/core/scene/measure.test.ts, src/editor/tools/tools.test.ts, src/editor/tools/measure-tool.test.ts, src/editor/interactions/pixel-snap.test.ts, e2e/arrange.spec.ts, e2e/pixel-grid.spec.ts |
+| Measure distances (⌥-hover redlines, ⌘⌥ for nested) | work-with-layers/measure-distances-between-layers.html | P0 | Chrome overlay | M2 | In progress (with a selection, hold ⌥ and hover: red lines and labels for the gaps to the hovered layer, or for the four distances when one layer contains the other; with nothing else under the pointer, distances go to the selection's parent frame or section. ⌥ hover already reaches nested layers, so ⌘⌥ behaves the same; pressing or releasing ⌥ updates without moving the pointer. Distances to ruler guides and to rotated layers' true outlines pending) | src/core/scene/measure.test.ts, src/editor/tools/measure-tool.test.ts |
+| Constraints (left, right, left & right, center, scale; ⌘ ignores) | work-with-layers/apply-constraints-to-define-how-layers-resize.html | P0 | Layout | M5 | Planned | |
+| Layout guides (uniform grid, columns, rows; count/auto, margin, gutter, offset; styles) | work-with-layers/create-layout-guides.html | P1 | Renderer, Constraints | M5 | Planned | |
+| Copy / cut / paste / paste in place / paste over selection / paste to replace (⇧⌘R) / multi-paste into frames | work-with-layers/copy-and-paste-objects.html | P0 | Clipboard | M2 | In progress (copy, cut, paste into selected frame or above selection with position rules, paste over selection ⇧⌘V, paste to replace ⇧⌘R, right-click → Paste here centers the content on the pointer inside the frame or section under it; ⌘V with two or more frames selected pastes one copy into each at the same position relative to the frame it was copied from, centered when copied from outside a frame or when that position falls outside the frame) | src/editor/clipboard/clipboard.test.ts, src/editor/clipboard/paste-here.test.ts, src/editor/clipboard/paste-multi.test.ts, e2e/clipboard.spec.ts, e2e/tidy-paste.spec.ts, e2e/paste-frames.spec.ts |
+| Duplicate (⌘D repeats last offset), ⌥-drag duplicate | work-with-layers/copy-and-paste-objects.html | P0 | Commands | M2 | Implemented (⌘D with repeated offset; ⌥-drag duplicate, whose offset a following ⌘D repeats) | src/editor/commands/structure.test.ts, src/editor/tools/tools.test.ts, e2e/structure.spec.ts, e2e/arrange.spec.ts |
+| Copy as PNG (⌘⇧C), copy as SVG, copy as code | work-with-layers/copy-and-paste-objects.html | P1 | Export, Codegen | M9 / M13 | Planned | |
+| Copy / paste properties (⌥⌘C / ⌥⌘V, single fill/stroke/effect rows) | work-with-layers/copy-and-paste-properties-between-layers.html | P1 | Clipboard | M3 | Implemented (Copy properties / Paste properties in the context menu, ⌥⌘C / ⌥⌘V (Ctrl+Alt+C / V): opacity, blend mode, effects, fills, strokes and stroke settings, corner radius and independent corners, per-side stroke weights — each applied only where the target layer type supports it, with absent optional properties cleared, one undo step for all selected layers. Clicking a fill, stroke or effect row highlights it; ⌘C then copies only that row and ⌘V adds it on top of each selected layer's list. Properties travel as validated `data-openframe-properties` HTML on the system clipboard when the browser allows, with an in-tab fallback. Text properties arrive with the text engine (M4)) | src/editor/clipboard/properties.test.ts, e2e/properties.spec.ts |
+| Copy between browser tabs/windows | work-with-layers/copy-and-paste-objects.html | P1 | Clipboard (native copy/paste events with an HTML flavor carrying a validated payload) | M2 | In progress (implemented through the system clipboard; the cross-tab path cannot be automated in Playwright, so it has a manual test step in TESTING.md) | src/editor/clipboard/clipboard.test.ts |
+
+## 4. Shape, drawing and vector tools
+
+| Feature | Documentation | Pri | Dependency | M | Status | Tests |
+|---|---|---:|---|---|---|---|
+| Rectangle (R), Ellipse (O), Frame (F / A) | create-and-edit-layers/shape-tools.html | P0 | Tools | M1 | Implemented | src/editor/tools/tools.test.ts, e2e/foundation.spec.ts |
+| Line (L), Arrow (⇧L), Polygon (point count), Star (count, ratio, radius) | create-and-edit-layers/shape-tools.html | P0 | Tools | M2 | In progress (Line/Arrow tools with ⇧ 45° constraint, snapping and click-to-place; end point handles move one end; start/end point markers: none, line arrow, triangle arrow, round, square, circle, diamond. Polygon and Star tools with Count 3–60 and star Ratio; hit testing follows outlines. Polygons and stars take a corner radius) | src/editor/tools/line-tool.test.ts, src/engine/render/shapes-render.test.ts, src/core/geometry/shapes.test.ts, e2e/shapes.spec.ts |
+| Arc handles on ellipse (sweep, start, ratio ring) | create-and-edit-layers/arc-tool-create-arcs-semi-circles-and-rings.html | P1 | Geometry | M6 | Planned | |
+| Pencil (⇧P), smoothing, ⇧ straight lines | create-and-edit-layers/sketch-on-the-canvas-with-the-pencil-tool.html | P0 | Vector model | M6 | Planned | |
+| Pen (P): vector networks, curves, close/open paths | design-with-vector-tools/vector-networks.html | P0 | Vector model | M6 | Planned | |
+| Vector edit mode with secondary toolbar | design-with-vector-tools/edit-vector-layers.html | P0 | Vector model | M6 | Planned | |
+| Bend tool with mirroring modes | design-with-vector-tools/edit-vector-layers.html | P0 | Vector model | M6 | Planned | |
+| Cut tool (X), Lasso (Q), Paint bucket (⇧B), Eraser (⇧E) | design-with-vector-tools/edit-vector-layers.html | P1 | Planarization | M6 | Planned | |
+| Variable-width strokes (width points, profiles) | design-with-vector-tools/edit-vector-layers.html | P1 | Stroke geometry | M6 | Planned | |
+| Shape builder (merge, extract, ⌥ subtract) | design-with-vector-tools/create-custom-shapes-with-the-shape-builder-tool.html | P1 | Planarization | M6 | Planned | |
+| Boolean operations: union, subtract, intersect, exclude (⌥⇧U/S/I/E), live boolean groups | design-with-vector-tools/boolean-operations.html | P0 | Skia PathOps | M6 | Planned | |
+| Flatten (⌥⇧F) | design-with-vector-tools/flatten-layers.html | P0 | Geometry | M6 | Planned | |
+| Outline stroke (⌘⌥O) | design-with-vector-tools/convert-strokes-to-vector-paths.html | P1 | Geometry | M6 | Planned | |
+| Convert text to vector paths | design-with-vector-tools/convert-text-to-vector-paths.html | P1 | Text, Geometry | M6 | Planned | |
+| Offset path (amount, join) | design-with-vector-tools/offset-a-vector-path.html | P2 | Geometry | M6 | Planned | |
+| Simplify path (slider; ⇧Delete deletes and heals) | design-with-vector-tools/simplify-a-vector-path.html | P2 | Curve fitting | M6 | Planned | |
+| Corner radius and smoothing, independent corners, iOS preset, on-canvas radius handles | additional-properties/adjust-corner-radius-and-smoothing.html | P0 | Geometry | M1 / M3 | In progress (uniform radius for frames, rectangles, polygons and stars — polygon/star vertices round with tangent arcs clamped to half of each adjacent edge; Independent corners toggle with four per-corner fields for frames and rectangles, returning to the largest corner when turned off; radii scale with the Scale tool. Corner smoothing, the iOS preset and on-canvas radius handles pending) | src/editor/commands/corner-radius.test.ts, src/engine/render/shapes-render.test.ts, src/core/geometry/shapes.test.ts, e2e/corner-radius.spec.ts |
+| Image / video placement tool (⇧⌘K, place multiple) | color-gradients-and-images/add-images-and-videos-to-designs.html | P0 | Assets | M3 | In progress (Place image in the Shape tools menu or ⇧⌘K opens the file picker for PNG, JPEG, WebP, GIF and other browser-decodable images; a hint shows the next image and how many remain; each click places one — on a rectangle, ellipse, polygon or star it replaces the top fill, elsewhere it creates a layer at the image's pixel size inside the frame under the click; Esc or switching tools discards the rest. Dropping image files on the canvas and pasting images from the clipboard place them at the drop point or the center of the view, several in a row. Images over 4096px are scaled down. SVG files are rejected until SVG import (M9); video and "Place all" pending) | src/editor/commands/images.test.ts, e2e/images.spec.ts |
+
+## 5. Text and typography
+
+| Feature | Documentation | Pri | Dependency | M | Status | Tests |
+|---|---|---:|---|---|---|---|
+| Text tool (click → auto width, drag → fixed size), editing, caret, selection, IME | text-and-typography/guide-to-text-in-reference-design.html | P0 | SkParagraph | M4 | Planned | |
+| Resizing: auto width, auto height, fixed, truncate, max lines | text-and-typography/adjust-text-dimensions-and-resizing.html | P0 | Layout | M4 | Planned | |
+| Font family, weight/style, size, line height, letter spacing, horizontal and vertical alignment | text-and-typography/explore-text-properties.html | P0 | Text engine | M4 | Planned | |
+| Mixed styles within one text layer | text-and-typography/explore-text-properties.html | P0 | Rich runs | M4 | Planned | |
+| Type settings: decoration (underline options), letter case, vertical trim, paragraph spacing, indentation, hanging punctuation, wrap style | text-and-typography/explore-text-properties.html | P1 | Text engine | M4 | Planned | |
+| Bulleted and numbered lists, nesting | text-and-typography/create-bulleted-and-numbered-lists.html | P1 | Text engine | M4 | Planned | |
+| Links in text | text-and-typography/add-links-to-text.html | P2 | Rich runs | M4 | Planned | |
+| OpenType features (stylistic sets, numbers, ligatures) | text-and-typography/use-opentype-features.html | P1 | SkParagraph fontFeatures | M4 | Planned | |
+| Variable font axes | text-and-typography/use-variable-fonts.html | P1 | SkParagraph fontVariations | M4 | Planned | |
+| Right-to-left text, bidi | text-and-typography/add-right-to-left-text.html | P1 | SkParagraph (ICU) | M4 | Planned | |
+| CJK text | text-and-typography/add-text-in-chinese-japanese-and-korean.html | P1 | Local fonts | M4 | Browser limitation (renders with local or uploaded CJK fonts; no bundled Noto) | |
+| Emoji and smart symbols | text-and-typography/add-emojis-and-smart-symbols-to-text.html | P2 | Text input | M4 | Planned | |
+| Text styles (create, apply, detach) | text-and-typography/create-and-apply-text-styles.html | P0 | Styles | M8 | Planned | |
+| Font picker with preview and filters | text-and-typography/browse-and-apply-fonts.html | P0 | Font registry | M4 | Planned | |
+| Local fonts | text-and-typography/add-a-font-to-reference.html | P0 | Local Font Access API | M4 | Browser limitation (Chromium only; fallback: upload TTF/OTF/WOFF2 stored in OPFS) | |
+| Missing fonts dialog with replacement | text-and-typography/browse-and-apply-fonts.html | P1 | Font registry | M4 | Planned | |
+| Icon fonts | text-and-typography/use-icon-fonts.html | P3 | Local fonts | M4 | Planned | |
+| Text on a path | text-and-typography/guide-to-text-in-reference-design.html | P1 | RSXform text | M11 | Planned | |
+| Typography shortcuts (size, weight, spacing, line height) | text-and-typography/explore-text-properties.html | P1 | Keymap | M4 | Planned | |
+
+## 6. Fills, strokes, effects, color
+
+| Feature | Documentation | Pri | Dependency | M | Status | Tests |
+|---|---|---:|---|---|---|---|
+| Multiple fills: add, remove, reorder, visibility, opacity | color-gradients-and-images/guide-to-fills.html | P0 | Paint model | M1 / M3 | In progress (solid fills: add, remove, visibility, hex, opacity, native color picker; reorder and custom picker M3) | src/engine/render/scene-renderer.test.ts, src/editor/commands/panel-logic.test.ts |
+| Color picker (HSB area, hue, alpha; Hex/RGB/CSS/HSL/HSB), document colors | color-gradients-and-images/update-fills-using-the-color-picker.html | P0 | UI primitives | M3 | In progress (popover from every color swatch — fills, strokes, gradient stops, page background: saturation/brightness area with pointer and arrow keys, hue and alpha sliders, Hex/RGB/HSL/HSB fields, one undo step per session, Esc or outside click closes. CSS format and document colors swatches pending) | src/core/color/format.test.ts, e2e/color-picker.spec.ts |
+| Contrast checker (AA/AAA) | color-gradients-and-images/update-fills-using-the-color-picker.html | P2 | Color utils | M3 | Planned | |
+| Eyedropper (I) | color-gradients-and-images/sample-colors-with-the-eyedropper-tool.html | P1 | EyeDropper API + canvas sampling | M3 | Implemented (I starts the eyedropper: a loupe shows the rendered color and hex under the pointer; clicking applies it to the selected layers' top visible solid fill (strokes for lines) as one undo step and returns to Move. The color picker's eyedropper uses the browser EyeDropper API where available (Chromium, whole screen) and otherwise picks from the canvas in every browser. ⌃C on macOS, Tab to switch color models in the loupe, and sampling styles/variables (M8) are not implemented; sampling outside the browser needs the EyeDropper API) | src/editor/tools/eyedropper-tool.test.ts, e2e/eyedropper.spec.ts |
+| Linear, radial, angular, diamond gradients; on-canvas gradient editing | color-gradients-and-images/use-gradients-as-a-fill-or-stroke.html | P0 | Renderer shaders | M3 | In progress (all four gradient types on fills and strokes: CanvasKit linear/radial/sweep shaders and an SkSL diamond shader, mapped through `gradientTransform`; per-row paint type dropdown converting solid ↔ gradient, CSS preview swatch, stops editor with position, color and alpha, add, remove (minimum two) and flip; persists and undoes. On-canvas editing: clicking a gradient swatch shows the gradient line with round end handles (plus a width handle for radial, angular and diamond) and a square per stop. Dragging an end moves or rotates the gradient; the center of a non-linear gradient moves it whole. Dragging a stop moves it; clicking the line adds a stop. Esc, clicking away or selecting another layer ends editing, and each drag is one undo step) | src/core/color/paints.test.ts, src/core/color/gradient-handles.test.ts, src/editor/interactions/gradient-edit.test.ts, src/engine/render/gradient-render.test.ts, e2e/gradient.spec.ts, e2e/gradient-handles.spec.ts |
+| Image fills: fill / fit / crop / tile, rotate, crop tool, adjustments (exposure, contrast, saturation, temperature, tint, highlights, shadows) | color-gradients-and-images/adjust-the-properties-of-an-image.html, crop-an-image.html | P0 | Blob store | M3 | In progress (IMAGE paints on fills and strokes: bytes stored once per SHA-256 hash in the IndexedDB `images` store and shared by all local files, loaded lazily with a checkerboard until available; Fill, Fit and Tile modes with tile size %, Rotate 90°, choose or replace the image, thumbnail swatch, paint opacity; the paint type select converts any paint to an image placeholder. Adjustments: exposure, contrast, saturation, temperature, tint, highlights and shadows as −100–100 sliders (double-click resets one, Reset adjustments clears all), stored in `filters` and rendered by an SkSL shader wrapping the image shader that matches the reference math in core/image/adjustments.ts; the thumbnail swatch shows the unadjusted image. Crop tool: double-click an image layer, click Crop image, or pick Crop in the mode menu. The whole image shows faded with a dashed outline. Crop handles move the crop edges while the image stays put; dragging inside repositions the image; the image's corner handles scale it about the opposite corner. Return, Esc, clicking elsewhere or selecting another layer applies the crop; each drag is one undo step. Crop aspect-ratio presets, Resize to fit, ⌥ symmetric cropping and free rotation of the image are pending) | src/core/image/adjustments.test.ts, src/core/image/image-fit.test.ts, src/core/image/image-paint.test.ts, src/engine/render/image-render.test.ts, src/platform/idb/images.test.ts, src/editor/images/image-registry.test.ts, e2e/images.spec.ts |
+| Pattern fills (source layer, tile, scale, spacing) | color-gradients-and-images/use-patterns-as-a-fill-or-stroke.html | P2 | Renderer | M3 | Planned | |
+| Video / GIF fills | color-gradients-and-images/add-images-and-videos-to-designs.html | P2 | Media | M10 | Planned | |
+| Blend modes (pass through + 19) on layers, fills and effects | color-gradients-and-images/apply-blend-modes-to-layers-fills-and-effects.html | P0 | Skia blend + SkSL blenders | M3 | In progress (renderer supports all modes incl. SkSL plus-darker; "Layer blend mode" dropdown in Appearance with mixed-selection support, undo and persistence; fills and strokes: blend mode menu in the color picker for solids and in the settings of gradients and images; shadows: blend mode menu in the effect settings. Drop shadows with a non-normal mode blend with what is behind the layer, inner shadows with the layer content; plus darker falls back to normal for inner shadows, which blend inside an image filter) | src/engine/render/scene-renderer.test.ts |
+| Selection colors (mixed selection) | color-gradients-and-images/view-and-adjust-colors-in-a-mixed-selection.html | P1 | Selection summary | M3 | Implemented (Selection colors section for several selected layers or layers with contents: each distinct solid color and gradient from visible fills and strokes of the selection and everything inside it appears once (images, hidden paints and masks excluded; color and opacity together identify a color). Editing a solid color or any color's opacity changes every usage as one undo step; the target button selects the layers using the color; See all when there are more than 8. Styles and variables in the list arrive with M8) | src/core/color/selection-colors.test.ts, e2e/selection-colors.spec.ts |
+| Color profiles (sRGB, Display P3) | color-gradients-and-images/about-color-models.html | P2 | Renderer | M3 | Planned (sRGB now; P3 document color space later) | |
+| Stroke: position inside/center/outside, weight, per-side weights | additional-properties/apply-and-adjust-stroke-properties.html | P0 | Stroke geometry | M3 | Implemented (position and weight; frames and rectangles get a Stroke sides select — all, top, right, bottom, left — with per-side weight fields, stored as `individualStrokeWeights` and collapsed back when all sides match; per-side strokes ignore corner radii and dashes for now) | src/engine/render/scene-renderer.test.ts, src/engine/render/stroke-render.test.ts, src/editor/commands/stroke-properties.test.ts, e2e/stroke.spec.ts |
+| Dashes (dash, gap, dash cap, custom pattern), joins, miter angle, end caps incl. arrows | additional-properties/apply-and-adjust-stroke-properties.html | P0 | Stroke geometry | M3 | In progress (line end caps incl. arrows done in M2; Stroke style solid/dashed with dash and gap lengths and dash cap (none, round, square), starting with a half dash; joins miter/bevel/round with miter angle; all persist and undo. Custom multi-segment dash patterns in the UI and caps on open vector paths arrive with M6) | src/engine/render/shapes-render.test.ts, src/engine/render/stroke-render.test.ts, src/editor/commands/stroke-properties.test.ts, e2e/stroke.spec.ts |
+| Brush and dynamic strokes (frequency, wiggle, smoothen) | additional-properties/apply-and-adjust-stroke-properties.html | P2 | Draw | M11 | Planned | |
+| Drop shadow, inner shadow (X, Y, blur, spread, color, show behind transparent areas) | additional-properties/apply-effects-to-layers.html | P0 | Renderer | M3 | Implemented (Effects section: add, type, visibility, remove; X, Y, blur, spread, color and opacity via the color picker, and Show behind transparent areas for drop shadows; rendered with composed CanvasKit image filters; persists and undoes. Each shadow has its own blend mode) | src/core/effects/effects.test.ts, src/engine/render/effect-render.test.ts, e2e/effects.spec.ts |
+| Layer blur, background blur (uniform and progressive) | additional-properties/apply-effects-to-layers.html | P0 / P1 | Backdrop saveLayer | M3 | In progress (uniform layer blur and uniform background blur, clipped to the layer's shape; background blur on groups and lines and progressive blurs pending) | src/engine/render/effect-render.test.ts, e2e/effects.spec.ts |
+| Noise (mono/duo/multi), texture | additional-properties/apply-effects-to-layers.html | P2 | SkSL | M3 | Planned | |
+| Glass effect | additional-properties/apply-effects-to-layers.html | P2 | SkSL + backdrop | M3 | Planned (approximation; see ADR 0001) | |
+| Effect limits, ordering, render order | additional-properties/apply-effects-to-layers.html | P1 | Renderer | M3 | In progress (render order: background blur, then drop shadows under the content, inner shadows over it, layer blur over everything; up to 64 effects per layer in the format. Per-type limits (8 shadows, one blur) and reordering pending) | src/engine/render/effect-render.test.ts |
+
+## 7. Auto layout
+
+| Feature | Documentation | Pri | Dependency | M | Status | Tests |
+|---|---|---:|---|---|---|---|
+| Add / remove / suggest auto layout (⇧A, ⌥⇧A, ⌃⇧A) | use-auto-layout/toggle-on-auto-layout-in-designs.html | P0 | Layout engine | M5 | Planned | |
+| Vertical and horizontal flow, wrap with separate gaps | use-auto-layout/use-the-horizontal-and-vertical-flows-in-auto-layout.html | P0 | Layout engine | M5 | Planned | |
+| Padding (on-canvas handles, shorthand), gap, auto gap (between/around/evenly), negative gap | use-auto-layout/use-the-horizontal-and-vertical-flows-in-auto-layout.html | P0 | Layout engine | M5 | Planned | |
+| Alignment box (9 positions / 3 positions), baseline alignment | use-auto-layout/use-the-horizontal-and-vertical-flows-in-auto-layout.html | P0 | Layout engine | M5 | Planned | |
+| Hug / fill / fixed sizing, min/max width and height | use-auto-layout/guide-to-auto-layout.html | P0 | Layout engine | M5 | Planned | |
+| Ignore auto layout (absolute position) | use-auto-layout/guide-to-auto-layout.html | P0 | Layout engine | M5 | Planned | |
+| Canvas stacking, strokes included in layout | use-auto-layout/use-the-horizontal-and-vertical-flows-in-auto-layout.html | P1 | Layout engine | M5 | Planned | |
+| Grid flow: tracks (fixed, fr, hug, min/max), row and column gaps, spans, cell alignment, auto-placement | use-auto-layout/use-the-grid-auto-layout-flow.html | P1 | Layout engine | M5 | Planned | |
+| Reorder children by drag or arrow keys with insertion indicator | use-auto-layout/use-the-horizontal-and-vertical-flows-in-auto-layout.html | P0 | Interactions | M5 | Planned | |
+| Layout version behaviors (border-box padding, inside strokes only) | use-auto-layout/use-auto-layout-with-css-flexbox-in-mind.html | P1 | Layout engine | M5 | Planned (implements the new version only) | |
+
+## 8. Components, instances, variants
+
+| Feature | Documentation | Pri | Dependency | M | Status | Tests |
+|---|---|---:|---|---|---|---|
+| Create component (⌥⌘K), create multiple components, restore deleted main component | components/create-components-to-reuse-in-designs.html | P0 | Instance resolver | M7 | Planned | |
+| Instances: insert, duplicate, go to main (⌃⌥⌘K), push overrides to main | use-libraries/create-and-insert-component-instances.html | P0 | Instance resolver | M7 | Planned | |
+| Overrides (allowed vs disallowed), reset one or all overrides | use-libraries/apply-changes-to-instances.html | P0 | Override paths | M7 | Planned | |
+| Detach instance (⌥⌘B) | use-libraries/detach-an-instance-from-the-component.html | P0 | Instance resolver | M7 | Planned | |
+| Swap instance while preserving overrides; preferred instances; quick insert (⇧I) | manage-your-libraries/swap-components-and-instances.html | P1 | Instance resolver | M7 | Planned | |
+| Variants, component sets, combine as variants, conflict errors | components/create-and-use-variants.html | P0 | Component sets | M7 | Planned | |
+| Component properties: boolean, text, instance swap, variant, nested exposure | components/explore-component-properties.html | P0 | Property defs | M7 | Planned | |
+| Slots (convert to slot, min/max layers, preferred instances, reset slot) | components/use-slots-to-build-flexible-components-in-reference.html | P1 | Instance resolver | M7 | Planned | |
+| Interactive components (change to, variant interactions) | components/create-interactive-components-with-variants.html | P1 | Prototype runtime | M10 | Planned | |
+| Animated components | components/create-and-use-animated-components.html | P2 | Motion | M12 | Planned | |
+| Assets panel (⌥2): grid/list, search, drag to insert, component details/playground | use-libraries/create-and-insert-component-instances.html | P0 | Components | M7 | Planned | |
+| Descriptions and documentation links for components, styles, variables | create-and-share-libraries/add-descriptions-to-styles-components-and-variables.html | P1 | Document model | M7 / M8 | Planned | |
+
+## 9. Styles, variables, libraries
+
+| Feature | Documentation | Pri | Dependency | M | Status | Tests |
+|---|---|---:|---|---|---|---|
+| Color, text, effect and layout guide styles: create, apply, edit, detach, folders, reorder, duplicate, delete | styles/*.html, use-libraries/apply-styles-to-layers-and-objects.html | P0 | Style store | M8 | Planned | |
+| Variables view: collections, groups, create/rename/duplicate/delete, search and filter | variables/create-and-manage-variables-and-collections.html | P0 | Variable store | M8 | Planned | |
+| Types: color, number, string, boolean (plus timing and easing for Motion) | variables/overview-of-variables-collections-and-modes.html | P0 | Variable store | M8 / M12 | Planned | |
+| Aliases (same type), cycle detection | variables/create-and-manage-variables-and-collections.html | P0 | Resolver | M8 | Planned | |
+| Modes: add, duplicate, set default, reorder; apply modes to frames, sections, pages; Auto inheritance | variables/modes-for-variables.html | P0 | Resolver | M8 | Planned | |
+| Apply variables to all bindable properties (the `=` shortcut in number fields), detach | variables/apply-variables-to-designs.html | P0 | Property registry | M8 | Planned | |
+| Scopes, code syntax (Web/Android/iOS), hide from publishing | variables/create-and-manage-variables-and-collections.html | P1 | Variable store | M8 | Planned | |
+| DTCG JSON import / export of modes | variables/modes-for-variables.html | P1 | Serialization | M8 | Planned | |
+| Extended collections (inherit variables, override values) | variables/extend-a-variable-collection.html | P2 | Variable store | M8 | Planned | |
+| Variables bound to variant properties | variables/modes-for-variables.html | P1 | Components | M8 | Planned | |
+| Libraries: publish, subscribe, review updates, swap libraries | create-and-share-libraries/*.html, use-libraries/*.html, manage-your-libraries/*.html | P1 | Local package import | M14 | Not feasible offline as cloud publishing. Local equivalent: import another `.openframe` file as a library snapshot, review updates, swap by name | |
+| Check designs (lint against library) | use-libraries/check-designs-in-reference.html | P2 | Styles, Variables | M14 | Planned (local heuristics; no org usage data) | |
+| UI kits (Material, Apple, Simple Design System) | use-libraries/start-designing-with-ui-kits.html | P3 | Libraries | — | Not feasible offline (third-party licensed assets; users can import their own) | |
+
+## 10. Prototyping
+
+| Feature | Documentation | Pri | Dependency | M | Status | Tests |
+|---|---|---:|---|---|---|---|
+| Prototype tab, connections (drag + noodle), interaction details panel, bulk editing | create-prototypes/connect-your-prototype.html | P0 | Prototype graph | M10 | Planned | |
+| Triggers: click/tap, drag, while hovering, while pressing, key/gamepad, mouse enter/leave/down/up, after delay, video hits/ends | guides/prototype-triggers.html | P0 | Runtime | M10 | Planned | |
+| Actions: navigate, back, scroll to, open link, open/close/swap overlay, set variable, set variable mode, conditional, video controls, change to | guides/prototype-actions.html | P0 | Runtime | M10 | Planned | |
+| Multiple actions, conditionals, expressions | advanced-prototyping/multiple-actions-and-conditionals.html, use-expressions-in-prototypes.html | P1 | Expression engine | M10 | In progress (expression parser and evaluator) | src/prototype/expressions.test.ts |
+| Transitions: instant, dissolve, smart animate, move in/out, push, slide in/out, with directions | guides/prototype-animations.html | P0 | Animation core | M10 | Planned | |
+| Easing presets, custom bezier, springs (gentle/quick/bouncy/slow/custom) | guides/prototype-easing-and-spring-animations.html | P0 | Animation core | M10 | In progress (solvers) | src/animation/easing.test.ts |
+| Smart animate matching (name + hierarchy) | advanced-prototyping/smart-animate-layers-between-frames.html | P1 | Animation core | M10 | Planned | |
+| Overlays: position, close on click outside, background | create-prototypes/create-overlays-in-your-prototypes.html | P0 | Runtime | M10 | Planned | |
+| Scroll overflow (horizontal / vertical / both), fixed and sticky layers | create-prototypes/prototype-scroll-and-overflow-behavior.html | P0 | Runtime | M10 | Planned | |
+| State memorization and reset (scroll, component, video) | guides/state-management-for-prototypes.html, create-prototypes/preserve-scroll-position-in-prototypes.html | P1 | Runtime | M10 | Planned | |
+| Flows and starting points, flow descriptions | create-prototypes/create-and-manage-prototype-flows.html | P0 | Prototype graph | M10 | Planned | |
+| Connections from main components, sections as destinations | create-prototypes/add-prototype-connections-from-main-components.html, use-sections-in-prototyping.html | P1 | Runtime | M10 | Planned | |
+| Variables in prototypes, variable modes in prototypes | advanced-prototyping/use-variables-in-prototypes.html, variable-modes-in-prototypes.html | P1 | Runtime + variables | M10 | Planned | |
+| Presentation view: flows sidebar, restart (R), hints on click, scaling modes, fullscreen | view-prototypes/play-your-prototypes.html | P0 | Runtime | M10 | Planned | |
+| Inline preview (⇧Space), follow prototype | view-prototypes/play-your-prototypes.html | P1 | Runtime | M10 | Planned | |
+| Device and background settings, device frames (own artwork) | view-prototypes/set-prototype-device-and-background-settings.html | P1 | Presentation | M10 | Planned | |
+| View prototype connections | view-prototypes/view-prototype-connections.html | P0 | Chrome overlay | M10 | Planned | |
+| Accessible prototypes (semantic HTML mirror, tab order) | view-prototypes/accessible-prototypes-in-reference.html | P1 | Presentation | M10 | Planned | |
+| Present offline | view-prototypes/present-prototypes-offline.html | P0 | PWA | M9 | Planned (inherently offline) | |
+| Mobile app viewing, mirror | view-prototypes/view-prototypes-on-a-mobile-device.html | — | Cloud | — | Not feasible offline (local equivalent: open the PWA on the device, or export an HTML prototype) | |
+
+## 11. Draw mode
+
+| Feature | Documentation | Pri | Dependency | M | Status | Tests |
+|---|---|---:|---|---|---|---|
+| Draw mode UI: toolbar, streamlined sliders, large layer thumbnails | reference-draw/explore-reference-draw.html | P1 | Modes | M11 | Planned | |
+| Pencil and brush tools with a secondary toolbar; ⌘-click samples a stroke | reference-draw/draw-with-illustration-tools.html | P1 | Vector model | M11 | Planned | |
+| Custom stretch and scatter brushes | reference-draw/draw-with-illustration-tools.html | P2 | Stroke geometry | M11 | Planned | |
+| Transforms: radial and linear repeat, apply transforms | reference-draw/create-patterns-with-transforms.html | P2 | Transform group node | M11 | Planned | |
+| Vector edit tools, variable width, shape builder, pattern fills, noise/texture/progressive blur | (see sections 4 and 6) | P1 | — | M6 / M3 | Planned | |
+
+## 12. Motion mode
+
+| Feature | Documentation | Pri | Dependency | M | Status | Tests |
+|---|---|---:|---|---|---|---|
+| Timeline panel: play (Space), auto-keyframe, current time, duration (default 2000 ms), ms/s, loop/once/ping-pong, collapse | reference-motion/tour-the-interface/use-the-reference-motion-timeline.html | P1 | Animation core | M12 | Planned | |
+| Ruler, playhead, zoom; layer tracks (selected/component colors); scale and move tracks | reference-motion/tour-the-interface/use-the-reference-motion-timeline.html | P1 | Timeline UI | M12 | Planned | |
+| Keyframes: add, select, move (⇧ snap), delete, diamond buttons in the inspector | reference-motion/animate-your-designs/add-select-and-delete-keyframes.html | P1 | Property registry | M12 | Planned | |
+| Easing: presets, hold, custom bezier, springs, saving as variables | reference-motion/animate-your-designs/adjust-an-animation-s-easing.html | P1 | Animation core | M12 | In progress (solvers) | src/animation/easing.test.ts |
+| Preset animation styles (e.g. spin), composite styles | reference-motion/animate-your-designs/quickly-add-motion-with-preset-animation-styles.html | P2 | Timeline | M12 | Planned | |
+| Motion path editing | reference-motion/animate-your-designs/edit-an-object-s-motion-path.html | P2 | Vector model | M12 | Planned | |
+| Path trim animation | reference-motion/animate-your-designs/animate-strokes-with-path-trim.html | P2 | makeTrimmed | M12 | Planned | |
+| Anchor point (⌥R) | reference-motion/animate-your-designs/move-a-layer-s-anchor-point.html | P2 | Transforms | M12 | Planned | |
+| Animated export: MP4, WebM, GIF, SVG (fps, size, quality, loop) | import-and-export/export-animations-from-reference.html | P1 | Export worker | M12 | Browser limitation (MP4/WebM need WebCodecs; GIF and SVG always available) | |
+| Time-stamped comments | comments/add-comments-to-files.html | P3 | Comments | M14 | Planned | |
+
+## 13. Dev Mode
+
+| Feature | Documentation | Pri | Dependency | M | Status | Tests |
+|---|---|---:|---|---|---|---|
+| Dev Mode toggle (⇧D), left sidebar (ready for dev, pages with badges, layers), frame pager | dev-mode/tour-the-interface/navigate-designs-in-dev-mode.html | P1 | Modes | M13 | Planned | |
+| Inspect panel: header, status, box model, List/Code, layout/style code blocks, colors, typography, styles and variables, interactions | dev-mode/inspect-designs/guide-to-inspecting.html | P1 | Codegen | M13 | Planned | |
+| Code generation: CSS (px/rem), SwiftUI, UIKit (px/pt), Compose, Android XML (px/dp/sp); unit scale | dev-mode/turn-designs-to-code/use-code-snippets-in-dev-mode.html | P1 | Codegen | M13 | Planned | |
+| Redlines on hover and ⌥-hover; saved measurements (⇧M) | dev-mode/inspect-designs/add-measurements-and-annotate-designs.html | P1 | Chrome overlay | M13 | Planned | |
+| Annotations (⇧T), categories, live properties, filter | dev-mode/inspect-designs/add-measurements-and-annotate-designs.html | P1 | Document model | M13 | Planned | |
+| Statuses: ready for dev, completed, changed (automatic) | dev-mode/dev-mode-across-your-organization/dev-mode-statuses-and-notifications.html | P1 | History | M13 | Planned | |
+| Ready-for-dev view, focus view | dev-mode/dev-mode-across-your-organization/dev-mode-ready-for-dev-view.html, dev-mode-focus-view.html | P2 | Versions | M13 | Planned | |
+| Compare changes (side by side, overlay, property and code diff) | dev-mode/inspect-designs/compare-changes-in-dev-mode.html | P2 | Versions, Diff | M13 | Planned | |
+| Variables in Dev Mode (details, suggested variables, variables table) | dev-mode/inspect-designs/variables-in-dev-mode.html | P1 | Variables | M13 | Planned | |
+| Assets section (auto icon detection, downloads), export | dev-mode/inspect-designs/guide-to-inspecting.html | P1 | Export | M13 | Planned | |
+| Dev resources (links on layers) | dev-mode/turn-designs-to-code/link-dev-resources-to-layers-in-dev-mode.html | P2 | Document model | M13 | Planned (links stored locally; opening them is user-initiated) | |
+| Component playground | dev-mode/inspect-designs/guide-to-inspecting.html | P2 | Components | M13 | Planned | |
+| Animation handoff code (CSS / React / JSON) | dev-mode/turn-designs-to-code/hand-off-animations-to-development.html | P2 | Motion | M13 | Planned | |
+| Code Connect, MCP server, VS Code extension, Dev Mode plugins, notifications, org admin settings | dev-mode/turn-designs-to-code/code-connect.html, reference-for-vs-code.html, dev-mode-across-your-organization/manage-dev-mode-settings-for-an-organization.html | — | Cloud | — | Not feasible offline | |
+
+## 14. Import / export / files
+
+| Feature | Documentation | Pri | Dependency | M | Status | Tests |
+|---|---|---:|---|---|---|---|
+| Native `.openframe` format (ZIP of canonical JSON plus blobs), versioning, migrations, validation | — (project requirement) | P0 | Serialization | M1 / M9 | In progress (canonical JSON, validation, migrations framework; ZIP package M9) | src/core/document/document.test.ts |
+| Autosave to IndexedDB, crash recovery journal, status indicator | — (project requirement) | P0 | Persistence | M1 | Implemented (committed edits survive reload and tab close; uncommitted gestures are discarded) | src/platform/idb/persistence.test.ts, e2e/foundation.spec.ts |
+| Large documents (10,000 nodes: spatial index, culling, hit testing) | — (project requirement) | P0 | Scene index, renderer | M1 | In progress (CPU-surface smoke budgets met; browser frame-rate profiling and tile caching in M2) | src/perf/scene-perf.test.ts |
+| Open / Save / Save As | — (project requirement) | P0 | File System Access API | M9 | Browser limitation (Chromium; fallback: file input and download) | |
+| Export PNG / JPG / SVG / PDF with scale, suffix, per-layer settings, bulk export (⇧⌘E) | import-and-export/export-static-designs-from-reference.html, export-formats-and-settings-for-static-designs.html | P0 | Export worker | M9 | Planned | |
+| WebP export | — (project requirement) | P1 | CanvasKit encoder | M9 | Planned | |
+| Import SVG as editable vectors; PNG/JPEG/WebP/GIF images; drag and drop | import-and-export/guide-to-imports-in-reference-design.html | P0 | SVG parser | M9 | Planned | |
+| Copy assets between design tools (SVG clipboard) | import-and-export/copy-assets-between-design-tools.html | P1 | Clipboard | M9 | Planned | |
+| Import .fig / .sketch files | import-and-export/import-sketch-files.html | P3 | Proprietary formats | — | Not feasible (undocumented proprietary binary formats) | |
+| PWA install, offline startup, update handling | — (project requirement) | P0 | Service worker | M1 / M9 | Implemented (precached shell, assets, fonts and CanvasKit; web manifest and icons; waiting updates applied via an in-app Reload after autosave flush; `.openframe` file handlers in M9) | e2e/offline.spec.ts |
+| No-network guarantee (CSP, lint ban on network APIs, E2E network and error guards) | — (project requirement) | P0 | Tooling | M0 | Implemented | e2e/fixtures.ts |
+
+## 15. Collaboration equivalents
+
+| Feature | Documentation | Pri | Dependency | M | Status | Tests |
+|---|---|---:|---|---|---|---|
+| Comments: pins, regions, threads, resolve/unresolve, edit, delete, move, filter/sort, markdown formatting, images | comments/*.html | P1 | Sidecar store | M14 | Planned (local author name, no mentions or notifications) | |
+| Version history: auto and named versions, restore, duplicate | branching-and-merging/guide-to-branching.html | P1 | Snapshots | M9 | Planned | |
+| Branches: create, switch, update from main, 3-way merge with conflict resolution, archive | branching-and-merging/*.html | P2 | Diff/merge | M14 | Planned (local; review requests become a self-review status) | |
+| Multiplayer cursors, spotlight, cursor chat, viewer history, share links, email notifications | multiplayer-tools/*.html, comments/manage-email-notifications-for-comments-on-files.html | — | Server | — | Not feasible offline | |

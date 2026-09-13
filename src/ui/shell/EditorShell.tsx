@@ -1,0 +1,273 @@
+/*
+ * Copyright (C) 2026 Stanislav Georgiev
+ * https://github.com/slaviboy
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import type { AppSession } from '@/app/bootstrap';
+import { applyUpdate, updates } from '@/platform/sw-register';
+import { Icon } from '../icons/Icon';
+import { SessionContext, useEditor, useEditorState, useSession } from '../hooks/useEditor';
+import { commandSections, mainMenuEntries } from '../menus/menu-model';
+import { FindPanel } from '../panels/find/FindPanel';
+import { Inspector } from '../panels/inspector/Inspector';
+import { LayersPanel } from '../panels/layers/LayersPanel';
+import { PagesPanel } from '../panels/pages/PagesPanel';
+import { Menu } from '../primitives/Menu';
+import { PropertyLabelsContext } from '../primitives/property-labels';
+import { viewPrefs } from '../view/view-prefs';
+import type { Box } from '../primitives/position';
+import { NAV_RAIL_W, PANEL_GAP, SIDEBAR_LEFT_DEFAULT, SIDEBAR_LEFT_MAX, SIDEBAR_LEFT_MIN, SIDEBAR_RIGHT_W } from '../tokens';
+import styles from './EditorShell.module.css';
+import { Toolbar } from './Toolbar';
+
+/**
+ * - `full`: navigation, both sidebars and the toolbar.
+ * - `minimized` (⇧⌘\): sidebars collapse; the properties panel returns while layers are selected.
+ * - `hidden` (⌘\): only the canvas.
+ */
+export type UiMode = 'full' | 'minimized' | 'hidden';
+
+interface EditorShellProps {
+  readonly session: AppSession;
+  readonly uiMode: UiMode;
+  readonly onRestoreUi: () => void;
+  readonly children: ReactNode;
+}
+
+export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorShellProps) {
+  const [leftWidth, setLeftWidth] = useState(SIDEBAR_LEFT_DEFAULT);
+  const [mainMenuAnchor, setMainMenuAnchor] = useState<Box | null>(null);
+  const closeMainMenu = useCallback(() => setMainMenuAnchor(null), []);
+  const editorState = session.editor.state;
+  const hasSelection = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().selection.length > 0);
+  const findOpen = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().findOpen);
+  const propertyLabels = useSyncExternalStore(viewPrefs.subscribe, () => viewPrefs.getSnapshot().propertyLabels);
+
+  const showLeft = uiMode === 'full';
+  const showRight = uiMode === 'full' || (uiMode === 'minimized' && hasSelection);
+
+  // Panels float over the canvas; tell the editor which edges they cover (rulers sit beside them).
+  useLayoutEffect(() => {
+    session.editor.setCanvasInsets({
+      left: showLeft ? PANEL_GAP * 2 + NAV_RAIL_W + leftWidth : 0,
+      right: showRight ? PANEL_GAP * 2 + SIDEBAR_RIGHT_W : 0,
+      top: 0,
+      bottom: 0,
+    });
+  }, [session, showLeft, showRight, leftWidth]);
+
+  return (
+    <SessionContext.Provider value={session}>
+      <div className={styles.shell} style={{ ['--left-w' as string]: `${leftWidth}px` }}>
+        <div className={styles.canvasArea}>{children}</div>
+        {showLeft && (
+          <aside className={`${styles.panel} ${styles.left}`} aria-label="File navigation">
+            <nav className={styles.rail} aria-label="Navigation">
+              <button
+                type="button"
+                className={styles.logo}
+                aria-label="Main menu"
+                aria-haspopup="menu"
+                aria-expanded={mainMenuAnchor !== null}
+                data-menu-root=""
+                onClick={(e) => {
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setMainMenuAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
+                }}
+              >
+                <Icon name="logo" />
+              </button>
+              {mainMenuAnchor && (
+                <Menu label="Main menu" entries={mainMenuEntries(session.editor)} anchor={mainMenuAnchor} placement="bottom-start" onClose={closeMainMenu} />
+              )}
+              <span className={styles.railTab} aria-current="page" title="File">
+                <Icon name="file" />
+                <span className={styles.railLabel}>File</span>
+              </span>
+            </nav>
+            <div className={styles.sidebar}>
+              <FileHeader />
+              <PagesPanel />
+              {findOpen ? <FindPanel /> : <LayersPanel />}
+            </div>
+            <ResizeHandle width={leftWidth} onWidth={setLeftWidth} />
+          </aside>
+        )}
+        {uiMode === 'minimized' && (
+          <button type="button" className={styles.restoreUi} aria-label="Show UI" title="Show UI" onClick={onRestoreUi}>
+            <Icon name="sidebar" />
+          </button>
+        )}
+        {showRight && (
+          <aside className={`${styles.panel} ${styles.right}`} aria-label="Properties">
+            <RightHeader />
+            <PropertyLabelsContext.Provider value={propertyLabels}>
+              <Inspector />
+            </PropertyLabelsContext.Provider>
+          </aside>
+        )}
+        {uiMode !== 'hidden' && <Toolbar />}
+      </div>
+    </SessionContext.Provider>
+  );
+}
+
+function FileHeader() {
+  const app = useSession();
+  const state = useSyncExternalStore(app.session.subscribe, app.session.getSnapshot);
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(state.file.name);
+
+  const commit = () => {
+    setEditing(false);
+    if (!name.trim()) setName(state.file.name);
+    void app.renameFile(name).catch((error: unknown) => console.error('Openframe: rename failed', error));
+  };
+
+  const save = state.save;
+  const statusText = save.state === 'saved' ? 'Saved locally' : save.state === 'error' ? `Not saved: ${save.error.message}` : 'Saving…';
+
+  return (
+    <div className={styles.fileHeader}>
+      {editing ? (
+        <input
+          className={styles.fileNameInput}
+          aria-label="File name"
+          value={name}
+          autoFocus
+          onFocus={(e) => e.currentTarget.select()}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') e.currentTarget.blur();
+            if (e.key === 'Escape') {
+              setName(state.file.name);
+              setEditing(false);
+            }
+          }}
+        />
+      ) : (
+        <button type="button" className={styles.fileName} onClick={() => setEditing(true)} title="Rename file">
+          {state.file.name}
+        </button>
+      )}
+      <span className={styles.saveStatus} data-state={save.state} role="status" aria-live="polite" data-testid="save-status">
+        {statusText}
+      </span>
+      <UpdateNotice />
+    </div>
+  );
+}
+
+function UpdateNotice() {
+  const app = useSession();
+  const update = useSyncExternalStore(updates.subscribe, updates.getSnapshot);
+  if (!update.updateAvailable) return null;
+  return (
+    <div className={styles.update} role="status">
+      <span>A new version is ready.</span>
+      <button
+        type="button"
+        className={styles.updateButton}
+        onClick={() => {
+          // Make sure every committed edit is durable before the page reloads.
+          void app.autosaver.flush().finally(applyUpdate);
+        }}
+      >
+        Reload
+      </button>
+    </div>
+  );
+}
+
+function RightHeader() {
+  const editor = useEditor();
+  const zoom = useEditorState((s) => s.viewports[s.activePageId]?.zoom ?? 1);
+  const [anchor, setAnchor] = useState<Box | null>(null);
+  const close = useCallback(() => setAnchor(null), []);
+  return (
+    <div className={styles.rightHeader}>
+      <div className={styles.tabs} role="tablist" aria-label="Properties panel">
+        <span role="tab" aria-selected="true" className={styles.tab} data-active>
+          Design
+        </span>
+      </div>
+      <button
+        type="button"
+        className={styles.zoomButton}
+        data-testid="zoom-level"
+        aria-label="Zoom and view options"
+        aria-haspopup="menu"
+        aria-expanded={anchor !== null}
+        data-menu-root=""
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
+        }}
+      >
+        {Math.round(zoom * 100)}%
+        <Icon name="chevronDown" size={16} />
+      </button>
+      {anchor && (
+        <Menu
+          label="Zoom and view options"
+          entries={commandSections(editor, [
+            ['view.zoomIn', 'view.zoomOut', 'view.zoomToFit', 'view.zoomToSelection'],
+            ['view.zoom50', 'view.zoom100', 'view.zoom200'],
+            ['view.togglePixelGrid', 'view.toggleSnapToPixelGrid'],
+            ['view.toggleRulers', 'view.toggleOutlines', 'view.toggleOutlineHidden', 'view.toggleMaskOutlines'],
+            ['view.togglePropertyLabels'],
+          ])}
+          anchor={anchor}
+          placement="bottom-start"
+          onClose={close}
+        />
+      )}
+    </div>
+  );
+}
+
+function ResizeHandle({ width, onWidth }: { width: number; onWidth: (w: number) => void }) {
+  const start = useRef<{ x: number; w: number } | null>(null);
+  return (
+    <div
+      className={styles.resizeHandle}
+      role="separator"
+      aria-orientation="vertical"
+      aria-label="Resize sidebar"
+      aria-valuenow={width}
+      aria-valuemin={SIDEBAR_LEFT_MIN}
+      aria-valuemax={SIDEBAR_LEFT_MAX}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowLeft') onWidth(Math.max(SIDEBAR_LEFT_MIN, width - 10));
+        if (e.key === 'ArrowRight') onWidth(Math.min(SIDEBAR_LEFT_MAX, width + 10));
+      }}
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        start.current = { x: e.clientX, w: width };
+      }}
+      onPointerMove={(e) => {
+        if (!start.current) return;
+        onWidth(Math.min(SIDEBAR_LEFT_MAX, Math.max(SIDEBAR_LEFT_MIN, start.current.w + e.clientX - start.current.x)));
+      }}
+      onPointerUp={() => {
+        start.current = null;
+      }}
+    />
+  );
+}

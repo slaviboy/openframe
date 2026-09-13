@@ -1,0 +1,113 @@
+/*
+ * Copyright (C) 2026 Stanislav Georgiev
+ * https://github.com/slaviboy
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.swatch {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+}
+
+/* The gradient swatch toggles on-canvas editing. */
+button.swatch {
+  padding: 0;
+  cursor: pointer;
+}
+
+.swatch[aria-pressed='true'] {
+  outline: 2px solid var(--accent, #0d99ff);
+  outline-offset: 1px;
+}
+
+.type {
+  flex: none;
+  width: 84px;
+}
+
+/* Gradient row: preview swatch and paint opacity in the color column. */
+.summary {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.stops {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 0 8px 12px;
+  list-style: none;
+}
+
+.stopsHeader {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+}
+
+.stopsHeader > span {
+  flex: 1;
+}
+
+.stopRow {
+  display: grid;
+  grid-template-columns: 64px 1fr auto;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Image adjustment: name, slider (−100–100), value. */
+.adjustRow {
+  display: grid;
+  grid-template-columns: 72px 1fr 28px;
+  align-items: center;
+  gap: 6px;
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+}
+
+.adjustRow input {
+  min-width: 0;
+  accent-color: var(--accent, #0d99ff);
+}
+
+.adjustRow output {
+  color: var(--fg-primary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.error {
+  margin: 0;
+  color: var(--fg-danger, #e03e1a);
+  font-size: var(--text-xs);
+}
+
+.textButton {
+  height: 22px;
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--fg-primary);
+  font-size: var(--text-xs);
+}

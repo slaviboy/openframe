@@ -1,0 +1,85 @@
+/*
+ * Copyright (C) 2026 Stanislav Georgiev
+ * https://github.com/slaviboy
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.menu {
+  position: fixed;
+  z-index: var(--z-menu);
+  min-width: 200px;
+  max-height: calc(100vh - var(--space-4));
+  overflow-y: auto;
+  padding: var(--space-2) 0;
+  border-radius: var(--radius-lg);
+  background: var(--bg-menu);
+  color: var(--fg-menu);
+  box-shadow: var(--shadow-menu);
+  font-size: var(--text-sm);
+  outline: none;
+  user-select: none;
+}
+
+.item {
+  display: grid;
+  grid-template-columns: 16px 1fr auto auto;
+  align-items: center;
+  gap: var(--space-2);
+  height: var(--control-h);
+  margin: 0 var(--space-2);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: default;
+  white-space: nowrap;
+}
+
+.item[data-active] {
+  background: var(--accent-design);
+}
+
+.item[data-disabled] {
+  color: var(--fg-menu-secondary);
+}
+
+.item[data-disabled][data-active] {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.check {
+  text-align: center;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shortcut {
+  padding-left: var(--space-4);
+  color: var(--fg-menu-secondary);
+}
+
+.item[data-active]:not([data-disabled]) .shortcut {
+  color: var(--fg-menu);
+}
+
+.chevron {
+  color: currentColor;
+}
+
+.separator {
+  height: 1px;
+  margin: var(--space-2) 0;
+  background: rgba(255, 255, 255, 0.1);
+}

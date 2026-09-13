@@ -1,0 +1,413 @@
+/*
+ * Copyright (C) 2026 Stanislav Georgiev
+ * https://github.com/slaviboy
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/**
+ * Openframe document schema, format version 1.
+ *
+ * The schema is the single source of truth for document types (`z.infer`) and for
+ * validation at trust boundaries (file load, import, paste, migration output).
+ * It is NOT run on every edit; ops are validated by construction and dev builds
+ * assert structural invariants after each commit.
+ *
+ * Adding a new optional field or a new union member is backwards compatible and does
+ * not require a version bump. Renaming/removing fields or changing semantics does.
+ */
+import { z } from 'zod';
+import { IMAGE_HASH_PATTERN } from '../image/hash';
+
+// The app ships a strict Content-Security-Policy without 'unsafe-eval'. zod's JIT parser
+// probes `new Function`, which CSP reports as a violation even though the error is caught;
+// jitless mode skips the probe and uses the interpreted parser.
+z.config({ jitless: true });
+
+export const FORMAT_NAME = 'openframe';
+export const FORMAT_VERSION = 1;
+
+const finite = z.number().refine(Number.isFinite, 'must be a finite number');
+const unit = z.number().min(0).max(1);
+export const IdSchema = z.string().regex(/^[0-9a-z]{1,12}:[0-9]+$/, 'invalid id');
+export const FractionalKeySchema = z.string().regex(/^[0-9A-Za-z]*[1-9A-Za-z]$/, 'invalid order key');
+
+export const ColorSchema = z.object({ r: unit, g: unit, b: unit, a: unit });
+
+/** Parent-relative affine transform [a, b, c, d, tx, ty] (Canvas/DOMMatrix order). */
+export const TransformSchema = z.tuple([finite, finite, finite, finite, finite, finite]);
+
+export const SizeSchema = z.object({ width: z.number().min(0), height: z.number().min(0) });
+
+export const BlendModeSchema = z.enum([
+  'PASS_THROUGH',
+  'NORMAL',
+  'DARKEN',
+  'MULTIPLY',
+  'PLUS_DARKER',
+  'COLOR_BURN',
+  'LIGHTEN',
+  'SCREEN',
+  'PLUS_LIGHTER',
+  'COLOR_DODGE',
+  'OVERLAY',
+  'SOFT_LIGHT',
+  'HARD_LIGHT',
+  'DIFFERENCE',
+  'EXCLUSION',
+  'HUE',
+  'SATURATION',
+  'COLOR',
+  'LUMINOSITY',
+]);
+
+export const SolidPaintSchema = z.object({
+  type: z.literal('SOLID'),
+  color: ColorSchema,
+  opacity: unit,
+  visible: z.boolean(),
+  blendMode: BlendModeSchema,
+});
+
+export const GradientStopSchema = z.object({ position: unit, color: ColorSchema });
+
+/**
+ * Gradient paints. Gradients are defined in a unit gradient space — linear runs from (0, 0.5)
+ * to (1, 0.5); radial, angular and diamond are centered at (0.5, 0.5) with radius 0.5 — and
+ * `gradientTransform` maps that space onto the layer's unit square (0–1 on both axes), so the
+ * identity is a left-to-right linear gradient or a centered radial one filling the layer.
+ */
+const gradientPaint = <T extends 'GRADIENT_LINEAR' | 'GRADIENT_RADIAL' | 'GRADIENT_ANGULAR' | 'GRADIENT_DIAMOND'>(type: T) =>
+  z.object({
+    type: z.literal(type),
+    gradientStops: z.array(GradientStopSchema).min(2).max(64),
+    gradientTransform: TransformSchema,
+    opacity: unit,
+    visible: z.boolean(),
+    blendMode: BlendModeSchema,
+  });
+
+export const LinearGradientPaintSchema = gradientPaint('GRADIENT_LINEAR');
+export const RadialGradientPaintSchema = gradientPaint('GRADIENT_RADIAL');
+export const AngularGradientPaintSchema = gradientPaint('GRADIENT_ANGULAR');
+export const DiamondGradientPaintSchema = gradientPaint('GRADIENT_DIAMOND');
+
+export const ImageScaleModeSchema = z.enum(['FILL', 'FIT', 'CROP', 'TILE']);
+
+const adjustment = z.number().min(-1).max(1);
+
+/** Image adjustments, each −1–1 (the inspector shows −100–100); absent means 0. */
+export const ImageFiltersSchema = z
+  .object({
+    exposure: adjustment,
+    contrast: adjustment,
+    saturation: adjustment,
+    temperature: adjustment,
+    tint: adjustment,
+    highlights: adjustment,
+    shadows: adjustment,
+  })
+  .partial();
+
+/**
+ * Image fill. Image bytes live outside the document in a content-addressed store keyed by
+ * `imageHash` (lowercase hex SHA-256). A paint without a hash is a placeholder waiting for an
+ * image (drawn as a checkerboard).
+ */
+export const ImagePaintSchema = z.object({
+  type: z.literal('IMAGE'),
+  imageHash: z.string().regex(IMAGE_HASH_PATTERN).optional(),
+  /** Pixel size of the stored image. */
+  imageSize: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }).optional(),
+  scaleMode: ImageScaleModeSchema,
+  /** CROP: maps the layer's unit square into the image's unit square. */
+  imageTransform: TransformSchema.optional(),
+  /** TILE: tile size as a multiple of the image's pixel size (default 1). */
+  scalingFactor: z.number().positive().optional(),
+  /** Clockwise quarter turns of the image within the layer (FILL, FIT, TILE); absent means 0. */
+  rotation: z.union([z.literal(90), z.literal(180), z.literal(270)]).optional(),
+  /** Non-destructive color adjustments; absent when all are 0. */
+  filters: ImageFiltersSchema.optional(),
+  opacity: unit,
+  visible: z.boolean(),
+  blendMode: BlendModeSchema,
+});
+
+export const PaintSchema = z.discriminatedUnion('type', [
+  SolidPaintSchema,
+  ImagePaintSchema,
+  LinearGradientPaintSchema,
+  RadialGradientPaintSchema,
+  AngularGradientPaintSchema,
+  DiamondGradientPaintSchema,
+]);
+
+const ShadowFields = {
+  /** Shadow color; its alpha is the shadow opacity. */
+  color: ColorSchema,
+  offset: z.object({ x: finite, y: finite }),
+  /** Blur radius in pixels. */
+  radius: z.number().min(0),
+  /** Grows (positive) or shrinks (negative) the shadow before blurring. */
+  spread: finite,
+  visible: z.boolean(),
+  blendMode: BlendModeSchema,
+};
+
+export const DropShadowEffectSchema = z.object({
+  type: z.literal('DROP_SHADOW'),
+  ...ShadowFields,
+  /** Show the shadow through transparent parts of the layer (otherwise the layer's silhouette knocks it out). */
+  showShadowBehindNode: z.boolean(),
+});
+export const InnerShadowEffectSchema = z.object({ type: z.literal('INNER_SHADOW'), ...ShadowFields });
+export const LayerBlurEffectSchema = z.object({ type: z.literal('LAYER_BLUR'), radius: z.number().min(0), visible: z.boolean() });
+export const BackgroundBlurEffectSchema = z.object({ type: z.literal('BACKGROUND_BLUR'), radius: z.number().min(0), visible: z.boolean() });
+
+export const EffectSchema = z.discriminatedUnion('type', [DropShadowEffectSchema, InnerShadowEffectSchema, LayerBlurEffectSchema, BackgroundBlurEffectSchema]);
+
+export const StrokeAlignSchema = z.enum(['INSIDE', 'CENTER', 'OUTSIDE']);
+
+export const CornerRadiiSchema = z.object({
+  topLeft: z.number().min(0),
+  topRight: z.number().min(0),
+  bottomRight: z.number().min(0),
+  bottomLeft: z.number().min(0),
+});
+
+const ParentRefSchema = z.object({ id: IdSchema, key: FractionalKeySchema });
+
+const BaseNodeFields = {
+  id: IdSchema,
+  name: z.string().max(10_000),
+  parent: ParentRefSchema,
+  visible: z.boolean(),
+  locked: z.boolean(),
+};
+
+const SceneFields = {
+  ...BaseNodeFields,
+  transform: TransformSchema,
+  size: SizeSchema,
+  opacity: unit,
+  blendMode: BlendModeSchema,
+  /** Shadows and blurs, in paint order. Absent when the layer has none. */
+  effects: z.array(EffectSchema).max(64).optional(),
+  /** Constrain proportions: width and height edits keep the aspect ratio. Absent means off. */
+  constrainProportions: z.boolean().optional(),
+  /** Used as a mask: masks the siblings above it, up to the next mask. Absent means not a mask. */
+  isMask: z.boolean().optional(),
+  /** How a mask reveals content; absent means ALPHA. */
+  maskType: z.enum(['ALPHA', 'VECTOR', 'LUMINANCE']).optional(),
+};
+
+export const StrokeJoinSchema = z.enum(['MITER', 'BEVEL', 'ROUND']);
+export const DashCapSchema = z.enum(['NONE', 'ROUND', 'SQUARE']);
+export const IndividualStrokeWeightsSchema = z.object({
+  top: z.number().min(0),
+  right: z.number().min(0),
+  bottom: z.number().min(0),
+  left: z.number().min(0),
+});
+
+const GeometryFields = {
+  fills: z.array(PaintSchema).max(256),
+  strokes: z.array(PaintSchema).max(256),
+  strokeWeight: z.number().min(0),
+  strokeAlign: StrokeAlignSchema,
+  /** Dash pattern as alternating dash and gap lengths; absent for a solid stroke. */
+  strokeDashes: z.array(z.number().min(0)).min(2).max(32).optional(),
+  /** Cap of each dash; absent means NONE. */
+  strokeCap: DashCapSchema.optional(),
+  /** Corner join; absent means MITER. */
+  strokeJoin: StrokeJoinSchema.optional(),
+  /** Miter joins become bevels at corners sharper than this angle, in degrees; absent means 28.96. */
+  strokeMiterAngle: z.number().min(0).max(180).optional(),
+};
+
+const CornerFields = {
+  cornerRadius: z.number().min(0),
+  /** Present only when corners are edited independently. */
+  cornerRadii: CornerRadiiSchema.optional(),
+  /** Per-side stroke weights (frames and rectangles); present only when sides differ from `strokeWeight`. */
+  individualStrokeWeights: IndividualStrokeWeightsSchema.optional(),
+};
+
+export const DocumentNodeSchema = z.object({
+  id: z.literal('0:0'),
+  type: z.literal('DOCUMENT'),
+  name: z.string(),
+});
+
+/**
+ * Ruler guide. `X` guides are vertical lines at x = offset; `Y` guides are horizontal lines
+ * at y = offset. Page guides use world coordinates; frame guides use the frame's local space.
+ */
+export const GuideSchema = z.object({ axis: z.enum(['X', 'Y']), offset: finite });
+const GuidesField = z.array(GuideSchema).max(10_000).optional();
+
+export const PageNodeSchema = z.object({
+  ...BaseNodeFields,
+  type: z.literal('PAGE'),
+  backgroundColor: ColorSchema,
+  /** Canvas guides. Absent when the page has none. */
+  guides: GuidesField,
+});
+
+export const FrameNodeSchema = z.object({
+  ...SceneFields,
+  ...GeometryFields,
+  ...CornerFields,
+  type: z.literal('FRAME'),
+  clipsContent: z.boolean(),
+  /** Frame guides (for frames directly on the page or in a section). Absent when none. */
+  guides: GuidesField,
+});
+
+export const GroupNodeSchema = z.object({ ...SceneFields, type: z.literal('GROUP') });
+
+export const RectangleNodeSchema = z.object({
+  ...SceneFields,
+  ...GeometryFields,
+  ...CornerFields,
+  type: z.literal('RECTANGLE'),
+});
+
+export const EllipseNodeSchema = z.object({ ...SceneFields, ...GeometryFields, type: z.literal('ELLIPSE') });
+
+const PointCountSchema = z.number().int().min(3).max(60);
+
+/** Regular polygon; vertices are scaled so their bounds fill the layer box. */
+export const PolygonNodeSchema = z.object({
+  ...SceneFields,
+  ...GeometryFields,
+  type: z.literal('POLYGON'),
+  pointCount: PointCountSchema,
+  /** Rounds every vertex; absent means sharp corners. */
+  cornerRadius: z.number().min(0).optional(),
+});
+
+/** Star; `innerRadius` is the inner/outer radius ratio. */
+export const StarNodeSchema = z.object({
+  ...SceneFields,
+  ...GeometryFields,
+  type: z.literal('STAR'),
+  pointCount: PointCountSchema,
+  innerRadius: unit,
+  /** Rounds every vertex; absent means sharp corners. */
+  cornerRadius: z.number().min(0).optional(),
+});
+
+export const StrokeCapSchema = z.enum(['NONE', 'ROUND', 'SQUARE', 'LINE_ARROW', 'TRIANGLE_ARROW', 'CIRCLE_FILLED', 'DIAMOND_FILLED']);
+
+/**
+ * Straight line from local (0,0) to (width, 0); direction comes from the transform and the
+ * height is always 0. Lines are stroked on center and have independent end caps.
+ */
+export const LineNodeSchema = z.object({
+  ...SceneFields,
+  ...GeometryFields,
+  type: z.literal('LINE'),
+  startCap: StrokeCapSchema,
+  endCap: StrokeCapSchema,
+});
+
+/**
+ * Canvas region that organizes layers. Sections live on the page or inside other sections
+ * (never in frames or groups), do not clip, and are never rotated or flipped.
+ */
+export const SectionNodeSchema = z.object({ ...SceneFields, ...GeometryFields, type: z.literal('SECTION') });
+
+/** Export region. Slices are not rendered; only content within their bounds is exported. */
+export const SliceNodeSchema = z.object({ ...SceneFields, type: z.literal('SLICE') });
+
+export const NodeSchema = z.discriminatedUnion('type', [
+  DocumentNodeSchema,
+  PageNodeSchema,
+  FrameNodeSchema,
+  GroupNodeSchema,
+  RectangleNodeSchema,
+  EllipseNodeSchema,
+  PolygonNodeSchema,
+  StarNodeSchema,
+  LineNodeSchema,
+  SectionNodeSchema,
+  SliceNodeSchema,
+]);
+
+export const DocumentMetaSchema = z.object({
+  name: z.string().max(1_000),
+  createdAt: z.string(),
+  appVersion: z.string(),
+});
+
+export const DocumentSchema = z.object({
+  format: z.literal(FORMAT_NAME),
+  version: z.literal(FORMAT_VERSION),
+  meta: DocumentMetaSchema,
+  nodes: z.record(IdSchema, NodeSchema),
+});
+
+export type Color = z.infer<typeof ColorSchema>;
+export type Transform = z.infer<typeof TransformSchema>;
+export type Size = z.infer<typeof SizeSchema>;
+export type BlendMode = z.infer<typeof BlendModeSchema>;
+export type Paint = z.infer<typeof PaintSchema>;
+export type SolidPaint = z.infer<typeof SolidPaintSchema>;
+export type GradientStop = z.infer<typeof GradientStopSchema>;
+export type GradientPaint = Extract<Paint, { gradientStops: readonly GradientStop[] }>;
+export type GradientType = GradientPaint['type'];
+export const isGradientPaint = (paint: Paint): paint is GradientPaint => paint.type.startsWith('GRADIENT_');
+export type ImagePaint = z.infer<typeof ImagePaintSchema>;
+export type ImageScaleMode = z.infer<typeof ImageScaleModeSchema>;
+export type ImageFilters = z.infer<typeof ImageFiltersSchema>;
+export type StrokeAlign = z.infer<typeof StrokeAlignSchema>;
+export type StrokeJoin = z.infer<typeof StrokeJoinSchema>;
+export type Effect = z.infer<typeof EffectSchema>;
+export type EffectType = Effect['type'];
+export type ShadowEffect = Extract<Effect, { offset: unknown }>;
+export type DashCap = z.infer<typeof DashCapSchema>;
+export type IndividualStrokeWeights = z.infer<typeof IndividualStrokeWeightsSchema>;
+/** Default miter angle (degrees), matching a miter limit of about 4. */
+export const DEFAULT_MITER_ANGLE = 28.96;
+export type Guide = z.infer<typeof GuideSchema>;
+export type CornerRadii = z.infer<typeof CornerRadiiSchema>;
+export type DocumentNode = z.infer<typeof DocumentNodeSchema>;
+export type PageNode = z.infer<typeof PageNodeSchema>;
+export type FrameNode = z.infer<typeof FrameNodeSchema>;
+export type GroupNode = z.infer<typeof GroupNodeSchema>;
+export type RectangleNode = z.infer<typeof RectangleNodeSchema>;
+export type EllipseNode = z.infer<typeof EllipseNodeSchema>;
+export type PolygonNode = z.infer<typeof PolygonNodeSchema>;
+export type StarNode = z.infer<typeof StarNodeSchema>;
+export type LineNode = z.infer<typeof LineNodeSchema>;
+export type StrokeCap = z.infer<typeof StrokeCapSchema>;
+export type SectionNode = z.infer<typeof SectionNodeSchema>;
+export type SliceNode = z.infer<typeof SliceNodeSchema>;
+export type SceneNode = FrameNode | GroupNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | SectionNode | SliceNode;
+export type Node = z.infer<typeof NodeSchema>;
+export type NodeType = Node['type'];
+export type DocumentMeta = z.infer<typeof DocumentMetaSchema>;
+export type SerializedDocument = z.infer<typeof DocumentSchema>;
+
+export const isSceneNode = (n: Node): n is SceneNode => n.type !== 'DOCUMENT' && n.type !== 'PAGE';
+export const hasGeometry = (n: Node): n is FrameNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | SectionNode =>
+  n.type === 'FRAME' ||
+  n.type === 'RECTANGLE' ||
+  n.type === 'ELLIPSE' ||
+  n.type === 'POLYGON' ||
+  n.type === 'STAR' ||
+  n.type === 'LINE' ||
+  n.type === 'SECTION';
+export const isContainer = (n: Node): boolean =>
+  n.type === 'DOCUMENT' || n.type === 'PAGE' || n.type === 'FRAME' || n.type === 'GROUP' || n.type === 'SECTION';

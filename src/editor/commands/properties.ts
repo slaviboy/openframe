@@ -1,0 +1,222 @@
+/*
+ * Copyright (C) 2026 Stanislav Georgiev
+ * https://github.com/slaviboy
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import type { DocumentStore } from '@/core/document/store';
+import type { Transaction } from '@/core/history/history';
+import type { Id } from '@/core/ids/ids';
+import { apply, determinant, multiply, rotation, scaling, type Matrix } from '@/core/math/matrix';
+import { matrixOf } from '@/core/scene/scene-index';
+import {
+  DEFAULT_MITER_ANGLE,
+  hasGeometry,
+  isSceneNode,
+  type BlendMode,
+  type CornerRadii,
+  type DashCap,
+  type Effect,
+  type IndividualStrokeWeights,
+  type Paint,
+  type SceneNode,
+  type StrokeAlign,
+  type StrokeCap,
+  type StrokeJoin,
+} from '@/core/schema/document';
+import { matrixRotationDegrees, roundTransform, toTransform } from '../interactions/transform';
+
+export const MIXED = Symbol('mixed');
+export type Mixed<T> = T | typeof MIXED;
+
+/** Shared value across nodes, or MIXED when they differ (compared with `equals`). */
+export function shared<N, T>(nodes: readonly N[], get: (n: N) => T, equals: (a: T, b: T) => boolean = Object.is): Mixed<T> | undefined {
+  if (nodes.length === 0) return undefined;
+  const first = get(nodes[0]!);
+  for (let i = 1; i < nodes.length; i++) if (!equals(first, get(nodes[i]!))) return MIXED;
+  return first;
+}
+
+export const sceneNodes = (store: DocumentStore, ids: readonly Id[]): SceneNode[] =>
+  ids.map((id) => store.get(id)).filter((n): n is SceneNode => n !== undefined && isSceneNode(n));
+
+/** Rotation shown in the inspector: degrees, counterclockwise positive, in (-180, 180]. */
+export const rotationDegrees = (node: SceneNode): number => matrixRotationDegrees(matrixOf(node.transform));
+
+export function setPosition(tx: Transaction, node: SceneNode, axis: 'x' | 'y', value: number): void {
+  const t = [...node.transform] as [number, number, number, number, number, number];
+  t[axis === 'x' ? 4 : 5] = value;
+  tx.set(node.id, 'transform', t);
+}
+
+export function setSize(tx: Transaction, node: SceneNode, axis: 'width' | 'height', value: number): void {
+  const current = tx.store.getOrThrow(node.id) as SceneNode;
+  // Lines have no height; their thickness is the stroke weight.
+  if (current.type === 'LINE' && axis === 'height') return;
+  const next = Math.max(0, value);
+  const other = axis === 'width' ? 'height' : 'width';
+  if (current.constrainProportions && current.type !== 'LINE' && current.size[axis] > 0) {
+    // Constrained layers scale the other dimension by the same factor.
+    const scaled = Math.round(((current.size[other] * next) / current.size[axis]) * 100) / 100;
+    tx.set(node.id, 'size', { [axis]: next, [other]: scaled } as { width: number; height: number });
+    return;
+  }
+  tx.set(node.id, 'size', { ...current.size, [axis]: next });
+}
+
+/** Turns constrain proportions on or off (stored only while on). */
+export function setConstrainProportions(tx: Transaction, node: SceneNode, on: boolean): void {
+  if (node.type === 'LINE') return;
+  tx.set(node.id, 'constrainProportions', on ? true : undefined);
+}
+
+/** Sets rotation around the layer's center, preserving any flip. */
+export function setRotation(tx: Transaction, node: SceneNode, degrees: number): void {
+  const current = tx.store.getOrThrow(node.id) as SceneNode;
+  if (current.type === 'SECTION') return;
+  const m = matrixOf(current.transform);
+  const flipX = determinant(m) < 0;
+  const half = { x: current.size.width / 2, y: current.size.height / 2 };
+  const center = apply(m, half);
+  const linear: Matrix = multiply(rotation((-degrees * Math.PI) / 180), scaling(flipX ? -1 : 1, 1));
+  const offset = apply(linear, half);
+  const next: Matrix = { ...linear, e: center.x - offset.x, f: center.y - offset.y };
+  tx.set(node.id, 'transform', toTransform(Math.abs(degrees % 90) < 1e-9 ? roundTransform(next) : next));
+}
+
+export function setOpacity(tx: Transaction, node: SceneNode, percent: number): void {
+  tx.set(node.id, 'opacity', Math.min(1, Math.max(0, percent / 100)));
+}
+
+/** Layer blend mode (pass through is the layer default). */
+export function setBlendMode(tx: Transaction, node: SceneNode, mode: BlendMode): void {
+  tx.set(node.id, 'blendMode', mode);
+}
+
+/** Uniform corner radius for frames, rectangles, polygons and stars (clears independent corners). */
+export function setCornerRadius(tx: Transaction, node: SceneNode, radius: number): void {
+  const r = Math.max(0, radius);
+  if (node.type === 'POLYGON' || node.type === 'STAR') {
+    tx.set(node.id, 'cornerRadius', r > 0 ? r : undefined);
+    return;
+  }
+  if (node.type !== 'FRAME' && node.type !== 'RECTANGLE') return;
+  tx.set(node.id, 'cornerRadius', r);
+  if (node.cornerRadii) tx.set(node.id, 'cornerRadii', undefined);
+}
+
+/**
+ * Independent corner radii for frames and rectangles. `undefined` returns to a uniform radius
+ * (the largest corner); equal corners collapse into `cornerRadius`.
+ */
+export function setCornerRadii(tx: Transaction, node: SceneNode, radii: CornerRadii | undefined): void {
+  if (node.type !== 'FRAME' && node.type !== 'RECTANGLE') return;
+  const current = tx.store.getOrThrow(node.id) as typeof node;
+  if (!radii) {
+    const r = current.cornerRadii;
+    if (r) tx.set(node.id, 'cornerRadius', Math.max(r.topLeft, r.topRight, r.bottomRight, r.bottomLeft));
+    tx.set(node.id, 'cornerRadii', undefined);
+    return;
+  }
+  const clean = (v: number) => Math.max(0, Math.round(v * 100) / 100);
+  const next = { topLeft: clean(radii.topLeft), topRight: clean(radii.topRight), bottomRight: clean(radii.bottomRight), bottomLeft: clean(radii.bottomLeft) };
+  tx.set(node.id, 'cornerRadii', next);
+}
+
+/** Polygon sides or star points, clamped to 3–60. */
+export function setPointCount(tx: Transaction, node: SceneNode, count: number): void {
+  if (node.type !== 'POLYGON' && node.type !== 'STAR') return;
+  tx.set(node.id, 'pointCount', Math.min(60, Math.max(3, Math.round(count))));
+}
+
+/** Star inner radius ratio as a percentage (0–100). */
+export function setInnerRadius(tx: Transaction, node: SceneNode, percent: number): void {
+  if (node.type !== 'STAR') return;
+  tx.set(node.id, 'innerRadius', Math.min(1, Math.max(0, percent / 100)));
+}
+
+export function setLineCap(tx: Transaction, node: SceneNode, end: 'startCap' | 'endCap', cap: StrokeCap): void {
+  if (node.type === 'LINE') tx.set(node.id, end, cap);
+}
+
+/** Replaces a layer's effects (stored only when there are any). */
+export function setEffects(tx: Transaction, node: SceneNode, effects: readonly Effect[]): void {
+  tx.set(node.id, 'effects', effects.length > 0 ? [...effects] : undefined);
+}
+
+export type PaintField = 'fills' | 'strokes';
+
+export function setPaints(tx: Transaction, node: SceneNode, field: PaintField, paints: readonly Paint[]): void {
+  if (!hasGeometry(node)) return;
+  tx.set(node.id, field, paints);
+}
+
+export function updatePaint(tx: Transaction, node: SceneNode, field: PaintField, index: number, patch: Partial<Paint>): void {
+  if (!hasGeometry(node)) return;
+  const current = (tx.store.getOrThrow(node.id) as typeof node)[field];
+  if (index < 0 || index >= current.length) return;
+  tx.set(node.id, field, current.map((p, i) => (i === index ? ({ ...p, ...patch } as Paint) : p)));
+}
+
+export function setStrokeWeight(tx: Transaction, node: SceneNode, weight: number): void {
+  if (hasGeometry(node)) tx.set(node.id, 'strokeWeight', Math.max(0, weight));
+}
+
+export function setStrokeAlign(tx: Transaction, node: SceneNode, align: StrokeAlign): void {
+  if (hasGeometry(node)) tx.set(node.id, 'strokeAlign', align);
+}
+
+/** Dash pattern (alternating dash and gap lengths), or undefined for a solid stroke. Needs a positive total length. */
+export function setStrokeDashes(tx: Transaction, node: SceneNode, dashes: readonly number[] | undefined): void {
+  if (!hasGeometry(node)) return;
+  const valid = dashes && dashes.length >= 2 && dashes.length % 2 === 0 && dashes.every((d) => Number.isFinite(d) && d >= 0) && dashes.some((d) => d > 0);
+  tx.set(node.id, 'strokeDashes', valid ? dashes.map((d) => Math.round(d * 100) / 100) : undefined);
+}
+
+export function setDashCap(tx: Transaction, node: SceneNode, cap: DashCap): void {
+  if (hasGeometry(node)) tx.set(node.id, 'strokeCap', cap === 'NONE' ? undefined : cap);
+}
+
+export function setStrokeJoin(tx: Transaction, node: SceneNode, join: StrokeJoin): void {
+  if (hasGeometry(node)) tx.set(node.id, 'strokeJoin', join === 'MITER' ? undefined : join);
+}
+
+/** Miter angle in degrees (clamped to 0–180); the default is stored as absent. */
+export function setStrokeMiterAngle(tx: Transaction, node: SceneNode, degrees: number): void {
+  if (!hasGeometry(node)) return;
+  const angle = Math.min(180, Math.max(0, Math.round(degrees * 100) / 100));
+  tx.set(node.id, 'strokeMiterAngle', angle === DEFAULT_MITER_ANGLE ? undefined : angle);
+}
+
+/**
+ * Per-side stroke weights for frames and rectangles. Equal sides collapse back into
+ * `strokeWeight` (and clear the per-side field).
+ */
+export function setIndividualStrokeWeights(tx: Transaction, node: SceneNode, weights: IndividualStrokeWeights | undefined): void {
+  if (node.type !== 'FRAME' && node.type !== 'RECTANGLE') return;
+  if (!weights) {
+    tx.set(node.id, 'individualStrokeWeights', undefined);
+    return;
+  }
+  const clean = (v: number) => Math.max(0, Math.round(v * 100) / 100);
+  const w = { top: clean(weights.top), right: clean(weights.right), bottom: clean(weights.bottom), left: clean(weights.left) };
+  if (w.top === w.right && w.right === w.bottom && w.bottom === w.left) {
+    tx.set(node.id, 'strokeWeight', w.top);
+    tx.set(node.id, 'individualStrokeWeights', undefined);
+    return;
+  }
+  tx.set(node.id, 'individualStrokeWeights', w);
+}
+
+export const paintsEqual = (a: readonly Paint[], b: readonly Paint[]): boolean => JSON.stringify(a) === JSON.stringify(b);
