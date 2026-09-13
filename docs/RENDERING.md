@@ -105,7 +105,8 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
   - Drop shadow: `MakeDropShadowOnly` of the content (through `MakeDilate`/`MakeErode` for spread), merged with `MakeBlend(SrcOver)`. Unless **Show behind transparent areas** is on, the shadows are cut by the content's opaque silhouette (`MakeBlend(DstOut)` with an alpha-saturating color matrix). The shadow's opacity follows the content's alpha.
   - Inner shadow: a color matrix turns the content into `(1 − α) · shadow color`, then offset, spread, blur, and `MakeBlend(SrcIn)` masks it back to the content, drawn over the content.
   - Layer blur: `MakeBlur(σ, σ, Decal)` around everything above.
-- Background blur: before the layer is drawn, the canvas is clipped to the layer's shape and `saveLayer(null, null, MakeBlur(σ))` copies the blurred backdrop in. Groups and lines don't support it yet.
+- Background blur: before the layer is drawn, the canvas is clipped to the layer's area (`backdropOutline`) and `saveLayer(null, null, MakeBlur(σ))` copies the blurred backdrop in.
+  - The area is the shape's outline, a line's stroke (`makeStroked`, without end markers), or for a group the union (`Path.MakeFromOp`, Union) of its visible children's areas, each placed by its transform.
 - Paint bounds grow by `effectOutset`: the largest drop-shadow offset plus blur plus positive spread, or the layer-blur radius.
 - Shadow blend modes:
   - Inner shadows blend onto the content inside the filter chain (`ImageFilter.MakeBlend` with the shadow's native Skia mode; plus darker, which needs a runtime blender, falls back to source-over).

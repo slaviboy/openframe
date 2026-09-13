@@ -295,7 +295,7 @@ export class SceneRenderer {
     canvas.concat([m.a, m.c, m.e, m.b, m.d, m.f, 0, 0, 1]);
 
     const patterns = this.preparePatterns(node, ctx);
-    this.drawBackgroundBlur(canvas, node);
+    this.drawBackgroundBlur(canvas, node, ctx.store);
     this.drawBlendedDropShadows(canvas, node, children, clips, ctx);
     const filters: ImageFilter[] = [];
     const effectFilter = this.effectFilter(node, filters);
@@ -737,7 +737,7 @@ export class SceneRenderer {
   }
 
   /** Background blur: blurs what is already drawn behind the layer, within the layer's shape. */
-  private drawBackgroundBlur(canvas: Canvas, node: SceneNode): void {
+  private drawBackgroundBlur(canvas: Canvas, node: SceneNode, store: DocumentStore): void {
     // Background blur and glass share one visual layer: only the first of them renders.
     const backdrop = backdropEffect(node.effects);
     if (backdrop?.type === 'GLASS') {
@@ -745,14 +745,12 @@ export class SceneRenderer {
       return;
     }
     const effect = backdrop && maxBlurRadius(backdrop) > 0 ? backdrop : undefined;
-    if (!effect || node.type === 'GROUP' || node.type === 'LINE' || node.type === 'SLICE') return;
+    if (!effect || node.type === 'SLICE') return;
     const ck = this.ck;
-    const path = this.shapePath(node);
-    const box = path ? null : this.boxRRect(node);
-    if (!path && !box) return;
+    const path = this.backdropOutline(node, store, 0);
+    if (!path) return;
     canvas.save();
-    if (path) canvas.clipPath(path, ck.ClipOp.Intersect, true);
-    else canvas.clipRRect(box!, ck.ClipOp.Intersect, true);
+    canvas.clipPath(path, ck.ClipOp.Intersect, true);
     const created: ImageFilter[] = [];
     const keep = <T extends ImageFilter>(filter: T): T => {
       created.push(filter);
@@ -766,7 +764,55 @@ export class SceneRenderer {
     canvas.restore();
     canvas.restore();
     for (const f of created) f.delete();
-    path?.delete();
+    path.delete();
+  }
+
+  /**
+   * The area a background blur covers, in the layer's coordinates: a shape's outline, a line's
+   * stroke (without end markers), or for a group the union of its visible children's areas.
+   */
+  private backdropOutline(node: SceneNode, store: DocumentStore, depth: number): Path | null {
+    const ck = this.ck;
+    switch (node.type) {
+      case 'SLICE':
+        return null;
+      case 'LINE': {
+        if (node.strokeWeight <= 0 || node.size.width <= 0) return null;
+        const line = new ck.PathBuilder().moveTo(0, 0).lineTo(node.size.width, 0).detachAndDelete();
+        const stroked = line.makeStroked({ width: node.strokeWeight, cap: ck.StrokeCap.Butt });
+        line.delete();
+        return stroked;
+      }
+      case 'GROUP': {
+        if (depth > 64) return null;
+        let union: Path | null = null;
+        for (const childId of store.children(node.id)) {
+          const child = store.get(childId);
+          if (!child || !isSceneNode(child) || !child.visible) continue;
+          const outline = this.backdropOutline(child, store, depth + 1);
+          if (!outline) continue;
+          const m = matrixOf(child.transform);
+          const placed = new ck.PathBuilder().addPath(outline, [m.a, m.c, m.e, m.b, m.d, m.f, 0, 0, 1])?.detachAndDelete() ?? null;
+          outline.delete();
+          if (!placed) continue;
+          if (!union) {
+            union = placed;
+            continue;
+          }
+          const merged: Path | null = ck.Path.MakeFromOp(union, placed, ck.PathOp.Union);
+          union.delete();
+          placed.delete();
+          union = merged;
+        }
+        return union;
+      }
+      default: {
+        const path = this.shapePath(node);
+        if (path) return path;
+        const box = this.boxRRect(node);
+        return box ? new ck.PathBuilder().addRRect(box).detachAndDelete() : null;
+      }
+    }
   }
 
   /** Join, miter limit, dash cap and dash pattern of a layer's strokes. */

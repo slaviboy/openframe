@@ -18,7 +18,7 @@
 import { createRequire } from 'node:module';
 import type { CanvasKit } from 'canvaskit-wasm';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { createEmptyDocument, makeFrame, makeRectangle, solid } from '@/core/document/factory';
+import { createEmptyDocument, makeFrame, makeGroup, makeLine, makeRectangle, solid } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
 import { SceneIndex } from '@/core/scene/scene-index';
 import type { Effect, Node } from '@/core/schema/document';
@@ -116,6 +116,36 @@ describe('effects rendering', () => {
     expect(blurred(37, 40).r).toBeGreaterThan(30);
     // Outside the glass layer the backdrop stays sharp.
     expect(blurred(10, 10).r).toBeLessThan(10);
+  });
+
+  test('background blur on a group covers the union of its children; on a line, its stroke', () => {
+    const blur: Effect = { type: 'BACKGROUND_BLUR', radius: 16, visible: true };
+    const backdrop: Build = (add, ids, page) => {
+      const back = makeRectangle({ id: ids.next(), parent: { id: page, key: 'U' }, name: 'B', x: 0, y: 0, width: 40, height: 80 });
+      add({ ...back, fills: [solid(BLACK)] } as Node);
+    };
+    const grouped = render((add, ids, page) => {
+      backdrop(add, ids, page);
+      const group = makeGroup({ id: ids.next(), parent: { id: page, key: 'W' }, name: 'G', x: 0, y: 0, width: 80, height: 80 });
+      add({ ...group, effects: [blur] } as Node);
+      for (const [key, y] of [['a', 20], ['b', 50]] as const) {
+        const child = makeRectangle({ id: ids.next(), parent: { id: group.id, key }, name: 'C', x: 20, y, width: 40, height: 10 });
+        add({ ...child, fills: [solid(WHITE, 0.01)] } as Node);
+      }
+    });
+    expect(grouped(37, 25).r).toBeGreaterThan(30);
+    expect(grouped(37, 55).r).toBeGreaterThan(30);
+    // Between the children, and outside the group, the backdrop stays sharp.
+    expect(grouped(37, 40).r).toBeLessThan(10);
+    expect(grouped(10, 10).r).toBeLessThan(10);
+
+    const lined = render((add, ids, page) => {
+      backdrop(add, ids, page);
+      const line = makeLine({ id: ids.next(), parent: { id: page, key: 'W' }, name: 'L', x: 0, y: 40, width: 80, height: 0 });
+      add({ ...line, strokes: [solid(WHITE, 0.01)], strokeWeight: 12, effects: [blur] } as Node);
+    });
+    expect(lined(37, 40).r).toBeGreaterThan(30);
+    expect(lined(37, 20).r).toBeLessThan(10);
   });
 
   test('drop shadow blend modes blend the shadow with what is behind the layer', () => {
