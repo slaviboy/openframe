@@ -32,6 +32,7 @@ import { SceneRenderer, type RenderOptions } from '@/engine/render/scene-rendere
 import { loadBundledFonts } from '@/engine/text/bundled-fonts';
 import { TextShaper } from '@/engine/text/text-shaper';
 import { apply } from '@/core/math/matrix';
+import { pastedUrl } from '@/core/text/links';
 import { worldToScreen } from '@/editor/viewport/viewport';
 import {
   deleteText,
@@ -41,7 +42,9 @@ import {
   redoTextEdit,
   selectAllText,
   selectedText,
+  applyLink,
   indentListItem,
+  openLinkEditor,
   textEditTarget,
   textStyleRange,
   toggleList,
@@ -329,7 +332,8 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
         lastTextEdit = textEdit;
         schedule();
       }
-      if (textEdit && document.activeElement !== textInput) textInput.focus({ preventScroll: true });
+      // The link editor's address field takes keyboard input while it is open.
+      if (textEdit && !editor.state.getSnapshot().linkEditing && document.activeElement !== textInput) textInput.focus({ preventScroll: true });
       if (!textEdit && document.activeElement === textInput) textInput.blur();
       // Keep the textarea at the caret so IME candidate windows appear next to it.
       const target = textEdit && textEditTarget(editor);
@@ -391,8 +395,11 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
       textInput.value = '';
       schedule();
     };
+    // ⇧⌘V pastes as plain text: a pasted address then isn't turned into a link.
+    let plainPaste = false;
     const onTextKeyDown = (e: KeyboardEvent) => {
       if (!editor.state.getSnapshot().textEdit || e.isComposing) return;
+      plainPaste = e.code === 'KeyV' && e.shiftKey && (IS_MAC ? e.metaKey : e.ctrlKey);
       if (onTextFormatKey(e)) {
         schedule();
         return;
@@ -478,6 +485,11 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
         editor.history.run(label, apply);
         return true;
       };
+      if (e.code === 'KeyU' && mod && e.shiftKey && !e.altKey) {
+        e.preventDefault();
+        openLinkEditor(editor);
+        return true;
+      }
       if (e.code === 'KeyU' && (IS_MAC ? e.altKey && !e.metaKey && !e.ctrlKey : e.ctrlKey && !e.altKey) && !e.shiftKey) {
         return run('Underline', (tx) => toggleTextDecoration(tx, target.node, 'UNDERLINE', range));
       }
@@ -512,7 +524,13 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
     const onTextPaste = (e: ClipboardEvent) => {
       if (!editor.state.getSnapshot().textEdit) return;
       e.preventDefault();
-      insertText(editor, e.clipboardData?.getData('text/plain') ?? '');
+      const text = e.clipboardData?.getData('text/plain') ?? '';
+      const plain = plainPaste;
+      plainPaste = false;
+      // Pasting an address over selected characters links them instead of replacing them.
+      const textEdit = editor.state.getSnapshot().textEdit;
+      const url = !plain && textEdit && textEdit.anchor !== textEdit.focus ? pastedUrl(text) : null;
+      if (!url || !applyLink(editor, url)) insertText(editor, text);
       schedule();
     };
     textInput.addEventListener('beforeinput', onBeforeInput);

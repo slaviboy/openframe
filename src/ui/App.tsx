@@ -26,6 +26,7 @@ import { Notice, PlaceImageHint, ToolHint } from './shell/Notice';
 import { setSnapToPixelGrid } from '@/editor/interactions/transform';
 import { StorageError } from '@/platform/idb/persistence';
 import { CanvasHost, type CanvasContextMenu } from './canvas/CanvasHost';
+import { LinkPopover } from './canvas/LinkPopover';
 import { clipboardCommands } from './clipboard/clipboard-commands';
 import { ClipboardController } from './clipboard/clipboard-controller';
 import { KeyboardController } from './keyboard/keyboard-controller';
@@ -236,6 +237,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
     <>
       <EditorShell session={session} uiMode={uiMode} onRestoreUi={restoreUi}>
         <CanvasHost editor={editor} tools={tools} theme={theme} rulers={prefs.rulers} pixelGrid={prefs.pixelGrid} maskOutlines={prefs.maskOutlines} outlines={outlines} onContextMenu={openContextMenu} onDropFiles={dropFiles} />
+        {editorState.textEdit && <LinkPopover />}
       </EditorShell>
       {contextMenu && (
         <Menu

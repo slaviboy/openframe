@@ -16,7 +16,7 @@
  */
 
 import { valuesEqual } from '../ops/equality';
-import type { FontName, LetterSpacing, LineHeight, ListType, Paint, TextCase, TextDecoration, TextNode } from '../schema/document';
+import type { FontName, Hyperlink, LetterSpacing, LineHeight, ListType, Paint, TextCase, TextDecoration, TextNode } from '../schema/document';
 
 /**
  * Mixed styles within a text layer. The layer's own properties are the default style; `styleRuns`
@@ -37,6 +37,8 @@ export interface TextStyle {
   readonly listType: ListType;
   /** List indentation level, 1–5. */
   readonly indentation: number;
+  /** The link on the text, or null. */
+  readonly hyperlink: Hyperlink | null;
 }
 
 export type TextStyleKey = keyof TextStyle;
@@ -54,14 +56,15 @@ export interface TextSegment extends TextStyle {
   readonly end: number;
 }
 
-export const TEXT_STYLE_KEYS: readonly TextStyleKey[] = ['fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'fills', 'textDecoration', 'textCase', 'listType', 'indentation'];
+export const TEXT_STYLE_KEYS: readonly TextStyleKey[] = ['fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'fills', 'textDecoration', 'textCase', 'listType', 'indentation', 'hyperlink'];
 
-type RunsNode = Pick<TextNode, 'characters' | 'fontName' | 'fontSize' | 'lineHeight' | 'letterSpacing' | 'fills'> & {
+export type RunsNode = Pick<TextNode, 'characters' | 'fontName' | 'fontSize' | 'lineHeight' | 'letterSpacing' | 'fills'> & {
   readonly styleRuns?: readonly TextStyleRun[] | undefined;
   readonly textDecoration?: TextDecoration | undefined;
   readonly textCase?: TextCase | undefined;
   readonly listType?: ListType | undefined;
   readonly indentation?: number | undefined;
+  readonly hyperlink?: Hyperlink | undefined;
 };
 
 /** The layer's default style. */
@@ -76,12 +79,13 @@ export function baseTextStyle(node: RunsNode): TextStyle {
     textCase: node.textCase ?? 'ORIGINAL',
     listType: node.listType ?? 'NONE',
     indentation: node.indentation ?? 1,
+    hyperlink: node.hyperlink ?? null,
   };
 }
 
 /** The layer field value for a style value: defaults (no decoration, as typed) are stored as absent. */
 export function layerFieldValue<K extends TextStyleKey>(key: K, value: TextStyle[K]): TextStyle[K] | undefined {
-  if ((key === 'textDecoration' && value === 'NONE') || (key === 'textCase' && value === 'ORIGINAL') || (key === 'listType' && value === 'NONE') || (key === 'indentation' && value === 1)) return undefined;
+  if ((key === 'textDecoration' && value === 'NONE') || (key === 'textCase' && value === 'ORIGINAL') || (key === 'listType' && value === 'NONE') || (key === 'indentation' && value === 1) || (key === 'hyperlink' && value === null)) return undefined;
   return value;
 }
 
@@ -170,12 +174,17 @@ export function textChange(before: string, after: string): { start: number; end:
 /**
  * Runs for the node's text after an edit replaced [start, end) of its current characters with
  * `insertedLength` characters. Inserted text takes the style of the character before it (at the
- * very start, the style of the character after it), like typing in the reference editor.
+ * very start, the style of the character after it), like typing in the reference editor. Only text
+ * inserted inside a link joins it: typing right after a link doesn't extend it.
  */
 export function runsAfterEdit(node: RunsNode, start: number, end: number, insertedLength: number): TextStyleRun[] | undefined {
   if (!node.styleRuns || node.styleRuns.length === 0) return undefined;
   const length = node.characters.length;
-  const inherit = length === 0 ? baseTextStyle(node) : start > 0 ? textStyleAt(node, start - 1) : textStyleAt(node, end);
+  let inherit = length === 0 ? baseTextStyle(node) : start > 0 ? textStyleAt(node, start - 1) : textStyleAt(node, end);
+  if (inherit.hyperlink && start > 0) {
+    const after = end < length ? textStyleAt(node, end).hyperlink : null;
+    if (!valuesEqual(after, inherit.hyperlink)) inherit = { ...inherit, hyperlink: baseTextStyle(node).hyperlink };
+  }
   const segments = splitAt(splitAt(textSegments(node), start), end);
   const delta = insertedLength - (end - start);
   const next: TextSegment[] = [];

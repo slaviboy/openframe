@@ -24,7 +24,7 @@ import { BUILTIN_COMMANDS } from '../commands/builtin';
 import { Editor } from '../editor';
 import { ToolManager } from '../tools/tool-manager';
 import type { PointerInfo } from '../tools/types';
-import { beginTextEdit, deleteText, endTextEdit, indentListItem, insertText, moveTextCaret, selectedText, setTextSelection, textEditTarget, undoTextEdit } from './text-edit';
+import { applyLink, editedLink, openLinkEditor, beginTextEdit, deleteText, endTextEdit, indentListItem, insertText, moveTextCaret, selectedText, setTextSelection, textEditTarget, undoTextEdit } from './text-edit';
 import { caret } from '@/core/text/text-editing';
 import { paragraphListTypes, textStyleValue } from '../commands/text';
 
@@ -104,6 +104,31 @@ describe('lists while editing', () => {
     // Outside a list, Tab isn't an indent.
     setTextSelection(editor, caret(13));
     expect(indentListItem(editor, 1)).toBe(false);
+  });
+});
+
+describe('links while editing', () => {
+  test('the link editor opens for selected characters or a link under the caret; links apply and remove as a whole', () => {
+    editor.state.setTool('text');
+    click(100, 100);
+    insertText(editor, 'go to site');
+    expect(openLinkEditor(editor)).toBe(false);
+    setTextSelection(editor, { anchor: 6, focus: 10 });
+    expect(openLinkEditor(editor)).toBe(true);
+    expect(editor.state.getSnapshot().linkEditing).toBe(true);
+    expect(applyLink(editor, 'https://example.com/')).toBe(true);
+    setTextSelection(editor, caret(8));
+    expect(editedLink(editor)).toEqual({ start: 6, end: 10, url: 'https://example.com/' });
+    // Moving to another layer or ending the edit closes the link editor.
+    endTextEdit(editor);
+    expect(editor.state.getSnapshot().linkEditing).toBe(false);
+    beginTextEdit(editor, texts()[0]!.id);
+    setTextSelection(editor, caret(7));
+    expect(applyLink(editor, null)).toBe(true);
+    expect(editedLink(editor)).toBeNull();
+    expect(texts()[0]!.styleRuns).toBeUndefined();
+    setTextSelection(editor, caret(2));
+    expect(applyLink(editor, null)).toBe(false);
   });
 });
 

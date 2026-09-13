@@ -23,7 +23,8 @@ import type { Transaction } from '@/core/history/history';
 import { valuesEqual } from '@/core/ops/equality';
 import { listTrigger } from '@/core/text/lists';
 import { paragraphAt, paragraphRanges, paragraphStyleOffset } from '@/core/text/paragraphs';
-import { changeIndentation, setListType, toggleListType } from '../commands/text';
+import { changeIndentation, setHyperlink, setListType, toggleListType } from '../commands/text';
+import { linkAt, type TextLink } from '@/core/text/links';
 import {
   caret,
   clampSelection,
@@ -265,6 +266,37 @@ export function toggleList(editor: Editor, type: 'UNORDERED' | 'ORDERED'): void 
   if (!a) return;
   const range = { start: selectionStart(a.selection), end: selectionEnd(a.selection) };
   changeList(editor, a, (tx) => toggleListType(tx, a.node, type, range));
+}
+
+/** The link under the caret or covering the selection of the text being edited, or null. */
+export function editedLink(editor: Editor): TextLink | null {
+  const a = active(editor);
+  return a ? linkAt(a.node, selectionStart(a.selection), selectionEnd(a.selection)) : null;
+}
+
+/** ⇧⌘U / Create link: opens the link editor for the selected characters or the link under the caret. */
+export function openLinkEditor(editor: Editor): boolean {
+  const a = active(editor);
+  if (!a || (isCollapsed(a.selection) && !editedLink(editor))) return false;
+  editor.state.setLinkEditing(true);
+  return true;
+}
+
+/**
+ * Links the selected characters to a web address, or removes the link (url null). With a caret, the
+ * link under it is changed or removed as a whole. One undo step.
+ */
+export function applyLink(editor: Editor, url: string | null): boolean {
+  const a = active(editor);
+  if (!a || editor.history.inTransaction) return false;
+  const start = selectionStart(a.selection);
+  const end = selectionEnd(a.selection);
+  const link = linkAt(a.node, start, end);
+  const range = end > start ? { start, end } : link ? { start: link.start, end: link.end } : null;
+  if (!range) return false;
+  editor.history.run(url ? 'Create link' : 'Remove link', (tx) => setHyperlink(tx, a.node, url, range));
+  editor.requestRender();
+  return true;
 }
 
 /** The text selection of a layer being edited, including a collapsed caret, or null. */

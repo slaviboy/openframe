@@ -25,6 +25,21 @@ import { clampLevel } from '@/core/text/lists';
 import { paragraphAt, paragraphRanges, paragraphStyleOffset } from '@/core/text/paragraphs';
 import { textStyleAt } from '@/core/text/style-runs';
 import type { ListType } from '@/core/schema/document';
+
+/**
+ * Links the characters of a range (or the whole layer) to a web address and underlines them, or
+ * removes their link and the underline that came with it.
+ */
+export function setHyperlink(tx: Transaction, node: SceneNode, url: string | null, range: TextRange = null): void {
+  const text = textOf(tx, node);
+  if (!text) return;
+  if (url) {
+    setTextStyle(tx, node, { hyperlink: { type: 'URL', value: url }, textDecoration: 'UNDERLINE' }, range);
+  } else {
+    const underlined = textStyleValue(text, 'textDecoration', range) === 'UNDERLINE';
+    setTextStyle(tx, node, { hyperlink: null, ...(underlined ? { textDecoration: 'NONE' as const } : {}) }, range);
+  }
+}
 import type { FontFamilyInfo } from '@/core/text/text-layout';
 
 /**

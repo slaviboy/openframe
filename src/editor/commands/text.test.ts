@@ -23,6 +23,7 @@ import { Editor } from '../editor';
 import { applyScale, captureScale } from '../interactions/scale';
 import { setSize } from './properties';
 import {
+  setHyperlink,
   changeIndentation,
   listSpan,
   paragraphListTypes,
@@ -187,6 +188,22 @@ describe('text properties', () => {
     expect(get().listSpacing).toBe(8);
     expect(listSpan('one\n\nthree', { start: 4, end: 4 })).toEqual({ start: 3, end: 5 });
     expect(listSpan('one\ntwo', { start: 1, end: 5 })).toEqual({ start: 0, end: 7 });
+  });
+
+  test('links underline their characters and removing one clears the underline', () => {
+    editor.history.run('type', (tx) => tx.set(id, 'characters', 'go to site'));
+    editor.history.run('link', (tx) => setHyperlink(tx, get(), 'https://example.com/', { start: 6, end: 10 }));
+    expect(textStyleValue(get(), 'hyperlink', { start: 6, end: 10 })).toEqual({ type: 'URL', value: 'https://example.com/' });
+    expect(textStyleValue(get(), 'textDecoration', { start: 6, end: 10 })).toBe('UNDERLINE');
+    expect(textStyleValue(get(), 'hyperlink', { start: 0, end: 5 })).toBeNull();
+    editor.history.run('unlink', (tx) => setHyperlink(tx, get(), null, { start: 6, end: 10 }));
+    expect(get().styleRuns).toBeUndefined();
+    // The whole layer.
+    editor.history.run('link', (tx) => setHyperlink(tx, get(), 'https://example.com/'));
+    expect(get()).toMatchObject({ hyperlink: { type: 'URL', value: 'https://example.com/' }, textDecoration: 'UNDERLINE' });
+    editor.history.run('unlink', (tx) => setHyperlink(tx, get(), null));
+    expect(get().hyperlink).toBeUndefined();
+    expect(get().textDecoration).toBeUndefined();
   });
 
   test('the Scale tool scales font size and pixel spacing', () => {

@@ -67,6 +67,8 @@ export interface EditorState {
   readonly blurEdit: BlurEditRef | null;
   /** Text layer whose content is being edited, with the text selection (UTF-16 offsets), or null. */
   readonly textEdit: TextEditRef | null;
+  /** The link editor is open for the text being edited (⇧⌘U, Create link). */
+  readonly linkEditing: boolean;
 }
 
 /** Text editing: the layer and its text selection (`anchor` stays, `focus` moves). */
@@ -114,14 +116,20 @@ export class EditorStore extends Observable<EditorState> {
       gradientEdit: null,
       blurEdit: null,
       textEdit: null,
+      linkEditing: false,
     });
   }
 
-  /** Text editing is exclusive with crop mode and on-canvas gradient or blur editing. */
+  /** Text editing is exclusive with crop mode and on-canvas gradient or blur editing. The link editor closes with the edit. */
   setTextEdit(textEdit: TextEditRef | null): void {
     const current = this.state.textEdit;
     if (current === textEdit || (current && textEdit && current.nodeId === textEdit.nodeId && current.anchor === textEdit.anchor && current.focus === textEdit.focus)) return;
-    this.setState(textEdit ? { textEdit, croppingId: null, gradientEdit: null, blurEdit: null } : { textEdit });
+    const linkEditing = this.state.linkEditing && !!textEdit && current?.nodeId === textEdit.nodeId;
+    this.setState(textEdit ? { textEdit, linkEditing, croppingId: null, gradientEdit: null, blurEdit: null } : { textEdit, linkEditing });
+  }
+
+  setLinkEditing(linkEditing: boolean): void {
+    if (this.state.linkEditing !== linkEditing) this.setState({ linkEditing: linkEditing && !!this.state.textEdit });
   }
 
   setCropAspect(cropAspect: CropAspect): void {

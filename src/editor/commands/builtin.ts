@@ -320,7 +320,7 @@ const COLOR_PROFILE_COMMANDS: CommandDefinition[] = (['SRGB', 'DISPLAY_P3'] as c
   },
 }));
 
-import { beginTextEdit } from '../interactions/text-edit';
+import { beginTextEdit, openLinkEditor } from '../interactions/text-edit';
 import { stepTextProperty, toggleFontStyle, toggleListType, toggleTextDecoration } from './text';
 import type { SceneNode as TextTarget } from '@/core/schema/document';
 
@@ -336,6 +336,17 @@ export function autoLineHeight(e: Editor, fontSize: number): number {
 }
 
 const TEXT_FORMAT_COMMANDS: CommandDefinition[] = [
+  {
+    id: 'text.createLink',
+    label: 'Create link',
+    category: 'Text',
+    shortcuts: ['Mod+Shift+U'],
+    enabled: (e) => e.state.getSnapshot().textEdit !== null || (e.selection.length === 1 && selectedTextLayers(e).length === 1),
+    // A selected layer is edited with all its text selected, so the link covers all of it.
+    run: (e) => {
+      if (e.state.getSnapshot().textEdit || e.commands.run('text.edit')) openLinkEditor(e);
+    },
+  },
   ...(
     [
       ['text.bulletedList', 'Bulleted list', 'UNORDERED', 'Mod+Shift+8'],

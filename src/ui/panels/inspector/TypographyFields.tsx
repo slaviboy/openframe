@@ -210,9 +210,12 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
           ))}
         </div>
       </div>
-      <button type="button" className={styles.disclosure} aria-expanded={settingsOpen} onClick={() => setSettingsOpen((open) => !open)}>
-        Type settings
-      </button>
+      <div className={styles.buttonRow}>
+        <button type="button" className={styles.disclosure} aria-expanded={settingsOpen} onClick={() => setSettingsOpen((open) => !open)}>
+          Type settings
+        </button>
+        {nodes.length === 1 && <IconButton icon="link" label="Create link" onClick={() => editor.commands.run('text.createLink')} />}
+      </div>
       {settingsOpen && (
         <div className={styles.typeSettings} role="group" aria-label="Type settings">
           <div className={styles.buttonRow} role="group" aria-label="Decoration">
