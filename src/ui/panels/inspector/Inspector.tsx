@@ -47,6 +47,9 @@ import { useColorProfile } from '../../hooks/useColorProfile';
 import { ReorderHandle } from './ReorderHandle';
 import { TextResizingButtons, TypographyFields } from './TypographyFields';
 import type { TextNode } from '@/core/schema/document';
+import type { Transaction } from '@/core/history/history';
+import { setTextFills, textStyleValue } from '@/editor/commands/text';
+import { textStyleRange } from '@/editor/interactions/text-edit';
 import { beginBlurEdit, endBlurEdit } from '@/editor/interactions/blur-edit';
 import { canonicalStringify } from '@/core/serialize/serialize';
 import gradientStyles from './Gradient.module.css';
@@ -787,13 +790,22 @@ function PaintSection({
   const gesture = useGesture(`Change ${title.toLowerCase()}`);
   const profile = useColorProfile();
   const strokeWeight = useGesture('Change stroke weight');
-  const paints = shared(nodes, (n) => n[field], paintsEqual);
+  // While a text layer's characters are selected for editing, its fills apply to those characters;
+  // otherwise a text layer's fills are Mixed when its style runs differ.
+  useEditorState((s) => s.textEdit);
+  const textRange = field === 'fills' && nodes.length === 1 ? textStyleRange(editor, nodes[0]!.id) : null;
+  const isText = (n: GeometryNode): n is TextNode => field === 'fills' && n.type === 'TEXT';
+  const readPaints = (n: GeometryNode): Paint[] => (isText(n) ? [...(textStyleValue(n, 'fills', textRange) ?? n.fills)] : n[field]);
+  const read = (tx: Transaction, n: GeometryNode) => readPaints(tx.store.getOrThrow(n.id) as GeometryNode);
+  const write = (tx: Transaction, n: GeometryNode, next: readonly Paint[]) => (isText(n) ? setTextFills(tx, n, next, textRange) : setPaints(tx, n, field, [...next]));
+  const textMixed = nodes.some((n) => isText(n) && textStyleValue(n, 'fills', textRange) === undefined);
+  const paints = textMixed ? MIXED : shared(nodes, readPaints, paintsEqual);
   const mixed = paints === MIXED;
   const list = mixed || paints === undefined ? [] : paints;
   /** Sets one paint's blend mode on every selected layer, as its own undo step. */
   const setPaintBlend = (index: number, mode: BlendMode) =>
     editor.history.run(`Change ${title.toLowerCase()} blend mode`, (tx) =>
-      nodes.forEach((n) => setPaints(tx, n, field, (tx.store.getOrThrow(n.id) as GeometryNode)[field].map((p, i) => (i === index ? { ...p, blendMode: mode } : p)))),
+      nodes.forEach((n) => write(tx, n, read(tx, n).map((p, i) => (i === index ? { ...p, blendMode: mode } : p)))),
     );
   // Index of this list's gradient being edited on the canvas, if any.
   const gradientEdit = useEditorState((s) => s.gradientEdit);
@@ -801,10 +813,7 @@ function PaintSection({
 
   const writeAll = (next: (current: readonly Paint[]) => readonly Paint[]) =>
     gesture.change((tx) => {
-      for (const n of nodes) {
-        const current = (tx.store.getOrThrow(n.id) as GeometryNode)[field];
-        setPaints(tx, n, field, next(current));
-      }
+      for (const n of nodes) write(tx, n, next(read(tx, n)));
     });
 
   /** Continuous gradient edits (scrubs, color picker) within the current gesture. */
@@ -814,14 +823,14 @@ function PaintSection({
   /** One-shot gradient edits (add, remove, flip) as their own undo step. */
   const editGradient = (index: number, label: string, edit: (g: GradientPaint) => GradientPaint) =>
     editor.history.run(label, (tx) =>
-      nodes.forEach((n) => setPaints(tx, n, field, (tx.store.getOrThrow(n.id) as GeometryNode)[field].map((p, i) => (i === index && isGradientPaint(p) ? edit(p) : p)))),
+      nodes.forEach((n) => write(tx, n, read(tx, n).map((p, i) => (i === index && isGradientPaint(p) ? edit(p) : p)))),
     );
 
   const add = () =>
     editor.history.run(`Add ${title.toLowerCase()}`, (tx) => {
       for (const n of nodes) {
-        const current = mixed ? [] : (tx.store.getOrThrow(n.id) as GeometryNode)[field];
-        setPaints(tx, n, field, [...current, defaultPaint()]);
+        const current = mixed ? [] : read(tx, n);
+        write(tx, n, [...current, defaultPaint()]);
       }
     });
 
@@ -844,8 +853,8 @@ function PaintSection({
                   onMove={(from, to) =>
                     editor.history.run(`Reorder ${title.toLowerCase()}s`, (tx) =>
                       nodes.forEach((n) => {
-                        const current = (tx.store.getOrThrow(n.id) as GeometryNode)[field];
-                        setPaints(tx, n, field, moveItem(current, current.length - 1 - from, current.length - 1 - to));
+                        const current = read(tx, n);
+                        write(tx, n, moveItem(current, current.length - 1 - from, current.length - 1 - to));
                       }),
                     )
                   }
@@ -857,7 +866,7 @@ function PaintSection({
                   onChange={(e) =>
                     editor.history.run(`Change ${title.toLowerCase()} type`, (tx) =>
                       nodes.forEach((n) =>
-                        setPaints(tx, n, field, (tx.store.getOrThrow(n.id) as GeometryNode)[field].map((p, i) => (i === index ? convertPaint(p, e.target.value as PaintType) : p))),
+                        write(tx, n, read(tx, n).map((p, i) => (i === index ? convertPaint(p, e.target.value as PaintType) : p))),
                       ),
                     )
                   }
@@ -927,7 +936,7 @@ function PaintSection({
                   onClick={() =>
                     editor.history.run(`Toggle ${title.toLowerCase()}`, (tx) =>
                       nodes.forEach((n) =>
-                        setPaints(tx, n, field, (tx.store.getOrThrow(n.id) as GeometryNode)[field].map((p, i) => (i === index ? { ...p, visible: !p.visible } : p))),
+                        write(tx, n, read(tx, n).map((p, i) => (i === index ? { ...p, visible: !p.visible } : p))),
                       ),
                     )
                   }
@@ -937,7 +946,7 @@ function PaintSection({
                   label={`Remove ${title.toLowerCase()}`}
                   onClick={() =>
                     editor.history.run(`Remove ${title.toLowerCase()}`, (tx) =>
-                      nodes.forEach((n) => setPaints(tx, n, field, (tx.store.getOrThrow(n.id) as GeometryNode)[field].filter((_, i) => i !== index))),
+                      nodes.forEach((n) => write(tx, n, read(tx, n).filter((_, i) => i !== index))),
                     )
                   }
                 />
@@ -949,7 +958,7 @@ function PaintSection({
                   onEdit={(label, edit) =>
                     editor.history.run(label, (tx) =>
                       nodes.forEach((n) =>
-                        setPaints(tx, n, field, (tx.store.getOrThrow(n.id) as GeometryNode)[field].map((p, i) => (i === index && p.type === 'IMAGE' ? edit(p) : p))),
+                        write(tx, n, read(tx, n).map((p, i) => (i === index && p.type === 'IMAGE' ? edit(p) : p))),
                       ),
                     )
                   }
@@ -971,7 +980,7 @@ function PaintSection({
                       if (!sourceId || nodes.some((n) => n.id === sourceId)) return;
                       editor.history.run('Select pattern source', (tx) =>
                         nodes.forEach((n) =>
-                          setPaints(tx, n, field, (tx.store.getOrThrow(n.id) as GeometryNode)[field].map((p, i) => (i === index && p.type === 'PATTERN' ? { ...p, sourceNodeId: sourceId } : p))),
+                          write(tx, n, read(tx, n).map((p, i) => (i === index && p.type === 'PATTERN' ? { ...p, sourceNodeId: sourceId } : p))),
                         ),
                       );
                     });
@@ -979,7 +988,7 @@ function PaintSection({
                   onEdit={(label, edit) =>
                     editor.history.run(label, (tx) =>
                       nodes.forEach((n) =>
-                        setPaints(tx, n, field, (tx.store.getOrThrow(n.id) as GeometryNode)[field].map((p, i) => (i === index && p.type === 'PATTERN' ? edit(p) : p))),
+                        write(tx, n, read(tx, n).map((p, i) => (i === index && p.type === 'PATTERN' ? edit(p) : p))),
                       ),
                     )
                   }

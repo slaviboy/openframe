@@ -30,7 +30,7 @@ export interface ShortcutGroup {
 }
 
 /** Tab order of the shortcuts panel. */
-export const SHORTCUT_CATEGORY_ORDER: readonly CommandCategory[] = ['Tools', 'Edit', 'View', 'Object', 'Arrange', 'Page', 'File', 'Help'];
+export const SHORTCUT_CATEGORY_ORDER: readonly CommandCategory[] = ['Tools', 'Edit', 'View', 'Object', 'Text', 'Arrange', 'Page', 'File', 'Help'];
 
 /**
  * Commands that have a keyboard shortcut (bound or browser-handled), grouped by category in

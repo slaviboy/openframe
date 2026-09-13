@@ -35,6 +35,7 @@ import {
   type TextEdit,
   type TextSelection,
 } from '@/core/text/text-editing';
+import { runsAfterEdit, textChange, type TextStyleRun } from '@/core/text/style-runs';
 import type { Editor } from '../editor';
 import type { ToolId } from '../stores/editor-store';
 import type { CursorKind, PointerInfo, Tool } from '../tools/types';
@@ -46,11 +47,15 @@ interface Session {
   readonly key: string;
   /** The layer was created for this session (removed without a trace if left empty). */
   readonly created: boolean;
-  /** Text states before each edit, for undo and redo while editing. */
-  readonly undo: TextEdit[];
-  readonly redo: TextEdit[];
+  /** Text states (with their style runs) before each edit, for undo and redo while editing. */
+  readonly undo: Snapshot[];
+  readonly redo: Snapshot[];
   /** The x position kept while moving the caret up and down through lines. */
   goalX: number | null;
+}
+
+interface Snapshot extends TextEdit {
+  readonly runs: readonly TextStyleRun[] | undefined;
 }
 
 const sessions = new WeakMap<Editor, Session>();
@@ -140,15 +145,28 @@ export function watchTextEdit(editor: Editor): () => void {
   });
 }
 
-function apply(editor: Editor, session: Session, node: TextNode, selection: TextSelection, edit: TextEdit, record = true): void {
+/**
+ * Commits an edit. Style runs follow the change (typed text takes the style before the caret)
+ * unless a snapshot restores them exactly.
+ */
+function apply(editor: Editor, session: Session, node: TextNode, selection: TextSelection, edit: TextEdit | Snapshot, record = true): void {
   if (edit.text !== node.characters) {
     if (editor.history.inTransaction) return;
     if (record) {
-      session.undo.push({ text: node.characters, selection });
+      session.undo.push({ text: node.characters, selection, runs: node.styleRuns });
       if (session.undo.length > UNDO_LIMIT) session.undo.shift();
       session.redo.length = 0;
     }
-    editor.history.run('Edit text', (tx) => tx.set(node.id, 'characters', edit.text), { mergeKey: session.key });
+    const change = textChange(node.characters, edit.text);
+    const runs = 'runs' in edit ? edit.runs : runsAfterEdit(node, change.start, change.end, change.insertedLength);
+    editor.history.run(
+      'Edit text',
+      (tx) => {
+        tx.set(node.id, 'characters', edit.text);
+        tx.set(node.id, 'styleRuns', runs);
+      },
+      { mergeKey: session.key },
+    );
   }
   session.goalX = null;
   editor.state.setTextEdit({ nodeId: node.id, ...clampSelection(edit.text, edit.selection) });
@@ -226,6 +244,16 @@ export function selectAllText(editor: Editor): void {
   if (a) setTextSelection(editor, { anchor: 0, focus: a.node.characters.length });
 }
 
+/**
+ * The characters that property changes apply to: the selected range while editing that layer with
+ * a non-empty selection, otherwise null (the whole layer).
+ */
+export function textStyleRange(editor: Editor, id: Id): { start: number; end: number } | null {
+  const target = textEditTarget(editor);
+  if (!target || target.node.id !== id || isCollapsed(target.selection)) return null;
+  return { start: selectionStart(target.selection), end: selectionEnd(target.selection) };
+}
+
 /** The selected text, for copy and cut. */
 export function selectedText(editor: Editor): string {
   const target = textEditTarget(editor);
@@ -237,7 +265,7 @@ export function undoTextEdit(editor: Editor): boolean {
   const a = active(editor);
   const previous = a?.session.undo.pop();
   if (!a || !previous) return false;
-  a.session.redo.push({ text: a.node.characters, selection: a.selection });
+  a.session.redo.push({ text: a.node.characters, selection: a.selection, runs: a.node.styleRuns });
   apply(editor, a.session, a.node, a.selection, previous, false);
   return true;
 }
@@ -246,7 +274,7 @@ export function redoTextEdit(editor: Editor): boolean {
   const a = active(editor);
   const next = a?.session.redo.pop();
   if (!a || !next) return false;
-  a.session.undo.push({ text: a.node.characters, selection: a.selection });
+  a.session.undo.push({ text: a.node.characters, selection: a.selection, runs: a.node.styleRuns });
   apply(editor, a.session, a.node, a.selection, next, false);
   return true;
 }

@@ -17,7 +17,7 @@
 
 import type { Editor } from '../editor';
 
-export type CommandCategory = 'File' | 'Edit' | 'View' | 'Object' | 'Arrange' | 'Tools' | 'Page' | 'Help';
+export type CommandCategory = 'File' | 'Edit' | 'View' | 'Object' | 'Text' | 'Arrange' | 'Tools' | 'Page' | 'Help';
 
 export interface CommandDefinition {
   readonly id: string;

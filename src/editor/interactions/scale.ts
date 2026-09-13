@@ -22,6 +22,7 @@ import { apply, invert, multiply, type Matrix } from '@/core/math/matrix';
 import type { Vec2 } from '@/core/math/vec';
 import { matrixOf, type SceneIndex } from '@/core/scene/scene-index';
 import { isSceneNode, type CornerRadii, type Effect, type LetterSpacing, type LineHeight, type Size, type Transform } from '@/core/schema/document';
+import type { TextStyleRun } from '@/core/text/style-runs';
 
 interface NodeSnapshot {
   readonly transform: Transform;
@@ -30,7 +31,7 @@ interface NodeSnapshot {
   readonly cornerRadius: number | undefined;
   readonly cornerRadii: CornerRadii | undefined;
   readonly effects: readonly Effect[] | undefined;
-  readonly text: { readonly fontSize: number; readonly lineHeight: LineHeight; readonly letterSpacing: LetterSpacing } | undefined;
+  readonly text: { readonly fontSize: number; readonly lineHeight: LineHeight; readonly letterSpacing: LetterSpacing; readonly styleRuns: readonly TextStyleRun[] | undefined } | undefined;
 }
 
 /** Effects scaled with their layer: shadow offsets, blur radii and spread. */
@@ -75,7 +76,7 @@ export function captureScale(store: DocumentStore, index: SceneIndex, rootIds: r
         cornerRadius: 'cornerRadius' in node ? node.cornerRadius : undefined,
         cornerRadii: 'cornerRadii' in node ? node.cornerRadii : undefined,
         effects: node.effects,
-        text: node.type === 'TEXT' ? { fontSize: node.fontSize, lineHeight: node.lineHeight, letterSpacing: node.letterSpacing } : undefined,
+        text: node.type === 'TEXT' ? { fontSize: node.fontSize, lineHeight: node.lineHeight, letterSpacing: node.letterSpacing, styleRuns: node.styleRuns } : undefined,
       });
     }
   }
@@ -101,10 +102,28 @@ export function applyScale(tx: Transaction, snapshot: ScaleSnapshot, factor: num
     if (s.cornerRadius !== undefined) tx.set(id, 'cornerRadius', round2(s.cornerRadius * f));
     if (s.effects && s.effects.length > 0) tx.set(id, 'effects', scaleEffects(s.effects, f));
     if (s.text) {
-      // Text scales its type: font size, and line height and letter spacing given in pixels.
-      tx.set(id, 'fontSize', Math.min(10_000, Math.max(1, round2(s.text.fontSize * f))));
-      if (s.text.lineHeight.unit === 'PIXELS') tx.set(id, 'lineHeight', { unit: 'PIXELS', value: round2(s.text.lineHeight.value * f) });
-      if (s.text.letterSpacing.unit === 'PIXELS') tx.set(id, 'letterSpacing', { unit: 'PIXELS', value: round2(s.text.letterSpacing.value * f) });
+      // Text scales its type: font size, and line height and letter spacing given in pixels, in every style run too.
+      const size = (v: number) => Math.min(10_000, Math.max(1, round2(v * f)));
+      const lineHeight = (lh: LineHeight): LineHeight => (lh.unit === 'PIXELS' ? { unit: 'PIXELS', value: round2(lh.value * f) } : lh);
+      const letterSpacing = (ls: LetterSpacing): LetterSpacing => (ls.unit === 'PIXELS' ? { unit: 'PIXELS', value: round2(ls.value * f) } : ls);
+      tx.set(id, 'fontSize', size(s.text.fontSize));
+      tx.set(id, 'lineHeight', lineHeight(s.text.lineHeight));
+      tx.set(id, 'letterSpacing', letterSpacing(s.text.letterSpacing));
+      if (s.text.styleRuns) {
+        tx.set(
+          id,
+          'styleRuns',
+          s.text.styleRuns.map((run) => ({
+            ...run,
+            style: {
+              ...run.style,
+              ...(run.style.fontSize !== undefined ? { fontSize: size(run.style.fontSize) } : {}),
+              ...(run.style.lineHeight ? { lineHeight: lineHeight(run.style.lineHeight) } : {}),
+              ...(run.style.letterSpacing ? { letterSpacing: letterSpacing(run.style.letterSpacing) } : {}),
+            },
+          })),
+        );
+      }
     }
     if (s.cornerRadii) {
       const r = s.cornerRadii;

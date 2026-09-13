@@ -45,6 +45,7 @@ import { clampCornerRadius, lineCapSize, polygonPoints, starPoints } from '@/cor
 import { rectangleCorners, resolveCornerRadii, roundedPolygon, type PathCommand } from '@/core/geometry/corners';
 import type { TextNode } from '@/core/schema/document';
 import type { TextShaper } from '../text/text-shaper';
+import { textSegments, type TextSegment } from '@/core/text/style-runs';
 import { adjustmentValues, hasAdjustments } from '@/core/image/adjustments';
 import { imageQuad } from '@/core/image/crop';
 import { imagePlacement } from '@/core/image/image-fit';
@@ -404,10 +405,15 @@ export class SceneRenderer {
       return;
     }
     if (node.type === 'TEXT') {
-      for (const paint of node.fills) {
-        if (!paint.visible || paint.opacity <= 0) continue;
-        this.configurePaint(this.fillPaint, paint, node.size);
-        this.drawText(canvas, node, this.fillPaint);
+      // Fill layers bottom to top; each paragraph paints every segment with its own fill at that layer.
+      const layers = Math.max(0, ...textSegments(node).map((s) => s.fills.length));
+      for (let i = 0; i < layers; i++) {
+        this.drawText(canvas, node, (segment) => {
+          const paint = segment.fills[i];
+          if (!paint || !paint.visible || paint.opacity <= 0) return this.transparentPaint();
+          this.configurePaint(this.fillPaint, paint, node.size);
+          return this.fillPaint;
+        });
       }
       return;
     }
@@ -891,17 +897,21 @@ export class SceneRenderer {
     this.textShaper = shaper;
   }
 
-  /** Draws a text layer's glyphs painted with `paint` (a fill, or the hairline outline paint). */
-  private drawText(canvas: Canvas, node: TextNode, paint: CkPaint): void {
-    const shaper = this.textShaper;
-    if (!shaper || node.characters === '') return;
+  private transparentPaint(): CkPaint {
     this.clearPaint ??= (() => {
       const p = new this.ck.Paint();
       p.setColor(this.ck.TRANSPARENT);
       return p;
     })();
-    const colors = { foreground: paint, background: this.clearPaint };
-    const { paragraph, dy } = shaper.layOut(node, shaper.build(node, colors), (maxLines) => shaper.build(node, colors, maxLines));
+    return this.clearPaint;
+  }
+
+  /** Draws a text layer's glyphs, each mixed-style segment painted with the paint `paintFor` returns. */
+  private drawText(canvas: Canvas, node: TextNode, paintFor: (segment: TextSegment) => CkPaint): void {
+    const shaper = this.textShaper;
+    if (!shaper || node.characters === '') return;
+    const painter = { background: this.transparentPaint(), paint: paintFor };
+    const { paragraph, dy } = shaper.layOut(node, shaper.build(node, painter), (maxLines) => shaper.build(node, painter, maxLines));
     canvas.drawParagraph(paragraph, 0, dy);
     paragraph.delete();
   }
@@ -909,7 +919,7 @@ export class SceneRenderer {
   /** Outline mode: a hairline (one device pixel at any zoom) along the layer's geometry. */
   private drawOutline(canvas: Canvas, node: GeometryNode): void {
     if (node.type === 'TEXT') {
-      this.drawText(canvas, node, this.outlinePaint);
+      this.drawText(canvas, node, () => this.outlinePaint);
       return;
     }
     if (node.type === 'LINE') {

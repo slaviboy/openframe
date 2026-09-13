@@ -17,11 +17,13 @@
 
 import { useState } from 'react';
 import type { Transaction } from '@/core/history/history';
+import { valuesEqual } from '@/core/ops/equality';
 import type { TextAlignHorizontal, TextAlignVertical, TextAutoResize, TextNode } from '@/core/schema/document';
 import { VARIABLE_FONT_STYLES } from '@/core/text/font-style';
+import { rangeValues, type TextStyle, type TextStyleKey } from '@/core/text/style-runs';
 import type { FontFamilyInfo } from '@/core/text/text-layout';
 import { formatLetterSpacing, formatLineHeight, parseLetterSpacing, parseLineHeight } from '@/core/text/text-values';
-import { MIXED, shared, type Mixed } from '@/editor/commands/properties';
+import { shared } from '@/editor/commands/properties';
 import {
   setFontFamily,
   setFontSize,
@@ -31,9 +33,11 @@ import {
   setTextAlignHorizontal,
   setTextAlignVertical,
   setTextAutoResize,
+  type TextRange,
 } from '@/editor/commands/text';
+import { textStyleRange } from '@/editor/interactions/text-edit';
 import type { IconName } from '../../icons/Icon';
-import { useEditor } from '../../hooks/useEditor';
+import { useEditor, useEditorState } from '../../hooks/useEditor';
 import { useGesture } from '../../hooks/useGesture';
 import { IconButton } from '../../primitives/IconButton';
 import { NumberField } from '../../primitives/NumberField';
@@ -58,13 +62,25 @@ export const RESIZE_MODES: readonly (readonly [TextAutoResize, IconName, string]
   ['TRUNCATE', 'truncate', 'Truncate text'],
 ];
 
-const val = <T,>(v: Mixed<T>): T | undefined => (v === MIXED ? undefined : v);
-
 /** Families to offer: the available fonts, plus the selection's family when it is not available (a missing font). */
 function familyOptions(available: readonly FontFamilyInfo[], family: string | undefined, style: string | undefined): readonly FontFamilyInfo[] {
   if (family === undefined || available.some((f) => f.family === family)) return available;
   return [...available, { family, styles: [style ?? 'Regular'] }];
 }
+
+/** Every distinct value of a style property over the range (or each whole layer). */
+function valuesOf<K extends TextStyleKey>(nodes: readonly TextNode[], range: TextRange, key: K): TextStyle[K][] {
+  const values: TextStyle[K][] = [];
+  for (const node of nodes) {
+    for (const v of rangeValues(node, range?.start ?? 0, range?.end ?? node.characters.length, key)) {
+      if (!values.some((existing) => valuesEqual(existing, v))) values.push(v);
+    }
+  }
+  return values;
+}
+
+/** The single value of a list, or undefined when there are several (mixed). */
+const single = <T,>(values: readonly T[]): T | undefined => (values.length === 1 ? values[0] : undefined);
 
 /** Text resizing buttons (shown in the Layout section for text layers). */
 export function TextResizingButtons({ nodes }: { nodes: readonly TextNode[] }) {
@@ -85,17 +101,26 @@ export function TextResizingButtons({ nodes }: { nodes: readonly TextNode[] }) {
   );
 }
 
-/** The Typography section: font family and style, size, line height, letter spacing and alignment. */
+/**
+ * The Typography section: font family and style, size, line height, letter spacing and alignment.
+ * While a single layer's text is being edited with characters selected, the style properties show
+ * and change those characters (mixed styles); otherwise they apply to whole layers.
+ */
 export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
   const editor = useEditor();
   const size = useGesture('Change font size');
-  const family = val(shared(nodes, (n) => n.fontName.family));
-  const style = val(shared(nodes, (n) => n.fontName.style));
+  // Re-render as the text selection changes.
+  useEditorState((s) => s.textEdit);
+  const range = nodes.length === 1 ? textStyleRange(editor, nodes[0]!.id) : null;
+  const fontNames = valuesOf(nodes, range, 'fontName');
+  const family = single([...new Set(fontNames.map((f) => f.family))]);
+  const style = single([...new Set(fontNames.map((f) => f.style))]);
   const available = editor.textLayout?.availableFonts() ?? [{ family: 'Inter', styles: VARIABLE_FONT_STYLES }];
   const families = familyOptions(available, family, style);
   const styleOptions = families.find((f) => f.family === family)?.styles ?? [];
-  const lineHeight = val(shared(nodes, (n) => formatLineHeight(n.lineHeight)));
-  const letterSpacing = val(shared(nodes, (n) => formatLetterSpacing(n.letterSpacing)));
+  const lineHeight = single(valuesOf(nodes, range, 'lineHeight'));
+  const letterSpacings = valuesOf(nodes, range, 'letterSpacing');
+  const letterSpacing = single(letterSpacings);
   const hAlign = shared(nodes, (n) => n.textAlignHorizontal);
   const vAlign = shared(nodes, (n) => n.textAlignVertical);
   const run = (label: string, apply: (tx: Transaction, node: TextNode) => void) => editor.history.run(label, (tx) => nodes.forEach((n) => apply(tx, n)));
@@ -106,7 +131,7 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
         className={primitives.select}
         aria-label="Font family"
         value={family ?? ''}
-        onChange={(e) => run('Change font', (tx, n) => setFontFamily(tx, n, e.target.value, families))}
+        onChange={(e) => run('Change font', (tx, n) => setFontFamily(tx, n, e.target.value, families, range))}
       >
         {family === undefined && <option value="">Mixed</option>}
         {families.map((f) => (
@@ -116,7 +141,7 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
         ))}
       </select>
       <div className={styles.grid2}>
-        <select className={primitives.select} aria-label="Font style" value={style ?? ''} onChange={(e) => run('Change font style', (tx, n) => setFontStyle(tx, n, e.target.value))}>
+        <select className={primitives.select} aria-label="Font style" value={style ?? ''} onChange={(e) => run('Change font style', (tx, n) => setFontStyle(tx, n, e.target.value, range))}>
           {(style === undefined || !styleOptions.includes(style)) && <option value={style ?? ''}>{style ?? 'Mixed'}</option>}
           {styleOptions.map((s) => (
             <option key={s} value={s}>
@@ -130,10 +155,10 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
           testId="field-font-size"
           min={1}
           max={10_000}
-          value={val(shared(nodes, (n) => n.fontSize))}
+          value={single(valuesOf(nodes, range, 'fontSize'))}
           onGestureStart={size.start}
           onGestureEnd={size.end}
-          onChange={(v) => size.change((tx) => nodes.forEach((n) => setFontSize(tx, n, v)))}
+          onChange={(v) => size.change((tx) => nodes.forEach((n) => setFontSize(tx, n, v, range)))}
         />
       </div>
       <div className={styles.grid2}>
@@ -141,17 +166,17 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
           label="Line height"
           short="↕"
           testId="field-line-height"
-          text={lineHeight ?? ''}
+          text={lineHeight ? formatLineHeight(lineHeight) : ''}
           parse={parseLineHeight}
-          onCommit={(value) => run('Change line height', (tx, n) => setLineHeight(tx, n, value))}
+          onCommit={(value) => run('Change line height', (tx, n) => setLineHeight(tx, n, value, range))}
         />
         <ValueField
           label="Letter spacing"
           short="|A|"
           testId="field-letter-spacing"
-          text={letterSpacing ?? ''}
-          parse={(input) => parseLetterSpacing(input, nodes[0]!.letterSpacing.unit)}
-          onCommit={(value) => run('Change letter spacing', (tx, n) => setLetterSpacing(tx, n, value))}
+          text={letterSpacing ? formatLetterSpacing(letterSpacing) : ''}
+          parse={(input) => parseLetterSpacing(input, letterSpacings[0]?.unit ?? 'PERCENT')}
+          onCommit={(value) => run('Change letter spacing', (tx, n) => setLetterSpacing(tx, n, value, range))}
         />
       </div>
       <div className={styles.buttonRow}>

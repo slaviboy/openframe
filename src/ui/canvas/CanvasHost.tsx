@@ -42,9 +42,11 @@ import {
   selectAllText,
   selectedText,
   textEditTarget,
+  textStyleRange,
   undoTextEdit,
   type CaretMove,
 } from '@/editor/interactions/text-edit';
+import { toggleFontStyle } from '@/editor/commands/text';
 import { imageFilesOf } from '../images/import-image';
 import { IS_MAC } from '../keyboard/keyboard-controller';
 import { ClickCounter } from './click-counter';
@@ -420,6 +422,14 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
       if (key === 'a') {
         e.preventDefault();
         selectAllText(editor);
+      } else if (key === 'b' || key === 'i') {
+        // Bold / italic on the selected characters (or the whole layer with a caret).
+        e.preventDefault();
+        const target = textEditTarget(editor);
+        if (target && !editor.history.inTransaction) {
+          const axis = key === 'b' ? 'bold' : 'italic';
+          editor.history.run(axis === 'bold' ? 'Bold' : 'Italic', (tx) => toggleFontStyle(tx, target.node, axis, editor.textLayout?.availableFonts() ?? [], textStyleRange(editor, target.node.id)));
+        }
       } else if (key === 'z') {
         e.preventDefault();
         if (e.shiftKey) redoTextEdit(editor);

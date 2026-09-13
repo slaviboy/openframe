@@ -24,12 +24,21 @@ import { parseFontStyle, VARIABLE_FONT_STYLES } from '@/core/text/font-style';
 import { nextGrapheme, previousGrapheme } from '@/core/text/text-editing';
 import type { FontFamilyInfo, TextCaretBox, TextLayoutService } from '@/core/text/text-layout';
 import { isFallbackFamily } from './font-files';
+import { textSegments, type TextSegment, type TextStyle as RunsStyle } from '@/core/text/style-runs';
 
 /** Font bytes to register under a family name. */
 export interface FontSource {
   readonly family: string;
   readonly bytes: ArrayBuffer | Uint8Array;
 }
+
+/** Paints glyphs: the paint for each mixed-style segment, over a background paint. */
+export interface TextPainter {
+  readonly background: CkPaint;
+  paint(segment: TextSegment): CkPaint;
+}
+
+type RunStyle = Pick<RunsStyle, 'fontName' | 'fontSize' | 'lineHeight' | 'letterSpacing'>;
 
 /** Layout width for text that never wraps. */
 const UNBOUNDED = 1e6;
@@ -85,9 +94,9 @@ export class TextShaper implements TextLayoutService {
     this.provider.delete();
   }
 
-  private textStyle(node: TextNode): TextStyle {
+  private textStyle(style: RunStyle): TextStyle {
     const ck = this.ck;
-    const { weight, italic } = parseFontStyle(node.fontName.style);
+    const { weight, italic } = parseFontStyle(style.fontName.style);
     const weights: EmbindEnumEntity[] = [
       ck.FontWeight.Thin,
       ck.FontWeight.ExtraLight,
@@ -99,29 +108,29 @@ export class TextShaper implements TextLayoutService {
       ck.FontWeight.ExtraBold,
       ck.FontWeight.Black,
     ];
-    const lineHeight = node.lineHeight.unit === 'PIXELS' ? node.lineHeight.value / node.fontSize : node.lineHeight.unit === 'PERCENT' ? node.lineHeight.value / 100 : null;
+    const lineHeight = style.lineHeight.unit === 'PIXELS' ? style.lineHeight.value / style.fontSize : style.lineHeight.unit === 'PERCENT' ? style.lineHeight.value / 100 : null;
     return new ck.TextStyle({
       color: ck.BLACK,
       // Other registered families follow as fallbacks for characters the font lacks.
-      fontFamilies: [node.fontName.family, ...this.families.filter((f) => f !== node.fontName.family)],
-      fontSize: node.fontSize,
+      fontFamilies: [style.fontName.family, ...this.families.filter((f) => f !== style.fontName.family)],
+      fontSize: style.fontSize,
       fontStyle: { weight: weights[Math.min(8, Math.max(0, Math.round(weight / 100) - 1))]!, slant: italic ? ck.FontSlant.Italic : ck.FontSlant.Upright },
       fontVariations: [{ axis: 'wght', value: weight }],
-      letterSpacing: node.letterSpacing.unit === 'PIXELS' ? node.letterSpacing.value : (node.letterSpacing.value / 100) * node.fontSize,
+      letterSpacing: style.letterSpacing.unit === 'PIXELS' ? style.letterSpacing.value : (style.letterSpacing.value / 100) * style.fontSize,
       ...(lineHeight !== null ? { heightMultiplier: lineHeight, halfLeading: true } : {}),
     });
   }
 
   /**
-   * A paragraph of the layer's text, painted with `foreground` over `background` when given
-   * (otherwise black). Not laid out; the caller deletes it.
+   * A paragraph of the layer's text with one style run per mixed-style segment. With a `painter`,
+   * each segment is painted with the paint it returns over `background` (otherwise black). Not
+   * laid out; the caller deletes it.
    */
-  build(node: TextNode, paint?: { readonly foreground: CkPaint; readonly background: CkPaint }, maxLines?: number): Paragraph {
+  build(node: TextNode, painter?: TextPainter, maxLines?: number): Paragraph {
     const ck = this.ck;
-    const textStyle = this.textStyle(node);
     const align = { LEFT: ck.TextAlign.Left, CENTER: ck.TextAlign.Center, RIGHT: ck.TextAlign.Right, JUSTIFIED: ck.TextAlign.Justify }[node.textAlignHorizontal];
     const style = new ck.ParagraphStyle({
-      textStyle,
+      textStyle: this.textStyle(node),
       textAlign: align,
       // Rounding widths up would wrap auto-width text laid out at its exact natural width.
       applyRoundingHack: false,
@@ -129,8 +138,15 @@ export class TextShaper implements TextLayoutService {
       ...(maxLines !== undefined ? { maxLines } : {}),
     });
     const builder = ck.ParagraphBuilder.MakeFromFontProvider(style, this.provider);
-    if (paint) builder.pushPaintStyle(textStyle, paint.foreground, paint.background);
-    builder.addText(node.characters === '' ? EMPTY : node.characters);
+    const segments = textSegments(node);
+    for (const segment of segments) {
+      const textStyle = this.textStyle(segment);
+      // Painters may reuse one paint object: pushing copies it into the run.
+      if (painter) builder.pushPaintStyle(textStyle, painter.paint(segment), painter.background);
+      else builder.pushStyle(textStyle);
+      builder.addText(node.characters === '' ? EMPTY : node.characters.slice(segment.start, segment.end));
+      builder.pop();
+    }
     const paragraph = builder.build();
     builder.delete();
     return paragraph;

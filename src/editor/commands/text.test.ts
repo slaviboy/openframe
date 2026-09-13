@@ -22,7 +22,19 @@ import type { TextNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { applyScale, captureScale } from '../interactions/scale';
 import { setSize } from './properties';
-import { resizedTextMode, setFontFamily, setFontSize, setFontStyle, setLetterSpacing, setLineHeight, setTextAlignHorizontal, setTextAutoResize } from './text';
+import {
+  resizedTextMode,
+  setFontFamily,
+  setFontSize,
+  setFontStyle,
+  setLetterSpacing,
+  setLineHeight,
+  setTextAlignHorizontal,
+  setTextAutoResize,
+  setTextFills,
+  textStyleValue,
+  toggleFontStyle,
+} from './text';
 
 let editor: Editor;
 let id: string;
@@ -80,6 +92,32 @@ describe('text properties', () => {
     expect(get()).toMatchObject({ textAutoResize: 'HEIGHT', size: { width: 30 } });
     editor.history.run('h', (tx) => setSize(tx, get(), 'height', 90));
     expect(get()).toMatchObject({ textAutoResize: 'NONE', size: { width: 30, height: 90 } });
+  });
+
+  test('with a range, style properties change those characters; without one, the whole layer', () => {
+    const boldName = { family: 'Inter', style: 'Bold' };
+    editor.history.run('type', (tx) => tx.set(id, 'characters', 'Hello world'));
+    editor.history.run('bold', (tx) => toggleFontStyle(tx, get(), 'bold', fonts, { start: 6, end: 11 }));
+    expect(get().styleRuns).toEqual([{ start: 6, end: 11, style: { fontName: boldName } }]);
+    expect(textStyleValue(get(), 'fontName')).toBeUndefined();
+    expect(textStyleValue(get(), 'fontName', { start: 6, end: 11 })).toEqual(boldName);
+    editor.history.run('size', (tx) => setFontSize(tx, get(), 30, { start: 0, end: 5 }));
+    expect(textStyleValue(get(), 'fontSize', { start: 0, end: 5 })).toBe(30);
+    expect(textStyleValue(get(), 'fontSize', { start: 5, end: 11 })).toBe(12);
+    // A whole-layer size replaces the range sizes and keeps the bold word.
+    editor.history.run('size', (tx) => setFontSize(tx, get(), 16));
+    expect(get()).toMatchObject({ fontSize: 16, styleRuns: [{ start: 6, end: 11, style: { fontName: boldName } }] });
+    // A range covering all the text is a whole-layer change.
+    editor.history.run('italic', (tx) => toggleFontStyle(tx, get(), 'italic', fonts, { start: 0, end: 11 }));
+    expect(get().fontName).toEqual({ family: 'Inter', style: 'Italic' });
+    expect(get().styleRuns).toBeUndefined();
+    // Range fills.
+    const red = [{ type: 'SOLID' as const, color: { r: 1, g: 0, b: 0, a: 1 }, opacity: 1, visible: true, blendMode: 'NORMAL' as const }];
+    editor.history.run('fill', (tx) => setTextFills(tx, get(), red, { start: 0, end: 1 }));
+    expect(textStyleValue(get(), 'fills', { start: 0, end: 1 })).toEqual(red);
+    expect(textStyleValue(get(), 'fills')).toBeUndefined();
+    editor.history.undo();
+    expect(get().styleRuns).toBeUndefined();
   });
 
   test('the Scale tool scales font size and pixel spacing', () => {

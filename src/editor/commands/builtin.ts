@@ -321,6 +321,7 @@ const COLOR_PROFILE_COMMANDS: CommandDefinition[] = (['SRGB', 'DISPLAY_P3'] as c
 }));
 
 import { beginTextEdit } from '../interactions/text-edit';
+import { toggleFontStyle } from './text';
 
 export const BUILTIN_COMMANDS: CommandDefinition[] = [
   ...COLOR_PROFILE_COMMANDS,
@@ -344,6 +345,20 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
       beginCrop(e, e.selection[0]!);
     },
   },
+  ...(['bold', 'italic'] as const).map(
+    (axis): CommandDefinition => ({
+      id: `text.${axis}`,
+      label: axis === 'bold' ? 'Bold' : 'Italic',
+      category: 'Text',
+      shortcuts: [axis === 'bold' ? 'Mod+B' : 'Mod+I'],
+      // While editing, the text input handles these for the selected characters.
+      enabled: (e) => e.state.getSnapshot().textEdit === null && e.selection.length > 0 && e.selection.every((id) => e.doc.get(id)?.type === 'TEXT'),
+      run: (e) =>
+        e.history.run(axis === 'bold' ? 'Bold' : 'Italic', (tx) =>
+          e.selection.forEach((id) => toggleFontStyle(tx, e.doc.getOrThrow(id) as Parameters<typeof toggleFontStyle>[1], axis, e.textLayout?.availableFonts() ?? [])),
+        ),
+    }),
+  ),
   // Before Select children, so Return on a text layer edits its text.
   {
     id: 'text.edit',

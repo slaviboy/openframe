@@ -441,6 +441,17 @@ export const TextAlignVerticalSchema = z.enum(['TOP', 'CENTER', 'BOTTOM']);
  */
 export const TextAutoResizeSchema = z.enum(['WIDTH_AND_HEIGHT', 'HEIGHT', 'NONE', 'TRUNCATE']);
 
+/** Properties a range of characters can override in a text layer (mixed styles). */
+export const TextStyleOverridesSchema = z.object({
+  fontName: FontNameSchema.optional(),
+  fontSize: z.number().min(1).max(10_000).optional(),
+  lineHeight: LineHeightSchema.optional(),
+  letterSpacing: LetterSpacingSchema.optional(),
+  fills: z.array(PaintSchema).max(256).optional(),
+});
+/** Overrides on the characters [start, end) (UTF-16 offsets). */
+export const TextStyleRunSchema = z.object({ start: z.number().int().min(0), end: z.number().int().min(1), style: TextStyleOverridesSchema });
+
 /** Text layer. Fills color the glyphs; `size` follows `textAutoResize`. */
 export const TextNodeSchema = z.object({
   ...SceneFields,
@@ -456,6 +467,8 @@ export const TextNodeSchema = z.object({
   textAutoResize: TextAutoResizeSchema,
   /** The layer name follows the first line of the text until the layer is renamed. Absent means off. */
   autoRename: z.boolean().optional(),
+  /** Mixed styles: sorted, non-overlapping overrides of the layer's style on character ranges. Absent when uniform. */
+  styleRuns: z.array(TextStyleRunSchema).max(100_000).optional(),
 });
 
 export const NodeSchema = z.discriminatedUnion('type', [
