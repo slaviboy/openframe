@@ -63,17 +63,28 @@ export interface ImageRecord {
   height: number;
 }
 
+/** A user font (uploaded or installed), content-addressed by the SHA-256 of its bytes and shared by every local file. */
+export interface FontRecord {
+  id: string;
+  family: string;
+  style: string;
+  bytes: ArrayBuffer;
+  variable: boolean;
+  source: 'upload' | 'local';
+}
+
 interface OpenframeDB extends DBSchema {
   files: { key: string; value: FileRecord; indexes: { updatedAt: string } };
   snapshots: { key: string; value: SnapshotRecord };
   journal: { key: number; value: JournalRecord; indexes: { fileId: string } };
   settings: { key: string; value: unknown };
   images: { key: string; value: ImageRecord };
+  fonts: { key: string; value: FontRecord };
 }
 
 export const DB_NAME = 'openframe';
-/** 1: files, snapshots, journal, settings. 2: images. */
-const DB_VERSION = 2;
+/** 1: files, snapshots, journal, settings. 2: images. 3: fonts. */
+const DB_VERSION = 3;
 
 export class StorageError extends Error {
   constructor(
@@ -122,6 +133,7 @@ export class LocalPersistence {
             database.createObjectStore('settings');
           }
           if (oldVersion < 2) database.createObjectStore('images', { keyPath: 'hash' });
+          if (oldVersion < 3) database.createObjectStore('fonts', { keyPath: 'id' });
         },
       });
       return new LocalPersistence(db);
@@ -250,6 +262,18 @@ export class LocalPersistence {
 
   async getImage(hash: string): Promise<ImageRecord | undefined> {
     return this.db.get('images', hash);
+  }
+
+  async putFont(record: FontRecord): Promise<void> {
+    try {
+      await this.db.put('fonts', record);
+    } catch (error) {
+      throw classify(error);
+    }
+  }
+
+  async listFonts(): Promise<FontRecord[]> {
+    return this.db.getAll('fonts');
   }
 
   async getSetting<T>(key: string): Promise<T | undefined> {

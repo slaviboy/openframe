@@ -15,7 +15,12 @@
  * limitations under the License.
  */
 
-import { useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
+import { usedFontFamilies } from '@/core/text/document-fonts';
+import { FONT_ACCEPT, readFontFiles } from '../../fonts/import-fonts';
+import { canListInstalledFonts, knownInstalledFamilies, listInstalledFamilies, readInstalledFamily } from '../../fonts/local-fonts';
+import type { Box } from '../../primitives/position';
+import { FontPicker, type FontPickerFamily } from './FontPicker';
 import type { Transaction } from '@/core/history/history';
 import { valuesEqual } from '@/core/ops/equality';
 import type { TextAlignHorizontal, TextAlignVertical, TextAutoResize, TextNode } from '@/core/schema/document';
@@ -127,19 +132,7 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
 
   return (
     <>
-      <select
-        className={primitives.select}
-        aria-label="Font family"
-        value={family ?? ''}
-        onChange={(e) => run('Change font', (tx, n) => setFontFamily(tx, n, e.target.value, families, range))}
-      >
-        {family === undefined && <option value="">Mixed</option>}
-        {families.map((f) => (
-          <option key={f.family} value={f.family}>
-            {available.some((a) => a.family === f.family) ? f.family : `${f.family} (missing)`}
-          </option>
-        ))}
-      </select>
+      <FamilyControl nodes={nodes} range={range} family={family} available={available} />
       <div className={styles.grid2}>
         <select className={primitives.select} aria-label="Font style" value={style ?? ''} onChange={(e) => run('Change font style', (tx, n) => setFontStyle(tx, n, e.target.value, range))}>
           {(style === undefined || !styleOptions.includes(style)) && <option value={style ?? ''}>{style ?? 'Mixed'}</option>}
@@ -191,6 +184,110 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
           ))}
         </div>
       </div>
+    </>
+  );
+}
+
+/**
+ * The font family button and its font picker. Hovering a family previews it on the selection
+ * within one gesture; picking commits that gesture as one undo step. Installed families are loaded
+ * when picked; uploaded fonts are read, stored and registered.
+ */
+function FamilyControl({ nodes, range, family, available }: { nodes: readonly TextNode[]; range: TextRange; family: string | undefined; available: readonly FontFamilyInfo[] }) {
+  const editor = useEditor();
+  const preview = useGesture('Change font');
+  const [anchor, setAnchor] = useState<Box | null>(null);
+  const [installed, setInstalled] = useState<readonly string[]>(knownInstalledFamilies);
+  const [error, setError] = useState<string | null>(null);
+  // Re-render when fonts are added (the engine registers them first).
+  useSyncExternalStore(
+    (listener) => editor.fonts.subscribe(listener),
+    () => editor.fonts.revision,
+  );
+  const fonts = editor.textLayout?.availableFonts() ?? available;
+  const names = new Set(fonts.map((f) => f.family));
+  const used = anchor ? usedFontFamilies(editor.doc) : [];
+  const entries: FontPickerFamily[] = [
+    ...fonts.map((f) => ({ family: f.family, user: f.user ?? false, variable: f.variable ?? false, inFile: used.includes(f.family) })),
+    ...installed.filter((f) => !names.has(f)).map((f) => ({ family: f, user: true, variable: false, inFile: used.includes(f), notLoaded: true })),
+    ...(family !== undefined && !names.has(family) && !installed.includes(family) ? [{ family, user: false, variable: false, inFile: true }] : []),
+  ].sort((a, b) => a.family.localeCompare(b.family));
+  const apply = (target: string) => (tx: Transaction) => {
+    const current = editor.textLayout?.availableFonts() ?? fonts;
+    nodes.forEach((n) => setFontFamily(tx, n, target, current, range));
+  };
+  const commit = (target: string) => {
+    preview.start();
+    preview.change(apply(target));
+    preview.end();
+  };
+
+  return (
+    <>
+      <button
+        type="button"
+        className={styles.fontButton}
+        aria-label="Font family"
+        aria-haspopup="dialog"
+        aria-expanded={anchor !== null}
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
+        }}
+      >
+        <span style={family ? { fontFamily: `"${family}", var(--font-ui, sans-serif)` } : undefined}>{family ?? 'Mixed'}</span>
+        {family !== undefined && !names.has(family) && <span className={styles.missing}>Missing</span>}
+      </button>
+      {error && (
+        <p role="alert" className={styles.hint}>
+          {error}
+        </p>
+      )}
+      {anchor && (
+        <FontPicker
+          anchor={anchor}
+          families={entries}
+          current={family}
+          accept={FONT_ACCEPT}
+          onPreview={(target) => {
+            if (target === null) {
+              preview.cancel();
+              return;
+            }
+            preview.start();
+            preview.change(apply(target));
+          }}
+          onPick={(target) => {
+            if (!names.has(target) && installed.includes(target)) {
+              preview.cancel();
+              void readInstalledFamily(target)
+                .then((loaded) => editor.fonts.add(loaded))
+                .then(
+                  () => commit(target),
+                  (e: unknown) => setError(e instanceof Error ? e.message : 'The installed font could not be read.'),
+                );
+            } else {
+              commit(target);
+            }
+          }}
+          onClose={() => setAnchor(null)}
+          onUpload={(files) => {
+            void readFontFiles(files, (bytes) => editor.textLayout?.fontFamilyOf?.(bytes) ?? null)
+              .then(async ({ fonts: read, errors }) => {
+                setError(errors.length > 0 ? errors.join(' ') : null);
+                await editor.fonts.add(read);
+              })
+              .catch((e: unknown) => setError(e instanceof Error ? e.message : 'The fonts could not be added.'));
+          }}
+          onListInstalled={
+            canListInstalledFonts()
+              ? () => {
+                  void listInstalledFamilies().then(setInstalled, () => setError('Installed fonts could not be listed.'));
+                }
+              : undefined
+          }
+        />
+      )}
     </>
   );
 }

@@ -29,7 +29,7 @@ test('typography properties and resizing change and persist', async ({ page }) =
   await page.keyboard.type('Typography');
   await page.keyboard.press('Escape');
 
-  await expect(page.getByLabel('Font family')).toHaveValue('Inter');
+  await expect(page.getByLabel('Font family')).toHaveText('Inter');
   await expect(page.getByLabel('Font style')).toHaveValue('Regular');
   await expect(page.getByRole('button', { name: 'Auto width' })).toHaveAttribute('aria-pressed', 'true');
   const w12 = await numberOf(page, 'field-w');

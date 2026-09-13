@@ -52,7 +52,14 @@ export function useGesture(label: string) {
     if (tx) editor.history.commit(tx);
   }, [editor]);
 
+  /** Abandons the open gesture, reverting its changes (e.g. a hover preview). */
+  const cancel = useCallback(() => {
+    const tx = txRef.current;
+    txRef.current = null;
+    if (tx) editor.history.cancel(tx);
+  }, [editor]);
+
   useEffect(() => () => end(), [end]);
 
-  return { start, change, end };
+  return { start, change, end, cancel };
 }

@@ -28,6 +28,7 @@ import type { Color, Transform } from '@/core/schema/document';
 import type { Vec2 } from '@/core/math/vec';
 import { CommandRegistry } from './commands/registry';
 import { ImageRegistry } from './images/image-registry';
+import { FontRegistry } from './fonts/font-registry';
 import { EditorStore } from './stores/editor-store';
 import { fitRect, visibleWorldRect, type Viewport } from './viewport/viewport';
 
@@ -75,6 +76,8 @@ export class Editor {
   readonly commands = new CommandRegistry(this);
   /** Image assets referenced by image paints (bytes live outside the document). */
   readonly images = new ImageRegistry();
+  /** Fonts the user uploaded or loaded from this device (bundled fonts are built into the engine). */
+  readonly fonts = new FontRegistry();
   /** Reads the rendered scene color at a canvas point (CSS pixels); set by the canvas host. */
   sampleCanvasPixel: ((screen: Vec2) => Color | null) | null = null;
   /** Lets the UI pick a color by clicking the canvas; set by the tool manager. Resolves null when canceled. */

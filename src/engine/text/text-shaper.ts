@@ -65,6 +65,7 @@ interface Layout {
 export class TextShaper implements TextLayoutService {
   private readonly provider: TypefaceFontProvider;
   private readonly families: string[] = [];
+  private readonly userFamilies = new Map<string, { styles: Set<string>; variable: boolean }>();
   private readonly layouts = new Map<Id, Layout>();
 
   constructor(
@@ -83,9 +84,45 @@ export class TextShaper implements TextLayoutService {
     return this.families;
   }
 
-  /** The families users can pick (fallback subsets excluded). The bundled fonts are variable, with every weight upright and italic. */
+  /**
+   * The families users can pick (fallback subsets excluded). Bundled fonts are variable, with every
+   * weight upright and italic; user families list the styles registered for them.
+   */
   availableFonts(): readonly FontFamilyInfo[] {
-    return this.families.filter((family) => !isFallbackFamily(family)).map((family) => ({ family, styles: VARIABLE_FONT_STYLES }));
+    return this.families
+      .filter((family) => !isFallbackFamily(family))
+      .map((family) => {
+        const user = this.userFamilies.get(family);
+        if (!user) return { family, styles: VARIABLE_FONT_STYLES, variable: true };
+        const order = (style: string) => {
+          const { weight, italic } = parseFontStyle(style);
+          return weight * 2 + (italic ? 1 : 0);
+        };
+        return { family, styles: [...user.styles].sort((a, b) => order(a) - order(b)), user: true, variable: user.variable };
+      });
+  }
+
+  /** Registers user fonts (uploaded or installed); cached layouts are dropped so text reshapes with them. */
+  registerFonts(fonts: readonly { readonly family: string; readonly style: string; readonly bytes: ArrayBuffer | Uint8Array; readonly variable: boolean }[]): void {
+    for (const font of fonts) {
+      this.provider.registerFont(font.bytes, font.family);
+      if (!this.families.includes(font.family)) this.families.push(font.family);
+      const entry = this.userFamilies.get(font.family) ?? { styles: new Set<string>(), variable: false };
+      if (font.variable) for (const style of VARIABLE_FONT_STYLES) entry.styles.add(style);
+      else entry.styles.add(font.style);
+      entry.variable ||= font.variable;
+      this.userFamilies.set(font.family, entry);
+    }
+    for (const layout of this.layouts.values()) layout.paragraph.delete();
+    this.layouts.clear();
+  }
+
+  fontFamilyOf(bytes: Uint8Array): string | null {
+    const typeface = this.ck.Typeface.MakeTypefaceFromData(bytes.slice().buffer);
+    if (!typeface) return null;
+    const family = typeface.getFamilyName();
+    typeface.delete();
+    return family || null;
   }
 
   dispose(): void {

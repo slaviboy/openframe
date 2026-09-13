@@ -145,6 +145,7 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
 - **Fonts:** the bundled Inter variable font (weight axis 100–900, upright and italic) loads with CanvasKit before the canvas reports ready ([`bundled-fonts.ts`](../src/engine/text/bundled-fonts.ts)). The font files are embedded as base64 in a lazily imported chunk (`bundled-font-data.ts`) and decoded in memory, because app code never uses `fetch`, not even for same-origin assets.
   - The Latin subset is registered as `Inter`. Latin-extended, Cyrillic, Greek and Vietnamese subsets are registered under internal family names and listed after the layer's family as fallbacks.
   - Style names map to a `FontWeight` plus a `wght` font variation, and italic to `FontSlant.Italic` ([`core/text/font-style.ts`](../src/core/text/font-style.ts)).
+  - **User fonts** (uploaded or installed; `editor.fonts`, persisted in the IndexedDB `fonts` store) are registered with `TextShaper.registerFonts` when the canvas starts and whenever more are added, which drops cached layouts. They are also added to `document.fonts` as `FontFace`s from their bytes, for UI previews. `fontFamilyOf` reads a font file's family name through `Typeface.getFamilyName` for formats the name-table parser can't read.
 - **Text style:**
   - Line height: auto is the font's own; pixels and percent become a height multiplier with half leading.
   - Letter spacing in percent is relative to the font size.

@@ -47,6 +47,7 @@ import {
   type CaretMove,
 } from '@/editor/interactions/text-edit';
 import { toggleFontStyle } from '@/editor/commands/text';
+import { addFontFaces } from '../fonts/font-faces';
 import { imageFilesOf } from '../images/import-image';
 import { IS_MAC } from '../keyboard/keyboard-controller';
 import { ClickCounter } from './click-counter';
@@ -155,6 +156,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
     let surface: Surface | null = null;
     let renderer: SceneRenderer | null = null;
     let shaper: TextShaper | null = null;
+    let unsubscribeFonts = () => {};
     const textInput = textInputRef.current!;
     // Caret blink phase while editing text; restarts visible whenever the selection changes.
     let caretVisible = true;
@@ -267,6 +269,18 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
         renderer = new SceneRenderer(instance, editor.images);
         shaper = new TextShaper(instance, fonts);
         renderer.setTextShaper(shaper);
+        // User fonts: the ones loaded at startup now, and any added later.
+        const registered = new Set<string>();
+        const registerUserFonts = () => {
+          const added = editor.fonts.list().filter((f) => !registered.has(f.id));
+          if (added.length === 0 || !shaper) return;
+          for (const font of added) registered.add(font.id);
+          shaper.registerFonts(added);
+          addFontFaces(added);
+          editor.requestRender();
+        };
+        registerUserFonts();
+        unsubscribeFonts = editor.fonts.subscribe(registerUserFonts);
         editor.setTextLayout(shaper);
         resize();
         setStatus({ kind: 'ready' });
@@ -526,6 +540,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
       textInput.removeEventListener('cut', onTextCopy);
       textInput.removeEventListener('paste', onTextPaste);
       editor.setTextLayout(null);
+      unsubscribeFonts();
       renderer?.dispose();
       shaper?.dispose();
       surface?.delete();

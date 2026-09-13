@@ -96,6 +96,12 @@ export async function bootstrap(): Promise<AppSession> {
       return r && { hash: r.hash, bytes: new Uint8Array(r.bytes), mime: r.mime, width: r.width, height: r.height };
     },
   };
+  editor.fonts.storage = {
+    save: (f) => persistence.putFont({ id: f.id, family: f.family, style: f.style, bytes: f.bytes.slice().buffer, variable: f.variable, source: f.source }),
+    loadAll: async () => (await persistence.listFonts()).map((r) => ({ ...r, bytes: new Uint8Array(r.bytes) })),
+  };
+  // User fonts load before the canvas, so text shapes with them from the first frame.
+  await editor.fonts.load().catch((error: unknown) => console.warn('Openframe: user fonts could not be loaded', error));
 
   const session = new SessionStore({ file, save: { state: 'saved', at: file.updatedAt }, recovered });
   const autosaver = new Autosaver({
