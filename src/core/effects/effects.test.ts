@@ -17,7 +17,20 @@
 
 import { describe, expect, test } from 'vitest';
 import { EffectSchema } from '../schema/document';
-import { convertEffect, defaultEffect, effectOutset } from './effects';
+import {
+  blurOffsets,
+  canAddEffect,
+  convertEffect,
+  defaultEffect,
+  effectOutset,
+  isProgressiveBlur,
+  levelWeight,
+  limitEffects,
+  maxBlurRadius,
+  nextEffectType,
+  progressiveBlurLevels,
+  setBlurType,
+} from './effects';
 
 describe('effects', () => {
   test('defaults validate against the schema', () => {
@@ -42,5 +55,46 @@ describe('effects', () => {
     expect(effectOutset([{ ...drop, visible: false } as typeof drop])).toBe(0);
     expect(effectOutset([defaultEffect('INNER_SHADOW'), { type: 'LAYER_BLUR', radius: 8, visible: true }])).toBe(8);
     expect(effectOutset(undefined)).toBe(0);
+  });
+
+  test('progressive blur levels weigh to 1 everywhere and follow the radius ramp', () => {
+    const blur = setBlurType({ type: 'LAYER_BLUR', radius: 40, visible: true }, 'PROGRESSIVE');
+    expect(EffectSchema.parse(blur)).toEqual(blur);
+    const levels = progressiveBlurLevels(blur);
+    expect(levels.length).toBeGreaterThan(2);
+    expect(levels[0]!.radius).toBe(0);
+    expect(levels.at(-1)!.radius).toBe(40);
+    for (const t of [0, 0.1, 0.37, 0.5, 0.83, 1]) {
+      expect(levels.reduce((sum, level) => sum + levelWeight(level, t), 0)).toBeCloseTo(1);
+    }
+    expect(levelWeight(levels[0]!, 0)).toBe(1);
+    expect(levelWeight(levels.at(-1)!, 1)).toBe(1);
+  });
+
+  test('blur type switches keep the radius; progressive settings only exist on progressive blurs', () => {
+    const progressive = setBlurType({ type: 'BACKGROUND_BLUR', radius: 12, visible: true }, 'PROGRESSIVE');
+    expect(progressive).toMatchObject({ blurType: 'PROGRESSIVE', startRadius: 0, startOffset: { x: 0.5, y: 0 }, endOffset: { x: 0.5, y: 1 } });
+    expect(maxBlurRadius({ ...progressive, startRadius: 30 })).toBe(30);
+    expect(blurOffsets({ type: 'LAYER_BLUR', radius: 1, visible: true }).end).toEqual({ x: 0.5, y: 1 });
+    const uniform = setBlurType(progressive, 'NORMAL');
+    expect(uniform).toEqual({ type: 'BACKGROUND_BLUR', radius: 12, visible: true });
+    expect(isProgressiveBlur(uniform)).toBe(false);
+    expect(effectOutset([{ ...progressive, type: 'LAYER_BLUR', startRadius: 25 }])).toBe(25);
+  });
+
+  test('effect limits: 8 drop and inner shadows, one layer and one background blur', () => {
+    const shadows = Array.from({ length: 9 }, () => defaultEffect('DROP_SHADOW'));
+    expect(canAddEffect(shadows.slice(0, 7), 'DROP_SHADOW')).toBe(true);
+    expect(canAddEffect(shadows.slice(0, 8), 'DROP_SHADOW')).toBe(false);
+    expect(nextEffectType(shadows.slice(0, 8))).toBe('INNER_SHADOW');
+    const blurs = [defaultEffect('LAYER_BLUR'), { ...defaultEffect('LAYER_BLUR'), radius: 30 }, defaultEffect('BACKGROUND_BLUR')];
+    expect(canAddEffect(blurs, 'LAYER_BLUR')).toBe(false);
+    // Only the first effects of each type count; extra ones are ignored when rendering.
+    const limited = limitEffects([...shadows, ...blurs]);
+    expect(limited.filter((e) => e.type === 'DROP_SHADOW')).toHaveLength(8);
+    expect(limited.filter((e) => e.type === 'LAYER_BLUR')).toEqual([defaultEffect('LAYER_BLUR')]);
+    expect(effectOutset([defaultEffect('LAYER_BLUR'), { ...defaultEffect('LAYER_BLUR'), radius: 30 }])).toBe(4);
+    const full = [...shadows.slice(0, 8), ...Array.from({ length: 8 }, () => defaultEffect('INNER_SHADOW')), ...blurs];
+    expect(nextEffectType(full)).toBeNull();
   });
 });

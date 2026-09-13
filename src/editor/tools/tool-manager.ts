@@ -26,6 +26,7 @@ import type { GuideRef, ToolId } from '../stores/editor-store';
 import { panBy, screenToWorld, zoomAt, type Viewport } from '../viewport/viewport';
 import { CropController } from '../interactions/crop';
 import { GradientEditController } from '../interactions/gradient-edit';
+import { BlurEditController } from '../interactions/blur-edit';
 import { EyedropperTool, type EyedropperSample } from './eyedropper-tool';
 import { ImagePlaceTool } from './image-tool';
 import { LineTool } from './line-tool';
@@ -90,6 +91,8 @@ export class ToolManager {
   readonly crop: CropController;
   /** On-canvas gradient handles (active while `gradientEdit` is set). */
   readonly gradientEdit: GradientEditController;
+  /** On-canvas progressive blur handles (active while `blurEdit` is set). */
+  readonly blurEdit: BlurEditController;
   /** Guide under the pointer, for the overlay. */
   hoveredGuide: GuideRef | null = null;
   private readonly tools: Record<ToolId, Tool>;
@@ -103,6 +106,7 @@ export class ToolManager {
     this.guides = new GuideController(editor);
     this.crop = new CropController(editor, this.env.hitTolerancePx);
     this.gradientEdit = new GradientEditController(editor, this.env.hitTolerancePx);
+    this.blurEdit = new BlurEditController(editor, this.env.hitTolerancePx);
     editor.pickColorFromCanvas = () => {
       const current = editor.state.getSnapshot().tool;
       return this.eyedropper.pick(current === 'eyedropper' ? 'move' : current);
@@ -327,6 +331,7 @@ export class ToolManager {
     const state = this.editor.state.getSnapshot();
     if (state.croppingId !== null) return this.crop;
     if (state.gradientEdit !== null) return this.gradientEdit;
+    if (state.blurEdit !== null) return this.blurEdit;
     return null;
   }
 

@@ -28,6 +28,7 @@ import { isSceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 import { cropImageWorldQuad } from '../interactions/crop';
 import { gradientEditChrome, type GradientChrome } from '../interactions/gradient-edit';
+import { blurEditChrome } from '../interactions/blur-edit';
 import { toCss, toHex6 } from '@/core/color/color';
 import type { Color } from '@/core/schema/document';
 import { isMaskLayer } from '@/core/scene/masks';
@@ -175,6 +176,9 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
 
   const gradient = gradientEditChrome(editor);
   if (gradient) drawGradientChrome(ctx, editor, gradient, theme);
+  // Progressive blur handles look like a linear gradient line without stops.
+  const blur = blurEditChrome(editor);
+  if (blur) drawGradientChrome(ctx, editor, { linear: true, start: blur.start, end: blur.end, width: blur.start, stops: [] }, theme);
 
   const cropQuad = cropImageWorldQuad(editor);
   if (cropQuad) drawCropChrome(ctx, editor, cropQuad, theme);

@@ -67,6 +67,8 @@ test('double-clicking an image layer crops it; the crop persists', async ({ page
   const chooser = page.waitForEvent('filechooser');
   await page.keyboard.press('ControlOrMeta+Shift+K');
   await (await chooser).setFiles([{ name: 'wide.png', mimeType: 'image/png', buffer: solidPng(80, 40, [200, 40, 40]) }]);
+  // Importing is asynchronous; place only once the tool holds the image.
+  await expect(page.getByTestId('place-image-hint')).toContainText('Click to place wide');
   await page.mouse.click(box.x + 500, box.y + 300);
   await expect(page.getByTestId('field-w')).toHaveValue('80');
 

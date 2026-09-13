@@ -20,7 +20,7 @@ import type { Effect } from '@/core/schema/document';
 
 const isNormalBlend = (mode: string): boolean => mode === 'NORMAL' || mode === 'PASS_THROUGH';
 import { maskRuns } from '@/core/scene/masks';
-import { blurSigma } from '@/core/effects/effects';
+import { blurOffsets, blurSigma, isProgressiveBlur, limitEffects, maxBlurRadius, progressiveBlurLevels, type BlurEffect } from '@/core/effects/effects';
 import type { DocumentStore } from '@/core/document/store';
 import { clampCornerRadius, lineCapSize, polygonPoints, starPoints } from '@/core/geometry/shapes';
 import { adjustmentValues, hasAdjustments } from '@/core/image/adjustments';
@@ -362,7 +362,7 @@ export class SceneRenderer {
    * - Layer blur: blurs everything above.
    */
   private effectFilter(node: SceneNode, created: ImageFilter[]): ImageFilter | null {
-    const effects = node.effects?.filter((e) => e.visible);
+    const effects = node.effects && limitEffects(node.effects).filter((e) => e.visible);
     if (!effects || effects.length === 0) return null;
     const ck = this.ck;
     const keep = <T extends ImageFilter>(filter: T): T => {
@@ -410,12 +410,50 @@ export class SceneRenderer {
       }
       result = over(drops, result);
     }
-    const blur = effects.find((e) => e.type === 'LAYER_BLUR');
-    if (blur && blur.radius > 0) {
-      const sigma = blurSigma(blur.radius);
-      result = keep(ck.ImageFilter.MakeBlur(sigma, sigma, ck.TileMode.Decal, result));
+    const blur = effects.find((e): e is BlurEffect => e.type === 'LAYER_BLUR');
+    if (blur && maxBlurRadius(blur) > 0) {
+      if (isProgressiveBlur(blur)) {
+        result = this.progressiveBlurFilter(blur, node.size, keep, result, ck.TileMode.Decal);
+      } else {
+        const sigma = blurSigma(blur.radius);
+        result = keep(ck.ImageFilter.MakeBlur(sigma, sigma, ck.TileMode.Decal, result));
+      }
     }
     return result;
+  }
+
+  /**
+   * Progressive blur as one image filter: each blur level of `progressiveBlurLevels` is masked by a
+   * linear gradient along the blur direction (DstIn) and the masked levels are summed (Plus). The
+   * weights sum to 1, so the result is a smooth ramp from the start radius to the end radius.
+   */
+  private progressiveBlurFilter(
+    effect: BlurEffect,
+    size: Size,
+    keep: <T extends ImageFilter>(filter: T) => T,
+    input: ImageFilter | null,
+    tile: EmbindEnumEntity,
+  ): ImageFilter {
+    const ck = this.ck;
+    const w = Math.max(size.width, 1e-6);
+    const h = Math.max(size.height, 1e-6);
+    const { start, end } = blurOffsets(effect);
+    const from = [start.x * w, start.y * h];
+    const to = [end.x * w, end.y * h];
+    // Coincident points have no direction; the end radius applies everywhere.
+    if (from[0] === to[0] && from[1] === to[1]) to[1] = from[1]! + 1e-3;
+    let result: ImageFilter | null = null;
+    for (const level of progressiveBlurLevels(effect)) {
+      const sigma = blurSigma(level.radius);
+      const blurred = sigma > 0 ? keep(ck.ImageFilter.MakeBlur(sigma, sigma, tile, input)) : input;
+      const colors = level.stops.map((s) => ck.Color4f(0, 0, 0, s.alpha));
+      const shader = ck.Shader.MakeLinearGradient(from, to, colors, level.stops.map((s) => s.position), ck.TileMode.Clamp);
+      const mask = keep(ck.ImageFilter.MakeShader(shader));
+      shader.delete();
+      const masked = keep(ck.ImageFilter.MakeBlend(ck.BlendMode.DstIn, blurred, mask));
+      result = result ? keep(ck.ImageFilter.MakeBlend(ck.BlendMode.Plus, result, masked)) : masked;
+    }
+    return result!;
   }
 
   /** Native Skia mode for image-filter blends; modes Skia lacks (plus darker) fall back to normal. */
@@ -430,7 +468,7 @@ export class SceneRenderer {
    * already on the canvas.
    */
   private drawBlendedDropShadows(canvas: Canvas, node: SceneNode, children: readonly Id[], clips: boolean, ctx: DrawContext): void {
-    const shadows = node.effects?.filter((e): e is Extract<Effect, { type: 'DROP_SHADOW' }> => e.type === 'DROP_SHADOW' && e.visible && !isNormalBlend(e.blendMode));
+    const shadows = node.effects && limitEffects(node.effects).filter((e): e is Extract<Effect, { type: 'DROP_SHADOW' }> => e.type === 'DROP_SHADOW' && e.visible && !isNormalBlend(e.blendMode));
     if (!shadows || shadows.length === 0) return;
     const ck = this.ck;
     for (const effect of shadows) {
@@ -477,7 +515,7 @@ export class SceneRenderer {
 
   /** Background blur: blurs what is already drawn behind the layer, within the layer's shape. */
   private drawBackgroundBlur(canvas: Canvas, node: SceneNode): void {
-    const effect = node.effects?.find((e) => e.type === 'BACKGROUND_BLUR' && e.visible && e.radius > 0);
+    const effect = node.effects && limitEffects(node.effects).find((e): e is BlurEffect => e.type === 'BACKGROUND_BLUR' && e.visible && maxBlurRadius(e) > 0);
     if (!effect || node.type === 'GROUP' || node.type === 'LINE' || node.type === 'SLICE') return;
     const ck = this.ck;
     const path = this.shapePath(node);
@@ -486,12 +524,19 @@ export class SceneRenderer {
     canvas.save();
     if (path) canvas.clipPath(path, ck.ClipOp.Intersect, true);
     else canvas.clipRRect(box!, ck.ClipOp.Intersect, true);
+    const created: ImageFilter[] = [];
+    const keep = <T extends ImageFilter>(filter: T): T => {
+      created.push(filter);
+      return filter;
+    };
     const sigma = blurSigma(effect.radius);
-    const filter = ck.ImageFilter.MakeBlur(sigma, sigma, ck.TileMode.Clamp, null);
+    const filter = isProgressiveBlur(effect)
+      ? this.progressiveBlurFilter(effect, node.size, keep, null, ck.TileMode.Clamp)
+      : keep(ck.ImageFilter.MakeBlur(sigma, sigma, ck.TileMode.Clamp, null));
     canvas.saveLayer(undefined, null, filter);
     canvas.restore();
     canvas.restore();
-    filter.delete();
+    for (const f of created) f.delete();
     path?.delete();
   }
 

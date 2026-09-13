@@ -139,6 +139,33 @@ describe('effects rendering', () => {
     expect(multiply(5, 5)).toEqual({ r: 0, g: 255, b: 0 });
   });
 
+  test('progressive layer blur is sharp at the start and blurred at the end', () => {
+    const progressive: Effect = { type: 'LAYER_BLUR', radius: 16, visible: true, blurType: 'PROGRESSIVE', startRadius: 0, startOffset: { x: 0.5, y: 0 }, endOffset: { x: 0.5, y: 1 } };
+    const at = render(rect([progressive], BLACK));
+    // Just outside the left edge: untouched near the top (start), darkened by blur near the bottom (end).
+    expect(at(18, 21).r).toBeGreaterThan(235);
+    expect(at(18, 58).r).toBeLessThan(225);
+    // Inside near the start the fill stays solid.
+    expect(at(22, 21).r).toBeLessThan(20);
+    // The same blur as uniform darkens both ends.
+    const uniform = render(rect([{ type: 'LAYER_BLUR', radius: 16, visible: true }], BLACK));
+    expect(uniform(18, 21).r).toBeLessThan(225);
+  });
+
+  test('progressive background blur ramps along its direction', () => {
+    const glass =
+      (effect: Effect): Build =>
+      (add, ids, page) => {
+        add({ ...makeRectangle({ id: ids.next(), parent: { id: page, key: 'A' }, name: 'Dark', x: 0, y: 0, width: 40, height: 80 }), fills: [solid(BLACK)] } as Node);
+        add({ ...makeRectangle({ id: ids.next(), parent: { id: page, key: 'B' }, name: 'Light', x: 40, y: 0, width: 40, height: 80 }), fills: [solid(WHITE)] } as Node);
+        add({ ...makeRectangle({ id: ids.next(), parent: { id: page, key: 'V' }, name: 'Glass', x: 20, y: 20, width: 40, height: 40 }), fills: [], effects: [effect] } as Node);
+      };
+    const at = render(glass({ type: 'BACKGROUND_BLUR', radius: 20, visible: true, blurType: 'PROGRESSIVE', startRadius: 0, startOffset: { x: 0.5, y: 0 }, endOffset: { x: 0.5, y: 1 } }));
+    // Just left of the dark/light boundary: still dark near the top of the glass, lightened near its bottom.
+    expect(at(38, 21).r).toBeLessThan(20);
+    expect(at(38, 58).r).toBeGreaterThan(40);
+  });
+
   test('inner shadow blend modes blend the shadow with the layer content', () => {
     expect(dark(render(rect([shadow('INNER_SHADOW')], RED))(40, 22))).toBe(true);
     // Screen with black leaves the content unchanged.

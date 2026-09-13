@@ -280,6 +280,29 @@ Clicking a gradient swatch in a paint row (single selection) runs `beginGradient
   - While picking, the picker ignores outside clicks and Escape.
   - Escape or switching tools resolves the promise with `null`.
 
+### Progressive blur
+
+The Blur type menu (Uniform / Progressive) on layer and background blurs runs `setBlurType` ([`core/effects/effects.ts`](../src/core/effects/effects.ts)). Uniform blurs carry no progressive fields. New progressive blurs ramp from 0 at the top center to the blur radius at the bottom center.
+
+The settings are Start and End radius, and start and end X/Y percentages. **Edit on canvas** runs `beginBlurEdit` ([`interactions/blur-edit.ts`](../src/editor/interactions/blur-edit.ts)):
+- It sets `editorState.blurEdit`, which is exclusive with crop mode and gradient editing.
+- `BlurEditController` then handles the start and end handles. Dragging one moves its offset, clamped to the layer box, as one undo step.
+- Escape, clicking away or changing the selection ends editing.
+
+### Effect limits and reordering
+
+**Limits.** `EFFECT_LIMITS` in [`core/effects/effects.ts`](../src/core/effects/effects.ts) caps each layer at 8 drop shadows, 8 inner shadows, 1 layer blur and 1 background blur.
+- **Add effect** creates `nextEffectType`: a drop shadow while there is room, otherwise the first type with room. The button is disabled when every type is full.
+- **Type menus** disable types that are at their limit.
+- **Pasted effects** that would exceed a limit are skipped.
+- **Rendering** uses `limitEffects`, the first effects of each type up to the limit, so files with more effects than allowed still draw predictably.
+
+**Reordering.** Fill, stroke and effect rows have a `ReorderHandle`.
+- Dragging it over the rows marked `data-reorder-row` moves the row to the drop position.
+- With the handle focused, ↑ and ↓ move the row one position.
+- Paint lists show the top paint first, so display positions are converted to indices before `moveItem`.
+- Each move is one undo step.
+
 ## Menus and command palette
 
 All menus are built from the command registry, so a menu item and its shortcut always run the same code. A command that can't run right now appears disabled; it is never hidden.

@@ -20,7 +20,23 @@ import { selectionColors, showsSelectionColors, updateSelectionColor, type Color
 import { ColorPicker } from '../../primitives/ColorPicker';
 import type { Box } from '../../primitives/position';
 import { addStop, convertPaint, PAINT_TYPE_LABELS, removeStop, reverseStops, updateStop, type PaintType } from '@/core/color/paints';
-import { convertEffect, defaultEffect, EFFECT_TYPE_LABELS, EFFECT_TYPES, isShadow } from '@/core/effects/effects';
+import {
+  blurOffsets,
+  canAddEffect,
+  convertEffect,
+  defaultEffect,
+  EFFECT_TYPE_LABELS,
+  EFFECT_TYPES,
+  isBlur,
+  isProgressiveBlur,
+  isShadow,
+  nextEffectType,
+  setBlurType,
+  type BlurType,
+} from '@/core/effects/effects';
+import { moveItem } from '@/core/collections/move-item';
+import { ReorderHandle } from './ReorderHandle';
+import { beginBlurEdit, endBlurEdit } from '@/editor/interactions/blur-edit';
 import { canonicalStringify } from '@/core/serialize/serialize';
 import gradientStyles from './Gradient.module.css';
 import { gradientCss } from './gradient-css';
@@ -615,7 +631,21 @@ function PaintSection({
             .reverse()
             .map(({ paint, index }) => (
               <Fragment key={index}>
-              <li className={styles.paintRow} data-hidden={!paint.visible || undefined} tabIndex={-1} data-copy-property={`${field}:${index}`} onClick={(e) => e.currentTarget.focus()}>
+              <li className={styles.paintRow} data-hidden={!paint.visible || undefined} data-reorder-row="" tabIndex={-1} data-copy-property={`${field}:${index}`} onClick={(e) => e.currentTarget.focus()}>
+                {/* The list shows the top paint first, so display positions run opposite to indices. */}
+                <ReorderHandle
+                  label={`Reorder ${title.toLowerCase()} ${list.length - index}`}
+                  position={list.length - 1 - index}
+                  count={list.length}
+                  onMove={(from, to) =>
+                    editor.history.run(`Reorder ${title.toLowerCase()}s`, (tx) =>
+                      nodes.forEach((n) => {
+                        const current = (tx.store.getOrThrow(n.id) as GeometryNode)[field];
+                        setPaints(tx, n, field, moveItem(current, current.length - 1 - from, current.length - 1 - to));
+                      }),
+                    )
+                  }
+                />
                 <select
                   className={`${primitives.select} ${gradientStyles.type}`}
                   aria-label={`${title} ${list.length - index} type`}
@@ -846,6 +876,9 @@ function EffectsSection({ nodes }: { nodes: SceneNode[] }) {
   );
   const mixed = effects === MIXED;
   const list = mixed || effects === undefined ? [] : effects;
+  // Index of the progressive blur whose handles are shown on the canvas, if it belongs to this selection.
+  const blurEdit = useEditorState((s) => s.blurEdit);
+  const blurEditing = blurEdit && nodes.length === 1 && blurEdit.nodeId === nodes[0]!.id ? blurEdit.index : null;
 
   const write = (label: string, next: (current: readonly Effect[]) => readonly Effect[]) =>
     editor.history.run(label, (tx) => nodes.forEach((n) => setEffects(tx, n, next((tx.store.getOrThrow(n.id) as SceneNode).effects ?? []))));
@@ -856,7 +889,23 @@ function EffectsSection({ nodes }: { nodes: SceneNode[] }) {
   const changeShadow = (index: number, patch: (shadow: ShadowEffect) => ShadowEffect) => change(index, (e) => (isShadow(e) ? patch(e) : e));
 
   return (
-    <Section title="Effects" actions={<IconButton icon="plus" label="Add effect" onClick={() => write('Add effect', (cur) => [...(mixed ? [] : cur), defaultEffect('DROP_SHADOW')])} />}>
+    <Section
+      title="Effects"
+      actions={
+        <IconButton
+          icon="plus"
+          label="Add effect"
+          disabled={!mixed && nextEffectType(list) === null}
+          onClick={() =>
+            write('Add effect', (cur) => {
+              const base = mixed ? [] : cur;
+              const type = nextEffectType(base);
+              return type ? [...base, defaultEffect(type)] : base;
+            })
+          }
+        />
+      }
+    >
       {mixed && <p className={styles.hint}>Click + to replace mixed effects</p>}
       {list.length > 0 && (
         <ul className={styles.paintList}>
@@ -864,7 +913,8 @@ function EffectsSection({ nodes }: { nodes: SceneNode[] }) {
             const name = `Effect ${index + 1}`;
             return (
               <Fragment key={index}>
-                <li className={styles.paintRow} data-hidden={!effect.visible || undefined} tabIndex={-1} data-copy-property={`effects:${index}`} onClick={(e) => e.currentTarget.focus()}>
+                <li className={styles.paintRow} data-hidden={!effect.visible || undefined} data-reorder-row="" tabIndex={-1} data-copy-property={`effects:${index}`} onClick={(e) => e.currentTarget.focus()}>
+                  <ReorderHandle label={`Reorder ${name.toLowerCase()}`} position={index} count={list.length} onMove={(from, to) => write('Reorder effects', (cur) => moveItem(cur, from, to))} />
                   <select
                     className={`${primitives.select} ${gradientStyles.type}`}
                     aria-label={`${name} type`}
@@ -872,7 +922,7 @@ function EffectsSection({ nodes }: { nodes: SceneNode[] }) {
                     onChange={(e) => write('Change effect type', (cur) => cur.map((x, i) => (i === index ? convertEffect(x, e.target.value as EffectType) : x)))}
                   >
                     {EFFECT_TYPES.map((type) => (
-                      <option key={type} value={type}>
+                      <option key={type} value={type} disabled={type !== effect.type && !canAddEffect(list, type)}>
                         {EFFECT_TYPE_LABELS[type]}
                       </option>
                     ))}
@@ -933,7 +983,7 @@ function EffectsSection({ nodes }: { nodes: SceneNode[] }) {
                   ) : (
                     <div className={styles.grid2}>
                       <NumberField
-                        label="Blur"
+                        label={isProgressiveBlur(effect) ? 'End' : 'Blur'}
                         ariaLabel={`${name} blur`}
                         testId={`field-effect-${index}-blur`}
                         min={0}
@@ -942,6 +992,62 @@ function EffectsSection({ nodes }: { nodes: SceneNode[] }) {
                         onGestureEnd={gesture.end}
                         onChange={(v) => change(index, (e) => (isShadow(e) ? e : { ...e, radius: v }))}
                       />
+                      <select
+                        className={primitives.select}
+                        aria-label={`${name} blur type`}
+                        value={effect.blurType ?? 'NORMAL'}
+                        onChange={(e) => write('Change blur type', (cur) => cur.map((x, i) => (i === index && isBlur(x) ? setBlurType(x, e.target.value as BlurType) : x)))}
+                      >
+                        <option value="NORMAL">Uniform</option>
+                        <option value="PROGRESSIVE">Progressive</option>
+                      </select>
+                      {isProgressiveBlur(effect) && (
+                        <>
+                          <NumberField
+                            label="Start"
+                            ariaLabel={`${name} start blur`}
+                            min={0}
+                            value={effect.startRadius ?? 0}
+                            onGestureStart={gesture.start}
+                            onGestureEnd={gesture.end}
+                            onChange={(v) => change(index, (e) => (isBlur(e) ? { ...e, startRadius: Math.max(0, v) } : e))}
+                          />
+                          <button
+                            type="button"
+                            className={gradientStyles.textButton}
+                            aria-label={`Edit ${name.toLowerCase()} blur on canvas`}
+                            aria-pressed={blurEditing === index}
+                            disabled={nodes.length !== 1}
+                            onClick={() => (blurEditing === index ? endBlurEdit(editor) : beginBlurEdit(editor, nodes[0]!.id, index))}
+                          >
+                            Edit on canvas
+                          </button>
+                          {(['start', 'end'] as const).flatMap((point) =>
+                            (['x', 'y'] as const).map((axis) => (
+                              <NumberField
+                                key={`${point}-${axis}`}
+                                label={`${point === 'start' ? 'S' : 'E'}${axis.toUpperCase()}`}
+                                ariaLabel={`${name} ${point} ${axis.toUpperCase()}`}
+                                suffix="%"
+                                min={0}
+                                max={100}
+                                decimals={0}
+                                value={Math.round(blurOffsets(effect)[point][axis] * 100)}
+                                onGestureStart={gesture.start}
+                                onGestureEnd={gesture.end}
+                                onChange={(v) =>
+                                  change(index, (e) => {
+                                    if (!isBlur(e)) return e;
+                                    const offsets = blurOffsets(e);
+                                    const next = { ...offsets[point], [axis]: Math.min(1, Math.max(0, v / 100)) };
+                                    return point === 'start' ? { ...e, startOffset: next } : { ...e, endOffset: next };
+                                  })
+                                }
+                              />
+                            )),
+                          )}
+                        </>
+                      )}
                     </div>
                   )}
                 </li>

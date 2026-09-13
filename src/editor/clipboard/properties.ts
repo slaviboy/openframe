@@ -16,6 +16,7 @@
  */
 
 import { z } from 'zod';
+import { canAddEffect } from '@/core/effects/effects';
 import type { Transaction } from '@/core/history/history';
 import {
   BlendModeSchema,
@@ -163,7 +164,10 @@ export function pasteProperties(editor: Editor, payload: PropertiesPayload): boo
   editor.history.run(label, (tx) => {
     for (const node of nodes) {
       if (payload.kind === 'all') applyProperties(tx, node, payload.properties);
-      else if (payload.kind === 'effect') tx.set(node.id, 'effects', [...(node.effects ?? []), payload.effect].slice(-64));
+      else if (payload.kind === 'effect') {
+        // A pasted effect is skipped on layers that already have as many of its type as allowed.
+        if (canAddEffect(node.effects ?? [], payload.effect.type)) tx.set(node.id, 'effects', [...(node.effects ?? []), payload.effect]);
+      }
       else if (hasGeometry(node) && !(node.type === 'LINE' && payload.field === 'fills')) tx.set(node.id, payload.field, [...node[payload.field], payload.paint]);
     }
   });

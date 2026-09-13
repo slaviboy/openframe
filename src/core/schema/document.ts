@@ -171,8 +171,20 @@ export const DropShadowEffectSchema = z.object({
   showShadowBehindNode: z.boolean(),
 });
 export const InnerShadowEffectSchema = z.object({ type: z.literal('INNER_SHADOW'), ...ShadowFields });
-export const LayerBlurEffectSchema = z.object({ type: z.literal('LAYER_BLUR'), radius: z.number().min(0), visible: z.boolean() });
-export const BackgroundBlurEffectSchema = z.object({ type: z.literal('BACKGROUND_BLUR'), radius: z.number().min(0), visible: z.boolean() });
+/**
+ * Blur settings. Uniform blurs use `radius` everywhere. Progressive blurs ramp from `startRadius`
+ * at `startOffset` to `radius` at `endOffset`; offsets are fractions (0–1) of the layer's width and height.
+ */
+const BlurFields = {
+  radius: z.number().min(0),
+  visible: z.boolean(),
+  blurType: z.enum(['NORMAL', 'PROGRESSIVE']).optional(),
+  startRadius: z.number().min(0).optional(),
+  startOffset: z.object({ x: unit, y: unit }).optional(),
+  endOffset: z.object({ x: unit, y: unit }).optional(),
+};
+export const LayerBlurEffectSchema = z.object({ type: z.literal('LAYER_BLUR'), ...BlurFields });
+export const BackgroundBlurEffectSchema = z.object({ type: z.literal('BACKGROUND_BLUR'), ...BlurFields });
 
 export const EffectSchema = z.discriminatedUnion('type', [DropShadowEffectSchema, InnerShadowEffectSchema, LayerBlurEffectSchema, BackgroundBlurEffectSchema]);
 

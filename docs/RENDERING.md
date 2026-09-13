@@ -102,6 +102,10 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
 - Shadow blend modes:
   - Inner shadows blend onto the content inside the filter chain (`ImageFilter.MakeBlend` with the shadow's native Skia mode; plus darker, which needs a runtime blender, falls back to source-over).
   - Drop shadows whose mode isn't normal are left out of the filter. Each is drawn first in its own pass (`drawBlendedDropShadows`): a `saveLayer` whose paint carries a shadow-only filter (knocked out under the layer unless shown behind it), the layer's opacity and the shadow's blend mode. Inside that layer the node's silhouette (geometry, children, frame strokes) is drawn without effects, so the shadow composites with what is already on the canvas.
+- Progressive blurs (layer and background) use `progressiveBlurLevels`: 2–8 uniform blur levels from the start radius to the end radius. Each level's weight along start → end is a "hat" function, and the weights sum to 1 everywhere.
+  - Each level is `MakeBlur` (or the unblurred input for radius 0), masked by `ImageFilter.MakeShader` of a linear gradient carrying the weight as alpha (`DstIn`).
+  - The masked levels are summed with `Plus`.
+  - The same filter serves as the layer filter (Decal edges) and as the backdrop filter of a background blur (Clamp edges).
 
 **Outline mode**
 - `render(…, { outlines: true, includeHidden })` draws each layer's geometry with a hairline paint (stroke width 0, one device pixel at any zoom), black or white depending on the page background's luminance.

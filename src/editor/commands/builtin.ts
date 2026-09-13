@@ -28,7 +28,7 @@ import { reorder } from './arrange';
 import type { CommandDefinition } from './registry';
 import { layersWithSame, matchingLayers } from './select-similar';
 import { canTidyUp, tidyUpSelection } from './tidy';
-import { canToggleMask, selectionIsMask, toggleMask } from './masks';
+import { canToggleMask, toggleMask } from './masks';
 import { beginCrop, cropTarget, endCrop } from '../interactions/crop';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
 
@@ -144,7 +144,6 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     // ⌃⌘M on macOS; Ctrl+Alt+M elsewhere.
     shortcuts: ['Mod+Ctrl+M', 'Ctrl+Alt+M'],
     enabled: canToggleMask,
-    checked: selectionIsMask,
     run: (e) => toggleMask(e),
   },
   {
