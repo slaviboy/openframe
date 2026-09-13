@@ -139,7 +139,8 @@ Positions snap to whole pixels for axis-aligned layers while **Snap to pixel gri
 - Each click places one image:
   - On a rectangle, ellipse, polygon or star, it replaces the top fill: an existing image fill keeps its mode and rotation.
   - Anywhere else, it creates a rectangle at the image's pixel size, centered on the click, inside the frame under it, and named after the file.
-- After the last image, or on Escape, or when switching tools, the remaining images are discarded and the Move tool returns.
+- With several images waiting, **Place all** in the hint (`ImagePlaceTool.placeAll`) places them all with `placeImages` in a row at the center of the visible canvas, selects them, and returns to the Move tool.
+- After the last image, or on Escape or Delete (handled by the KeyboardController before commands, so the selection isn't deleted), or when switching tools, the remaining images are discarded and the Move tool returns.
 - Dropping image files on the canvas, or pasting them (with no Openframe layers on the clipboard), places them with `placeImages`. They form a row with 20 px gaps, centered on the drop point or on the visible canvas, in one undo step.
 - Files that fail to import are reported in a dismissible notice; the rest still import.
 
@@ -150,9 +151,17 @@ Positions snap to whole pixels for axis-aligned layers while **Snap to pixel gri
   - The layer becomes the only selection, and `editorState.croppingId` is set.
 - **Pointer input:** while `croppingId` is set, the ToolManager routes pointer input to `CropController` ([`interactions/crop.ts`](../src/editor/interactions/crop.ts)):
   - **Layer handles** move the crop edges. The layer's transform and size change, and `imageTransform` is recomputed so the image stays fixed on the canvas.
-  - **Corner handles of the whole image** (round, on the dashed outline) scale the image uniformly about the opposite corner.
+    - ⌥ moves the opposite edge by the same amount (symmetric about the center).
+    - A fixed **aspect ratio** (`editorState.cropAspect`, reset to Free when crop mode starts) keeps the box's proportions. Corners follow the larger change, and edges resize the other dimension about its middle.
+  - **Corner handles of the whole image** (round, on the dashed outline) scale the image uniformly about the opposite corner. With Control, the scale is free along the image's own axes (`scaleImageAxes`), so a rotated image stays rectangular.
+  - **Edges of the whole image** resize it about the opposite edge, keeping its aspect ratio; with Control, only along that axis.
+  - **Just outside an image corner** (rotate cursor, within 18px), dragging rotates the image about its center (`rotateImageAbout`). ⇧ snaps the image's resulting rotation to 15°.
   - **Dragging inside** the crop or the image repositions the image.
-  - Each drag is one transaction.
+  - Each drag is one transaction. Pressing or releasing ⌥, ⇧ or Control mid-drag updates it (the ToolManager forwards modifier changes to the canvas editor).
+- **Image settings** in crop mode, for the single cropped layer ([`ImageSettings.tsx`](../src/ui/panels/inspector/ImageSettings.tsx)):
+  - An **aspect ratio** menu: Free, Original, 1:1, 5:4, 4:5, 4:3, 3:4, 3:2, 2:3, 16:9 and 9:16. A fixed ratio reshapes the crop to the largest centered box of that ratio, as one undo step (`setCropAspect`).
+  - **Resize to fit** sets the crop box to the bounds of the whole image (`resizeCropToFit`, `fitCropBox`).
+  - A **Zoom** slider (10–500%) scales the image about the crop center. 100% is the scale at which the unrotated image just covers the layer (`zoomCropPaint`, `cropZoomPercent`).
 - **Leaving:** Return (`image.applyCrop`, which runs before Select children), Escape, clicking outside, or any selection or page change ends crop mode. The crop is kept.
 
 ### Masks

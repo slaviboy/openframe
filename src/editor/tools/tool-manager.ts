@@ -275,7 +275,7 @@ export class ToolManager {
   }
 
   modifiersChanged(m: ModifierState): void {
-    (this.pointerTool ?? this.tool).modifiersChanged?.(m);
+    (this.pointerTool ?? this.canvasEditor ?? this.tool).modifiersChanged?.(m);
   }
 
   /**

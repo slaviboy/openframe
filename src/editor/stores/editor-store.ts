@@ -17,6 +17,7 @@
 
 import type { DocumentStore } from '@/core/document/store';
 import type { Id } from '@/core/ids/ids';
+import type { CropAspect } from '@/core/image/crop';
 import { DEFAULT_VIEWPORT, type Viewport } from '../viewport/viewport';
 import { Observable } from './observable';
 
@@ -58,6 +59,8 @@ export interface EditorState {
   readonly scaleAnchor: ScaleAnchor;
   /** Layer whose image fill is being cropped (crop mode), or null. */
   readonly croppingId: Id | null;
+  /** Aspect ratio the crop box keeps while cropping (reset to free when crop mode starts). */
+  readonly cropAspect: CropAspect;
   /** Gradient paint being edited with on-canvas handles, or null. */
   readonly gradientEdit: GradientEditRef | null;
   /** Progressive blur being edited with on-canvas handles, or null. */
@@ -98,9 +101,14 @@ export class EditorStore extends Observable<EditorState> {
       findOpen: false,
       scaleAnchor: 'nw',
       croppingId: null,
+      cropAspect: 'FREE',
       gradientEdit: null,
       blurEdit: null,
     });
+  }
+
+  setCropAspect(cropAspect: CropAspect): void {
+    this.setState({ cropAspect });
   }
 
   setScaleAnchor(scaleAnchor: ScaleAnchor): void {
@@ -110,7 +118,7 @@ export class EditorStore extends Observable<EditorState> {
   /** Crop mode and on-canvas gradient editing are mutually exclusive. */
   setCropping(croppingId: Id | null): void {
     if (this.state.croppingId !== croppingId) {
-      this.setState({ croppingId, gradientEdit: croppingId ? null : this.state.gradientEdit, blurEdit: croppingId ? null : this.state.blurEdit });
+      this.setState({ croppingId, cropAspect: 'FREE', gradientEdit: croppingId ? null : this.state.gradientEdit, blurEdit: croppingId ? null : this.state.blurEdit });
     }
   }
 

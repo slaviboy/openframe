@@ -18,6 +18,7 @@
 import { hitTestDeepest } from '@/core/scene/hit-test';
 import { isSceneNode } from '@/core/schema/document';
 import { fillWithImage, IMAGE_FILLABLE, placeImages, type PlaceableImage } from '../commands/images';
+import { screenToWorld } from '../viewport/viewport';
 import type { CursorKind, PointerInfo, Tool, ToolEnvironment } from './types';
 
 /**
@@ -50,6 +51,22 @@ export class ImagePlaceTool implements Tool {
     if (this.queue.length === 0) return;
     this.queue = [];
     this.notify();
+  }
+
+  /**
+   * Place all: places every waiting image in a row centered in the visible canvas (clear of the
+   * panels), selects them, and returns to the Move tool.
+   */
+  placeAll(): void {
+    const { editor } = this.env;
+    if (this.queue.length === 0) return;
+    const insets = editor.canvasInsets;
+    const center = { x: (insets.left + editor.canvasSize.width - insets.right) / 2, y: (insets.top + editor.canvasSize.height - insets.bottom) / 2 };
+    const images = this.queue;
+    this.queue = [];
+    placeImages(editor, images, screenToWorld(editor.state.viewport, center));
+    this.notify();
+    editor.state.setTool('move');
   }
 
   subscribe = (listener: () => void): (() => void) => {

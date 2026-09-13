@@ -93,6 +93,19 @@ describe('placing images', () => {
     expect(editor.state.getSnapshot().tool).toBe('move');
   });
 
+  test('Place all places every waiting image in a row and returns to Move', () => {
+    const tools = new ToolManager(editor);
+    tools.imageTool.load([red, blue]);
+    editor.state.setTool('image');
+    tools.imageTool.placeAll();
+    expect(tools.imageTool.pending).toEqual([]);
+    expect(editor.state.getSnapshot().tool).toBe('move');
+    const placed = editor.selection.map((id) => editor.doc.getOrThrow(id) as RectangleNode);
+    expect(placed.map((n) => n.name)).toEqual(['red', 'blue']);
+    // Side by side, the second to the right of the first.
+    expect(placed[1]!.transform[4]).toBeGreaterThan(placed[0]!.transform[4] + placed[0]!.size.width);
+  });
+
   test('switching away from Place image, or Escape, discards the waiting images', () => {
     const tools = new ToolManager(editor);
     tools.imageTool.load([red, blue]);

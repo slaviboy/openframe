@@ -100,6 +100,11 @@ export class KeyboardController {
       this.editor.requestRender();
       return;
     }
+    // Delete discards images waiting in Place image (instead of deleting the selection).
+    if ((e.key === 'Delete' || e.key === 'Backspace') && this.tools.imageTool.pending.length > 0 && this.tools.cancel()) {
+      e.preventDefault();
+      return;
+    }
 
     const candidates = this.keymap.resolveAll(e);
     if (candidates.length === 0) return;

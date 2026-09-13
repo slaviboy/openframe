@@ -92,6 +92,77 @@ test('double-clicking an image layer crops it; the crop persists', async ({ page
   await expect(page.getByLabel('Fill 1 image mode')).toHaveValue('CROP');
 });
 
+test('crop aspect ratios, Resize to fit, zoom and ⌥ symmetric cropping', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  const chooser = page.waitForEvent('filechooser');
+  await page.keyboard.press('ControlOrMeta+Shift+K');
+  await (await chooser).setFiles([{ name: 'wide.png', mimeType: 'image/png', buffer: solidPng(80, 40, [40, 120, 200]) }]);
+  await expect(page.getByTestId('place-image-hint')).toContainText('Click to place wide');
+  await page.mouse.click(box.x + 500, box.y + 300);
+  await expect(page.getByTestId('field-w')).toHaveValue('80');
+  await page.mouse.dblclick(box.x + 500, box.y + 300);
+  await expect(page.getByLabel('Fill 1 image mode')).toHaveValue('CROP');
+
+  const aspect = page.getByLabel('Fill 1 crop aspect ratio');
+  await expect(aspect).toHaveValue('FREE');
+  await aspect.selectOption('1:1');
+  await expect(page.getByTestId('field-w')).toHaveValue('40');
+  await expect(page.getByTestId('field-h')).toHaveValue('40');
+
+  await page.getByRole('button', { name: 'Resize to fit' }).click();
+  await expect(page.getByTestId('field-w')).toHaveValue('80');
+  await expect(page.getByTestId('field-h')).toHaveValue('40');
+  await expect(aspect).toHaveValue('FREE');
+
+  // ⌥ moves both side edges: the right edge 10px in makes the crop 20px narrower.
+  await page.mouse.move(box.x + 540, box.y + 300);
+  await page.keyboard.down('Alt');
+  await page.mouse.down();
+  await page.mouse.move(box.x + 535, box.y + 300, { steps: 3 });
+  await page.mouse.move(box.x + 530, box.y + 300, { steps: 3 });
+  await page.mouse.up();
+  await page.keyboard.up('Alt');
+  await expect(page.getByTestId('field-w')).toHaveValue('60');
+
+  await expect(page.getByTestId('crop-zoom')).toHaveText('100%');
+  await page.getByLabel('Fill 1 crop zoom').fill('200');
+  await expect(page.getByTestId('crop-zoom')).toHaveText('200%');
+
+  // Clicking empty canvas (clear of the side panels) applies the crop.
+  await page.mouse.click(box.x + 700, box.y + 450);
+  await expect(page.getByLabel('Fill 1 crop zoom')).toHaveCount(0);
+  await expect(page.getByTestId('field-w')).toHaveValue('60');
+});
+
+test('Place all places every waiting image at once; Delete discards them', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const load = async () => {
+    const chooser = page.waitForEvent('filechooser');
+    await page.keyboard.press('ControlOrMeta+Shift+K');
+    await (await chooser).setFiles([
+      { name: 'one.png', mimeType: 'image/png', buffer: solidPng(30, 20, [200, 0, 0]) },
+      { name: 'two.png', mimeType: 'image/png', buffer: solidPng(40, 20, [0, 0, 200]) },
+    ]);
+    await expect(page.getByTestId('place-image-hint')).toContainText('2 images left');
+  };
+  await load();
+  await page.getByRole('button', { name: 'Place all' }).click();
+  await expect(page.getByTestId('place-image-hint')).toHaveCount(0);
+  await expect(page.getByRole('treeitem', { name: /one/ })).toHaveCount(1);
+  await expect(page.getByRole('treeitem', { name: /two/ })).toHaveCount(1);
+  await expect(page.getByText('2 layers')).toBeVisible();
+
+  await load();
+  await page.keyboard.press('Delete');
+  await expect(page.getByTestId('place-image-hint')).toHaveCount(0);
+  // Only the first two layers exist, and they are still there.
+  await expect(page.getByRole('treeitem', { name: /one/ })).toHaveCount(1);
+  await expect(page.getByRole('treeitem', { name: /two/ })).toHaveCount(1);
+});
+
 test('dropping image files on the canvas creates image layers at the drop point', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');

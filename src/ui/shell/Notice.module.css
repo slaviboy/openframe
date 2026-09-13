@@ -47,3 +47,18 @@
 .close:hover {
   background: var(--bg-hover);
 }
+
+.action {
+  flex: none;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-control, transparent);
+  color: var(--fg-primary);
+  font-size: var(--text-xs);
+}
+
+.action:hover {
+  background: var(--bg-hover);
+}

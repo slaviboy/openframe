@@ -945,6 +945,7 @@ function PaintSection({
                   }
                   onScrub={(edit) => writeAll((cur) => cur.map((p, i) => (i === index && p.type === 'IMAGE' ? edit(p) : p)))}
                   onCrop={field === 'fills' && nodes.length === 1 ? () => beginCrop(editor, nodes[0]!.id, index) : undefined}
+                  cropLayer={field === 'fills' && nodes.length === 1 ? { id: nodes[0]!.id, size: nodes[0]!.size } : undefined}
                   onGestureStart={gesture.start}
                   onGestureEnd={gesture.end}
                 />

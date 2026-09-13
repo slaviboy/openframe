@@ -35,15 +35,22 @@ export function Notice({ message, onClose }: { message: string; onClose: () => v
   );
 }
 
-/** Shown while Place image holds images: what the next click places and how many remain. */
+/** Shown while Place image holds images: what the next click places, how many remain, and Place all. */
 export function PlaceImageHint({ tools }: { tools: ToolManager }) {
   const pending = useSyncExternalStore(tools.imageTool.subscribe, () => tools.imageTool.pending);
   const next = pending[0];
   if (!next) return null;
   return (
     <div className={styles.notice} role="status" data-testid="place-image-hint">
-      Click to place {next.name}
-      {pending.length > 1 ? ` · ${pending.length} images left` : ''} · Esc to discard
+      <span>
+        Click to place {next.name}
+        {pending.length > 1 ? ` · ${pending.length} images left` : ''} · Esc or Delete to discard
+      </span>
+      {pending.length > 1 && (
+        <button type="button" className={styles.action} onClick={() => tools.imageTool.placeAll()}>
+          Place all
+        </button>
+      )}
     </div>
   );
 }

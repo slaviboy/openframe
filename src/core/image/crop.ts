@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { apply, invert, multiply, scaling, translation, type Matrix } from '../math/matrix';
+import { apply, invert, multiply, rotation, scaling, translation, type Matrix } from '../math/matrix';
 import type { Vec2 } from '../math/vec';
 import type { ImagePaint, Size, Transform } from '../schema/document';
 import { imagePlacement } from './image-fit';
@@ -76,4 +76,94 @@ export const moveImage = (imageToLayer: Matrix, delta: Vec2): Matrix => multiply
 export function scaleImageAbout(imageToLayer: Matrix, factor: number, fixed: Vec2): Matrix {
   const about = multiply(translation(fixed.x, fixed.y), multiply(scaling(factor), translation(-fixed.x, -fixed.y)));
   return multiply(about, imageToLayer);
+}
+
+/**
+ * Scales the image along its own axes about a fixed point in image pixels, so it stays a rectangle
+ * even when rotated (free-aspect resize while cropping).
+ */
+export function scaleImageAxes(imageToLayer: Matrix, sx: number, sy: number, fixedImage: Vec2): Matrix {
+  const about = multiply(translation(fixedImage.x, fixedImage.y), multiply(scaling(sx, sy), translation(-fixedImage.x, -fixedImage.y)));
+  return multiply(imageToLayer, about);
+}
+
+/** Rotates the image about a point in layer coordinates (positive radians turn clockwise on screen). */
+export function rotateImageAbout(imageToLayer: Matrix, radians: number, pivot: Vec2): Matrix {
+  const about = multiply(translation(pivot.x, pivot.y), multiply(rotation(radians), translation(-pivot.x, -pivot.y)));
+  return multiply(about, imageToLayer);
+}
+
+/** Center of the full image in layer coordinates. */
+export const imageCenter = (imageToLayer: Matrix, image: Size): Vec2 => apply(imageToLayer, { x: image.width / 2, y: image.height / 2 });
+
+/** A crop box in layer coordinates. */
+export interface CropBox {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** Resize to fit: the box that shows the whole image (the bounds of its corners in layer coordinates). */
+export function fitCropBox(imageToLayer: Matrix, image: Size): CropBox {
+  const quad = imageQuad(imageToLayer, image);
+  const xs = quad.map((p) => p.x);
+  const ys = quad.map((p) => p.y);
+  const x = Math.min(...xs);
+  const y = Math.min(...ys);
+  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y };
+}
+
+/** Crop aspect ratio presets: free, the image's own ratio, or a fixed width:height. */
+export const CROP_ASPECTS = ['FREE', 'ORIGINAL', '1:1', '5:4', '4:5', '4:3', '3:4', '3:2', '2:3', '16:9', '9:16'] as const;
+export type CropAspect = (typeof CROP_ASPECTS)[number];
+
+export const CROP_ASPECT_LABELS: Record<CropAspect, string> = {
+  FREE: 'Free',
+  ORIGINAL: 'Original',
+  '1:1': '1:1',
+  '5:4': '5:4',
+  '4:5': '4:5',
+  '4:3': '4:3',
+  '3:4': '3:4',
+  '3:2': '3:2',
+  '2:3': '2:3',
+  '16:9': '16:9',
+  '9:16': '9:16',
+};
+
+/** Width / height of a preset, or null for a free crop. */
+export function cropAspectRatio(aspect: CropAspect, image: Size): number | null {
+  if (aspect === 'FREE') return null;
+  if (aspect === 'ORIGINAL') return image.height > 0 ? image.width / image.height : null;
+  const [w, h] = aspect.split(':').map(Number) as [number, number];
+  return w / h;
+}
+
+/** The largest box of `ratio` (width / height) centered in a layer of `size`. */
+export function aspectCropBox(size: Size, ratio: number): CropBox {
+  const width = Math.min(size.width, size.height * ratio);
+  const height = width / ratio;
+  return { x: (size.width - width) / 2, y: (size.height - height) / 2, width, height };
+}
+
+/** Image scale (layer units per image pixel) at which it just covers a layer of `size` (unrotated). */
+const coverScale = (image: Size, size: Size): number => Math.max(size.width / image.width, size.height / image.height);
+
+/** Crop zoom in percent: the image's scale relative to the scale that just covers the layer. */
+export function cropZoomPercent(imageToLayer: Matrix, image: Size, size: Size): number {
+  const scale = Math.sqrt(Math.abs(imageToLayer.a * imageToLayer.d - imageToLayer.b * imageToLayer.c));
+  return (scale / coverScale(image, size)) * 100;
+}
+
+/** A CROP paint zoomed to `percent` (see `cropZoomPercent`) about the center of the layer. */
+export function zoomCropPaint(paint: ImagePaint, size: Size, percent: number): ImagePaint {
+  const image = paint.imageSize;
+  const m = image && imagePlacement(paint, image, size)?.matrix;
+  if (!image || !m || paint.scaleMode !== 'CROP') return paint;
+  const current = cropZoomPercent(m, image, size);
+  if (current <= 0) return paint;
+  const next = scaleImageAbout(m, Math.max(1, percent) / current, { x: size.width / 2, y: size.height / 2 });
+  const imageTransform = cropTransformFor(next, image, size);
+  return imageTransform ? { ...paint, imageTransform } : paint;
 }
