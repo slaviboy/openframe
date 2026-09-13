@@ -27,10 +27,11 @@ import { textStyleAt } from '@/core/text/style-runs';
 import type { OpenTypeFeatures } from '@/core/text/opentype';
 
 /**
- * Changes the OpenType features of a range (or the whole layer). Each stretch of text keeps its
- * other feature settings; when the whole layer ends up the same, the setting moves to the layer.
+ * Changes a style property that holds several settings (OpenType features, axis values) over a range
+ * (or the whole layer). Each stretch of text keeps its other settings; when the whole layer ends up
+ * the same, the value moves to the layer.
  */
-export function updateOpenTypeFeatures(tx: Transaction, node: SceneNode, update: (features: OpenTypeFeatures) => OpenTypeFeatures, range: TextRange = null): void {
+function updateSettingsStyle<K extends 'openTypeFeatures' | 'fontVariations'>(tx: Transaction, node: SceneNode, key: K, update: (value: TextStyle[K]) => TextStyle[K], range: TextRange): void {
   const text = textOf(tx, node);
   if (!text) return;
   const length = text.characters.length;
@@ -41,12 +42,32 @@ export function updateOpenTypeFeatures(tx: Transaction, node: SceneNode, update:
   if (to <= from && !whole) return;
   const segments = textSegments(text);
   const covered = to > from ? segments.filter((s) => s.end > from && s.start < to) : segments.slice(0, 1);
-  const next = covered.map((s) => update(s.openTypeFeatures));
-  if (whole && next.every((f) => valuesEqual(f, next[0]))) {
-    setTextStyle(tx, node, { openTypeFeatures: next[0]! }, null);
+  const next = covered.map((s) => update(s[key]));
+  if (whole && next.every((v) => valuesEqual(v, next[0]))) {
+    setTextStyle(tx, node, { [key]: next[0]! } as TextStyleOverrides, null);
     return;
   }
-  covered.forEach((segment, i) => setTextStyle(tx, node, { openTypeFeatures: next[i]! }, { start: Math.max(from, segment.start), end: Math.min(to, segment.end) }));
+  covered.forEach((segment, i) => setTextStyle(tx, node, { [key]: next[i]! } as TextStyleOverrides, { start: Math.max(from, segment.start), end: Math.min(to, segment.end) }));
+}
+
+/** Changes the OpenType features of a range (or the whole layer), keeping each stretch's other feature settings. */
+export function updateOpenTypeFeatures(tx: Transaction, node: SceneNode, update: (features: OpenTypeFeatures) => OpenTypeFeatures, range: TextRange = null): void {
+  updateSettingsStyle(tx, node, 'openTypeFeatures', update, range);
+}
+
+/** Sets one variable font axis value over a range (or the whole layer); null returns the axis to its default. */
+export function setFontVariation(tx: Transaction, node: SceneNode, axis: string, value: number | null, range: TextRange = null): void {
+  updateSettingsStyle(
+    tx,
+    node,
+    'fontVariations',
+    (variations) => {
+      const next: Record<string, number> = Object.fromEntries(Object.entries(variations).filter(([tag]) => tag !== axis));
+      if (value !== null) next[axis] = value;
+      return next;
+    },
+    range,
+  );
 }
 import type { ListType } from '@/core/schema/document';
 

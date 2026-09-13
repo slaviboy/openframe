@@ -23,6 +23,7 @@ import { Editor } from '../editor';
 import { applyScale, captureScale } from '../interactions/scale';
 import { setSize } from './properties';
 import {
+  setFontVariation,
   updateOpenTypeFeatures,
   setHyperlink,
   changeIndentation,
@@ -219,6 +220,19 @@ describe('text properties', () => {
     expect(get().styleRuns).toBeUndefined();
     editor.history.run('reset', (tx) => updateOpenTypeFeatures(tx, get(), () => ({})));
     expect(get().openTypeFeatures).toBeUndefined();
+  });
+
+  test('variable axis values apply per range and reset to the default', () => {
+    editor.history.run('type', (tx) => tx.set(id, 'characters', 'wide text'));
+    editor.history.run('wdth', (tx) => setFontVariation(tx, get(), 'wdth', 80, { start: 0, end: 4 }));
+    editor.history.run('wght', (tx) => setFontVariation(tx, get(), 'wght', 650));
+    expect(textStyleValue(get(), 'fontVariations', { start: 0, end: 4 })).toEqual({ wdth: 80, wght: 650 });
+    expect(textStyleValue(get(), 'fontVariations', { start: 5, end: 9 })).toEqual({ wght: 650 });
+    editor.history.run('reset', (tx) => setFontVariation(tx, get(), 'wdth', null));
+    expect(get()).toMatchObject({ fontVariations: { wght: 650 } });
+    expect(get().styleRuns).toBeUndefined();
+    editor.history.run('reset', (tx) => setFontVariation(tx, get(), 'wght', null));
+    expect(get().fontVariations).toBeUndefined();
   });
 
   test('the Scale tool scales font size and pixel spacing', () => {

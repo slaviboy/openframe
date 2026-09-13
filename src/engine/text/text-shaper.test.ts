@@ -118,6 +118,16 @@ describe('text shaping', () => {
     expect(shaper.supportedFeatures({ family: 'Inter', style: 'Regular' })).toBe(supported);
   });
 
+  test('variable axis values change shaping, and the bundled font reports its weight axis', () => {
+    const regular = shaper.measure(text({ characters: 'Hello' }), null).width;
+    expect(shaper.measure(text({ characters: 'Hello', fontVariations: { wght: 900 } }), null).width).toBeGreaterThan(regular + 2);
+    // A stored weight wins over the style name's.
+    const bold = text({ characters: 'Hello', fontName: { family: 'Inter', style: 'Bold' } });
+    expect(shaper.measure({ ...bold, fontVariations: { wght: 400 } }, null).width).toBeCloseTo(regular, 0);
+    expect(shaper.fontAxes('Inter')).toEqual([{ tag: 'wght', name: 'Weight', min: 100, default: 400, max: 900, hidden: false }]);
+    expect(shaper.fontAxes('Not A Font')).toEqual([]);
+  });
+
   test('letter case changes the shaped text and max lines limits the height', () => {
     const lower = shaper.measure(text({ characters: 'hello' }), null).width;
     expect(shaper.measure(text({ characters: 'hello', textCase: 'UPPER' }), null).width).toBeGreaterThan(lower);

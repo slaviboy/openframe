@@ -22,6 +22,7 @@ import { canListInstalledFonts, knownInstalledFamilies, listInstalledFamilies, r
 import type { Box } from '../../primitives/position';
 import { FontPicker, type FontPickerFamily } from './FontPicker';
 import { OpenTypeFields } from './OpenTypeFields';
+import { VariableAxesFields } from './VariableAxesFields';
 import type { Transaction } from '@/core/history/history';
 import { valuesEqual } from '@/core/ops/equality';
 import type { TextAlignHorizontal, TextAlignVertical, TextAutoResize, TextNode } from '@/core/schema/document';
@@ -305,6 +306,7 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
             />
             {maxLines !== undefined && <IconButton icon="minus" label="Remove max lines" onClick={() => run('Remove max lines', (tx, n) => setMaxLines(tx, n, undefined))} />}
           </div>
+          <VariableAxesFields nodes={nodes} range={range} fonts={fontNames} />
           <OpenTypeFields nodes={nodes} range={range} fonts={fontNames} />
         </div>
       )}

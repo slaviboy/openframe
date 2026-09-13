@@ -21,6 +21,8 @@ import type { Rect } from '@/core/math/rect';
 import type { Vec2 } from '@/core/math/vec';
 import type { FontName, OpenTypeFeatures, Size, TextAlignVertical, TextNode } from '@/core/schema/document';
 import { FEATURE_PROBE_TEXT, isDefaultOnFeature, PROBED_FEATURES, toFontFeatures } from '@/core/text/opentype';
+import { readFontAxes, type FontAxis } from '@/core/text/font-names';
+import { BUNDLED_FONT_AXES, mergeAxes, variationSettings } from '@/core/text/font-variations';
 import { parseFontStyle, VARIABLE_FONT_STYLES } from '@/core/text/font-style';
 import { nextGrapheme, previousGrapheme } from '@/core/text/text-editing';
 import type { FontFamilyInfo, TextCaretBox, TextLayoutService } from '@/core/text/text-layout';
@@ -48,6 +50,7 @@ type RunStyle = Pick<RunsStyle, 'fontName' | 'fontSize' | 'lineHeight' | 'letter
   readonly textDecoration?: RunsStyle['textDecoration'] | undefined;
   readonly textCase?: RunsStyle['textCase'] | undefined;
   readonly openTypeFeatures?: RunsStyle['openTypeFeatures'] | undefined;
+  readonly fontVariations?: RunsStyle['fontVariations'] | undefined;
 };
 
 /** Layout width for text that never wraps. */
@@ -109,6 +112,8 @@ export class TextShaper implements TextLayoutService {
   private readonly layouts = new Map<Id, CachedLayout>();
   /** Supported OpenType features by "family\nstyle". */
   private readonly featureSupport = new Map<string, readonly string[]>();
+  /** Variation axes of user families, read from their font files. */
+  private readonly familyAxes = new Map<string, readonly FontAxis[]>();
 
   constructor(
     private readonly ck: CanvasKit,
@@ -153,6 +158,8 @@ export class TextShaper implements TextLayoutService {
       if (font.variable) for (const style of VARIABLE_FONT_STYLES) entry.styles.add(style);
       else entry.styles.add(font.style);
       entry.variable ||= font.variable;
+      const axes = readFontAxes(font.bytes instanceof Uint8Array ? font.bytes : new Uint8Array(font.bytes));
+      if (axes.length > 0) this.familyAxes.set(font.family, mergeAxes(this.familyAxes.get(font.family) ?? [], axes));
       this.userFamilies.set(font.family, entry);
     }
     this.featureSupport.clear();
@@ -190,6 +197,12 @@ export class TextShaper implements TextLayoutService {
     const supported = PROBED_FEATURES.filter((tag) => signature({ [tag]: !isDefaultOnFeature(tag) }) !== base);
     this.featureSupport.set(key, supported);
     return supported;
+  }
+
+  /** Variation axes of a family: the bundled Inter's weight axis, or those read from a user family's files. */
+  fontAxes(family: string): readonly FontAxis[] {
+    if (isFallbackFamily(family) || !this.families.includes(family)) return [];
+    return this.userFamilies.has(family) ? (this.familyAxes.get(family) ?? []) : BUNDLED_FONT_AXES;
   }
 
   fontFamilyOf(bytes: Uint8Array): string | null {
@@ -231,7 +244,7 @@ export class TextShaper implements TextLayoutService {
       fontFamilies: [style.fontName.family, ...this.families.filter((f) => f !== style.fontName.family)],
       fontSize: style.fontSize,
       fontStyle: { weight: weights[Math.min(8, Math.max(0, Math.round(weight / 100) - 1))]!, slant: italic ? ck.FontSlant.Italic : ck.FontSlant.Upright },
-      fontVariations: [{ axis: 'wght', value: weight }],
+      fontVariations: variationSettings(weight, style.fontVariations),
       letterSpacing: style.letterSpacing.unit === 'PIXELS' ? style.letterSpacing.value : (style.letterSpacing.value / 100) * style.fontSize,
       ...(lineHeight !== null ? { heightMultiplier: lineHeight, halfLeading: true } : {}),
       fontFeatures: toFontFeatures(style.openTypeFeatures ?? {}, style.textCase === 'SMALL_CAPS'),

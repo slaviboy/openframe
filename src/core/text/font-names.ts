@@ -23,6 +23,20 @@ export interface FontFileInfo {
   readonly variable: boolean;
 }
 
+/** A variation axis of a variable font. */
+export interface FontAxis {
+  /** Four-character axis tag, e.g. `wght` or `GRAD`. */
+  readonly tag: string;
+  readonly name: string;
+  readonly min: number;
+  readonly default: number;
+  readonly max: number;
+  /** The font marks the axis as not meant for users. */
+  readonly hidden: boolean;
+}
+
+const STANDARD_AXIS_NAMES: Readonly<Record<string, string>> = { wght: 'Weight', wdth: 'Width', opsz: 'Optical size', ital: 'Italic', slnt: 'Slant' };
+
 const tag = (view: DataView, offset: number) =>
   String.fromCharCode(view.getUint8(offset), view.getUint8(offset + 1), view.getUint8(offset + 2), view.getUint8(offset + 3));
 
@@ -34,13 +48,8 @@ function utf16be(bytes: Uint8Array, start: number, length: number): string {
 
 const latin1 = (bytes: Uint8Array, start: number, length: number) => String.fromCharCode(...bytes.subarray(start, start + length));
 
-/**
- * Family and style names of a TrueType or OpenType font (or the first font of a collection), from
- * its `name` table. Typographic names (IDs 16 and 17) win over legacy ones (1 and 2), and Windows
- * English records over other platforms. Returns null for anything that isn't a readable sfnt
- * (compressed WOFF and WOFF2 files included).
- */
-export function readFontNames(bytes: Uint8Array): FontFileInfo | null {
+/** The table offsets of a TrueType or OpenType font (or a collection's first font), or null when it isn't a readable sfnt. */
+function openSfnt(bytes: Uint8Array): { view: DataView; tables: Map<string, number> } | null {
   if (bytes.length < 12) return null;
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let directory = 0;
@@ -51,20 +60,22 @@ export function readFontNames(bytes: Uint8Array): FontFileInfo | null {
   }
   const version = view.getUint32(directory);
   if (version !== 0x00010000 && tag(view, directory) !== 'OTTO' && tag(view, directory) !== 'true') return null;
-  const tables = view.getUint16(directory + 4);
-  let name = -1;
-  let variable = false;
-  for (let i = 0; i < tables; i++) {
+  const count = view.getUint16(directory + 4);
+  const tables = new Map<string, number>();
+  for (let i = 0; i < count; i++) {
     const record = directory + 12 + i * 16;
     if (record + 16 > bytes.length) return null;
-    const t = tag(view, record);
-    if (t === 'name') name = view.getUint32(record + 8);
-    if (t === 'fvar') variable = true;
+    tables.set(tag(view, record), view.getUint32(record + 8));
   }
-  if (name < 0 || name + 6 > bytes.length) return null;
+  return { view, tables };
+}
+
+/** The best record of each requested name ID: Windows English over other Windows and Unicode records over Mac Roman. */
+function readNames(bytes: Uint8Array, view: DataView, name: number, ids: ReadonlySet<number>): Map<number, string> {
+  const best = new Map<number, { text: string; score: number }>();
+  if (name + 6 > bytes.length) return new Map();
   const count = view.getUint16(name + 2);
   const storage = name + view.getUint16(name + 4);
-  const best = new Map<number, { text: string; score: number }>();
   for (let i = 0; i < count; i++) {
     const record = name + 6 + i * 12;
     if (record + 12 > bytes.length) break;
@@ -74,7 +85,7 @@ export function readFontNames(bytes: Uint8Array): FontFileInfo | null {
     const id = view.getUint16(record + 6);
     const length = view.getUint16(record + 8);
     const start = storage + view.getUint16(record + 10);
-    if (![1, 2, 16, 17].includes(id) || start + length > bytes.length) continue;
+    if (!ids.has(id) || start + length > bytes.length) continue;
     let text: string | null = null;
     let score = 0;
     if (platform === 3 && (encoding === 0 || encoding === 1 || encoding === 10)) {
@@ -90,9 +101,51 @@ export function readFontNames(bytes: Uint8Array): FontFileInfo | null {
     const trimmed = text?.trim();
     if (trimmed && (best.get(id)?.score ?? -1) < score) best.set(id, { text: trimmed, score });
   }
-  const family = best.get(16)?.text ?? best.get(1)?.text;
-  const style = best.get(17)?.text ?? best.get(2)?.text ?? 'Regular';
-  return family ? { family, style, variable } : null;
+  return new Map([...best].map(([id, { text }]) => [id, text]));
+}
+
+/**
+ * Family and style names of a TrueType or OpenType font (or the first font of a collection), from
+ * its `name` table. Typographic names (IDs 16 and 17) win over legacy ones (1 and 2), and Windows
+ * English records over other platforms. Returns null for anything that isn't a readable sfnt
+ * (compressed WOFF and WOFF2 files included).
+ */
+export function readFontNames(bytes: Uint8Array): FontFileInfo | null {
+  const sfnt = openSfnt(bytes);
+  if (!sfnt) return null;
+  const name = sfnt.tables.get('name');
+  if (name === undefined || name + 6 > bytes.length) return null;
+  const names = readNames(bytes, sfnt.view, name, new Set([1, 2, 16, 17]));
+  const family = names.get(16) ?? names.get(1);
+  const style = names.get(17) ?? names.get(2) ?? 'Regular';
+  return family ? { family, style, variable: sfnt.tables.has('fvar') } : null;
+}
+
+const fixed = (view: DataView, offset: number) => Math.round((view.getInt32(offset) / 65536) * 1000) / 1000;
+
+/**
+ * The variation axes of a variable TrueType or OpenType font, from its `fvar` table, named by the
+ * font's `name` table (or the standard names of registered axes). Empty for static fonts and for
+ * files that aren't a readable sfnt (compressed WOFF and WOFF2 included).
+ */
+export function readFontAxes(bytes: Uint8Array): FontAxis[] {
+  const sfnt = openSfnt(bytes);
+  const fvar = sfnt?.tables.get('fvar');
+  if (!sfnt || fvar === undefined || fvar + 16 > bytes.length) return [];
+  const { view } = sfnt;
+  const axesStart = fvar + view.getUint16(fvar + 4);
+  const count = view.getUint16(fvar + 8);
+  const size = view.getUint16(fvar + 10);
+  if (size < 20) return [];
+  const records: (Omit<FontAxis, 'name'> & { nameId: number })[] = [];
+  for (let i = 0; i < count; i++) {
+    const r = axesStart + i * size;
+    if (r + 20 > bytes.length) break;
+    records.push({ tag: tag(view, r), min: fixed(view, r + 4), default: fixed(view, r + 8), max: fixed(view, r + 12), hidden: (view.getUint16(r + 16) & 1) === 1, nameId: view.getUint16(r + 18) });
+  }
+  const nameTable = sfnt.tables.get('name');
+  const names = nameTable === undefined ? new Map<number, string>() : readNames(bytes, view, nameTable, new Set(records.map((r) => r.nameId)));
+  return records.map(({ nameId, ...axis }) => ({ ...axis, name: names.get(nameId) ?? STANDARD_AXIS_NAMES[axis.tag] ?? axis.tag }));
 }
 
 /** A style name from a font file name ("Roboto-SemiBoldItalic.woff2" → "Semi Bold Italic"), or Regular. */

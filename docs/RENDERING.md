@@ -167,6 +167,9 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
   - **OpenType features:** a run's `openTypeFeatures` become SkParagraph `fontFeatures` (1 on, 0 off), together with `smcp` for small caps ([`core/text/opentype.ts`](../src/core/text/opentype.ts)).
     - `TextShaper.supportedFeatures(fontName)` shapes `FEATURE_PROBE_TEXT` (printable ASCII plus fractions, ligature pairs, ordinals and capitals with punctuation) in that family alone. It then shapes the text again with each probed tag switched from its default. A tag is supported when any glyph ID or position changes.
     - Results are cached per family and style, and cleared when fonts are registered. Font files are never parsed for their GSUB/GPOS feature lists, so compressed WOFF2 fonts work the same way.
+  - **Variable axes:** each run's font variations are `wght` from the style name, unless `fontVariations.wght` overrides it, plus every other stored axis (`variationSettings` in [`core/text/font-variations.ts`](../src/core/text/font-variations.ts)).
+    - `TextShaper.fontAxes(family)` reports the bundled Inter's weight axis (100–900). For user families it reports the axes that `readFontAxes` read from each registered file's `fvar` table ([`core/text/font-names.ts`](../src/core/text/font-names.ts)).
+    - Axes from several files of one family are merged into one range per axis (`mergeAxes`).
   - `maxLines` sets the paragraph's max lines and an ellipsis.
 - **Drawing:** each visible fill is drawn as a paragraph built with `pushPaintStyle`, so gradients, images and patterns shade the glyphs. Outline mode paints the glyphs with the hairline paint. A background blur on text uses the text box.
 - **Editing and measuring:** the same shaper implements the editor's `TextLayoutService` (measure, caret, hit, selection rectangles, line navigation). Paragraphs are cached per layer by node identity (up to 256), so what is measured is what is drawn.

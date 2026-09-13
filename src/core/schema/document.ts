@@ -461,6 +461,9 @@ export const HyperlinkSchema = z.object({
 /** OpenType features turned on (true) or off (false) by four-character tag; absent tags use the font's default. */
 export const OpenTypeFeaturesSchema = z.record(z.string().regex(/^[a-z0-9]{4}$/), z.boolean()).refine((features) => Object.keys(features).length <= 256, 'Too many OpenType features');
 
+/** Variable font axis values by four-character axis tag (e.g. `wght`, `wdth`, `GRAD`); absent axes use the style or font default. */
+export const FontVariationsSchema = z.record(z.string().regex(/^[A-Za-z0-9 ]{4}$/), z.number().finite()).refine((axes) => Object.keys(axes).length <= 64, 'Too many font variation axes');
+
 /** Properties a range of characters can override in a text layer (mixed styles). */
 export const TextStyleOverridesSchema = z.object({
   fontName: FontNameSchema.optional(),
@@ -476,6 +479,7 @@ export const TextStyleOverridesSchema = z.object({
   /** A link on these characters; null removes a link the layer has. */
   hyperlink: HyperlinkSchema.nullable().optional(),
   openTypeFeatures: OpenTypeFeaturesSchema.optional(),
+  fontVariations: FontVariationsSchema.optional(),
 });
 /** Overrides on the characters [start, end) (UTF-16 offsets). */
 export const TextStyleRunSchema = z.object({ start: z.number().int().min(0), end: z.number().int().min(1), style: TextStyleOverridesSchema });
@@ -517,6 +521,8 @@ export const TextNodeSchema = z.object({
   hyperlink: HyperlinkSchema.optional(),
   /** OpenType features of the whole text (style runs can override them per character). */
   openTypeFeatures: OpenTypeFeaturesSchema.optional(),
+  /** Variable font axis values of the whole text (style runs can override them per character). */
+  fontVariations: FontVariationsSchema.optional(),
 });
 
 export const NodeSchema = z.discriminatedUnion('type', [
@@ -595,6 +601,7 @@ export type TextCase = z.infer<typeof TextCaseSchema>;
 export type ListType = z.infer<typeof ListTypeSchema>;
 export type Hyperlink = z.infer<typeof HyperlinkSchema>;
 export type OpenTypeFeatures = Readonly<z.infer<typeof OpenTypeFeaturesSchema>>;
+export type FontVariations = Readonly<z.infer<typeof FontVariationsSchema>>;
 export type TextNode = z.infer<typeof TextNodeSchema>;
 export type SceneNode = FrameNode | GroupNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | SectionNode | SliceNode | TextNode;
 export type Node = z.infer<typeof NodeSchema>;
