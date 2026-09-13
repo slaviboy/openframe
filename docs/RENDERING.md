@@ -119,6 +119,11 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
     - Each `noiseSize` cell is hashed. Cells above `density` are empty; the rest take the mono color, one of the duo colors, or a random color at the multi opacity.
     - The shader becomes an image filter, is kept only where the content has coverage (`SrcIn`), and blends over the content with the effect's native blend mode.
   - **Texture** displaces the content with `MakeDisplacementMap`, up to `radius` pixels (scale `radius × 2`). The displacement field is a smooth value-noise SkSL shader whose grain is `noiseSize`. `clipToShape` keeps the displaced result inside the original coverage (`SrcIn`); unclipped textures grow the paint bounds by `radius`.
+- **Glass** replaces background blur when it comes first in the list (`backdropEffect`). `drawGlass` works inside the layer's shape clip:
+  - **Backdrop filter:** frost is `MakeBlur(radius / 2)`. Refraction is `MakeDisplacementMap` with scale `refraction × depth`. Its field is [`GLASS_FIELD_SKSL`](../src/engine/render/glass-sksl.ts): a rounded-box or ellipse signed distance function whose outward normal, faded over `depth`, is encoded in red and green.
+  - **Dispersion:** red, green and blue are displaced by (1 ± 0.3 × dispersion) × scale, isolated with color matrices, and recombined with `Lighten`.
+  - **Light:** a stroke of the shape, whose inner half survives the clip, with a linear gradient from the light side (`lightIntensity`), through transparent, to the opposite side (35%). Splay widens the stroke and adds a mask blur.
+  - The layer's content then draws on top.
 
 **Outline mode**
 - `render(…, { outlines: true, includeHidden })` draws each layer's geometry with a hairline paint (stroke width 0, one device pixel at any zoom), black or white depending on the page background's luminance.

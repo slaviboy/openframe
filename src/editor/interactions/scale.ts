@@ -41,7 +41,9 @@ function scaleEffects(effects: readonly Effect[], f: number): Effect[] {
         ? { ...effect, noiseSize: Math.min(100, Math.max(0.1, round2(effect.noiseSize * f))) }
         : effect.type === 'TEXTURE'
           ? { ...effect, noiseSize: Math.min(100, Math.max(0.1, round2(effect.noiseSize * f))), radius: Math.min(100, round2(effect.radius * f)) }
-          : { ...effect, radius: round2(effect.radius * f), ...(effect.startRadius !== undefined ? { startRadius: round2(effect.startRadius * f) } : {}) },
+          : effect.type === 'GLASS'
+            ? { ...effect, radius: Math.min(1000, round2(effect.radius * f)), depth: Math.min(1000, round2(effect.depth * f)) }
+            : { ...effect, radius: round2(effect.radius * f), ...(effect.startRadius !== undefined ? { startRadius: round2(effect.startRadius * f) } : {}) },
   );
 }
 

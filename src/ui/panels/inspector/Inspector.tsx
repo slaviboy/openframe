@@ -35,6 +35,7 @@ import {
   setBlurType,
   type BlurType,
   type NoiseEffect,
+  type GlassEffect,
   type NoiseType,
   type TextureEffect,
 } from '@/core/effects/effects';
@@ -158,7 +159,7 @@ export function Inspector() {
 interface GrainSettingsProps {
   name: string;
   index: number;
-  effect: NoiseEffect | TextureEffect;
+  effect: NoiseEffect | TextureEffect | GlassEffect;
   change: (index: number, patch: (effect: Effect) => Effect) => void;
   write: (label: string, next: (current: readonly Effect[]) => readonly Effect[]) => void;
   gesture: { start: () => void; end: () => void };
@@ -168,6 +169,45 @@ interface GrainSettingsProps {
 function GrainSettings({ name, index, effect, change, write, gesture }: GrainSettingsProps) {
   const patchNoise = (patch: Partial<NoiseEffect>) => change(index, (e) => (e.type === 'NOISE' ? { ...e, ...patch } : e));
   const patchTexture = (patch: Partial<TextureEffect>) => change(index, (e) => (e.type === 'TEXTURE' ? { ...e, ...patch } : e));
+  const patchGlass = (patch: Partial<GlassEffect>) => change(index, (e) => (e.type === 'GLASS' ? { ...e, ...patch } : e));
+  if (effect.type === 'GLASS') {
+    const percent = (key: 'lightIntensity' | 'refraction' | 'dispersion' | 'splay', label: string) => (
+      <NumberField
+        label={label}
+        ariaLabel={`${name} ${label.toLowerCase()}`}
+        suffix="%"
+        min={0}
+        max={100}
+        decimals={0}
+        value={Math.round(effect[key] * 100)}
+        onGestureStart={gesture.start}
+        onGestureEnd={gesture.end}
+        onChange={(v) => patchGlass({ [key]: Math.min(1, Math.max(0, v / 100)) })}
+      />
+    );
+    return (
+      <div className={styles.grid2}>
+        <NumberField
+          label="Angle"
+          ariaLabel={`${name} light angle`}
+          suffix="°"
+          min={-180}
+          max={180}
+          decimals={0}
+          value={effect.lightAngle}
+          onGestureStart={gesture.start}
+          onGestureEnd={gesture.end}
+          onChange={(v) => patchGlass({ lightAngle: Math.min(180, Math.max(-180, v)) })}
+        />
+        {percent('lightIntensity', 'Light')}
+        {percent('refraction', 'Refraction')}
+        <NumberField label="Depth" ariaLabel={`${name} depth`} min={0} max={1000} value={effect.depth} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => patchGlass({ depth: Math.min(1000, Math.max(0, v)) })} />
+        {percent('dispersion', 'Dispersion')}
+        <NumberField label="Frost" ariaLabel={`${name} frost`} min={0} max={1000} value={effect.radius} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => patchGlass({ radius: Math.min(1000, Math.max(0, v)) })} />
+        {percent('splay', 'Splay')}
+      </div>
+    );
+  }
   if (effect.type === 'TEXTURE') {
     return (
       <div className={styles.grid2}>

@@ -18,6 +18,7 @@
 import { describe, expect, test } from 'vitest';
 import { EffectSchema, type Effect } from '../schema/document';
 import {
+  backdropEffect,
   blurOffsets,
   canAddEffect,
   convertEffect,
@@ -96,10 +97,22 @@ describe('effects', () => {
     expect(effectOutset([defaultEffect('LAYER_BLUR'), ({ ...defaultEffect('LAYER_BLUR'), radius: 30 } as Effect)])).toBe(4);
     const full = [...shadows.slice(0, 8), ...Array.from({ length: 8 }, () => defaultEffect('INNER_SHADOW')), ...blurs];
     expect(nextEffectType(full)).toBe('NOISE');
-    const everything = [...full, defaultEffect('NOISE'), defaultEffect('NOISE'), defaultEffect('TEXTURE')];
+    const everything = [...full, defaultEffect('NOISE'), defaultEffect('NOISE'), defaultEffect('TEXTURE'), defaultEffect('GLASS')];
     expect(nextEffectType(everything)).toBeNull();
     expect(canAddEffect([defaultEffect('NOISE')], 'NOISE')).toBe(true);
     expect(canAddEffect([defaultEffect('TEXTURE')], 'TEXTURE')).toBe(false);
+  });
+
+  test('glass: valid default, one per layer, and background blur vs glass renders the first one', () => {
+    expect(EffectSchema.parse(defaultEffect('GLASS'))).toEqual(defaultEffect('GLASS'));
+    expect(canAddEffect([defaultEffect('GLASS')], 'GLASS')).toBe(false);
+    const blur = { type: 'BACKGROUND_BLUR', radius: 10, visible: true } as Effect;
+    expect(backdropEffect([defaultEffect('DROP_SHADOW'), defaultEffect('GLASS'), blur])?.type).toBe('GLASS');
+    expect(backdropEffect([blur, defaultEffect('GLASS')])?.type).toBe('BACKGROUND_BLUR');
+    expect(backdropEffect([{ ...blur, visible: false }, defaultEffect('GLASS')])?.type).toBe('GLASS');
+    expect(backdropEffect(undefined)).toBeNull();
+    // Converting a blur to glass keeps its radius as frost.
+    expect(convertEffect(blur, 'GLASS')).toMatchObject({ type: 'GLASS', radius: 10 });
   });
 
   test('noise and texture defaults are valid; converting keeps visibility; unclipped texture extends the bounds', () => {

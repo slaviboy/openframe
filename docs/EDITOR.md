@@ -343,6 +343,10 @@ The Inspector then sets `sourceNodeId` as one undo step, unless the pick is one 
   - Swatches, gradient previews and picker thumbs render with `toCss(color, profile)`, which gives `color(display-p3 …)` for P3 files.
   - The contrast checker converts P3 colors to sRGB (`documentToWcag`) before computing WCAG ratios, and converts a fixed color back to P3.
 
+### Glass
+
+The effect type menu includes Glass, limited to one per layer. Its settings in `GrainSettings` are Angle, Light, Refraction, Depth, Dispersion, Frost and Splay. Numeric edits are gestures, so each drag or commit is one undo step. Converting a blur to glass keeps its radius as frost. The Scale tool scales frost and depth.
+
 ## Menus and command palette
 
 All menus are built from the command registry, so a menu item and its shortcut always run the same code. A command that can't run right now appears disabled; it is never hidden.

@@ -27,10 +27,13 @@ import {
   limitEffects,
   maxBlurRadius,
   progressiveBlurLevels,
+  backdropEffect,
   type BlurEffect,
+  type GlassEffect,
   type NoiseEffect,
   type TextureEffect,
 } from '@/core/effects/effects';
+import { GLASS_FIELD_SKSL } from './glass-sksl';
 import { NOISE_SKSL, TEXTURE_SKSL } from './noise-sksl';
 import { patternLayout } from '@/core/color/pattern';
 import type { ColorProfile } from '@/core/color/color';
@@ -143,6 +146,7 @@ export class SceneRenderer {
   private adjustEffect: RuntimeEffect | null | undefined;
   private noiseEffect: RuntimeEffect | null | undefined;
   private textureEffect: RuntimeEffect | null | undefined;
+  private glassEffect: RuntimeEffect | null | undefined;
   /** Pattern shaders of the layer being drawn, keyed by paint. */
   private readonly patternShaders = new Map<PatternPaint, Shader>();
   /** Pattern sources currently being recorded (guards against a pattern of itself). */
@@ -190,6 +194,8 @@ export class SceneRenderer {
     this.noiseEffect = undefined;
     this.textureEffect?.delete();
     this.textureEffect = undefined;
+    this.glassEffect?.delete();
+    this.glassEffect = undefined;
   }
 
   render(canvas: Canvas, store: DocumentStore, index: SceneIndex, pageId: Id, view: RenderView, options: RenderOptions = {}): RenderStats {
@@ -639,9 +645,105 @@ export class SceneRenderer {
     if (node.type === 'FRAME') this.drawStrokes(canvas, node);
   }
 
+  /**
+   * Glass, within the layer's shape (drawn before its content, which covers it where the fills are
+   * opaque):
+   * 1. the backdrop is frosted (blurred by `radius`) and refracted near the edges by a displacement
+   *    map whose field is the shape's edge normal (GLASS_FIELD_SKSL); with dispersion, red, green
+   *    and blue are displaced by slightly different amounts and recombined (Lighten);
+   * 2. a light from `lightAngle` adds a highlight along the edges, strongest on the side facing the
+   *    light and fainter opposite, widened and softened by `splay`.
+   */
+  private drawGlass(canvas: Canvas, node: SceneNode, effect: GlassEffect): void {
+    if (node.type === 'GROUP' || node.type === 'LINE' || node.type === 'SLICE') return;
+    const ck = this.ck;
+    const path = this.shapePath(node);
+    const box = path ? null : this.boxRRect(node);
+    if (!path && !box) return;
+    const { width, height } = node.size;
+    const created: ImageFilter[] = [];
+    const keep = <T extends ImageFilter>(filter: T): T => {
+      created.push(filter);
+      return filter;
+    };
+    canvas.save();
+    if (path) canvas.clipPath(path, ck.ClipOp.Intersect, true);
+    else canvas.clipRRect(box!, ck.ClipOp.Intersect, true);
+
+    const sigma = blurSigma(effect.radius);
+    let filter: ImageFilter | null = sigma > 0 ? keep(ck.ImageFilter.MakeBlur(sigma, sigma, ck.TileMode.Clamp, null)) : null;
+    const scale = effect.refraction * effect.depth;
+    this.glassEffect ??= ck.RuntimeEffect.Make(GLASS_FIELD_SKSL);
+    if (this.glassEffect && scale > 0) {
+      const corner = node.type === 'FRAME' || node.type === 'RECTANGLE' ? (node.cornerRadii ? Math.max(node.cornerRadii.topLeft, node.cornerRadii.topRight, node.cornerRadii.bottomRight, node.cornerRadii.bottomLeft) : node.cornerRadius) : 0;
+      const shader = this.glassEffect.makeShader([width, height, corner, node.type === 'ELLIPSE' ? 1 : 0, effect.depth]);
+      const field = keep(ck.ImageFilter.MakeShader(shader));
+      shader.delete();
+      const displace = (amount: number, input: ImageFilter | null) => keep(ck.ImageFilter.MakeDisplacementMap(ck.ColorChannel.Red, ck.ColorChannel.Green, amount, field, input));
+      if (effect.dispersion > 0) {
+        // Keep one color channel (and alpha) of a displaced copy; Lighten recombines the three.
+        const only = (channel: 0 | 1 | 2, input: ImageFilter) => {
+          const m = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0];
+          m[channel * 5 + channel] = 1;
+          const cf = ck.ColorFilter.MakeMatrix(m);
+          const result = keep(ck.ImageFilter.MakeColorFilter(cf, input));
+          cf.delete();
+          return result;
+        };
+        const spread = effect.dispersion * 0.3;
+        const red = only(0, displace(scale * (1 + spread), filter));
+        const green = only(1, displace(scale, filter));
+        const blue = only(2, displace(scale * (1 - spread), filter));
+        filter = keep(ck.ImageFilter.MakeBlend(ck.BlendMode.Lighten, keep(ck.ImageFilter.MakeBlend(ck.BlendMode.Lighten, red, green)), blue));
+      } else {
+        filter = displace(scale, filter);
+      }
+    }
+    if (filter) {
+      canvas.saveLayer(undefined, null, filter);
+      canvas.restore();
+    }
+
+    if (effect.lightIntensity > 0) {
+      const angle = (effect.lightAngle * Math.PI) / 180;
+      const toLight = { x: Math.cos(angle), y: -Math.sin(angle) };
+      const reach = Math.hypot(width, height) / 2;
+      const cx = width / 2;
+      const cy = height / 2;
+      const colors = [ck.Color4f(1, 1, 1, effect.lightIntensity), ck.Color4f(1, 1, 1, 0), ck.Color4f(1, 1, 1, effect.lightIntensity * 0.35)];
+      const shader = ck.Shader.MakeLinearGradient([cx + toLight.x * reach, cy + toLight.y * reach], [cx - toLight.x * reach, cy - toLight.y * reach], colors, [0, 0.5, 1], ck.TileMode.Clamp);
+      const light = this.shadowPaint;
+      light.setShader(shader);
+      light.setStyle(ck.PaintStyle.Stroke);
+      // The clip keeps the inner half of the stroke; splay widens and softens the highlight.
+      // The rim is as thick as a share of the glass edge depth (the clip keeps its inner half).
+      light.setStrokeWidth(Math.max(4, effect.depth * 0.4) * (1 + effect.splay * 4));
+      light.setAlphaf(1);
+      light.setBlendMode(ck.BlendMode.SrcOver);
+      const soft = effect.splay > 0 ? ck.MaskFilter.MakeBlur(ck.BlurStyle.Normal, effect.splay * 4, true) : null;
+      light.setMaskFilter(soft);
+      if (path) canvas.drawPath(path, light);
+      else canvas.drawRRect(box!, light);
+      light.setMaskFilter(null);
+      soft?.delete();
+      light.setShader(null as never);
+      light.setStyle(ck.PaintStyle.Fill);
+      shader.delete();
+    }
+    canvas.restore();
+    for (const f of created) f.delete();
+    path?.delete();
+  }
+
   /** Background blur: blurs what is already drawn behind the layer, within the layer's shape. */
   private drawBackgroundBlur(canvas: Canvas, node: SceneNode): void {
-    const effect = node.effects && limitEffects(node.effects).find((e): e is BlurEffect => e.type === 'BACKGROUND_BLUR' && e.visible && maxBlurRadius(e) > 0);
+    // Background blur and glass share one visual layer: only the first of them renders.
+    const backdrop = backdropEffect(node.effects);
+    if (backdrop?.type === 'GLASS') {
+      this.drawGlass(canvas, node, backdrop);
+      return;
+    }
+    const effect = backdrop && maxBlurRadius(backdrop) > 0 ? backdrop : undefined;
     if (!effect || node.type === 'GROUP' || node.type === 'LINE' || node.type === 'SLICE') return;
     const ck = this.ck;
     const path = this.shapePath(node);

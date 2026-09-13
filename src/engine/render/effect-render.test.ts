@@ -207,6 +207,32 @@ describe('effects rendering', () => {
     expect(outsideDark(render(rect([], BLACK)))).toBe(0);
   });
 
+  test('glass frosts, refracts and lights what is behind the layer; the first of glass and background blur renders', () => {
+    const glass = (patch: Record<string, unknown>): Effect =>
+      ({ type: 'GLASS', lightIntensity: 0, lightAngle: 90, refraction: 0, depth: 10, dispersion: 0, radius: 0, splay: 0, visible: true, ...patch }) as Effect;
+    /** Black on x < edge, white elsewhere, and a 40×40 glass layer at (20, 20). */
+    const scene =
+      (effects: Effect[], edge = 40): Build =>
+      (add, ids, page) => {
+        add({ ...makeRectangle({ id: ids.next(), parent: { id: page, key: 'A' }, name: 'Dark', x: 0, y: 0, width: edge, height: 80 }), fills: [solid(BLACK)] } as Node);
+        add({ ...makeRectangle({ id: ids.next(), parent: { id: page, key: 'B' }, name: 'Light', x: edge, y: 0, width: 80 - edge, height: 80 }), fills: [solid(WHITE)] } as Node);
+        add({ ...makeRectangle({ id: ids.next(), parent: { id: page, key: 'V' }, name: 'Glass', x: 20, y: 20, width: 40, height: 40 }), fills: [], effects } as Node);
+      };
+    // Frost blurs across the dark/light boundary.
+    expect(render(scene([glass({})]))(38, 40).r).toBeLessThan(20);
+    expect(render(scene([glass({ radius: 20 })]))(38, 40).r).toBeGreaterThan(40);
+    // Refraction pulls the backdrop from outside the edge: just inside the left edge the dark strip shows.
+    expect(render(scene([glass({})], 22))(24, 40).r).toBeGreaterThan(200);
+    expect(render(scene([glass({ refraction: 1 })], 22))(24, 40).r).toBeLessThan(128);
+    // Light from the top brightens the top edge more than the middle.
+    const lit = render(scene([glass({ lightIntensity: 1 })]));
+    expect(lit(30, 21).r).toBeGreaterThan(lit(30, 40).r + 30);
+    // Only the first of glass and background blur renders.
+    const blur: Effect = { type: 'BACKGROUND_BLUR', radius: 20, visible: true };
+    expect(render(scene([glass({}), blur]))(38, 40).r).toBeLessThan(20);
+    expect(render(scene([blur, glass({})]))(38, 40).r).toBeGreaterThan(40);
+  });
+
   test('inner shadow blend modes blend the shadow with the layer content', () => {
     expect(dark(render(rect([shadow('INNER_SHADOW')], RED))(40, 22))).toBe(true);
     // Screen with black leaves the content unchanged.

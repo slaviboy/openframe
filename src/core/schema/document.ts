@@ -231,6 +231,24 @@ export const TextureEffectSchema = z.object({
   visible: z.boolean(),
 });
 
+/**
+ * Glass: bends and frosts what is behind the layer inside its shape. `radius` is the frost blur,
+ * `refraction` (0–1) and `depth` (px from the edge inward) shape the lens-like edge, `dispersion`
+ * (0–1) splits colors along it, and a light from `lightAngle` degrees (0 = from the right,
+ * 90 = from the top) highlights the edges with `lightIntensity`, spread by `splay`.
+ */
+export const GlassEffectSchema = z.object({
+  type: z.literal('GLASS'),
+  lightIntensity: unit,
+  lightAngle: z.number().min(-180).max(180),
+  refraction: unit,
+  depth: z.number().min(0).max(1000),
+  dispersion: unit,
+  radius: z.number().min(0).max(1000),
+  splay: unit,
+  visible: z.boolean(),
+});
+
 export const EffectSchema = z.discriminatedUnion('type', [
   DropShadowEffectSchema,
   InnerShadowEffectSchema,
@@ -238,6 +256,7 @@ export const EffectSchema = z.discriminatedUnion('type', [
   BackgroundBlurEffectSchema,
   NoiseEffectSchema,
   TextureEffectSchema,
+  GlassEffectSchema,
 ]);
 
 export const StrokeAlignSchema = z.enum(['INSIDE', 'CENTER', 'OUTSIDE']);

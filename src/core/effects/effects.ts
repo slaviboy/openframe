@@ -24,7 +24,21 @@ export const EFFECT_TYPE_LABELS: Record<EffectType, string> = {
   BACKGROUND_BLUR: 'Background blur',
   NOISE: 'Noise',
   TEXTURE: 'Texture',
+  GLASS: 'Glass',
 };
+
+export type GlassEffect = Extract<Effect, { type: 'GLASS' }>;
+
+/**
+ * The effect drawn behind a layer: the first visible background blur or glass in list order.
+ * The two share the same visual layer, so only the first one encountered renders.
+ */
+export function backdropEffect(effects: readonly Effect[] | undefined): Extract<Effect, { type: 'BACKGROUND_BLUR' | 'GLASS' }> | null {
+  for (const effect of limitEffects(effects ?? [])) {
+    if ((effect.type === 'BACKGROUND_BLUR' || effect.type === 'GLASS') && effect.visible) return effect;
+  }
+  return null;
+}
 
 export type NoiseEffect = Extract<Effect, { type: 'NOISE' }>;
 export type TextureEffect = Extract<Effect, { type: 'TEXTURE' }>;
@@ -32,12 +46,12 @@ export type NoiseType = NoiseEffect['noiseType'];
 
 export const NOISE_TYPE_LABELS: Record<NoiseType, string> = { MONOTONE: 'Mono', DUOTONE: 'Duo', MULTITONE: 'Multi' };
 
-export const EFFECT_TYPES: readonly EffectType[] = ['DROP_SHADOW', 'INNER_SHADOW', 'LAYER_BLUR', 'BACKGROUND_BLUR', 'NOISE', 'TEXTURE'];
+export const EFFECT_TYPES: readonly EffectType[] = ['DROP_SHADOW', 'INNER_SHADOW', 'LAYER_BLUR', 'BACKGROUND_BLUR', 'NOISE', 'TEXTURE', 'GLASS'];
 
 export const isShadow = (effect: Effect): effect is ShadowEffect => effect.type === 'DROP_SHADOW' || effect.type === 'INNER_SHADOW';
 
 /** How many effects of each type one layer can have. */
-export const EFFECT_LIMITS: Readonly<Record<EffectType, number>> = { DROP_SHADOW: 8, INNER_SHADOW: 8, LAYER_BLUR: 1, BACKGROUND_BLUR: 1, NOISE: 2, TEXTURE: 1 };
+export const EFFECT_LIMITS: Readonly<Record<EffectType, number>> = { DROP_SHADOW: 8, INNER_SHADOW: 8, LAYER_BLUR: 1, BACKGROUND_BLUR: 1, NOISE: 2, TEXTURE: 1, GLASS: 1 };
 
 /** The effects that take part in rendering: the first ones of each type, up to its limit, in list order. */
 export function limitEffects(effects: readonly Effect[]): Effect[] {
@@ -81,6 +95,8 @@ export function defaultEffect(type: EffectType): Effect {
       };
     case 'TEXTURE':
       return { type, noiseSize: 4, radius: 4, clipToShape: false, visible: true };
+    case 'GLASS':
+      return { type, lightIntensity: 0.8, lightAngle: 45, refraction: 0.8, depth: 20, dispersion: 0.2, radius: 4, splay: 0.2, visible: true };
   }
 }
 
