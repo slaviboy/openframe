@@ -33,6 +33,8 @@ import {
 } from '@/core/effects/effects';
 import { NOISE_SKSL, TEXTURE_SKSL } from './noise-sksl';
 import { patternLayout } from '@/core/color/pattern';
+import type { ColorProfile } from '@/core/color/color';
+import { documentToSrgb } from '@/core/color/color-profile';
 import { invert } from '@/core/math/matrix';
 import { hasGeometry, isSceneNode, type PatternPaint } from '@/core/schema/document';
 import type { DocumentStore } from '@/core/document/store';
@@ -90,6 +92,8 @@ export interface RenderOptions {
   readonly includeHidden?: boolean;
   /** Layer in crop mode: its whole image is shown faded under the crop. */
   readonly cropping?: Id | null;
+  /** The file's color profile: how document color values are interpreted. */
+  readonly colorProfile?: ColorProfile;
 }
 
 interface DrawContext {
@@ -143,6 +147,8 @@ export class SceneRenderer {
   private readonly patternShaders = new Map<PatternPaint, Shader>();
   /** Pattern sources currently being recorded (guards against a pattern of itself). */
   private readonly patternSources = new Set<Id>();
+  /** Color profile of the page being rendered. */
+  private profile: ColorProfile = 'SRGB';
 
   constructor(
     private readonly ck: CanvasKit,
@@ -188,6 +194,7 @@ export class SceneRenderer {
 
   render(canvas: Canvas, store: DocumentStore, index: SceneIndex, pageId: Id, view: RenderView, options: RenderOptions = {}): RenderStats {
     const start = performance.now();
+    this.profile = options.colorProfile ?? 'SRGB';
     const stats: RenderStats = { drawn: 0, culled: 0, ms: 0 };
     const page = store.get(pageId);
     if (options.outlines) {
@@ -461,7 +468,7 @@ export class SceneRenderer {
         if (!isNormalBlend(effect.blendMode)) continue;
         const sigma = blurSigma(effect.radius);
         const c = effect.color;
-        const shadow = keep(ck.ImageFilter.MakeDropShadowOnly(effect.offset.x, effect.offset.y, sigma, sigma, ck.Color4f(c.r, c.g, c.b, c.a), spreadInput(effect.spread, null)));
+        const shadow = keep(ck.ImageFilter.MakeDropShadowOnly(effect.offset.x, effect.offset.y, sigma, sigma, this.color(c), spreadInput(effect.spread, null)));
         drops = drops ? over(drops, shadow) : shadow;
         knockOut ||= !effect.showShadowBehindNode;
       } else if (effect.type === 'INNER_SHADOW') {
@@ -600,7 +607,7 @@ export class SceneRenderer {
       const c = effect.color;
       const spread =
         effect.spread > 0 ? keep(ck.ImageFilter.MakeDilate(effect.spread, effect.spread, null)) : effect.spread < 0 ? keep(ck.ImageFilter.MakeErode(-effect.spread, -effect.spread, null)) : null;
-      let filter: ImageFilter = keep(ck.ImageFilter.MakeDropShadowOnly(effect.offset.x, effect.offset.y, sigma, sigma, ck.Color4f(c.r, c.g, c.b, c.a), spread));
+      let filter: ImageFilter = keep(ck.ImageFilter.MakeDropShadowOnly(effect.offset.x, effect.offset.y, sigma, sigma, this.color(c), spread));
       if (!effect.showShadowBehindNode) {
         const opaque = ck.ColorFilter.MakeMatrix([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 255, 0]);
         const silhouette = keep(ck.ImageFilter.MakeColorFilter(opaque, null));
@@ -922,7 +929,7 @@ export class SceneRenderer {
   private gradientShader(paint: GradientPaint, size: Size): Shader {
     const ck = this.ck;
     const stops = [...paint.gradientStops].sort((a, b) => a.position - b.position);
-    const colors = stops.map((s) => ck.Color4f(s.color.r, s.color.g, s.color.b, s.color.a));
+    const colors = stops.map((s) => this.color(s.color));
     const positions = stops.map((s) => s.position);
     const [a, b, c, d, e, f] = paint.gradientTransform;
     // Lines have no height; give their gradient the stroke's thickness so it stays defined.
@@ -956,7 +963,9 @@ export class SceneRenderer {
     }
   }
 
+  /** A document color as an (extended) sRGB Color4f; P3 files convert, and a P3 surface keeps the wide gamut. */
   private color(c: Color, opacity = 1): Float32Array {
-    return this.ck.Color4f(c.r, c.g, c.b, c.a * opacity);
+    const s = documentToSrgb(c, this.profile);
+    return this.ck.Color4f(s.r, s.g, s.b, c.a * opacity);
   }
 }

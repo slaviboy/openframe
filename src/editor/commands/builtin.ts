@@ -29,6 +29,7 @@ import type { CommandDefinition } from './registry';
 import { layersWithSame, matchingLayers } from './select-similar';
 import { canTidyUp, tidyUpSelection } from './tidy';
 import { canToggleMask, toggleMask } from './masks';
+import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/core/color/color-profile';
 import { beginCrop, cropTarget, endCrop } from '../interactions/crop';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
 
@@ -308,7 +309,18 @@ const HIERARCHY_COMMANDS: CommandDefinition[] = [
   },
 ];
 
+const COLOR_PROFILE_COMMANDS: CommandDefinition[] = (['SRGB', 'DISPLAY_P3'] as const).map((profile) => ({
+  id: profile === 'SRGB' ? 'file.colorProfileSrgb' : 'file.colorProfileP3',
+  label: `Color profile: ${COLOR_PROFILE_LABELS[profile]}`,
+  category: 'File',
+  checked: (e) => documentColorProfile(e.doc) === profile,
+  run: (e) => {
+    if (documentColorProfile(e.doc) !== profile) e.history.run('Change color profile', (tx) => setColorProfile(tx, profile));
+  },
+}));
+
 export const BUILTIN_COMMANDS: CommandDefinition[] = [
+  ...COLOR_PROFILE_COMMANDS,
   // Listed first so Return applies a crop before it selects children.
   {
     id: 'image.applyCrop',

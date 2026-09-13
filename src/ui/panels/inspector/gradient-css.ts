@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-import { toCss } from '@/core/color/color';
+import { toCss, type ColorProfile } from '@/core/color/color';
 import type { GradientPaint } from '@/core/schema/document';
 
 /** CSS approximation of a gradient paint for inspector swatches (ignores the gradient transform). */
-export function gradientCss(paint: GradientPaint): string {
+export function gradientCss(paint: GradientPaint, profile: ColorProfile = 'SRGB'): string {
   const stops = [...paint.gradientStops]
     .sort((a, b) => a.position - b.position)
-    .map((s) => `${toCss(s.color)} ${Math.round(s.position * 1000) / 10}%`)
+    .map((s) => `${toCss(s.color, profile)} ${Math.round(s.position * 1000) / 10}%`)
     .join(', ');
   switch (paint.type) {
     case 'GRADIENT_LINEAR':

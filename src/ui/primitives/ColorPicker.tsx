@@ -30,7 +30,8 @@ interface EyeDropperConstructor {
 }
 
 import type { BlendMode } from '@/core/schema/document';
-import { contrastRatio } from '@/core/color/color';
+import { clampColor, contrastRatio, srgbToP3, type ColorProfile } from '@/core/color/color';
+import { documentToWcag } from '@/core/color/color-profile';
 import {
   CONTRAST_CATEGORY_LABELS,
   formatContrastRatio,
@@ -64,6 +65,8 @@ export interface ColorPickerProps {
   readonly onPickFromCanvas?: (() => Promise<RGBA | null>) | undefined;
   /** The color behind the layer, for the contrast checker (shown when given). */
   readonly getContrastBackground?: (() => RGBA) | undefined;
+  /** The file's color profile (swatches and contrast math follow it). */
+  readonly colorProfile?: ColorProfile | undefined;
 }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
@@ -210,7 +213,7 @@ export function ColorPicker(props: ColorPickerProps) {
       >
         <div className={styles.white} />
         <div className={styles.black} />
-        <div className={styles.thumb} style={{ left: `${hsb.s * 100}%`, top: `${(1 - hsb.b) * 100}%`, background: toCss({ ...color, a: 1 }) }} />
+        <div className={styles.thumb} style={{ left: `${hsb.s * 100}%`, top: `${(1 - hsb.b) * 100}%`, background: toCss({ ...color, a: 1 }, props.colorProfile) }} />
       </div>
       <input
         className={`${styles.slider} ${styles.hue}`}
@@ -234,7 +237,7 @@ export function ColorPicker(props: ColorPickerProps) {
         step={1}
         aria-label="Alpha"
         value={Math.round(opacity * 100)}
-        style={{ background: `linear-gradient(to right, transparent, ${toCss({ ...color, a: 1 })})` }}
+        style={{ background: `linear-gradient(to right, transparent, ${toCss({ ...color, a: 1 }, props.colorProfile)})` }}
         onChange={(e) => onOpacity(Number(e.target.value) / 100)}
       />
       <div className={styles.row}>
@@ -290,7 +293,7 @@ export function ColorPicker(props: ColorPickerProps) {
           </button>
         )}
       </div>
-      {props.getContrastBackground && <ContrastSection color={color} getBackground={props.getContrastBackground} onColor={onColor} />}
+      {props.getContrastBackground && <ContrastSection color={color} getBackground={props.getContrastBackground} onColor={onColor} profile={props.colorProfile ?? 'SRGB'} />}
     </div>,
     document.body,
   );
@@ -303,7 +306,7 @@ const CONTRAST_LEVELS: readonly ContrastLevel[] = ['AA', 'AAA'];
  * category menu, and a badge per compliance level. A failing badge adjusts the color to the nearest
  * compliant one.
  */
-function ContrastSection({ color, getBackground, onColor }: { color: RGBA; getBackground: () => RGBA; onColor: (color: RGBA) => void }) {
+function ContrastSection({ color, getBackground, onColor, profile }: { color: RGBA; getBackground: () => RGBA; onColor: (color: RGBA) => void; profile: ColorProfile }) {
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<ContrastCategory>('AUTO');
   if (!open) {
@@ -315,12 +318,13 @@ function ContrastSection({ color, getBackground, onColor }: { color: RGBA; getBa
   }
   const background = getBackground();
   const foreground = { ...color, a: 1 };
-  const ratio = contrastRatio(foreground, background);
+  // WCAG math is defined in sRGB: P3 colors are converted (and clipped) first.
+  const ratio = contrastRatio(documentToWcag(foreground, profile), documentToWcag(background, profile));
   const resolved = resolveContrastCategory(category);
   return (
     <section className={styles.contrast} aria-label="Color contrast">
       <div className={styles.row}>
-        <span className={styles.contrastSwatch} style={{ background: toCss(background), color: toCss(foreground) }} aria-hidden="true">
+        <span className={styles.contrastSwatch} style={{ background: toCss(background, profile), color: toCss(foreground, profile) }} aria-hidden="true">
           Aa
         </span>
         <output className={styles.contrastRatio} aria-label="Contrast ratio">
@@ -356,8 +360,8 @@ function ContrastSection({ color, getBackground, onColor }: { color: RGBA; getBa
               aria-label={`Fix ${level} contrast`}
               title={`Needs ${target}:1 — click to adjust the color`}
               onClick={() => {
-                const fixed = nearestCompliantColor(foreground, background, target);
-                if (fixed) onColor({ ...fixed, a: 1 });
+                const fixed = nearestCompliantColor(documentToWcag(foreground, profile), documentToWcag(background, profile), target);
+                if (fixed) onColor({ ...(profile === 'DISPLAY_P3' ? clampColor(srgbToP3(fixed)) : fixed), a: 1 });
               }}
             >
               {level} ⚠

@@ -311,6 +311,8 @@ export const DocumentNodeSchema = z.object({
   id: z.literal('0:0'),
   type: z.literal('DOCUMENT'),
   name: z.string(),
+  /** How color values are interpreted and rendered; absent means sRGB. */
+  colorProfile: z.enum(['SRGB', 'DISPLAY_P3']).optional(),
 });
 
 /**

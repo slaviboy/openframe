@@ -71,6 +71,10 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
 - Ellipses, polygons and stars draw as paths built once per node per frame. The same path is the clip for inside and outside strokes. Polygon and star vertices come from [`core/geometry/shapes.ts`](../src/core/geometry/shapes.ts), which the hit tester also uses.
 
 **Paints**
+- **Color profile.** `RenderOptions.colorProfile` is the file's profile.
+  - **Colors:** every document color passes through `color()`. In Display P3 files, `documentToSrgb` converts it to extended sRGB, which can hold values outside 0–1. Solids, gradient stops, shadow colors and the page background all go this way.
+  - **Surface:** CanvasHost creates the canvas surface with `ColorSpace.DISPLAY_P3` for P3 files, so Skia keeps the wider gamut when it maps colors onto the surface. It recreates the surface when the profile changes.
+  - **Exceptions:** noise uniforms and image pixels are not converted. The noise shader runs in the surface's color space, and encoded images carry their own color space.
 - Solid paints set the paint color with the paint opacity folded into alpha.
 - Gradient paints set a shader and a white color whose alpha is the paint opacity. Shaders are built per draw in unit gradient space and mapped onto the layer with `scale(width, height) · gradientTransform` (lines use the stroke weight as height):
   - linear: `MakeLinearGradient` from (0, ½) to (1, ½)

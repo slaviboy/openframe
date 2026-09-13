@@ -26,6 +26,8 @@ import type { ToolManager } from '@/editor/tools/tool-manager';
 import type { PointerInfo } from '@/editor/tools/types';
 import { loadCanvasKit } from '@/engine/ck/canvaskit';
 import { screenToWorld } from '@/editor/viewport/viewport';
+import type { ColorProfile } from '@/core/color/color';
+import { documentColorProfile } from '@/core/color/color-profile';
 import { SceneRenderer, type RenderOptions } from '@/engine/render/scene-renderer';
 import { imageFilesOf } from '../images/import-image';
 import { IS_MAC } from '../keyboard/keyboard-controller';
@@ -136,19 +138,25 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
     let frame = 0;
     let disposed = false;
     let size = { width: 0, height: 0, dpr: 1 };
+    let surfaceProfile: ColorProfile = 'SRGB';
 
     const createSurface = () => {
       if (!ck) return;
       surface?.delete();
-      surface = ck.MakeWebGLCanvasSurface(sceneCanvas) ?? ck.MakeSWCanvasSurface(sceneCanvas);
+      // The surface uses the file's color space, so Display P3 colors keep their wider gamut.
+      surfaceProfile = documentColorProfile(editor.doc);
+      const colorSpace = surfaceProfile === 'DISPLAY_P3' ? ck.ColorSpace.DISPLAY_P3 : ck.ColorSpace.SRGB;
+      surface = ck.MakeWebGLCanvasSurface(sceneCanvas, colorSpace) ?? ck.MakeSWCanvasSurface(sceneCanvas);
       if (!surface) setStatus({ kind: 'error', message: 'Could not create a drawing surface.' });
     };
 
     const renderScene = () => {
+      // Changing the file's color profile recreates the surface in the new color space.
+      if (surface && documentColorProfile(editor.doc) !== surfaceProfile) createSurface();
       if (!surface || !renderer) return;
       const v = editor.state.viewport;
       try {
-        renderer.render(surface.getCanvas(), editor.doc, editor.scene, editor.pageId, { ...v, ...size }, { ...outlinesRef.current, cropping: editor.state.getSnapshot().croppingId });
+        renderer.render(surface.getCanvas(), editor.doc, editor.scene, editor.pageId, { ...v, ...size }, { ...outlinesRef.current, cropping: editor.state.getSnapshot().croppingId, colorProfile: surfaceProfile });
         surface.flush();
       } catch (error) {
         console.error('Openframe: scene render failed', error);
@@ -164,7 +172,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
       if (x < 0 || y < 0 || x >= sceneCanvas.width || y >= sceneCanvas.height) return null;
       renderScene();
       const image = surface.makeImageSnapshot([x, y, x + 1, y + 1]);
-      const pixel = image.readPixels(0, 0, { width: 1, height: 1, colorType: ck.ColorType.RGBA_8888, alphaType: ck.AlphaType.Unpremul, colorSpace: ck.ColorSpace.SRGB }) as Uint8Array | null;
+      const pixel = image.readPixels(0, 0, { width: 1, height: 1, colorType: ck.ColorType.RGBA_8888, alphaType: ck.AlphaType.Unpremul, colorSpace: surfaceProfile === 'DISPLAY_P3' ? ck.ColorSpace.DISPLAY_P3 : ck.ColorSpace.SRGB }) as Uint8Array | null;
       image.delete();
       return pixel ? { r: pixel[0]! / 255, g: pixel[1]! / 255, b: pixel[2]! / 255, a: 1 } : null;
     });

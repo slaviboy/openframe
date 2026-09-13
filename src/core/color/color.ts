@@ -61,7 +61,14 @@ export function parseHex(input: string): RGBA | null {
   return { r: n(0), g: n(2), b: n(4), a: s.length === 8 ? n(6) : 1 };
 }
 
-export function toCss(c: RGBA): string {
+/** How a file's color values are interpreted: sRGB, or the wider Display P3 gamut. */
+export type ColorProfile = 'SRGB' | 'DISPLAY_P3';
+
+const round4 = (v: number) => Math.round(v * 10000) / 10000;
+
+/** CSS for a color. Display P3 files use `color(display-p3 …)` so swatches show the same color as the canvas. */
+export function toCss(c: RGBA, profile: ColorProfile = 'SRGB'): string {
+  if (profile === 'DISPLAY_P3') return `color(display-p3 ${round4(clamp01(c.r))} ${round4(clamp01(c.g))} ${round4(clamp01(c.b))} / ${round4(clamp01(c.a))})`;
   if (c.a >= 1) return `#${toHex6(c).toLowerCase()}`;
   return `rgba(${to255(c.r)}, ${to255(c.g)}, ${to255(c.b)}, ${Math.round(clamp01(c.a) * 1000) / 1000})`;
 }
@@ -108,6 +115,45 @@ function hueOf(c: RGBA, max: number, d: number): number {
   h *= 60;
   return h < 0 ? h + 360 : h;
 }
+
+/** sRGB transfer function (also used by Display P3), extended to negative and > 1 values by symmetry. */
+const toLinear = (v: number) => {
+  const a = Math.abs(v);
+  return Math.sign(v) * (a <= 0.04045 ? a / 12.92 : ((a + 0.055) / 1.055) ** 2.4);
+};
+const fromLinear = (v: number) => {
+  const a = Math.abs(v);
+  return Math.sign(v) * (a <= 0.0031308 ? a * 12.92 : 1.055 * a ** (1 / 2.4) - 0.055);
+};
+
+/** Display P3 → extended sRGB (values outside 0–1 are colors outside the sRGB gamut). */
+export function p3ToSrgb(c: RGBA): RGBA {
+  const r = toLinear(c.r);
+  const g = toLinear(c.g);
+  const b = toLinear(c.b);
+  return {
+    r: fromLinear(1.2249401 * r - 0.2249404 * g),
+    g: fromLinear(-0.0420569 * r + 1.0420571 * g),
+    b: fromLinear(-0.0196376 * r - 0.0786361 * g + 1.0982735 * b),
+    a: c.a,
+  };
+}
+
+/** sRGB (possibly extended) → Display P3. */
+export function srgbToP3(c: RGBA): RGBA {
+  const r = toLinear(c.r);
+  const g = toLinear(c.g);
+  const b = toLinear(c.b);
+  return {
+    r: fromLinear(0.8224621 * r + 0.177538 * g),
+    g: fromLinear(0.0331941 * r + 0.9668058 * g),
+    b: fromLinear(0.0170827 * r + 0.0723974 * g + 0.9105199 * b),
+    a: c.a,
+  };
+}
+
+/** Clamps each channel to 0–1 (gamut clipping). */
+export const clampColor = (c: RGBA): RGBA => ({ r: clamp01(c.r), g: clamp01(c.g), b: clamp01(c.b), a: clamp01(c.a) });
 
 /** WCAG 2.x relative luminance. */
 export function relativeLuminance(c: RGBA): number {

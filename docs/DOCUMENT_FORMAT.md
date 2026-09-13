@@ -135,7 +135,7 @@ Frames and rectangles also accept `individualStrokeWeights: { top, right, bottom
 
 | Type | Extra fields |
 |---|---|
-| `DOCUMENT` | `id: "0:0"`, `name` |
+| `DOCUMENT` | `id: "0:0"`, `name`, optional `colorProfile` (`"SRGB"` \| `"DISPLAY_P3"`; absent means sRGB): how every color value in the file is interpreted |
 | `PAGE` | `backgroundColor: Color` (canvas color); optional `guides: Guide[]` in world coordinates |
 | `FRAME` | `clipsContent: boolean`; optional `guides: Guide[]` in the frame's local space (used for frames on the page or in a section) |
 

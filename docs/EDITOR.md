@@ -334,6 +334,15 @@ Choosing **Pattern** in a paint row's type menu creates a pattern paint with no 
 
 The Inspector then sets `sourceNodeId` as one undo step, unless the pick is one of the selected layers themselves.
 
+### Color profile
+
+**File › Color profile: sRGB / Display P3** (`file.colorProfileSrgb`, `file.colorProfileP3`) runs `setColorProfile` ([`core/color/color-profile.ts`](../src/core/color/color-profile.ts)).
+- The setting is stored on the document node, so it undoes and saves like any other edit.
+- Color values are not changed.
+- The UI reads the profile with `useColorProfile`:
+  - Swatches, gradient previews and picker thumbs render with `toCss(color, profile)`, which gives `color(display-p3 …)` for P3 files.
+  - The contrast checker converts P3 colors to sRGB (`documentToWcag`) before computing WCAG ratios, and converts a fixed color back to P3.
+
 ## Menus and command palette
 
 All menus are built from the command registry, so a menu item and its shortcut always run the same code. A command that can't run right now appears disabled; it is never hidden.

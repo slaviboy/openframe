@@ -40,6 +40,7 @@ import {
 } from '@/core/effects/effects';
 import { moveItem } from '@/core/collections/move-item';
 import { backgroundColorBehind } from '@/core/color/contrast';
+import { useColorProfile } from '../../hooks/useColorProfile';
 import { ReorderHandle } from './ReorderHandle';
 import { beginBlurEdit, endBlurEdit } from '@/editor/interactions/blur-edit';
 import { canonicalStringify } from '@/core/serialize/serialize';
@@ -699,6 +700,7 @@ function PaintSection({
 }) {
   const editor = useEditor();
   const gesture = useGesture(`Change ${title.toLowerCase()}`);
+  const profile = useColorProfile();
   const strokeWeight = useGesture('Change stroke weight');
   const paints = shared(nodes, (n) => n[field], paintsEqual);
   const mixed = paints === MIXED;
@@ -813,11 +815,11 @@ function PaintSection({
                           className={gradientStyles.swatch}
                           aria-label={`Edit ${title.toLowerCase()} ${list.length - index} gradient on canvas`}
                           aria-pressed={editingIndex === index}
-                          style={{ background: gradientCss(paint) }}
+                          style={{ background: gradientCss(paint, profile) }}
                           onClick={() => (editingIndex === index ? endGradientEdit(editor) : beginGradientEdit(editor, nodes[0]!.id, field, index))}
                         />
                       ) : (
-                        <span className={gradientStyles.swatch} role="img" aria-label={`${title} ${list.length - index} gradient`} style={{ background: gradientCss(paint) }} />
+                        <span className={gradientStyles.swatch} role="img" aria-label={`${title} ${list.length - index} gradient`} style={{ background: gradientCss(paint, profile) }} />
                       )
                     )}
                     <NumberField
@@ -1491,6 +1493,7 @@ interface ColorControlProps {
  */
 function ColorControl({ label, color, opacity, onColor, onOpacity, onGestureStart, onGestureEnd, blendMode, onBlendMode, getContrastBackground }: ColorControlProps) {
   const editor = useEditor();
+  const profile = useColorProfile();
   const hex = toHex6(color);
   // Draft text while the hex field is being edited; otherwise it mirrors the document.
   const [draft, setDraft] = useState<string | null>(null);
@@ -1515,7 +1518,7 @@ function ColorControl({ label, color, opacity, onColor, onOpacity, onGestureStar
         aria-label={`${label} color`}
         aria-haspopup="dialog"
         aria-expanded={pickerAnchor !== null}
-        style={{ background: toCss({ ...color, a: 1 }) }}
+        style={{ background: toCss({ ...color, a: 1 }, profile) }}
         onClick={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
           setPickerAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
@@ -1536,6 +1539,7 @@ function ColorControl({ label, color, opacity, onColor, onOpacity, onGestureStar
           blendOptions={PAINT_BLEND_OPTIONS}
           onPickFromCanvas={editor.pickColorFromCanvas ?? undefined}
           getContrastBackground={getContrastBackground}
+          colorProfile={profile}
           onBlendMode={onBlendMode}
         />
       )}

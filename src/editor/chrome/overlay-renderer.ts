@@ -29,7 +29,8 @@ import type { Editor } from '../editor';
 import { cropImageWorldQuad } from '../interactions/crop';
 import { gradientEditChrome, type GradientChrome } from '../interactions/gradient-edit';
 import { blurEditChrome } from '../interactions/blur-edit';
-import { toCss, toHex6 } from '@/core/color/color';
+import { toCss, toHex6, type ColorProfile } from '@/core/color/color';
+import { documentColorProfile } from '@/core/color/color-profile';
 import type { Color } from '@/core/schema/document';
 import { isMaskLayer } from '@/core/scene/masks';
 
@@ -172,7 +173,7 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
     ctx.fillText(text, x + 4, y + 8.5);
   }
 
-  if (input.eyedropper) drawEyedropperLoupe(ctx, input.eyedropper, theme);
+  if (input.eyedropper) drawEyedropperLoupe(ctx, input.eyedropper, theme, documentColorProfile(editor.doc));
 
   const gradient = gradientEditChrome(editor);
   if (gradient) drawGradientChrome(ctx, editor, gradient, theme);
@@ -187,12 +188,12 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
 }
 
 /** Eyedropper loupe: a swatch of the sampled color beside the pointer, with its hex value. */
-function drawEyedropperLoupe(ctx: CanvasRenderingContext2D, sample: { readonly screen: Vec2; readonly color: Color }, theme: ChromeTheme): void {
+function drawEyedropperLoupe(ctx: CanvasRenderingContext2D, sample: { readonly screen: Vec2; readonly color: Color }, theme: ChromeTheme, profile: ColorProfile): void {
   const cx = Math.round(sample.screen.x + 28);
   const cy = Math.round(sample.screen.y - 28);
   ctx.beginPath();
   ctx.arc(cx, cy, 18, 0, Math.PI * 2);
-  ctx.fillStyle = toCss({ ...sample.color, a: 1 });
+  ctx.fillStyle = toCss({ ...sample.color, a: 1 }, profile);
   ctx.fill();
   ctx.lineWidth = 3;
   ctx.strokeStyle = '#ffffff';
@@ -258,7 +259,7 @@ function drawGradientChrome(ctx: CanvasRenderingContext2D, editor: Editor, g: Gr
     const p = worldToScreen(v, stop.point);
     const x = Math.round(p.x - size / 2) + 0.5;
     const y = Math.round(p.y - size / 2) + 0.5;
-    ctx.fillStyle = toCss(stop.color);
+    ctx.fillStyle = toCss(stop.color, documentColorProfile(editor.doc));
     ctx.fillRect(x, y, size, size);
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 2;
