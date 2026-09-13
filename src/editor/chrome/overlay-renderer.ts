@@ -48,6 +48,10 @@ export interface OverlayInput {
   readonly marquee: Rect | null;
   /** Live angle label while rotating (degrees, and pointer position in canvas pixels). */
   readonly rotation?: { angle: number; screen: Vec2 } | null;
+  /** Corner radius handles (canvas pixels); `active` is the index of the dragged one, or −1. */
+  readonly radiusHandles?: { readonly points: readonly Vec2[]; readonly active: number } | null;
+  /** Live radius label while dragging a radius handle. */
+  readonly radiusLabel?: { radius: number; screen: Vec2 } | null;
   /** Snapping guides of the current move, in world coordinates. */
   readonly guides?: readonly SnapGuide[];
   /** ⌥ distance measurements, in world coordinates. */
@@ -158,12 +162,29 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
     ctx.strokeRect(Math.round(p.x) + 0.5, Math.round(p.y) + 0.5, Math.round(w), Math.round(h));
   }
 
-  if (input.rotation) {
-    const text = `${formatNumber(input.rotation.angle)}°`;
+  if (input.radiusHandles) {
+    input.radiusHandles.points.forEach((p, i) => {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = i === input.radiusHandles!.active ? theme.selection : theme.handleFill;
+      ctx.fill();
+      ctx.strokeStyle = theme.selection;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    });
+  }
+
+  const label = input.rotation
+    ? { text: `${formatNumber(input.rotation.angle)}°`, screen: input.rotation.screen }
+    : input.radiusLabel
+      ? { text: `Radius ${formatNumber(input.radiusLabel.radius)}`, screen: input.radiusLabel.screen }
+      : null;
+  if (label) {
+    const text = label.text;
     ctx.font = theme.font;
     const w = Math.ceil(ctx.measureText(text).width) + 8;
-    const x = Math.round(input.rotation.screen.x + 14);
-    const y = Math.round(input.rotation.screen.y + 14);
+    const x = Math.round(label.screen.x + 14);
+    const y = Math.round(label.screen.y + 14);
     ctx.fillStyle = theme.selection;
     ctx.beginPath();
     ctx.roundRect(x, y, w, 16, 2);

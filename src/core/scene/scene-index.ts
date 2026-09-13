@@ -24,6 +24,7 @@ import { SpatialIndex } from '../math/spatial-index';
 import type { Vec2 } from '../math/vec';
 import { effectOutset } from '../effects/effects';
 import { distanceToSegment, lineCapSize, pointInPolygon, polygonPoints, starPoints } from '../geometry/shapes';
+import { flattenPath, rectangleCorners, resolveCornerRadii, roundedPolygon } from '../geometry/corners';
 import { hasGeometry, isSceneNode, type Node, type SceneNode, type StrokeCap } from '../schema/document';
 
 export const matrixOf = (t: readonly number[]): Matrix => ({ a: t[0]!, b: t[1]!, c: t[2]!, d: t[3]!, e: t[4]!, f: t[5]! });
@@ -216,12 +217,14 @@ export function nodeContainsLocal(node: SceneNode, p: Vec2, tolerance: number): 
     case 'FRAME':
     case 'RECTANGLE': {
       if (!containsPoint({ x: -tolerance, y: -tolerance, width: w + tolerance * 2, height: h + tolerance * 2 }, p)) return false;
-      const radii = node.cornerRadii ?? {
-        topLeft: node.cornerRadius,
-        topRight: node.cornerRadius,
-        bottomRight: node.cornerRadius,
-        bottomLeft: node.cornerRadius,
-      };
+      const radii = resolveCornerRadii(node);
+      if (node.cornerSmoothing && Math.max(radii.topLeft, radii.topRight, radii.bottomRight, radii.bottomLeft) > 0) {
+        // Smoothed corners: test against the flattened outline.
+        const corners = rectangleCorners(w, h, radii);
+        const outline = flattenPath(roundedPolygon(corners.points, corners.radii, node.cornerSmoothing));
+        if (pointInPolygon(p, outline)) return true;
+        return tolerance > 0 && outline.some((a, i) => distanceToSegment(p, a, outline[(i + 1) % outline.length]!) <= tolerance);
+      }
       const maxR = Math.min(w, h) / 2;
       const corner = (cx: number, cy: number, r: number) => {
         const rr = Math.min(r, maxR);

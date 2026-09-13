@@ -33,6 +33,9 @@ import { measureBetween, type MeasureLine } from '@/core/scene/measure';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
 import { isSceneNode } from '@/core/schema/document';
 import { beginCrop } from '../interactions/crop';
+import { resolveCornerRadii } from '@/core/geometry/corners';
+import type { CornerRadii } from '@/core/schema/document';
+import { applyDraggedRadius, draggedRadius, hitRadiusHandle, radiusHandles, radiusHandleScreen, radiusTarget, type RadiusHandle } from '../interactions/radius-handles';
 import {
   frameCenterWorld,
   handleCursor,
@@ -124,6 +127,17 @@ type Gesture =
       /** Rotation shown in the angle label. */
       displayAngle: number;
       last: PointerInfo;
+    }
+  /** Dragging an on-canvas corner radius handle (⌥: only that rectangle corner). */
+  | {
+      kind: 'radius';
+      tx: Transaction;
+      handle: RadiusHandle;
+      /** Rectangle radii when the drag started (null for polygons and stars). */
+      startRadii: CornerRadii | null;
+      down: PointerInfo;
+      last: PointerInfo;
+      radius: number;
     };
 
 /**
@@ -170,6 +184,38 @@ export class MoveTool implements Tool {
     return g.kind === 'rotate' ? { angle: g.displayAngle, screen: g.last.screen } : null;
   }
 
+  /**
+   * Corner radius handles to draw (screen points), shown while the pointer is over the selected
+   * rectangle, polygon or star, or while one is dragged (`active` is the dragged handle's index).
+   */
+  get radiusHandleView(): { readonly points: readonly Vec2[]; readonly active: number } | null {
+    if (this.id !== 'move') return null;
+    const { editor } = this.env;
+    const g = this.gesture;
+    if (g.kind === 'radius') {
+      const handles = radiusHandles(editor);
+      const active = handles.findIndex((h) => h.corner === g.handle.corner);
+      return { points: handles.map((h) => radiusHandleScreen(editor, h)), active };
+    }
+    if (g.kind !== 'idle' || !this.lastHover) return null;
+    const node = radiusTarget(editor);
+    if (!node) return null;
+    const handles = radiusHandles(editor);
+    const points = handles.map((h) => radiusHandleScreen(editor, h));
+    const local = editor.scene.toLocal(node.id, this.lastHover.world);
+    const hover = this.lastHover.screen;
+    const over =
+      (local !== null && local.x >= 0 && local.y >= 0 && local.x <= node.size.width && local.y <= node.size.height) ||
+      points.some((p) => Math.hypot(p.x - hover.x, p.y - hover.y) <= this.env.hitTolerancePx);
+    return over ? { points, active: -1 } : null;
+  }
+
+  /** Radius label while dragging a radius handle. */
+  get radiusLabel(): { radius: number; screen: Vec2 } | null {
+    const g = this.gesture;
+    return g.kind === 'radius' ? { radius: g.radius, screen: g.last.screen } : null;
+  }
+
   /** Current marquee in world space (for the overlay), or null. */
   get marquee(): Rect | null {
     if (this.gesture.kind !== 'marquee') return null;
@@ -206,6 +252,16 @@ export class MoveTool implements Tool {
         const candidates = snapCandidatesFor(editor, editor.selection);
         const scale = this.id === 'scale' ? captureScale(tx.store, editor.scene, editor.selection) : null;
         this.gesture = { kind: 'resize', down: p, tx, handle, frame, starts, last: p, candidates, guides: [], scale };
+        return;
+      }
+    }
+    if (frame && this.id === 'move' && !p.shift) {
+      const handle = hitRadiusHandle(editor, p.screen, this.env.hitTolerancePx);
+      if (handle) {
+        const tx = editor.history.begin('Change corner radius');
+        const node = tx.store.getOrThrow(handle.id);
+        const startRadii = node.type === 'RECTANGLE' ? resolveCornerRadii(node) : null;
+        this.gesture = { kind: 'radius', tx, handle, startRadii, down: p, last: p, radius: handle.radius };
         return;
       }
     }
@@ -337,6 +393,10 @@ export class MoveTool implements Tool {
         g.last = p;
         this.applyLineEnd(p);
         return;
+      case 'radius':
+        g.last = p;
+        this.applyRadius(p);
+        return;
       case 'spacing': {
         g.last = p;
         const delta = g.info.selection.axis === 'x' ? p.world.x - g.down.world.x : p.world.y - g.down.world.y;
@@ -387,6 +447,7 @@ export class MoveTool implements Tool {
       case 'rotate':
       case 'line-end':
       case 'spacing':
+      case 'radius':
         editor.history.commit(g.tx);
         break;
       case 'marquee':
@@ -410,13 +471,14 @@ export class MoveTool implements Tool {
     if (g.kind === 'move') this.applyMove({ ...g.last, ...m });
     if (g.kind === 'rotate') this.applyRotate({ ...g.last, ...m });
     if (g.kind === 'line-end') this.applyLineEnd({ ...g.last, ...m });
+    if (g.kind === 'radius') this.applyRadius({ ...g.last, ...m });
   }
 
   cancel(): boolean {
     const g = this.gesture;
     const { editor } = this.env;
     this.gesture = { kind: 'idle' };
-    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate' || g.kind === 'line-end' || g.kind === 'spacing') {
+    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate' || g.kind === 'line-end' || g.kind === 'spacing' || g.kind === 'radius') {
       editor.history.cancel(g.tx);
       return true;
     }
@@ -651,6 +713,19 @@ export class MoveTool implements Tool {
         y1: result.y1 + from.y,
       });
     }
+    g.tx.flushPreview();
+    editor.requestRender();
+  }
+
+  private applyRadius(p: PointerInfo): void {
+    const g = this.gesture;
+    if (g.kind !== 'radius') return;
+    const { editor } = this.env;
+    const local = editor.scene.toLocal(g.handle.id, p.world);
+    const downLocal = editor.scene.toLocal(g.handle.id, g.down.world);
+    if (!local || !downLocal) return;
+    g.radius = draggedRadius(g.handle, downLocal, local);
+    applyDraggedRadius(g.tx, g.handle, g.radius, p.alt, g.startRadii);
     g.tx.flushPreview();
     editor.requestRender();
   }

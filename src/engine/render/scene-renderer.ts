@@ -42,6 +42,7 @@ import { invert } from '@/core/math/matrix';
 import { hasGeometry, isSceneNode, type PatternPaint } from '@/core/schema/document';
 import type { DocumentStore } from '@/core/document/store';
 import { clampCornerRadius, lineCapSize, polygonPoints, starPoints } from '@/core/geometry/shapes';
+import { rectangleCorners, resolveCornerRadii, roundedPolygon, type PathCommand } from '@/core/geometry/corners';
 import { adjustmentValues, hasAdjustments } from '@/core/image/adjustments';
 import { imageQuad } from '@/core/image/crop';
 import { imagePlacement } from '@/core/image/image-fit';
@@ -317,7 +318,7 @@ export class SceneRenderer {
     if (children.length > 0) {
       if (clips) {
         canvas.save();
-        if (node.type === 'FRAME') canvas.clipRRect(this.rrect(node), this.ck.ClipOp.Intersect, true);
+        if (node.type === 'FRAME') this.clipToFrame(canvas, node);
       }
       this.drawChildren(canvas, children, ctx);
       if (clips) canvas.restore();
@@ -637,7 +638,7 @@ export class SceneRenderer {
     if (children.length > 0) {
       if (clips) {
         canvas.save();
-        if (node.type === 'FRAME') canvas.clipRRect(this.rrect(node), this.ck.ClipOp.Intersect, true);
+        if (node.type === 'FRAME') this.clipToFrame(canvas, node);
       }
       this.drawChildren(canvas, children, ctx);
       if (clips) canvas.restore();
@@ -847,17 +848,28 @@ export class SceneRenderer {
     return null;
   }
 
-  /** Outline path for ellipses, polygons and stars; null for (rounded) rectangles, which draw as RRects. */
+  /**
+   * Outline path for ellipses, polygons, stars and smoothed rectangles; null for (rounded)
+   * rectangles without corner smoothing, which draw as RRects.
+   */
   private shapePath(node: ShapeNode): Path | null {
     const { width: w, height: h } = node.size;
     switch (node.type) {
       case 'ELLIPSE':
         return new this.ck.PathBuilder().addOval(this.ck.LTRBRect(0, 0, w, h)).detachAndDelete();
+      case 'FRAME':
+      case 'RECTANGLE': {
+        const radii = resolveCornerRadii(node);
+        if (!node.cornerSmoothing || Math.max(radii.topLeft, radii.topRight, radii.bottomRight, radii.bottomLeft) <= 0) return null;
+        const corners = rectangleCorners(w, h, radii);
+        return this.pathFrom(roundedPolygon(corners.points, corners.radii, node.cornerSmoothing));
+      }
       case 'POLYGON':
       case 'STAR': {
         const points = node.type === 'POLYGON' ? polygonPoints(w, h, node.pointCount) : starPoints(w, h, node.pointCount, node.innerRadius);
         const radius = node.cornerRadius ?? 0;
         if (radius <= 0) return new this.ck.PathBuilder().addPolygon(points.flatMap((p) => [p.x, p.y]), true).detachAndDelete();
+        if (node.cornerSmoothing) return this.pathFrom(roundedPolygon(points, points.map(() => radius), node.cornerSmoothing));
         // Start mid-edge so every vertex, including the first, gets a tangent arc.
         const builder = new this.ck.PathBuilder();
         const n = points.length;
@@ -876,6 +888,28 @@ export class SceneRenderer {
       }
       default:
         return null;
+    }
+  }
+
+  private pathFrom(commands: readonly PathCommand[]): Path {
+    const builder = new this.ck.PathBuilder();
+    for (const c of commands) {
+      if (c.op === 'M') builder.moveTo(c.x, c.y);
+      else if (c.op === 'L') builder.lineTo(c.x, c.y);
+      else if (c.op === 'C') builder.cubicTo(c.x1, c.y1, c.x2, c.y2, c.x, c.y);
+      else builder.close();
+    }
+    return builder.detachAndDelete();
+  }
+
+  /** Clips a frame's children to its outline. */
+  private clipToFrame(canvas: Canvas, node: Extract<SceneNode, { type: 'FRAME' }>): void {
+    const path = this.shapePath(node);
+    if (path) {
+      canvas.clipPath(path, this.ck.ClipOp.Intersect, true);
+      path.delete();
+    } else {
+      canvas.clipRRect(this.rrect(node), this.ck.ClipOp.Intersect, true);
     }
   }
 

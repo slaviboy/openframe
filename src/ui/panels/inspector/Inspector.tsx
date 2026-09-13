@@ -40,6 +40,7 @@ import {
   type TextureEffect,
 } from '@/core/effects/effects';
 import { moveItem } from '@/core/collections/move-item';
+import { IOS_CORNER_SMOOTHING } from '@/core/geometry/corners';
 import { backgroundColorBehind } from '@/core/color/contrast';
 import { useColorProfile } from '../../hooks/useColorProfile';
 import { ReorderHandle } from './ReorderHandle';
@@ -87,6 +88,7 @@ import {
   setConstrainProportions,
   setCornerRadii,
   setCornerRadius,
+  setCornerSmoothing,
   setInnerRadius,
   setLineCap,
   setOpacity,
@@ -462,6 +464,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
   const rotate = useGesture('Rotate');
   const appearance = useGesture('Change opacity');
   const radius = useGesture('Change corner radius');
+  const smoothingGesture = useGesture('Change corner smoothing');
   const pointCount = useGesture('Change point count');
   const ratio = useGesture('Change star ratio');
   const tool = useEditorState((s) => s.tool);
@@ -503,6 +506,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
   );
   const boxNodes = nodes.filter((n): n is Extract<SceneNode, { type: 'FRAME' | 'RECTANGLE' }> => n.type === 'FRAME' || n.type === 'RECTANGLE');
   const independentCorners = boxNodes.length === nodes.length && boxNodes.every((n) => n.cornerRadii !== undefined);
+  const smoothing = val(shared(radiusNodes, (n) => Math.round((n.cornerSmoothing ?? 0) * 100)));
   const frames = nodes.filter((n) => n.type === 'FRAME');
   const lines = nodes.filter((n): n is LineNode => n.type === 'LINE');
   const pointed = nodes.filter((n) => n.type === 'POLYGON' || n.type === 'STAR');
@@ -708,6 +712,36 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
                 }
               />
             ))}
+          </div>
+        )}
+        {radiusNodes.length === nodes.length && (
+          <div className={styles.smoothingRow}>
+            <div className={gradientStyles.adjustRow}>
+              <span aria-hidden="true">Smoothing</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                aria-label="Corner smoothing"
+                value={smoothing ?? 0}
+                onPointerDown={smoothingGesture.start}
+                onPointerUp={smoothingGesture.end}
+                onPointerCancel={smoothingGesture.end}
+                onBlur={smoothingGesture.end}
+                onChange={(e) => smoothingGesture.change((tx) => radiusNodes.forEach((n) => setCornerSmoothing(tx, n, Number(e.target.value))))}
+              />
+              <output data-testid="corner-smoothing-value">{smoothing === undefined ? '–' : `${smoothing}%`}</output>
+            </div>
+            <button
+              type="button"
+              className={gradientStyles.textButton}
+              aria-pressed={smoothing === IOS_CORNER_SMOOTHING * 100}
+              title="Corner smoothing 60%, as on iOS"
+              onClick={() => editor.history.run('iOS corner smoothing', (tx) => radiusNodes.forEach((n) => setCornerSmoothing(tx, n, IOS_CORNER_SMOOTHING * 100)))}
+            >
+              iOS
+            </button>
           </div>
         )}
       </Section>

@@ -186,6 +186,8 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
         theme: themeRef.current === 'dark' ? DARK_CHROME : LIGHT_CHROME,
         marquee: tools.moveTool.marquee,
         rotation: tools.moveTool.rotationLabel,
+        radiusHandles: tools.moveTool.radiusHandleView,
+        radiusLabel: tools.moveTool.radiusLabel,
         guides: tools.snapGuides,
         measurements: tools.moveTool.measurements,
         gaps: tools.moveTool.gapIndicators,

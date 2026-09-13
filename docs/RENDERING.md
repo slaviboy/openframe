@@ -143,6 +143,7 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
 - Radii are clamped to half the shorter side.
 - `cornerRadii`, when present, overrides the uniform radius.
 - Polygons and stars with a `cornerRadius` build their path from the midpoint of the closing edge, with `arcToTangent` at each vertex. Each vertex's radius is clamped (`clampCornerRadius`) so its tangent points stay within half of each adjacent edge. Hit testing still uses the sharp outline.
+- **Corner smoothing** (`cornerSmoothing` > 0) replaces the RRect or tangent-arc path with `roundedPolygon` ([`core/geometry/corners.ts`](../src/core/geometry/corners.ts)), converted to a CanvasKit path. Each corner keeps the circle of a plain round corner, but the arc covers only (1 − smoothing) of the sweep. Two cubic Béziers ease into it from the edges, starting (1 + smoothing) × the tangent distance from the vertex. For 90° corners this matches the reference's squircle construction. When an edge is too short, smoothing is reduced first, then the radius. Frames with smoothing clip their children to the same path. Smoothed rectangles hit-test against the flattened outline (`flattenPath`).
 
 **Blend modes** ([`blend.ts`](../src/engine/render/blend.ts))
 - Seventeen document modes map to native Skia blend modes; `PASS_THROUGH` and `NORMAL` both map to `SrcOver`.

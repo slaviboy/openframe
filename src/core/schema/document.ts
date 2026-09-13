@@ -322,6 +322,8 @@ const CornerFields = {
   cornerRadius: z.number().min(0),
   /** Present only when corners are edited independently. */
   cornerRadii: CornerRadiiSchema.optional(),
+  /** Corner smoothing (0–1, 0.6 is the iOS preset); absent means circular corners. */
+  cornerSmoothing: unit.optional(),
   /** Per-side stroke weights (frames and rectangles); present only when sides differ from `strokeWeight`. */
   individualStrokeWeights: IndividualStrokeWeightsSchema.optional(),
 };
@@ -380,6 +382,8 @@ export const PolygonNodeSchema = z.object({
   pointCount: PointCountSchema,
   /** Rounds every vertex; absent means sharp corners. */
   cornerRadius: z.number().min(0).optional(),
+  /** Corner smoothing (0–1); absent means circular corners. */
+  cornerSmoothing: unit.optional(),
 });
 
 /** Star; `innerRadius` is the inner/outer radius ratio. */
@@ -391,6 +395,8 @@ export const StarNodeSchema = z.object({
   innerRadius: unit,
   /** Rounds every vertex; absent means sharp corners. */
   cornerRadius: z.number().min(0).optional(),
+  /** Corner smoothing (0–1); absent means circular corners. */
+  cornerSmoothing: unit.optional(),
 });
 
 export const StrokeCapSchema = z.enum(['NONE', 'ROUND', 'SQUARE', 'LINE_ARROW', 'TRIANGLE_ARROW', 'CIRCLE_FILLED', 'DIAMOND_FILLED']);

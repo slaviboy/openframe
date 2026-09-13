@@ -21,7 +21,8 @@ import { IdGenerator } from '@/core/ids/ids';
 import type { RectangleNode, SceneNode, StarNode } from '@/core/schema/document';
 import { deserializeDocument, serializeDocument } from '@/core/serialize/serialize';
 import { Editor } from '../editor';
-import { setCornerRadii, setCornerRadius } from './properties';
+import { nodeContainsLocal } from '@/core/scene/scene-index';
+import { setCornerRadii, setCornerRadius, setCornerSmoothing } from './properties';
 
 let editor: Editor;
 
@@ -61,5 +62,23 @@ describe('corner radius', () => {
     const ellipse = add(makeEllipse);
     editor.history.run('radius', (tx) => setCornerRadius(tx, get(ellipse), 6));
     expect('cornerRadius' in get(ellipse)).toBe(false);
+  });
+
+  test('corner smoothing is stored as a fraction, removed at 0, and smoothed rectangles hit-test their outline', () => {
+    const rect = add(makeRectangle);
+    editor.history.run('radius', (tx) => setCornerRadius(tx, get(rect), 40));
+    editor.history.run('smoothing', (tx) => setCornerSmoothing(tx, get(rect), 60));
+    expect(get<RectangleNode>(rect).cornerSmoothing).toBe(0.6);
+    expect((deserializeDocument(serializeDocument(editor.doc)).getOrThrow(rect) as RectangleNode).cornerSmoothing).toBe(0.6);
+    expect(nodeContainsLocal(get(rect), { x: 50, y: 50 }, 0)).toBe(true);
+    expect(nodeContainsLocal(get(rect), { x: 2, y: 2 }, 0)).toBe(false);
+    editor.history.run('smoothing', (tx) => setCornerSmoothing(tx, get(rect), 0));
+    expect('cornerSmoothing' in get(rect)).toBe(false);
+    const star = add(makeStar);
+    editor.history.run('smoothing', (tx) => setCornerSmoothing(tx, get(star), 250));
+    expect(get<StarNode>(star).cornerSmoothing).toBe(1);
+    const ellipse = add(makeEllipse);
+    editor.history.run('smoothing', (tx) => setCornerSmoothing(tx, get(ellipse), 60));
+    expect('cornerSmoothing' in get(ellipse)).toBe(false);
   });
 });

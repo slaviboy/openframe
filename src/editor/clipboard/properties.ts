@@ -57,6 +57,7 @@ const LayerPropertiesSchema = z.object({
   strokeMiterAngle: z.number().min(0).max(180).nullable().optional(),
   cornerRadius: z.number().min(0).nullable().optional(),
   cornerRadii: CornerRadiiSchema.nullable().optional(),
+  cornerSmoothing: z.number().min(0).max(1).nullable().optional(),
   individualStrokeWeights: IndividualStrokeWeightsSchema.nullable().optional(),
 });
 export type LayerProperties = z.infer<typeof LayerPropertiesSchema>;
@@ -93,8 +94,10 @@ export function layerProperties(node: SceneNode): LayerProperties {
     props.cornerRadius = node.cornerRadius;
     props.cornerRadii = orNull(node.cornerRadii);
     props.individualStrokeWeights = orNull(node.individualStrokeWeights);
+    props.cornerSmoothing = orNull(node.cornerSmoothing);
   } else if (node.type === 'POLYGON' || node.type === 'STAR') {
     props.cornerRadius = orNull(node.cornerRadius);
+    props.cornerSmoothing = orNull(node.cornerSmoothing);
   }
   return props;
 }
@@ -129,6 +132,9 @@ export function applyProperties(tx: Transaction, node: SceneNode, props: LayerPr
     if (props.individualStrokeWeights !== undefined) assign(tx, node, 'individualStrokeWeights', orUndefined(props.individualStrokeWeights));
   } else if ((node.type === 'POLYGON' || node.type === 'STAR') && props.cornerRadius !== undefined) {
     assign(tx, node, 'cornerRadius', props.cornerRadius && props.cornerRadius > 0 ? props.cornerRadius : undefined);
+  }
+  if ((node.type === 'FRAME' || node.type === 'RECTANGLE' || node.type === 'POLYGON' || node.type === 'STAR') && props.cornerSmoothing !== undefined) {
+    assign(tx, node, 'cornerSmoothing', props.cornerSmoothing ? props.cornerSmoothing : undefined);
   }
 }
 

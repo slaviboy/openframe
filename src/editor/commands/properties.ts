@@ -134,6 +134,13 @@ export function setCornerRadii(tx: Transaction, node: SceneNode, radii: CornerRa
   tx.set(node.id, 'cornerRadii', next);
 }
 
+/** Corner smoothing in percent (0–100) for frames, rectangles, polygons and stars; 0 removes it. */
+export function setCornerSmoothing(tx: Transaction, node: SceneNode, percent: number): void {
+  if (node.type !== 'FRAME' && node.type !== 'RECTANGLE' && node.type !== 'POLYGON' && node.type !== 'STAR') return;
+  const value = Math.round(Math.min(100, Math.max(0, percent))) / 100;
+  tx.set(node.id, 'cornerSmoothing', value > 0 ? value : undefined);
+}
+
 /** Polygon sides or star points, clamped to 3–60. */
 export function setPointCount(tx: Transaction, node: SceneNode, count: number): void {
   if (node.type !== 'POLYGON' && node.type !== 'STAR') return;

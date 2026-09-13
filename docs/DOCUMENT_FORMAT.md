@@ -130,6 +130,7 @@ Frames and rectangles also accept `individualStrokeWeights: { top, right, bottom
 |---|---|---|
 | `cornerRadius` | number ≥ 0 | Uniform radius |
 | `cornerRadii` | `{ topLeft, topRight, bottomRight, bottomLeft }` | Optional. When present it overrides `cornerRadius`. Radii are clamped to half the shorter side when rendering. |
+| `cornerSmoothing` | 0–1 (optional) | Continuous-curvature ("squircle") corners; 0.6 is the iOS preset. Absent means circular corners. Also allowed on `POLYGON` and `STAR`. |
 
 ### Per-type fields
 
