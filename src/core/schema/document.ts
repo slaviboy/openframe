@@ -143,9 +143,28 @@ export const ImagePaintSchema = z.object({
   blendMode: BlendModeSchema,
 });
 
+/**
+ * Pattern fill: tiles the content of another layer (`sourceNodeId`, absent until chosen). Tiles are
+ * the source's size × `scalingFactor` plus `spacing`; hexagonal tiles offset every other row
+ * (horizontal) or column (vertical) by half a tile. `horizontalAlignment` anchors the tile grid to the
+ * layer's left edge, center or right edge.
+ */
+export const PatternPaintSchema = z.object({
+  type: z.literal('PATTERN'),
+  sourceNodeId: IdSchema.optional(),
+  tileType: z.enum(['RECTANGULAR', 'HORIZONTAL_HEXAGONAL', 'VERTICAL_HEXAGONAL']),
+  scalingFactor: z.number().min(0.01).max(100),
+  spacing: z.object({ x: z.number().min(0).max(10000), y: z.number().min(0).max(10000) }),
+  horizontalAlignment: z.enum(['START', 'CENTER', 'END']),
+  opacity: unit,
+  visible: z.boolean(),
+  blendMode: BlendModeSchema,
+});
+
 export const PaintSchema = z.discriminatedUnion('type', [
   SolidPaintSchema,
   ImagePaintSchema,
+  PatternPaintSchema,
   LinearGradientPaintSchema,
   RadialGradientPaintSchema,
   AngularGradientPaintSchema,
@@ -186,7 +205,40 @@ const BlurFields = {
 export const LayerBlurEffectSchema = z.object({ type: z.literal('LAYER_BLUR'), ...BlurFields });
 export const BackgroundBlurEffectSchema = z.object({ type: z.literal('BACKGROUND_BLUR'), ...BlurFields });
 
-export const EffectSchema = z.discriminatedUnion('type', [DropShadowEffectSchema, InnerShadowEffectSchema, LayerBlurEffectSchema, BackgroundBlurEffectSchema]);
+/**
+ * Noise: random pixels over the layer's content. `noiseSize` is the pixel size in design pixels and
+ * `density` the share of pixels that get noise. Mono uses `color` (alpha = opacity), duo `color` and
+ * `secondaryColor`, multi random colors at `opacity`.
+ */
+export const NoiseEffectSchema = z.object({
+  type: z.literal('NOISE'),
+  noiseType: z.enum(['MONOTONE', 'DUOTONE', 'MULTITONE']),
+  noiseSize: z.number().min(0.1).max(100),
+  density: unit,
+  color: ColorSchema,
+  secondaryColor: ColorSchema,
+  opacity: unit,
+  visible: z.boolean(),
+  blendMode: BlendModeSchema,
+});
+
+/** Texture: roughens the layer's edges by up to `radius` pixels, with grain of `noiseSize`; `clipToShape` keeps it inside the layer. */
+export const TextureEffectSchema = z.object({
+  type: z.literal('TEXTURE'),
+  noiseSize: z.number().min(0.1).max(100),
+  radius: z.number().min(0).max(100),
+  clipToShape: z.boolean(),
+  visible: z.boolean(),
+});
+
+export const EffectSchema = z.discriminatedUnion('type', [
+  DropShadowEffectSchema,
+  InnerShadowEffectSchema,
+  LayerBlurEffectSchema,
+  BackgroundBlurEffectSchema,
+  NoiseEffectSchema,
+  TextureEffectSchema,
+]);
 
 export const StrokeAlignSchema = z.enum(['INSIDE', 'CENTER', 'OUTSIDE']);
 
@@ -383,6 +435,7 @@ export const isGradientPaint = (paint: Paint): paint is GradientPaint => paint.t
 export type ImagePaint = z.infer<typeof ImagePaintSchema>;
 export type ImageScaleMode = z.infer<typeof ImageScaleModeSchema>;
 export type ImageFilters = z.infer<typeof ImageFiltersSchema>;
+export type PatternPaint = z.infer<typeof PatternPaintSchema>;
 export type StrokeAlign = z.infer<typeof StrokeAlignSchema>;
 export type StrokeJoin = z.infer<typeof StrokeJoinSchema>;
 export type Effect = z.infer<typeof EffectSchema>;

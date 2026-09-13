@@ -303,6 +303,37 @@ The settings are Start and End radius, and start and end X/Y percentages. **Edit
 - Paint lists show the top paint first, so display positions are converted to indices before `moveItem`.
 - Each move is one undo step.
 
+### Noise and texture effects
+
+The effect type menu includes Noise and Texture, and their settings come from `GrainSettings` in the Inspector.
+- **Noise:** type (Mono / Duo / Multi), blend mode, size, density, and either the color picker (a second color for Duo) or an opacity field (Multi).
+- **Texture:** size, radius and Clip to shape.
+
+Numeric edits are gestures (one undo step per drag or commit); menus and the checkbox are single steps. Defaults come from `defaultEffect`. Converting between types keeps visibility, and keeps the radius when both types have one.
+
+### Contrast checker
+
+A fill's color picker shows **Check color contrast** when a single layer is selected. The row passes `getContrastBackground`, which calls `backgroundColorBehind` ([`core/color/contrast.ts`](../src/core/color/contrast.ts)).
+- **Background:** the page color, with every visible layer painted before the layer that covers the layer's center (ancestors included) composited on top. Each such layer contributes its visible solid fills at their opacity.
+- **Ratio:** `contrastRatio`, the WCAG 2.x ratio, shown truncated to two decimals.
+- **Thresholds (`requiredContrast`):**
+  - Normal text: 4.5 (AA) and 7 (AAA).
+  - Large text: 3 (AA) and 4.5 (AAA).
+  - Graphics: 3 (AA only).
+  - Auto resolves to Graphics until text layers exist.
+- **Fixing:** clicking a failing badge applies `nearestCompliantColor`. It binary-searches HSL lightness towards black and white, keeps the hue and saturation, snaps to 8-bit channels, and takes the smaller change. The edit is part of the picker's gesture.
+
+### Pattern fills
+
+Choosing **Pattern** in a paint row's type menu creates a pattern paint with no source. `PatternSettings` shows the source name, **Select source**, tile type, alignment, scale and X/Y spacing.
+
+**Select source** calls `editor.pickLayerFromCanvas()`, which the ToolManager wires to `LayerPickTool` ([`tools/layer-pick-tool.ts`](../src/editor/tools/layer-pick-tool.ts)):
+- **While picking:** tool `pickLayer`. Hovering highlights the layer a click would pick (resolved with `selectionTarget`). The selection is not changed, and a hint appears.
+- **Clicking a layer:** resolves the promise with that layer and restores the previous tool.
+- **Escape or switching tools:** resolves `null`.
+
+The Inspector then sets `sourceNodeId` as one undo step, unless the pick is one of the selected layers themselves.
+
 ## Menus and command palette
 
 All menus are built from the command registry, so a menu item and its shortcut always run the same code. A command that can't run right now appears disabled; it is never hidden.

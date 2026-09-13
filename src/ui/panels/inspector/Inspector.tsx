@@ -31,10 +31,15 @@ import {
   isProgressiveBlur,
   isShadow,
   nextEffectType,
+  NOISE_TYPE_LABELS,
   setBlurType,
   type BlurType,
+  type NoiseEffect,
+  type NoiseType,
+  type TextureEffect,
 } from '@/core/effects/effects';
 import { moveItem } from '@/core/collections/move-item';
+import { backgroundColorBehind } from '@/core/color/contrast';
 import { ReorderHandle } from './ReorderHandle';
 import { beginBlurEdit, endBlurEdit } from '@/editor/interactions/blur-edit';
 import { canonicalStringify } from '@/core/serialize/serialize';
@@ -62,8 +67,9 @@ import {
   type StrokeCap,
 } from '@/core/schema/document';
 
-const PAINT_TYPES: readonly PaintType[] = ['SOLID', 'GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND', 'IMAGE'];
+const PAINT_TYPES: readonly PaintType[] = ['SOLID', 'GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND', 'IMAGE', 'PATTERN'];
 import { ImageSettings, ImageSwatch } from './ImageSettings';
+import { PatternSettings } from './PatternSettings';
 import { PAINT_BLEND_OPTIONS } from './blend-modes';
 import { beginCrop } from '@/editor/interactions/crop';
 import { beginGradientEdit, endGradientEdit } from '@/editor/interactions/gradient-edit';
@@ -145,6 +151,117 @@ export function Inspector() {
     <div className={styles.inspector} data-testid="inspector">
       {nodes.length === 0 ? <PageSection /> : <SelectionSections nodes={nodes} />}
     </div>
+  );
+}
+
+interface GrainSettingsProps {
+  name: string;
+  index: number;
+  effect: NoiseEffect | TextureEffect;
+  change: (index: number, patch: (effect: Effect) => Effect) => void;
+  write: (label: string, next: (current: readonly Effect[]) => readonly Effect[]) => void;
+  gesture: { start: () => void; end: () => void };
+}
+
+/** Settings for noise (type, size, density, colors or opacity, blend mode) and texture (size, radius, clip to shape). */
+function GrainSettings({ name, index, effect, change, write, gesture }: GrainSettingsProps) {
+  const patchNoise = (patch: Partial<NoiseEffect>) => change(index, (e) => (e.type === 'NOISE' ? { ...e, ...patch } : e));
+  const patchTexture = (patch: Partial<TextureEffect>) => change(index, (e) => (e.type === 'TEXTURE' ? { ...e, ...patch } : e));
+  if (effect.type === 'TEXTURE') {
+    return (
+      <div className={styles.grid2}>
+        <NumberField label="Size" ariaLabel={`${name} texture size`} min={0.1} max={100} value={effect.noiseSize} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => patchTexture({ noiseSize: Math.min(100, Math.max(0.1, v)) })} />
+        <NumberField label="Radius" ariaLabel={`${name} texture radius`} min={0} max={100} value={effect.radius} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => patchTexture({ radius: Math.min(100, Math.max(0, v)) })} />
+        <label className={styles.checkbox}>
+          <input
+            type="checkbox"
+            checked={effect.clipToShape}
+            onChange={(e) => write('Toggle texture clip to shape', (cur) => cur.map((x, i) => (i === index && x.type === 'TEXTURE' ? { ...x, clipToShape: e.target.checked } : x)))}
+          />
+          Clip to shape
+        </label>
+      </div>
+    );
+  }
+  return (
+    <>
+      <div className={styles.grid2}>
+        <select
+          className={primitives.select}
+          aria-label={`${name} noise type`}
+          value={effect.noiseType}
+          onChange={(e) => write('Change noise type', (cur) => cur.map((x, i) => (i === index && x.type === 'NOISE' ? { ...x, noiseType: e.target.value as NoiseType } : x)))}
+        >
+          {(Object.keys(NOISE_TYPE_LABELS) as NoiseType[]).map((type) => (
+            <option key={type} value={type}>
+              {NOISE_TYPE_LABELS[type]}
+            </option>
+          ))}
+        </select>
+        <select
+          className={primitives.select}
+          aria-label={`${name} blend mode`}
+          value={effect.blendMode}
+          onChange={(e) => write('Change effect blend mode', (cur) => cur.map((x, i) => (i === index && x.type === 'NOISE' ? { ...x, blendMode: e.target.value as BlendMode } : x)))}
+        >
+          {PAINT_BLEND_OPTIONS.map(([mode, label]) => (
+            <option key={mode} value={mode}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <NumberField label="Size" ariaLabel={`${name} noise size`} min={0.1} max={100} value={effect.noiseSize} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => patchNoise({ noiseSize: Math.min(100, Math.max(0.1, v)) })} />
+        <NumberField
+          label="Density"
+          ariaLabel={`${name} density`}
+          suffix="%"
+          min={0}
+          max={100}
+          decimals={0}
+          value={Math.round(effect.density * 100)}
+          onGestureStart={gesture.start}
+          onGestureEnd={gesture.end}
+          onChange={(v) => patchNoise({ density: Math.min(1, Math.max(0, v / 100)) })}
+        />
+      </div>
+      {effect.noiseType === 'MULTITONE' ? (
+        <NumberField
+          label="Opacity"
+          ariaLabel={`${name} noise opacity`}
+          suffix="%"
+          min={0}
+          max={100}
+          decimals={0}
+          value={Math.round(effect.opacity * 100)}
+          onGestureStart={gesture.start}
+          onGestureEnd={gesture.end}
+          onChange={(v) => patchNoise({ opacity: Math.min(1, Math.max(0, v / 100)) })}
+        />
+      ) : (
+        <>
+          <ColorControl
+            label={name}
+            color={effect.color}
+            opacity={effect.color.a}
+            onGestureStart={gesture.start}
+            onGestureEnd={gesture.end}
+            onColor={(c) => change(index, (e) => (e.type === 'NOISE' ? { ...e, color: { ...c, a: e.color.a } } : e))}
+            onOpacity={(o) => change(index, (e) => (e.type === 'NOISE' ? { ...e, color: { ...e.color, a: o } } : e))}
+          />
+          {effect.noiseType === 'DUOTONE' && (
+            <ColorControl
+              label={`${name} secondary`}
+              color={effect.secondaryColor}
+              opacity={effect.secondaryColor.a}
+              onGestureStart={gesture.start}
+              onGestureEnd={gesture.end}
+              onColor={(c) => change(index, (e) => (e.type === 'NOISE' ? { ...e, secondaryColor: { ...c, a: e.secondaryColor.a } } : e))}
+              onOpacity={(o) => change(index, (e) => (e.type === 'NOISE' ? { ...e, secondaryColor: { ...e.secondaryColor, a: o } } : e))}
+            />
+          )}
+        </>
+      )}
+    </>
   );
 }
 
@@ -673,13 +790,21 @@ function PaintSection({
                     onGestureEnd={gesture.end}
                     onColor={(c) => writeAll((cur) => cur.map((p, i) => (i === index && p.type === 'SOLID' ? { ...p, color: { ...c, a: 1 } } : p)))}
                     onOpacity={(o) => writeAll((cur) => cur.map((p, i) => (i === index ? { ...p, opacity: o } : p)))}
+                    getContrastBackground={nodes.length === 1 ? () => backgroundColorBehind(editor.doc, editor.scene, editor.pageId, nodes[0]!.id) : undefined}
                     blendMode={paint.blendMode}
                     // The picker session is one gesture, so its blend change joins that undo step.
                     onBlendMode={(mode) => writeAll((cur) => cur.map((p, i) => (i === index ? { ...p, blendMode: mode } : p)))}
                   />
                 ) : (
                   <span className={gradientStyles.summary}>
-                    {paint.type === 'IMAGE' ? (
+                    {paint.type === 'PATTERN' ? (
+                      <span
+                        className={gradientStyles.swatch}
+                        role="img"
+                        aria-label={`${title} ${list.length - index} pattern`}
+                        style={{ background: 'repeating-linear-gradient(45deg, #b3b3b3 0 3px, #eeeeee 3px 6px)' }}
+                      />
+                    ) : paint.type === 'IMAGE' ? (
                       <ImageSwatch hash={paint.imageHash} label={`${title} ${list.length - index} image`} />
                     ) : (
                       nodes.length === 1 ? (
@@ -743,6 +868,34 @@ function PaintSection({
                   }
                   onScrub={(edit) => writeAll((cur) => cur.map((p, i) => (i === index && p.type === 'IMAGE' ? edit(p) : p)))}
                   onCrop={field === 'fills' && nodes.length === 1 ? () => beginCrop(editor, nodes[0]!.id, index) : undefined}
+                  onGestureStart={gesture.start}
+                  onGestureEnd={gesture.end}
+                />
+              )}
+              {paint.type === 'PATTERN' && (
+                <PatternSettings
+                  label={`${title} ${list.length - index}`}
+                  paint={paint}
+                  sourceName={(paint.sourceNodeId && editor.doc.get(paint.sourceNodeId)?.name) || null}
+                  onSelectSource={() => {
+                    void editor.pickLayerFromCanvas?.().then((sourceId) => {
+                      // A layer can't be its own pattern source.
+                      if (!sourceId || nodes.some((n) => n.id === sourceId)) return;
+                      editor.history.run('Select pattern source', (tx) =>
+                        nodes.forEach((n) =>
+                          setPaints(tx, n, field, (tx.store.getOrThrow(n.id) as GeometryNode)[field].map((p, i) => (i === index && p.type === 'PATTERN' ? { ...p, sourceNodeId: sourceId } : p))),
+                        ),
+                      );
+                    });
+                  }}
+                  onEdit={(label, edit) =>
+                    editor.history.run(label, (tx) =>
+                      nodes.forEach((n) =>
+                        setPaints(tx, n, field, (tx.store.getOrThrow(n.id) as GeometryNode)[field].map((p, i) => (i === index && p.type === 'PATTERN' ? edit(p) : p))),
+                      ),
+                    )
+                  }
+                  onScrub={(edit) => writeAll((cur) => cur.map((p, i) => (i === index && p.type === 'PATTERN' ? edit(p) : p)))}
                   onGestureStart={gesture.start}
                   onGestureEnd={gesture.end}
                 />
@@ -980,7 +1133,7 @@ function EffectsSection({ nodes }: { nodes: SceneNode[] }) {
                         </label>
                       )}
                     </>
-                  ) : (
+                  ) : isBlur(effect) ? (
                     <div className={styles.grid2}>
                       <NumberField
                         label={isProgressiveBlur(effect) ? 'End' : 'Blur'}
@@ -1049,6 +1202,8 @@ function EffectsSection({ nodes }: { nodes: SceneNode[] }) {
                         </>
                       )}
                     </div>
+                  ) : (
+                    <GrainSettings name={name} index={index} effect={effect} change={change} write={write} gesture={gesture} />
                   )}
                 </li>
               </Fragment>
@@ -1326,13 +1481,15 @@ interface ColorControlProps {
   /** Paint blend mode, edited in the picker. */
   blendMode?: BlendMode | undefined;
   onBlendMode?: ((mode: BlendMode) => void) | undefined;
+  /** The color behind the layer, enabling the contrast checker in the picker. */
+  getContrastBackground?: (() => Color) | undefined;
 }
 
 /**
  * Swatch (native color picker, fully offline), hex input, and opacity field.
  * A custom HSB picker with eyedropper replaces the native picker in milestone M3.
  */
-function ColorControl({ label, color, opacity, onColor, onOpacity, onGestureStart, onGestureEnd, blendMode, onBlendMode }: ColorControlProps) {
+function ColorControl({ label, color, opacity, onColor, onOpacity, onGestureStart, onGestureEnd, blendMode, onBlendMode, getContrastBackground }: ColorControlProps) {
   const editor = useEditor();
   const hex = toHex6(color);
   // Draft text while the hex field is being edited; otherwise it mirrors the document.
@@ -1378,6 +1535,7 @@ function ColorControl({ label, color, opacity, onColor, onOpacity, onGestureStar
           blendMode={blendMode}
           blendOptions={PAINT_BLEND_OPTIONS}
           onPickFromCanvas={editor.pickColorFromCanvas ?? undefined}
+          getContrastBackground={getContrastBackground}
           onBlendMode={onBlendMode}
         />
       )}

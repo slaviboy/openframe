@@ -166,6 +166,47 @@ describe('effects rendering', () => {
     expect(at(38, 58).r).toBeGreaterThan(40);
   });
 
+  test('noise covers the layer content only, following density and type', () => {
+    const noise = (patch: Record<string, unknown>): Effect =>
+      ({
+        type: 'NOISE',
+        noiseType: 'MONOTONE',
+        noiseSize: 1,
+        density: 1,
+        color: { r: 0, g: 0, b: 0, a: 1 },
+        secondaryColor: { r: 1, g: 1, b: 1, a: 1 },
+        opacity: 1,
+        visible: true,
+        blendMode: 'NORMAL',
+        ...patch,
+      }) as Effect;
+    const full = render(rect([noise({})]));
+    expect(full(40, 40).r).toBeLessThan(20);
+    expect(full(5, 5)).toEqual({ r: 245, g: 245, b: 245 });
+    expect(render(rect([noise({ density: 0 })]))(40, 40)).toEqual({ r: 255, g: 255, b: 255 });
+    // Duo mixes both colors; multi produces colored pixels.
+    const duo = render(rect([noise({ noiseType: 'DUOTONE' })]));
+    const values = new Set<number>();
+    for (let y = 30; y < 40; y++) for (let x = 30; x < 40; x++) values.add(duo(x, y).r > 128 ? 1 : 0);
+    expect(values.size).toBe(2);
+    const multi = render(rect([noise({ noiseType: 'MULTITONE' })]));
+    let colored = false;
+    for (let y = 30; y < 40 && !colored; y++) for (let x = 30; x < 40; x++) if (Math.abs(multi(x, y).r - multi(x, y).g) > 30) colored = true;
+    expect(colored).toBe(true);
+  });
+
+  test('texture roughens edges beyond the layer unless clipped to its shape', () => {
+    const texture = (clipToShape: boolean): Effect => ({ type: 'TEXTURE', noiseSize: 3, radius: 6, clipToShape, visible: true });
+    const outsideDark = (at: ReturnType<typeof render>) => {
+      let count = 0;
+      for (let y = 22; y < 58; y++) for (let x = 14; x < 20; x++) if (at(x, y).r < 200) count++;
+      return count;
+    };
+    expect(outsideDark(render(rect([texture(false)], BLACK)))).toBeGreaterThan(0);
+    expect(outsideDark(render(rect([texture(true)], BLACK)))).toBe(0);
+    expect(outsideDark(render(rect([], BLACK)))).toBe(0);
+  });
+
   test('inner shadow blend modes blend the shadow with the layer content', () => {
     expect(dark(render(rect([shadow('INNER_SHADOW')], RED))(40, 22))).toBe(true);
     // Screen with black leaves the content unchanged.

@@ -28,6 +28,7 @@ export const PAINT_TYPE_LABELS: Record<PaintType, string> = {
   GRADIENT_ANGULAR: 'Angular',
   GRADIENT_DIAMOND: 'Diamond',
   IMAGE: 'Image',
+  PATTERN: 'Pattern',
 };
 
 /** Neutral gray an image paint is summarized by when converted to a color. */
@@ -38,7 +39,7 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 /** The color a paint is summarized by (a solid's color, a gradient's first stop, or gray for images). */
 export function representativeColor(paint: Paint): Color {
   if (paint.type === 'SOLID') return paint.color;
-  if (paint.type === 'IMAGE') return IMAGE_SUMMARY_COLOR;
+  if (paint.type === 'IMAGE' || paint.type === 'PATTERN') return IMAGE_SUMMARY_COLOR;
   return paint.gradientStops[0]!.color;
 }
 
@@ -53,6 +54,7 @@ export function convertPaint(paint: Paint, type: PaintType): Paint {
   const common = { opacity: paint.opacity, visible: paint.visible, blendMode: paint.blendMode };
   if (type === 'SOLID') return { type: 'SOLID', color: { ...representativeColor(paint), a: 1 }, ...common };
   if (type === 'IMAGE') return { type: 'IMAGE', scaleMode: 'FILL', ...common };
+  if (type === 'PATTERN') return { type: 'PATTERN', tileType: 'RECTANGULAR', scalingFactor: 1, spacing: { x: 0, y: 0 }, horizontalAlignment: 'START', ...common };
   const base = representativeColor(paint);
   const stops: GradientStop[] = isGradientPaint(paint)
     ? paint.gradientStops.map((s) => ({ ...s, color: { ...s.color } }))

@@ -28,6 +28,7 @@ import { CropController } from '../interactions/crop';
 import { GradientEditController } from '../interactions/gradient-edit';
 import { BlurEditController } from '../interactions/blur-edit';
 import { EyedropperTool, type EyedropperSample } from './eyedropper-tool';
+import { LayerPickTool } from './layer-pick-tool';
 import { ImagePlaceTool } from './image-tool';
 import { LineTool } from './line-tool';
 import { MoveTool } from './move-tool';
@@ -107,6 +108,10 @@ export class ToolManager {
     this.crop = new CropController(editor, this.env.hitTolerancePx);
     this.gradientEdit = new GradientEditController(editor, this.env.hitTolerancePx);
     this.blurEdit = new BlurEditController(editor, this.env.hitTolerancePx);
+    editor.pickLayerFromCanvas = () => {
+      const current = editor.state.getSnapshot().tool;
+      return (this.tools.pickLayer as LayerPickTool).pick(current === 'pickLayer' ? 'move' : current);
+    };
     editor.pickColorFromCanvas = () => {
       const current = editor.state.getSnapshot().tool;
       return this.eyedropper.pick(current === 'eyedropper' ? 'move' : current);
@@ -126,6 +131,7 @@ export class ToolManager {
       star: new ShapeTool('star', this.env),
       image: new ImagePlaceTool(this.env),
       eyedropper: new EyedropperTool(this.env),
+      pickLayer: new LayerPickTool(this.env),
     };
     let previous = editor.state.getSnapshot().tool;
     editor.state.subscribe(() => {
@@ -137,6 +143,7 @@ export class ToolManager {
         // Leaving Place image drops the images still waiting.
         if (old instanceof ImagePlaceTool) old.discard();
         if (old instanceof EyedropperTool) old.leave();
+        if (old instanceof LayerPickTool) old.leave();
         previous = next;
       }
     });

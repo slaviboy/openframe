@@ -99,7 +99,7 @@ Every node except the root has:
 | `transform` | `[a, b, c, d, tx, ty]` | Affine transform relative to the parent, in Canvas/DOMMatrix order. Encodes position, rotation and flips. |
 | `size` | `{ width, height }` (≥ 0) | Size in the node's local space, before the transform |
 | `opacity` | 0–1 | Layer opacity |
-| `effects` | `Effect[]` (optional, ≤ 64) | Shadows and blurs, absent when there are none. `DROP_SHADOW` / `INNER_SHADOW`: `color` (alpha = opacity), `offset {x, y}`, `radius` (blur, ≥ 0), `spread`, `visible`, `blendMode`; drop shadows add `showShadowBehindNode`. `LAYER_BLUR` / `BACKGROUND_BLUR`: `radius`, `visible`, and for progressive blurs `blurType: "PROGRESSIVE"`, `startRadius` (radius at the start), `startOffset {x, y}` and `endOffset {x, y}` (fractions 0–1 of the layer box; `radius` applies at the end). Absent `blurType` means uniform. |
+| `effects` | `Effect[]` (optional, ≤ 64) | Shadows and blurs, absent when there are none. `DROP_SHADOW` / `INNER_SHADOW`: `color` (alpha = opacity), `offset {x, y}`, `radius` (blur, ≥ 0), `spread`, `visible`, `blendMode`; drop shadows add `showShadowBehindNode`. `LAYER_BLUR` / `BACKGROUND_BLUR`: `radius`, `visible`, and for progressive blurs `blurType: "PROGRESSIVE"`, `startRadius` (radius at the start), `startOffset {x, y}` and `endOffset {x, y}` (fractions 0–1 of the layer box; `radius` applies at the end). Absent `blurType` means uniform. `NOISE`: `noiseType` (`MONOTONE` \| `DUOTONE` \| `MULTITONE`), `noiseSize` (0.1–100 px), `density` (0–1), `color` and `secondaryColor` (alpha = opacity; mono uses `color`, duo both), `opacity` (multi), `visible`, `blendMode`. `TEXTURE`: `noiseSize` (0.1–100 px), `radius` (0–100 px), `clipToShape`, `visible`. |
 | `constrainProportions` | `true` (optional) | Present only when on: width and height edits keep the aspect ratio, and handle resizes keep it unless Shift is held |
 | `isMask` | `true` (optional) | The layer is a mask for the siblings above it (later in paint order), up to the next mask. A hidden mask masks nothing. |
 | `maskType` | `"VECTOR"` \| `"LUMINANCE"` (optional) | How a mask reveals content: absent is alpha (mask opacity), `VECTOR` treats any coverage as opaque, `LUMINANCE` uses brightness |
@@ -203,7 +203,12 @@ A `Guide` is `{ "axis": "X" | "Y", "offset": number }`: `X` guides are vertical 
   - `FIT` scales it to fit entirely inside the layer, centered.
   - `TILE` repeats it from the layer origin at `scalingFactor` × its pixel size.
   - `CROP` maps the layer's unit square into the image's unit square with `imageTransform`, ignoring `rotation`.
-- Pattern and video paints arrive later as new union members.
+- Pattern paint:
+  - Fields: `{ "type": "PATTERN", "sourceNodeId"?: Id, "tileType": "RECTANGULAR" | "HORIZONTAL_HEXAGONAL" | "VERTICAL_HEXAGONAL", "scalingFactor": 0.01–100, "spacing": { "x", "y" } (px), "horizontalAlignment": "START" | "CENTER" | "END", "opacity", "visible", "blendMode" }`.
+  - The source layer's content, drawn in its own coordinates, is scaled by `scalingFactor` and repeated with `spacing` between tiles.
+  - Hexagonal tiles shift every other row or column by half a tile.
+  - A missing `sourceNodeId`, a deleted source, or a source that is the layer itself renders nothing.
+- Video paints arrive later as a new union member.
 
 ## 6. Serialization
 

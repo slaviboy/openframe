@@ -37,7 +37,11 @@ function scaleEffects(effects: readonly Effect[], f: number): Effect[] {
   return effects.map((effect) =>
     effect.type === 'DROP_SHADOW' || effect.type === 'INNER_SHADOW'
       ? { ...effect, offset: { x: round2(effect.offset.x * f), y: round2(effect.offset.y * f) }, radius: round2(effect.radius * f), spread: round2(effect.spread * f) }
-      : { ...effect, radius: round2(effect.radius * f) },
+      : effect.type === 'NOISE'
+        ? { ...effect, noiseSize: Math.min(100, Math.max(0.1, round2(effect.noiseSize * f))) }
+        : effect.type === 'TEXTURE'
+          ? { ...effect, noiseSize: Math.min(100, Math.max(0.1, round2(effect.noiseSize * f))), radius: Math.min(100, round2(effect.radius * f)) }
+          : { ...effect, radius: round2(effect.radius * f), ...(effect.startRadius !== undefined ? { startRadius: round2(effect.startRadius * f) } : {}) },
   );
 }
 

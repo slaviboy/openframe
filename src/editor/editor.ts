@@ -77,6 +77,8 @@ export class Editor {
   sampleCanvasPixel: ((screen: Vec2) => Color | null) | null = null;
   /** Lets the UI pick a color by clicking the canvas; set by the tool manager. Resolves null when canceled. */
   pickColorFromCanvas: (() => Promise<Color | null>) | null = null;
+  /** Lets the UI pick a layer by clicking the canvas (without selecting it); set by the tool manager. */
+  pickLayerFromCanvas: (() => Promise<Id | null>) | null = null;
 
   /** Installs (or removes, with null) the canvas pixel reader used by the eyedropper. */
   setCanvasSampler(sampler: ((screen: Vec2) => Color | null) | null): void {

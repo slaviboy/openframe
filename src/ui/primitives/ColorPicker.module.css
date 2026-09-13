@@ -137,6 +137,57 @@
   font-size: var(--text-sm);
 }
 
+.contrastToggle {
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--fg-primary);
+  font-size: var(--text-sm);
+}
+
+.contrast {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.contrastSwatch {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.contrastRatio {
+  flex: 1;
+  font-size: var(--text-sm);
+  font-variant-numeric: tabular-nums;
+}
+
+.contrastBadge {
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--fg-danger, #e03e1a);
+  font-size: var(--text-xs);
+}
+
+.contrastBadge[data-pass] {
+  display: inline-grid;
+  place-items: center;
+  color: var(--fg-success, #14ae5c);
+}
+
 .eyedropper {
   flex: none;
   width: 24px;

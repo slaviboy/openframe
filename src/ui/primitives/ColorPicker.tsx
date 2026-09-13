@@ -30,6 +30,16 @@ interface EyeDropperConstructor {
 }
 
 import type { BlendMode } from '@/core/schema/document';
+import { contrastRatio } from '@/core/color/color';
+import {
+  CONTRAST_CATEGORY_LABELS,
+  formatContrastRatio,
+  nearestCompliantColor,
+  requiredContrast,
+  resolveContrastCategory,
+  type ContrastCategory,
+  type ContrastLevel,
+} from '@/core/color/contrast';
 import primitiveStyles from './primitives.module.css';
 
 export interface ColorPickerProps {
@@ -52,6 +62,8 @@ export interface ColorPickerProps {
   readonly onBlendMode?: ((mode: BlendMode) => void) | undefined;
   /** Picks a color by clicking the canvas; used when the browser has no EyeDropper API. */
   readonly onPickFromCanvas?: (() => Promise<RGBA | null>) | undefined;
+  /** The color behind the layer, for the contrast checker (shown when given). */
+  readonly getContrastBackground?: (() => RGBA) | undefined;
 }
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
@@ -278,7 +290,81 @@ export function ColorPicker(props: ColorPickerProps) {
           </button>
         )}
       </div>
+      {props.getContrastBackground && <ContrastSection color={color} getBackground={props.getContrastBackground} onColor={onColor} />}
     </div>,
     document.body,
+  );
+}
+
+const CONTRAST_LEVELS: readonly ContrastLevel[] = ['AA', 'AAA'];
+
+/**
+ * Color contrast: the WCAG ratio of the color (foreground) against what is behind the layer, a
+ * category menu, and a badge per compliance level. A failing badge adjusts the color to the nearest
+ * compliant one.
+ */
+function ContrastSection({ color, getBackground, onColor }: { color: RGBA; getBackground: () => RGBA; onColor: (color: RGBA) => void }) {
+  const [open, setOpen] = useState(false);
+  const [category, setCategory] = useState<ContrastCategory>('AUTO');
+  if (!open) {
+    return (
+      <button type="button" className={styles.contrastToggle} onClick={() => setOpen(true)}>
+        Check color contrast
+      </button>
+    );
+  }
+  const background = getBackground();
+  const foreground = { ...color, a: 1 };
+  const ratio = contrastRatio(foreground, background);
+  const resolved = resolveContrastCategory(category);
+  return (
+    <section className={styles.contrast} aria-label="Color contrast">
+      <div className={styles.row}>
+        <span className={styles.contrastSwatch} style={{ background: toCss(background), color: toCss(foreground) }} aria-hidden="true">
+          Aa
+        </span>
+        <output className={styles.contrastRatio} aria-label="Contrast ratio">
+          {formatContrastRatio(ratio)}
+        </output>
+        <select className={styles.format} aria-label="Contrast category" value={category} onChange={(e) => setCategory(e.target.value as ContrastCategory)}>
+          {(Object.keys(CONTRAST_CATEGORY_LABELS) as ContrastCategory[]).map((c) => (
+            <option key={c} value={c}>
+              {CONTRAST_CATEGORY_LABELS[c]}
+            </option>
+          ))}
+        </select>
+        <button type="button" className={styles.eyedropper} aria-label="Close color contrast" onClick={() => setOpen(false)}>
+          ×
+        </button>
+      </div>
+      <div className={styles.row}>
+        {CONTRAST_LEVELS.map((level) => {
+          const target = requiredContrast(resolved, level);
+          if (target === null) return null;
+          if (ratio >= target) {
+            return (
+              <span key={level} className={styles.contrastBadge} data-pass="" title={`Meets ${target}:1`}>
+                {level} ✓
+              </span>
+            );
+          }
+          return (
+            <button
+              key={level}
+              type="button"
+              className={styles.contrastBadge}
+              aria-label={`Fix ${level} contrast`}
+              title={`Needs ${target}:1 — click to adjust the color`}
+              onClick={() => {
+                const fixed = nearestCompliantColor(foreground, background, target);
+                if (fixed) onColor({ ...fixed, a: 1 });
+              }}
+            >
+              {level} ⚠
+            </button>
+          );
+        })}
+      </div>
+    </section>
   );
 }

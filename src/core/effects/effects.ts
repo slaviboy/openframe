@@ -22,14 +22,22 @@ export const EFFECT_TYPE_LABELS: Record<EffectType, string> = {
   INNER_SHADOW: 'Inner shadow',
   LAYER_BLUR: 'Layer blur',
   BACKGROUND_BLUR: 'Background blur',
+  NOISE: 'Noise',
+  TEXTURE: 'Texture',
 };
 
-export const EFFECT_TYPES: readonly EffectType[] = ['DROP_SHADOW', 'INNER_SHADOW', 'LAYER_BLUR', 'BACKGROUND_BLUR'];
+export type NoiseEffect = Extract<Effect, { type: 'NOISE' }>;
+export type TextureEffect = Extract<Effect, { type: 'TEXTURE' }>;
+export type NoiseType = NoiseEffect['noiseType'];
+
+export const NOISE_TYPE_LABELS: Record<NoiseType, string> = { MONOTONE: 'Mono', DUOTONE: 'Duo', MULTITONE: 'Multi' };
+
+export const EFFECT_TYPES: readonly EffectType[] = ['DROP_SHADOW', 'INNER_SHADOW', 'LAYER_BLUR', 'BACKGROUND_BLUR', 'NOISE', 'TEXTURE'];
 
 export const isShadow = (effect: Effect): effect is ShadowEffect => effect.type === 'DROP_SHADOW' || effect.type === 'INNER_SHADOW';
 
 /** How many effects of each type one layer can have. */
-export const EFFECT_LIMITS: Readonly<Record<EffectType, number>> = { DROP_SHADOW: 8, INNER_SHADOW: 8, LAYER_BLUR: 1, BACKGROUND_BLUR: 1 };
+export const EFFECT_LIMITS: Readonly<Record<EffectType, number>> = { DROP_SHADOW: 8, INNER_SHADOW: 8, LAYER_BLUR: 1, BACKGROUND_BLUR: 1, NOISE: 2, TEXTURE: 1 };
 
 /** The effects that take part in rendering: the first ones of each type, up to its limit, in list order. */
 export function limitEffects(effects: readonly Effect[]): Effect[] {
@@ -59,6 +67,20 @@ export function defaultEffect(type: EffectType): Effect {
     case 'LAYER_BLUR':
     case 'BACKGROUND_BLUR':
       return { type, radius: 4, visible: true };
+    case 'NOISE':
+      return {
+        type,
+        noiseType: 'MONOTONE',
+        noiseSize: 1,
+        density: 0.5,
+        color: { r: 0, g: 0, b: 0, a: 0.25 },
+        secondaryColor: { r: 1, g: 1, b: 1, a: 0.25 },
+        opacity: 0.25,
+        visible: true,
+        blendMode: 'NORMAL',
+      };
+    case 'TEXTURE':
+      return { type, noiseSize: 4, radius: 4, clipToShape: false, visible: true };
   }
 }
 
@@ -71,7 +93,9 @@ export function convertEffect(effect: Effect, type: EffectType): Effect {
     const shared = { color, offset, radius, spread, visible, blendMode };
     return next.type === 'DROP_SHADOW' ? { ...next, ...shared } : { ...next, ...shared };
   }
-  return { ...next, radius: effect.radius, visible: effect.visible } as Effect;
+  // Types that both have a radius (shadows, blurs, texture) keep it.
+  if ('radius' in effect && 'radius' in next) return { ...next, radius: effect.radius, visible: effect.visible } as Effect;
+  return { ...next, visible: effect.visible };
 }
 
 /** How far visible effects extend beyond a layer's geometry (for culling and invalidation). */
@@ -83,6 +107,8 @@ export function effectOutset(effects: readonly Effect[] | undefined): number {
       outset = Math.max(outset, Math.max(Math.abs(effect.offset.x), Math.abs(effect.offset.y)) + effect.radius + Math.max(0, effect.spread));
     } else if (effect.type === 'LAYER_BLUR') {
       outset = Math.max(outset, maxBlurRadius(effect));
+    } else if (effect.type === 'TEXTURE' && !effect.clipToShape) {
+      outset = Math.max(outset, effect.radius);
     }
   }
   return outset;

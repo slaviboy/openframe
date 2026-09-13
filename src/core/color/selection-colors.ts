@@ -59,7 +59,7 @@ export function selectionColors(store: DocumentStore, ids: readonly Id[]): Selec
       for (const field of ['fills', 'strokes'] as const) {
         if (field === 'fills' && node.type === 'LINE') continue;
         node[field].forEach((paint: Paint, index) => {
-          if (!paint.visible || paint.type === 'IMAGE') return;
+          if (!paint.visible || paint.type === 'IMAGE' || paint.type === 'PATTERN') return;
           const key = colorKey(paint);
           let entry = byKey.get(key);
           if (!entry) byKey.set(key, (entry = { paint, usages: [], layers: [] }));
@@ -88,7 +88,7 @@ export function updateSelectionColor(tx: Transaction, usages: readonly PaintUsag
     for (const field of ['fills', 'strokes'] as const) {
       const indices = list.filter((u) => u.field === field).map((u) => u.index);
       if (indices.length === 0) continue;
-      const next = node[field].map((paint, i) => (indices.includes(i) && paint.type !== 'IMAGE' ? edit(paint) : paint));
+      const next = node[field].map((paint, i) => (indices.includes(i) && paint.type !== 'IMAGE' && paint.type !== 'PATTERN' ? edit(paint) : paint));
       tx.set(id, field, next);
     }
   }

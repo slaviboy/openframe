@@ -22,7 +22,7 @@ import { placeImages } from '@/editor/commands/images';
 import { screenToWorld } from '@/editor/viewport/viewport';
 import { importImageFiles, pickImageFiles } from './images/image-actions';
 import { IMAGE_ACCEPT } from './images/import-image';
-import { Notice, PlaceImageHint } from './shell/Notice';
+import { Notice, PlaceImageHint, ToolHint } from './shell/Notice';
 import { setSnapToPixelGrid } from '@/editor/interactions/transform';
 import { StorageError } from '@/platform/idb/persistence';
 import { CanvasHost, type CanvasContextMenu } from './canvas/CanvasHost';
@@ -259,6 +259,8 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
       {editorState.dialog === 'batchRename' && <BatchRenameDialog editor={editor} onClose={closeDialog} />}
       {editorState.dialog === 'nudgeAmount' && <NudgeDialog onClose={closeDialog} />}
       {editorState.tool === 'image' && <PlaceImageHint tools={tools} />}
+      {editorState.tool === 'pickLayer' && <ToolHint text="Click a layer to use as the pattern source · Esc to cancel" />}
+      {editorState.tool === 'eyedropper' && <ToolHint text="Click to apply a color from the canvas · Esc to cancel" />}
       {notice && <Notice message={notice} onClose={closeNotice} />}
     </>
   );

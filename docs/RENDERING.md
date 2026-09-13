@@ -78,6 +78,10 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
   - angular: `MakeSweepGradient` around (½, ½), starting at 3 o'clock and running clockwise
   - diamond: an SkSL runtime shader that samples a linear color ramp at `(|x − ½| + |y − ½|) · 2`
 - Stops are sorted by position; colors are interpolated in unpremultiplied space.
+- **Pattern paints.** Before a layer draws, `preparePatterns` records each of its visible pattern fills and strokes. Doing this first matters: recording reuses the renderer's shared paints, which must not change mid-draw.
+  - **Recording:** each placement of `patternLayout` becomes a `PictureRecorder` picture one tile in size. The source is drawn with `drawNode` under the inverse of its own transform, scaled, unculled and without crop previews.
+  - **Shader:** `SkPicture.makeShader` with Repeat tiling, offset to the alignment origin. `configurePaint` uses it with the paint opacity. Shaders are deleted after the layer draws.
+  - **Recursion guard:** a source already being recorded (the layer itself, or a cycle) records nothing.
 - Image paints set an image shader and a white color whose alpha is the paint opacity.
   - The renderer takes an `ImageSource` (the editor's image registry) that maps hashes to encoded bytes. Bytes are decoded once with `MakeImageFromEncoded` and cached per hash until `dispose()`.
   - The shader's local matrix is `imagePlacement(...)`, which maps image pixels to layer coordinates. `TILE` uses `TileMode.Repeat`; the other modes use `Decal`, so areas outside the image stay transparent. Sampling uses linear filtering.
@@ -106,6 +110,11 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
   - Each level is `MakeBlur` (or the unblurred input for radius 0), masked by `ImageFilter.MakeShader` of a linear gradient carrying the weight as alpha (`DstIn`).
   - The masked levels are summed with `Plus`.
   - The same filter serves as the layer filter (Decal edges) and as the backdrop filter of a background blur (Clamp edges).
+- Layer blur, noise and texture are applied after the shadows, in their order in the effects list.
+  - **Noise** is an SkSL shader in layer coordinates ([`noise-sksl.ts`](../src/engine/render/noise-sksl.ts)).
+    - Each `noiseSize` cell is hashed. Cells above `density` are empty; the rest take the mono color, one of the duo colors, or a random color at the multi opacity.
+    - The shader becomes an image filter, is kept only where the content has coverage (`SrcIn`), and blends over the content with the effect's native blend mode.
+  - **Texture** displaces the content with `MakeDisplacementMap`, up to `radius` pixels (scale `radius × 2`). The displacement field is a smooth value-noise SkSL shader whose grain is `noiseSize`. `clipToShape` keeps the displaced result inside the original coverage (`SrcIn`); unclipped textures grow the paint bounds by `radius`.
 
 **Outline mode**
 - `render(…, { outlines: true, includeHidden })` draws each layer's geometry with a hairline paint (stroke width 0, one device pixel at any zoom), black or white depending on the page background's luminance.

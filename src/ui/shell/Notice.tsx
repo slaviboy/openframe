@@ -47,3 +47,12 @@ export function PlaceImageHint({ tools }: { tools: ToolManager }) {
     </div>
   );
 }
+
+/** A short instruction while a pick-on-canvas tool is active. */
+export function ToolHint({ text }: { text: string }) {
+  return (
+    <div className={styles.notice} role="status" data-testid="tool-hint">
+      {text}
+    </div>
+  );
+}

@@ -20,7 +20,21 @@ import type { Effect } from '@/core/schema/document';
 
 const isNormalBlend = (mode: string): boolean => mode === 'NORMAL' || mode === 'PASS_THROUGH';
 import { maskRuns } from '@/core/scene/masks';
-import { blurOffsets, blurSigma, isProgressiveBlur, limitEffects, maxBlurRadius, progressiveBlurLevels, type BlurEffect } from '@/core/effects/effects';
+import {
+  blurOffsets,
+  blurSigma,
+  isProgressiveBlur,
+  limitEffects,
+  maxBlurRadius,
+  progressiveBlurLevels,
+  type BlurEffect,
+  type NoiseEffect,
+  type TextureEffect,
+} from '@/core/effects/effects';
+import { NOISE_SKSL, TEXTURE_SKSL } from './noise-sksl';
+import { patternLayout } from '@/core/color/pattern';
+import { invert } from '@/core/math/matrix';
+import { hasGeometry, isSceneNode, type PatternPaint } from '@/core/schema/document';
 import type { DocumentStore } from '@/core/document/store';
 import { clampCornerRadius, lineCapSize, polygonPoints, starPoints } from '@/core/geometry/shapes';
 import { adjustmentValues, hasAdjustments } from '@/core/image/adjustments';
@@ -123,6 +137,12 @@ export class SceneRenderer {
   private readonly imageCache = new Map<string, CkImage | null>();
   private checker: CkImage | null = null;
   private adjustEffect: RuntimeEffect | null | undefined;
+  private noiseEffect: RuntimeEffect | null | undefined;
+  private textureEffect: RuntimeEffect | null | undefined;
+  /** Pattern shaders of the layer being drawn, keyed by paint. */
+  private readonly patternShaders = new Map<PatternPaint, Shader>();
+  /** Pattern sources currently being recorded (guards against a pattern of itself). */
+  private readonly patternSources = new Set<Id>();
 
   constructor(
     private readonly ck: CanvasKit,
@@ -160,6 +180,10 @@ export class SceneRenderer {
     this.checker = null;
     this.adjustEffect?.delete();
     this.adjustEffect = undefined;
+    this.noiseEffect?.delete();
+    this.noiseEffect = undefined;
+    this.textureEffect?.delete();
+    this.textureEffect = undefined;
   }
 
   render(canvas: Canvas, store: DocumentStore, index: SceneIndex, pageId: Id, view: RenderView, options: RenderOptions = {}): RenderStats {
@@ -256,6 +280,7 @@ export class SceneRenderer {
     const m = matrixOf(node.transform);
     canvas.concat([m.a, m.c, m.e, m.b, m.d, m.f, 0, 0, 1]);
 
+    const patterns = this.preparePatterns(node, ctx);
     this.drawBackgroundBlur(canvas, node);
     this.drawBlendedDropShadows(canvas, node, children, clips, ctx);
     const filters: ImageFilter[] = [];
@@ -288,6 +313,60 @@ export class SceneRenderer {
     if (node.type === 'FRAME') this.drawStrokes(canvas, node);
     if (needsLayer) canvas.restore();
     canvas.restore();
+    for (const paint of patterns) {
+      this.patternShaders.get(paint)?.delete();
+      this.patternShaders.delete(paint);
+    }
+  }
+
+  /**
+   * Records a picture shader for every visible pattern fill and stroke of a layer, before any of its
+   * geometry is drawn (recording draws other layers with the shared paints). A pattern whose source
+   * is missing, has no area, or is already being recorded (a pattern of itself) stays transparent.
+   * Returns the paints that got a shader, for release after the layer is drawn.
+   */
+  private preparePatterns(node: SceneNode, ctx: DrawContext): PatternPaint[] {
+    if (!hasGeometry(node)) return [];
+    const prepared: PatternPaint[] = [];
+    for (const paint of [...node.fills, ...node.strokes]) {
+      if (paint.type !== 'PATTERN' || !paint.visible || !paint.sourceNodeId || this.patternShaders.has(paint)) continue;
+      const shader = this.recordPattern(paint, paint.sourceNodeId, node.size, ctx);
+      if (!shader) continue;
+      this.patternShaders.set(paint, shader);
+      prepared.push(paint);
+    }
+    return prepared;
+  }
+
+  private recordPattern(paint: PatternPaint, sourceId: Id, size: Size, ctx: DrawContext): Shader | null {
+    const ck = this.ck;
+    const source = ctx.store.get(sourceId);
+    if (!source || !isSceneNode(source) || source.type === 'SLICE' || this.patternSources.has(sourceId)) return null;
+    const layout = patternLayout(paint, source.size, size);
+    const inverse = invert(matrixOf(source.transform));
+    if (!layout || !inverse) return null;
+    const recorder = new ck.PictureRecorder();
+    const canvas = recorder.beginRecording(ck.LTRBRect(0, 0, layout.tile.width, layout.tile.height));
+    // The source draws in its own coordinates, unculled, without crop previews.
+    const local: DrawContext = { ...ctx, visible: { x: -1e9, y: -1e9, width: 2e9, height: 2e9 }, cropping: null };
+    this.patternSources.add(sourceId);
+    try {
+      for (const at of layout.placements) {
+        canvas.save();
+        canvas.translate(at.x, at.y);
+        canvas.scale(layout.scale, layout.scale);
+        canvas.concat([inverse.a, inverse.c, inverse.e, inverse.b, inverse.d, inverse.f, 0, 0, 1]);
+        this.drawNode(canvas, sourceId, local);
+        canvas.restore();
+      }
+    } finally {
+      this.patternSources.delete(sourceId);
+    }
+    const picture = recorder.finishRecordingAsPicture();
+    recorder.delete();
+    const shader = picture.makeShader(ck.TileMode.Repeat, ck.TileMode.Repeat, ck.FilterMode.Linear, [1, 0, layout.origin.x, 0, 1, layout.origin.y, 0, 0, 1]);
+    picture.delete();
+    return shader;
   }
 
   /** Crop mode: the whole image of the top CROP fill, faded, under the layer (the crop itself draws on top). */
@@ -410,13 +489,20 @@ export class SceneRenderer {
       }
       result = over(drops, result);
     }
-    const blur = effects.find((e): e is BlurEffect => e.type === 'LAYER_BLUR');
-    if (blur && maxBlurRadius(blur) > 0) {
-      if (isProgressiveBlur(blur)) {
-        result = this.progressiveBlurFilter(blur, node.size, keep, result, ck.TileMode.Decal);
-      } else {
-        const sigma = blurSigma(blur.radius);
-        result = keep(ck.ImageFilter.MakeBlur(sigma, sigma, ck.TileMode.Decal, result));
+    // Layer blur, noise and texture sit on top, applied in their order in the list.
+    for (const effect of effects) {
+      if (effect.type === 'LAYER_BLUR') {
+        if (maxBlurRadius(effect) <= 0) continue;
+        if (isProgressiveBlur(effect)) {
+          result = this.progressiveBlurFilter(effect, node.size, keep, result, ck.TileMode.Decal);
+        } else {
+          const sigma = blurSigma(effect.radius);
+          result = keep(ck.ImageFilter.MakeBlur(sigma, sigma, ck.TileMode.Decal, result));
+        }
+      } else if (effect.type === 'NOISE') {
+        result = this.noiseFilter(effect, keep, result);
+      } else if (effect.type === 'TEXTURE') {
+        result = this.textureFilter(effect, keep, result);
       }
     }
     return result;
@@ -454,6 +540,39 @@ export class SceneRenderer {
       result = result ? keep(ck.ImageFilter.MakeBlend(ck.BlendMode.Plus, result, masked)) : masked;
     }
     return result!;
+  }
+
+  /**
+   * Noise: a noise shader in layer coordinates, kept only where the content (so far) has coverage
+   * (SrcIn), then blended over the content with the effect's blend mode.
+   */
+  private noiseFilter(effect: NoiseEffect, keep: <T extends ImageFilter>(filter: T) => T, input: ImageFilter | null): ImageFilter | null {
+    const ck = this.ck;
+    this.noiseEffect ??= ck.RuntimeEffect.Make(NOISE_SKSL);
+    if (!this.noiseEffect || effect.density <= 0) return input;
+    const mode = effect.noiseType === 'MONOTONE' ? 0 : effect.noiseType === 'DUOTONE' ? 1 : 2;
+    const c1 = effect.color;
+    const c2 = effect.secondaryColor;
+    const shader = this.noiseEffect.makeShader([effect.noiseSize, effect.density, mode, c1.r, c1.g, c1.b, c1.a, c2.r, c2.g, c2.b, c2.a, effect.opacity]);
+    const noise = keep(ck.ImageFilter.MakeShader(shader));
+    shader.delete();
+    const masked = keep(ck.ImageFilter.MakeBlend(ck.BlendMode.SrcIn, input, noise));
+    return keep(ck.ImageFilter.MakeBlend(this.nativeBlend(effect.blendMode), input, masked));
+  }
+
+  /**
+   * Texture: displaces the content by a smooth noise field (up to `radius` pixels), which roughens
+   * edges. With clip to shape, the displaced result is kept only inside the original coverage.
+   */
+  private textureFilter(effect: TextureEffect, keep: <T extends ImageFilter>(filter: T) => T, input: ImageFilter | null): ImageFilter | null {
+    const ck = this.ck;
+    this.textureEffect ??= ck.RuntimeEffect.Make(TEXTURE_SKSL);
+    if (!this.textureEffect || effect.radius <= 0) return input;
+    const shader = this.textureEffect.makeShader([effect.noiseSize]);
+    const field = keep(ck.ImageFilter.MakeShader(shader));
+    shader.delete();
+    const displaced = keep(ck.ImageFilter.MakeDisplacementMap(ck.ColorChannel.Red, ck.ColorChannel.Green, effect.radius * 2, field, input));
+    return effect.clipToShape ? keep(ck.ImageFilter.MakeBlend(ck.BlendMode.SrcIn, input, displaced)) : displaced;
   }
 
   /** Native Skia mode for image-filter blends; modes Skia lacks (plus darker) fall back to normal. */
@@ -723,6 +842,11 @@ export class SceneRenderer {
     if (paint.type === 'SOLID') {
       target.setShader(null as never);
       target.setColor(this.color(paint.color, paint.opacity));
+    } else if (paint.type === 'PATTERN') {
+      // Pattern shaders are recorded before the layer draws (see preparePatterns).
+      const shader = this.patternShaders.get(paint);
+      target.setShader(shader ?? (null as never));
+      target.setColor(shader ? this.ck.Color4f(1, 1, 1, paint.opacity) : this.ck.TRANSPARENT);
     } else if (paint.type === 'IMAGE') {
       const shader = this.imageShader(paint, size);
       target.setShader(shader);

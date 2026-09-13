@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import { EffectSchema } from '../schema/document';
+import { EffectSchema, type Effect } from '../schema/document';
 import {
   blurOffsets,
   canAddEffect,
@@ -87,14 +87,27 @@ describe('effects', () => {
     expect(canAddEffect(shadows.slice(0, 7), 'DROP_SHADOW')).toBe(true);
     expect(canAddEffect(shadows.slice(0, 8), 'DROP_SHADOW')).toBe(false);
     expect(nextEffectType(shadows.slice(0, 8))).toBe('INNER_SHADOW');
-    const blurs = [defaultEffect('LAYER_BLUR'), { ...defaultEffect('LAYER_BLUR'), radius: 30 }, defaultEffect('BACKGROUND_BLUR')];
+    const blurs = [defaultEffect('LAYER_BLUR'), ({ ...defaultEffect('LAYER_BLUR'), radius: 30 } as Effect), defaultEffect('BACKGROUND_BLUR')];
     expect(canAddEffect(blurs, 'LAYER_BLUR')).toBe(false);
     // Only the first effects of each type count; extra ones are ignored when rendering.
     const limited = limitEffects([...shadows, ...blurs]);
     expect(limited.filter((e) => e.type === 'DROP_SHADOW')).toHaveLength(8);
     expect(limited.filter((e) => e.type === 'LAYER_BLUR')).toEqual([defaultEffect('LAYER_BLUR')]);
-    expect(effectOutset([defaultEffect('LAYER_BLUR'), { ...defaultEffect('LAYER_BLUR'), radius: 30 }])).toBe(4);
+    expect(effectOutset([defaultEffect('LAYER_BLUR'), ({ ...defaultEffect('LAYER_BLUR'), radius: 30 } as Effect)])).toBe(4);
     const full = [...shadows.slice(0, 8), ...Array.from({ length: 8 }, () => defaultEffect('INNER_SHADOW')), ...blurs];
-    expect(nextEffectType(full)).toBeNull();
+    expect(nextEffectType(full)).toBe('NOISE');
+    const everything = [...full, defaultEffect('NOISE'), defaultEffect('NOISE'), defaultEffect('TEXTURE')];
+    expect(nextEffectType(everything)).toBeNull();
+    expect(canAddEffect([defaultEffect('NOISE')], 'NOISE')).toBe(true);
+    expect(canAddEffect([defaultEffect('TEXTURE')], 'TEXTURE')).toBe(false);
+  });
+
+  test('noise and texture defaults are valid; converting keeps visibility; unclipped texture extends the bounds', () => {
+    for (const type of ['NOISE', 'TEXTURE'] as const) expect(EffectSchema.parse(defaultEffect(type))).toEqual(defaultEffect(type));
+    const hidden = { ...defaultEffect('DROP_SHADOW'), visible: false };
+    expect(convertEffect(hidden, 'NOISE')).toMatchObject({ type: 'NOISE', visible: false });
+    expect(convertEffect(defaultEffect('NOISE'), 'LAYER_BLUR')).toEqual(defaultEffect('LAYER_BLUR'));
+    expect(effectOutset([{ ...defaultEffect('TEXTURE'), radius: 12 } as Effect])).toBe(12);
+    expect(effectOutset([{ ...defaultEffect('TEXTURE'), radius: 12, clipToShape: true } as Effect])).toBe(0);
   });
 });
