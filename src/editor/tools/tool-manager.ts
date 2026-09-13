@@ -24,7 +24,7 @@ import { hitHandle, hitRotationCorner, selectionFrame } from '../chrome/selectio
 import { GuideController, guidesOf, hitGuide, rulerAt, sameGuide } from '../interactions/guides';
 import type { GuideRef, ToolId } from '../stores/editor-store';
 import { panBy, screenToWorld, zoomAt, type Viewport } from '../viewport/viewport';
-import { CropController } from '../interactions/crop';
+import { beginCrop, CropController, endCrop } from '../interactions/crop';
 import { GradientEditController } from '../interactions/gradient-edit';
 import { BlurEditController } from '../interactions/blur-edit';
 import { EyedropperTool, type EyedropperSample } from './eyedropper-tool';
@@ -99,6 +99,8 @@ export class ToolManager {
   private readonly tools: Record<ToolId, Tool>;
   private middlePan: Vec2 | null = null;
   private pointerTool: Tool | null = null;
+  /** The current drag is a ⌘-drag crop, which leaves crop mode when it ends. */
+  private quickCrop = false;
   private rulersVisible = false;
   private hoverCursor: CursorKind | null = null;
 
@@ -215,6 +217,18 @@ export class ToolManager {
       this.middlePan = sample.screen;
       return;
     }
+    if (sample.button === 0 && sample.mod && this.canvasEditor === null && this.editor.state.getSnapshot().tool === 'move') {
+      // ⌘-drag a handle of a selected image layer: crop directly, without staying in crop mode.
+      const p = this.toPointer(sample);
+      const frame = selectionFrame(this.editor);
+      const id = frame?.nodeId ?? null;
+      if (frame && id && this.editor.doc.children(id).length === 0 && hitHandle(this.editor, frame, p.screen, this.env.hitTolerancePx) && beginCrop(this.editor, id)) {
+        this.quickCrop = true;
+        this.pointerTool = this.crop;
+        this.crop.pointerDown(p);
+        return;
+      }
+    }
     const canvasEditor = sample.button === 0 ? this.canvasEditor : null;
     if (canvasEditor) {
       this.pointerTool = canvasEditor;
@@ -272,6 +286,13 @@ export class ToolManager {
     const tool = this.pointerTool ?? this.tool;
     this.pointerTool = null;
     tool.pointerUp(this.toPointer(sample));
+    this.endQuickCrop();
+  }
+
+  private endQuickCrop(): void {
+    if (!this.quickCrop) return;
+    this.quickCrop = false;
+    endCrop(this.editor);
   }
 
   modifiersChanged(m: ModifierState): void {
@@ -330,7 +351,9 @@ export class ToolManager {
   cancel(): boolean {
     const tool = this.pointerTool ?? (this.canvasEditor ?? this.tool);
     this.pointerTool = null;
-    return tool.cancel();
+    const handled = tool.cancel();
+    this.endQuickCrop();
+    return handled;
   }
 
   /** Crop mode or on-canvas gradient editing, which take pointer input ahead of the active tool. */

@@ -147,6 +147,7 @@ Positions snap to whole pixels for axis-aligned layers while **Snap to pixel gri
 ### Crop mode
 
 - **Entering:** double-click a layer that has an image fill and no children, click **Crop image**, or choose **Crop** in the image mode menu. The **Crop image** command does the same.
+- **Quick crop:** with the Move tool, ⌘-dragging (Ctrl-dragging) a resize handle of a single selected image layer crops instead of resizing. The ToolManager enters crop mode, hands that drag to the `CropController` as a crop-edge drag, and leaves crop mode when the drag ends or is cancelled.
   - `beginCrop` switches the paint to `CROP` without moving the image, as its own undo step (`toCropPaint` in [`core/image/crop.ts`](../src/core/image/crop.ts)).
   - The layer becomes the only selection, and `editorState.croppingId` is set.
 - **Pointer input:** while `croppingId` is set, the ToolManager routes pointer input to `CropController` ([`interactions/crop.ts`](../src/editor/interactions/crop.ts)):

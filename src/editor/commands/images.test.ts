@@ -93,6 +93,29 @@ describe('placing images', () => {
     expect(editor.state.getSnapshot().tool).toBe('move');
   });
 
+  test('⌘-dragging a handle of an image layer crops it without staying in crop mode', () => {
+    const tools = new ToolManager(editor);
+    // Screen = world, so pointer samples land where the layer is.
+    editor.setViewport({ x: 0, y: 0, zoom: 1 });
+    // A 40×20 image layer spanning (−20, −10) to (20, 10); the east edge is at x = 20.
+    const [id] = placeImages(editor, [red], { x: 0, y: 0 });
+    tools.pointerDown({ ...click(20, 0), mod: true });
+    tools.pointerMove({ ...click(15, 0), mod: true });
+    tools.pointerMove({ ...click(10, 0), mod: true });
+    tools.pointerUp({ ...click(10, 0), mod: true });
+    const node = editor.doc.getOrThrow(id!) as RectangleNode;
+    expect(node.size).toEqual({ width: 30, height: 20 });
+    expect((node.fills[0] as ImagePaint).scaleMode).toBe('CROP');
+    expect(editor.state.getSnapshot().croppingId).toBeNull();
+    // Without ⌘ the same drag resizes instead of cropping.
+    tools.pointerDown(click(10, 0));
+    tools.pointerMove(click(15, 0));
+    tools.pointerMove(click(20, 0));
+    tools.pointerUp(click(20, 0));
+    expect((editor.doc.getOrThrow(id!) as RectangleNode).size.width).toBe(40);
+    expect(editor.state.getSnapshot().croppingId).toBeNull();
+  });
+
   test('Place all places every waiting image in a row and returns to Move', () => {
     const tools = new ToolManager(editor);
     tools.imageTool.load([red, blue]);

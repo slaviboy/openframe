@@ -136,6 +136,33 @@ test('crop aspect ratios, Resize to fit, zoom and ⌥ symmetric cropping', async
   await expect(page.getByTestId('field-w')).toHaveValue('60');
 });
 
+test('⌘-dragging an image layer handle crops it directly', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  const chooser = page.waitForEvent('filechooser');
+  await page.keyboard.press('ControlOrMeta+Shift+K');
+  await (await chooser).setFiles([{ name: 'wide.png', mimeType: 'image/png', buffer: solidPng(80, 40, [40, 160, 80]) }]);
+  await expect(page.getByTestId('place-image-hint')).toContainText('Click to place wide');
+  await page.mouse.click(box.x + 500, box.y + 300);
+  await expect(page.getByTestId('field-w')).toHaveValue('80');
+  await expect(page.getByLabel('Fill 1 image mode')).toHaveValue('FILL');
+
+  // The layer spans 460–540 × 280–320; ⌘-drag its right edge 20px in.
+  const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
+  await page.mouse.move(box.x + 540, box.y + 300);
+  await page.keyboard.down(mod);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 530, box.y + 300, { steps: 3 });
+  await page.mouse.move(box.x + 520, box.y + 300, { steps: 3 });
+  await page.mouse.up();
+  await page.keyboard.up(mod);
+  await expect(page.getByTestId('field-w')).toHaveValue('60');
+  await expect(page.getByLabel('Fill 1 image mode')).toHaveValue('CROP');
+  // Not left in crop mode.
+  await expect(page.getByLabel('Fill 1 crop aspect ratio')).toHaveCount(0);
+});
+
 test('Place all places every waiting image at once; Delete discards them', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
