@@ -922,9 +922,7 @@ export class SceneRenderer {
         return this.ck.BLACK;
       },
     };
-    const { paragraph, dy } = shaper.layOut(node, shaper.build(node, painter), (maxLines) => shaper.build(node, painter, maxLines));
-    canvas.drawParagraph(paragraph, 0, dy);
-    paragraph.delete();
+    shaper.draw(canvas, node, painter);
   }
 
   /** Outline mode: a hairline (one device pixel at any zoom) along the layer's geometry. */

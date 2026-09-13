@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { CanvasKit, EmbindEnumEntity, LineMetrics, Paint as CkPaint, Paragraph, TextStyle, TypefaceFontProvider } from 'canvaskit-wasm';
+import type { Canvas, CanvasKit, EmbindEnumEntity, LineMetrics, Paint as CkPaint, Paragraph, TextStyle, TypefaceFontProvider } from 'canvaskit-wasm';
 import type { Id } from '@/core/ids/ids';
 import type { Rect } from '@/core/math/rect';
 import type { Vec2 } from '@/core/math/vec';
@@ -24,8 +24,9 @@ import { parseFontStyle, VARIABLE_FONT_STYLES } from '@/core/text/font-style';
 import { nextGrapheme, previousGrapheme } from '@/core/text/text-editing';
 import type { FontFamilyInfo, TextCaretBox, TextLayoutService } from '@/core/text/text-layout';
 import { isFallbackFamily } from './font-files';
-import { textSegments, type TextSegment, type TextStyle as RunsStyle } from '@/core/text/style-runs';
+import { textSegments, textStyleAt, type TextSegment, type TextStyle as RunsStyle } from '@/core/text/style-runs';
 import { applyTextCase } from '@/core/text/letter-case';
+import { fromParagraphOffset, lineBudgets, paragraphAt, paragraphRanges, toParagraphOffset, type ParagraphRange } from '@/core/text/paragraphs';
 
 /** Font bytes to register under a family name. */
 export interface FontSource {
@@ -48,31 +49,53 @@ type RunStyle = Pick<RunsStyle, 'fontName' | 'fontSize' | 'lineHeight' | 'letter
 
 /** Layout width for text that never wraps. */
 const UNBOUNDED = 1e6;
-/** Stands in for empty text, so an empty layer keeps one line's height and a caret. */
+/** Stands in for an empty paragraph, so it keeps one line's height and a caret. */
 const EMPTY = '​';
-/** Laid-out paragraphs kept for caret and hit queries. */
+/** Laid-out text kept for caret and hit queries. */
 const CACHE_LIMIT = 256;
 const VERTICAL: Record<TextAlignVertical, number> = { TOP: 0, CENTER: 0.5, BOTTOM: 1 };
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
-interface Layout {
-  readonly node: TextNode;
+/** One paragraph of a text layer, laid out. */
+interface ParagraphLayout {
+  readonly range: ParagraphRange;
   readonly paragraph: Paragraph;
-  /** Offset of the paragraph's top in the layer (vertical alignment of fixed-size boxes). */
+  /** Placeholder characters before the paragraph's own (a first-line indent). */
+  readonly prefix: number;
+  /** Top within the text block, before vertical alignment. */
+  readonly top: number;
+  readonly height: number;
+  /** Cut off entirely by max lines or truncation. */
+  readonly hidden: boolean;
+}
+
+/** A text layer's paragraphs stacked into a block. */
+interface BlockLayout {
+  readonly paragraphs: readonly ParagraphLayout[];
+  /** The widest paragraph's natural width (for auto width). */
+  readonly naturalWidth: number;
+  readonly height: number;
+  /** Offset of the block's top in the layer (vertical alignment of fixed-size boxes). */
   readonly dy: number;
+}
+
+interface CachedLayout {
+  readonly node: TextNode;
+  readonly block: BlockLayout;
 }
 
 /**
  * Shapes and lays out text layers with SkParagraph (HarfBuzz shaping, ICU line breaking) from
- * registered fonts. Implements the editor's text layout service and builds painted paragraphs for
- * the renderer, so what is measured is exactly what is drawn.
+ * registered fonts. Each paragraph (text between line breaks) is its own SkParagraph, stacked with
+ * the layer's paragraph spacing and offset by its first-line indent. Implements the editor's text
+ * layout service and draws for the renderer, so what is measured is exactly what is drawn.
  */
 export class TextShaper implements TextLayoutService {
   private readonly provider: TypefaceFontProvider;
   private readonly families: string[] = [];
   private readonly userFamilies = new Map<string, { styles: Set<string>; variable: boolean }>();
-  private readonly layouts = new Map<Id, Layout>();
+  private readonly layouts = new Map<Id, CachedLayout>();
 
   constructor(
     private readonly ck: CanvasKit,
@@ -119,8 +142,7 @@ export class TextShaper implements TextLayoutService {
       entry.variable ||= font.variable;
       this.userFamilies.set(font.family, entry);
     }
-    for (const layout of this.layouts.values()) layout.paragraph.delete();
-    this.layouts.clear();
+    this.clearCache();
   }
 
   fontFamilyOf(bytes: Uint8Array): string | null {
@@ -132,9 +154,13 @@ export class TextShaper implements TextLayoutService {
   }
 
   dispose(): void {
-    for (const layout of this.layouts.values()) layout.paragraph.delete();
-    this.layouts.clear();
+    this.clearCache();
     this.provider.delete();
+  }
+
+  private clearCache(): void {
+    for (const { block } of this.layouts.values()) deleteBlock(block);
+    this.layouts.clear();
   }
 
   private textStyle(style: RunStyle, decorationColor?: Float32Array): TextStyle {
@@ -172,16 +198,24 @@ export class TextShaper implements TextLayoutService {
     });
   }
 
+  /** First-line indent in effect (only left-aligned and justified text is indented). */
+  private indentOf(node: TextNode): number {
+    const indent = node.paragraphIndent ?? 0;
+    return indent > 0 && (node.textAlignHorizontal === 'LEFT' || node.textAlignHorizontal === 'JUSTIFIED') ? indent : 0;
+  }
+
   /**
-   * A paragraph of the layer's text with one style run per mixed-style segment. With a `painter`,
-   * each segment is painted with the paint it returns over `background` (otherwise black). Not
-   * laid out; the caller deletes it.
+   * One paragraph of the layer's text with one style run per mixed-style segment, after an indent
+   * placeholder when the layer has one. With a `painter`, segments are painted with the paints it
+   * returns. Not laid out; the caller deletes it.
    */
-  build(node: TextNode, painter?: TextPainter, maxLines: number | undefined = node.maxLines): Paragraph {
+  private buildParagraph(node: TextNode, range: ParagraphRange, painter: TextPainter | undefined, maxLines?: number): Paragraph {
     const ck = this.ck;
     const align = { LEFT: ck.TextAlign.Left, CENTER: ck.TextAlign.Center, RIGHT: ck.TextAlign.Right, JUSTIFIED: ck.TextAlign.Justify }[node.textAlignHorizontal];
+    // An empty paragraph takes the style of the character before it (what typing there would get).
+    const emptyStyle = textStyleAt(node, range.start > 0 ? range.start - 1 : range.start);
     const style = new ck.ParagraphStyle({
-      textStyle: this.textStyle(node),
+      textStyle: this.textStyle(range.end > range.start ? textStyleAt(node, range.start) : emptyStyle),
       textAlign: align,
       // Rounding widths up would wrap auto-width text laid out at its exact natural width.
       applyRoundingHack: false,
@@ -189,15 +223,25 @@ export class TextShaper implements TextLayoutService {
       ...(maxLines !== undefined ? { maxLines } : {}),
     });
     const builder = ck.ParagraphBuilder.MakeFromFontProvider(style, this.provider);
-    const segments = textSegments(node);
-    for (const segment of segments) {
+    const indent = this.indentOf(node);
+    if (indent > 0) builder.addPlaceholder(indent, 0, ck.PlaceholderAlignment.Baseline, ck.TextBaseline.Alphabetic, 0);
+    const add = (segment: TextSegment, text: string) => {
       const textStyle = this.textStyle(segment, painter?.decorationColor?.(segment));
       // Painters may reuse one paint object: pushing copies it into the run.
       if (painter) builder.pushPaintStyle(textStyle, painter.paint(segment), painter.background);
       else builder.pushStyle(textStyle);
-      // Letter case keeps every character's length, so offsets still match the stored text.
-      builder.addText(node.characters === '' ? EMPTY : applyTextCase(node.characters.slice(segment.start, segment.end), segment.textCase));
+      builder.addText(text);
       builder.pop();
+    };
+    if (range.end === range.start) {
+      add({ ...emptyStyle, start: range.start, end: range.start }, EMPTY);
+    } else {
+      for (const segment of textSegments(node)) {
+        const start = Math.max(segment.start, range.start);
+        const end = Math.min(segment.end, range.end);
+        // Letter case keeps every character's length, so offsets still match the stored text.
+        if (end > start) add(segment, applyTextCase(node.characters.slice(start, end), segment.textCase));
+      }
     }
     const paragraph = builder.build();
     builder.delete();
@@ -205,129 +249,209 @@ export class TextShaper implements TextLayoutService {
   }
 
   /**
-   * Lays out a paragraph for the layer's box: auto width at its natural width (never narrower
-   * than the box), everything else wrapped to the box width. Truncated layers are rebuilt to the
-   * lines that fit. Returns the paragraph to draw (possibly a new one) and its vertical offset.
+   * Lays the layer's paragraphs out and stacks them. `width` null uses the natural width; a number
+   * wraps to it; 'box' fits the layer's box: auto width at its natural width (never narrower than
+   * the box), otherwise wrapped to the box width, with truncation to the box height and vertical
+   * alignment. Max lines is shared across paragraphs in order. The caller deletes the paragraphs.
    */
-  layOut(node: TextNode, paragraph: Paragraph, rebuild: (maxLines: number) => Paragraph): { paragraph: Paragraph; dy: number } {
-    let p = paragraph;
-    if (node.textAutoResize === 'WIDTH_AND_HEIGHT') {
-      p.layout(UNBOUNDED);
-      p.layout(Math.max(node.size.width, p.getMaxIntrinsicWidth()) + 0.01);
+  private stack(node: TextNode, width: number | null | 'box', painter?: TextPainter): BlockLayout {
+    const ranges = paragraphRanges(node.characters);
+    const spacing = node.paragraphSpacing ?? 0;
+    const prefix = this.indentOf(node) > 0 ? 1 : 0;
+    const paragraphs = ranges.map((range) => this.buildParagraph(node, range, painter));
+    let naturalWidth = 0;
+    let layoutWidth: number;
+    if (width === null || (width === 'box' && node.textAutoResize === 'WIDTH_AND_HEIGHT')) {
+      for (const p of paragraphs) p.layout(UNBOUNDED);
+      naturalWidth = Math.max(0, ...paragraphs.map((p) => p.getMaxIntrinsicWidth()));
+      layoutWidth = (width === 'box' ? Math.max(node.size.width, naturalWidth) : naturalWidth) + 0.01;
     } else {
-      p.layout(Math.max(0, node.size.width));
+      layoutWidth = Math.max(0, width === 'box' ? node.size.width : width);
     }
-    if (node.textAutoResize === 'TRUNCATE') {
-      const lines = p.getLineMetrics();
-      const fit = lines.filter((l) => l.baseline + l.descent <= node.size.height + 0.5).length;
-      if (fit < lines.length) {
-        p.delete();
-        p = rebuild(Math.max(1, fit));
-        p.layout(Math.max(0, node.size.width));
+    for (const p of paragraphs) p.layout(layoutWidth);
+    const counts = paragraphs.map((p) => p.getLineMetrics().length);
+    let budgets = lineBudgets(counts, node.maxLines);
+    if (width === 'box' && node.textAutoResize === 'TRUNCATE') {
+      // The lines that fit in the box: once a paragraph is cut, the ones after it are hidden.
+      let top = 0;
+      let cut = false;
+      budgets = budgets.map((budget, i) => {
+        if (cut) return 0;
+        const p = paragraphs[i]!;
+        const fit = p
+          .getLineMetrics()
+          .slice(0, budget)
+          .filter((l) => top + l.baseline + l.descent <= node.size.height + 0.5).length;
+        const lines = i === 0 ? Math.max(1, fit) : fit;
+        if (lines < counts[i]!) cut = true;
+        top += p.getHeight() + spacing;
+        return lines;
+      });
+    }
+    const layouts: ParagraphLayout[] = [];
+    let top = 0;
+    let visible = 0;
+    paragraphs.forEach((original, i) => {
+      let paragraph = original;
+      const budget = budgets[i]!;
+      // The first paragraph always shows at least its first line.
+      const hidden = budget === 0 && i > 0;
+      if (!hidden && budget < counts[i]!) {
+        paragraph.delete();
+        paragraph = this.buildParagraph(node, ranges[i]!, painter, Math.max(1, budget));
+        paragraph.layout(layoutWidth);
       }
-    }
-    const fixed = node.textAutoResize === 'NONE' || node.textAutoResize === 'TRUNCATE';
-    return { paragraph: p, dy: fixed ? (node.size.height - p.getHeight()) * VERTICAL[node.textAlignVertical] : 0 };
+      if (!hidden && visible > 0) top += spacing;
+      const height = hidden ? 0 : paragraph.getHeight();
+      layouts.push({ range: ranges[i]!, paragraph, prefix, top, height, hidden });
+      if (!hidden) {
+        top += height;
+        visible++;
+      }
+    });
+    const fixed = width === 'box' && (node.textAutoResize === 'NONE' || node.textAutoResize === 'TRUNCATE');
+    return { paragraphs: layouts, naturalWidth, height: top, dy: fixed ? (node.size.height - top) * VERTICAL[node.textAlignVertical] : 0 };
   }
 
-  private layout(node: TextNode): Layout {
+  /** Draws a text layer's glyphs, each mixed-style segment painted by `painter`. */
+  draw(canvas: Canvas, node: TextNode, painter: TextPainter): void {
+    const block = this.stack(node, 'box', painter);
+    for (const p of block.paragraphs) if (!p.hidden) canvas.drawParagraph(p.paragraph, 0, block.dy + p.top);
+    deleteBlock(block);
+  }
+
+  private layout(node: TextNode): BlockLayout {
     const cached = this.layouts.get(node.id);
-    if (cached?.node === node) return cached;
+    if (cached?.node === node) return cached.block;
     if (cached) {
-      cached.paragraph.delete();
+      deleteBlock(cached.block);
       this.layouts.delete(node.id);
     }
-    const { paragraph, dy } = this.layOut(node, this.build(node), (maxLines) => this.build(node, undefined, maxLines));
-    const layout = { node, paragraph, dy };
-    this.layouts.set(node.id, layout);
+    const block = this.stack(node, 'box');
+    this.layouts.set(node.id, { node, block });
     if (this.layouts.size > CACHE_LIMIT) {
       const [oldest] = this.layouts.keys();
-      this.layouts.get(oldest!)?.paragraph.delete();
+      const evicted = this.layouts.get(oldest!);
+      if (evicted) deleteBlock(evicted.block);
       this.layouts.delete(oldest!);
     }
-    return layout;
+    return block;
   }
 
   measure(node: TextNode, width: number | null): Size {
-    const paragraph = this.build(node);
-    try {
-      if (width === null) {
-        paragraph.layout(UNBOUNDED);
-        return { width: round2(paragraph.getMaxIntrinsicWidth()), height: round2(paragraph.getHeight()) };
-      }
-      paragraph.layout(Math.max(0, width));
-      return { width, height: round2(paragraph.getHeight()) };
-    } finally {
-      paragraph.delete();
-    }
+    const block = this.stack(node, width);
+    deleteBlock(block);
+    return { width: width === null ? round2(block.naturalWidth) : width, height: round2(block.height) };
   }
 
   private clamp(node: TextNode, offset: number): number {
     return Math.min(node.characters.length, Math.max(0, offset));
   }
 
-  /** Index of the visual line containing `offset` (the last line starting at or before it). */
-  private lineIndex(lines: readonly LineMetrics[], offset: number): number {
-    for (let i = lines.length - 1; i >= 0; i--) if (lines[i]!.startIndex <= offset) return i;
+  /** Index of the visual line containing a paragraph-local offset (the last line starting at or before it). */
+  private lineIndex(lines: readonly LineMetrics[], local: number): number {
+    for (let i = lines.length - 1; i >= 0; i--) if (lines[i]!.startIndex <= local) return i;
     return 0;
+  }
+
+  /** The laid-out paragraph holding an offset (the last visible one when it is cut off). */
+  private paragraphFor(block: BlockLayout, offset: number): ParagraphLayout {
+    const range = paragraphAt(
+      block.paragraphs.map((p) => p.range),
+      offset,
+    );
+    const layout = block.paragraphs[range.index]!;
+    if (!layout.hidden) return layout;
+    return [...block.paragraphs].reverse().find((p) => !p.hidden) ?? block.paragraphs[0]!;
   }
 
   offsetAt(node: TextNode, point: Vec2): number {
     if (node.characters === '') return 0;
-    const { paragraph, dy } = this.layout(node);
-    return this.clamp(node, paragraph.getGlyphPositionAtCoordinate(point.x, point.y - dy).pos);
+    const block = this.layout(node);
+    const y = point.y - block.dy;
+    const spacing = node.paragraphSpacing ?? 0;
+    const visible = block.paragraphs.filter((p) => !p.hidden);
+    // The paragraph under the point; the gap between two belongs to the nearer one.
+    let target = visible[0]!;
+    for (const p of visible) if (y >= p.top - spacing / 2) target = p;
+    const local = target.paragraph.getGlyphPositionAtCoordinate(point.x, y - target.top).pos;
+    return this.clamp(node, fromParagraphOffset(target.range, local, target.prefix));
   }
 
   caretAt(node: TextNode, offset: number): TextCaretBox {
-    const { paragraph, dy } = this.layout(node);
+    const block = this.layout(node);
     const text = node.characters;
-    const at = this.clamp(node, offset);
+    const layout = this.paragraphFor(block, this.clamp(node, offset));
+    const { range, paragraph, prefix } = layout;
+    const at = Math.min(range.end, Math.max(range.start, offset));
+    const local = (o: number) => toParagraphOffset(range, o, prefix);
+    const y = block.dy + layout.top;
     const lines = paragraph.getLineMetrics();
-    if (lines.length === 0) return { x: 0, top: dy, bottom: dy + node.fontSize };
-    const box = (index: number) => {
-      const line = lines[this.lineIndex(lines, index)]!;
-      return { top: line.baseline - line.ascent + dy, bottom: line.baseline + line.descent + dy };
+    if (lines.length === 0) return { x: 0, top: y, bottom: y + node.fontSize };
+    const box = (localIndex: number) => {
+      const line = lines[this.lineIndex(lines, localIndex)]!;
+      return { top: line.baseline - line.ascent + y, bottom: line.baseline + line.descent + y };
     };
     const rect = (start: number, end: number) => paragraph.getRectsForRange(start, end, this.ck.RectHeightStyle.Tight, this.ck.RectWidthStyle.Tight)[0]?.rect;
-    if (at < text.length && text[at] !== '\n') {
-      const r = rect(at, nextGrapheme(text, at));
-      if (r) return { x: r[0]!, ...box(at) };
+    if (at < range.end) {
+      const r = rect(local(at), local(nextGrapheme(text, at)));
+      if (r) return { x: r[0]!, ...box(local(at)) };
     }
-    if (at > 0 && text[at - 1] !== '\n') {
-      const r = rect(previousGrapheme(text, at), at);
-      if (r) return { x: r[2]!, ...box(at - 1) };
+    if (at > range.start) {
+      const r = rect(local(previousGrapheme(text, at)), local(at));
+      if (r) return { x: r[2]!, ...box(local(at) - 1) };
     }
-    // An empty line: the start of the text or right after a line break.
+    // An empty paragraph.
     const width = paragraph.getMaxWidth();
-    const x = node.textAlignHorizontal === 'CENTER' ? width / 2 : node.textAlignHorizontal === 'RIGHT' ? width : 0;
-    return { x, ...box(at) };
+    const x = node.textAlignHorizontal === 'CENTER' ? width / 2 : node.textAlignHorizontal === 'RIGHT' ? width : this.indentOf(node);
+    return { x, ...box(local(at)) };
   }
 
   selectionRects(node: TextNode, start: number, end: number): Rect[] {
     if (node.characters === '' || start >= end) return [];
-    const { paragraph, dy } = this.layout(node);
-    return paragraph
-      .getRectsForRange(this.clamp(node, start), this.clamp(node, end), this.ck.RectHeightStyle.Max, this.ck.RectWidthStyle.Tight)
-      .map(({ rect: r }) => ({ x: r[0]!, y: r[1]! + dy, width: r[2]! - r[0]!, height: r[3]! - r[1]! }));
+    const block = this.layout(node);
+    const rects: Rect[] = [];
+    for (const layout of block.paragraphs) {
+      const from = Math.max(start, layout.range.start);
+      const to = Math.min(end, layout.range.end);
+      if (layout.hidden || to <= from) continue;
+      const y = block.dy + layout.top;
+      for (const { rect: r } of layout.paragraph.getRectsForRange(toParagraphOffset(layout.range, from, layout.prefix), toParagraphOffset(layout.range, to, layout.prefix), this.ck.RectHeightStyle.Max, this.ck.RectWidthStyle.Tight)) {
+        rects.push({ x: r[0]!, y: r[1]! + y, width: r[2]! - r[0]!, height: r[3]! - r[1]! });
+      }
+    }
+    return rects;
   }
 
   offsetOnAdjacentLine(node: TextNode, offset: number, direction: -1 | 1, x: number): number {
-    const { paragraph } = this.layout(node);
-    const lines = paragraph.getLineMetrics();
-    const target = this.lineIndex(lines, this.clamp(node, offset)) + direction;
-    if (target < 0) return 0;
-    if (target >= lines.length) return node.characters.length;
-    return this.clamp(node, paragraph.getGlyphPositionAtCoordinate(x, lines[target]!.baseline).pos);
+    const block = this.layout(node);
+    const layout = this.paragraphFor(block, this.clamp(node, offset));
+    const lines = layout.paragraph.getLineMetrics();
+    const line = this.lineIndex(lines, toParagraphOffset(layout.range, this.clamp(node, offset), layout.prefix)) + direction;
+    if (line >= 0 && line < lines.length) {
+      return this.clamp(node, fromParagraphOffset(layout.range, layout.paragraph.getGlyphPositionAtCoordinate(x, lines[line]!.baseline).pos, layout.prefix));
+    }
+    // Into the paragraph above or below.
+    const visible = block.paragraphs.filter((p) => !p.hidden);
+    const next = visible[visible.indexOf(layout) + direction];
+    if (!next) return direction < 0 ? 0 : node.characters.length;
+    const nextLines = next.paragraph.getLineMetrics();
+    const nextLine = direction > 0 ? nextLines[0] : nextLines[nextLines.length - 1];
+    if (!nextLine) return direction > 0 ? next.range.start : next.range.end;
+    return this.clamp(node, fromParagraphOffset(next.range, next.paragraph.getGlyphPositionAtCoordinate(x, nextLine.baseline).pos, next.prefix));
   }
 
   lineRange(node: TextNode, offset: number): [number, number] {
     if (node.characters === '') return [0, 0];
-    const { paragraph } = this.layout(node);
-    const lines = paragraph.getLineMetrics();
-    const line = lines[this.lineIndex(lines, this.clamp(node, offset))];
-    if (!line) return [0, 0];
-    let end = this.clamp(node, line.endIndex);
-    if (end > line.startIndex && node.characters[end - 1] === '\n') end--;
-    return [this.clamp(node, line.startIndex), end];
+    const block = this.layout(node);
+    const layout = this.paragraphFor(block, this.clamp(node, offset));
+    const lines = layout.paragraph.getLineMetrics();
+    const line = lines[this.lineIndex(lines, toParagraphOffset(layout.range, this.clamp(node, offset), layout.prefix))];
+    if (!line) return [layout.range.start, layout.range.end];
+    return [fromParagraphOffset(layout.range, line.startIndex, layout.prefix), fromParagraphOffset(layout.range, line.endIndex, layout.prefix)];
   }
+}
+
+function deleteBlock(block: BlockLayout): void {
+  for (const p of block.paragraphs) p.paragraph.delete();
 }

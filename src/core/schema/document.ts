@@ -482,6 +482,10 @@ export const TextNodeSchema = z.object({
   textCase: TextCaseSchema.optional(),
   /** Text beyond this many lines is cut off with an ellipsis (auto height or truncated boxes). Absent means no limit. */
   maxLines: z.number().int().min(1).max(10_000).optional(),
+  /** Space between paragraphs, in pixels. Absent means 0. */
+  paragraphSpacing: z.number().min(0).max(10_000).optional(),
+  /** First-line indent of every paragraph, in pixels (left-aligned and justified text only). Absent means 0. */
+  paragraphIndent: z.number().min(0).max(10_000).optional(),
 });
 
 export const NodeSchema = z.discriminatedUnion('type', [

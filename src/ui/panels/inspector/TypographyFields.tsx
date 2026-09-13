@@ -36,6 +36,8 @@ import {
   setLetterSpacing,
   setLineHeight,
   setMaxLines,
+  setParagraphIndent,
+  setParagraphSpacing,
   setTextAlignHorizontal,
   setTextAlignVertical,
   setTextAutoResize,
@@ -136,6 +138,8 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
   const textCase = single(valuesOf(nodes, range, 'textCase'));
   const maxLinesValues = [...new Set(nodes.map((n) => n.maxLines))];
   const maxLines = maxLinesValues.length === 1 ? maxLinesValues[0] : undefined;
+  const paragraphSpacing = single([...new Set(nodes.map((n) => n.paragraphSpacing ?? 0))]);
+  const paragraphIndent = single([...new Set(nodes.map((n) => n.paragraphIndent ?? 0))]);
   const hAlign = shared(nodes, (n) => n.textAlignHorizontal);
   const vAlign = shared(nodes, (n) => n.textAlignVertical);
   const run = (label: string, apply: (tx: Transaction, node: TextNode) => void) => editor.history.run(label, (tx) => nodes.forEach((n) => apply(tx, n)));
@@ -211,6 +215,28 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
               </option>
             ))}
           </select>
+          <div className={styles.grid2}>
+            <NumberField
+              label="¶↕"
+              ariaLabel="Paragraph spacing"
+              testId="field-paragraph-spacing"
+              min={0}
+              max={10_000}
+              value={paragraphSpacing}
+              onChange={(v) => run('Change paragraph spacing', (tx, n) => setParagraphSpacing(tx, n, v))}
+            />
+            <NumberField
+              label="¶→"
+              ariaLabel="Paragraph indent"
+              testId="field-paragraph-indent"
+              min={0}
+              max={10_000}
+              value={paragraphIndent}
+              // Only left-aligned and justified text is indented.
+              disabled={hAlign !== 'LEFT' && hAlign !== 'JUSTIFIED'}
+              onChange={(v) => run('Change paragraph indent', (tx, n) => setParagraphIndent(tx, n, v))}
+            />
+          </div>
           <div className={styles.buttonRow}>
             <NumberField
               label="≡"

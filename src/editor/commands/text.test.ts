@@ -32,6 +32,8 @@ import {
   setTextAlignHorizontal,
   setTextAutoResize,
   setMaxLines,
+  setParagraphIndent,
+  setParagraphSpacing,
   setTextCase,
   setTextFills,
   stepTextProperty,
@@ -139,6 +141,14 @@ describe('text properties', () => {
     expect(get().maxLines).toBe(2);
     editor.history.run('max', (tx) => setMaxLines(tx, get(), undefined));
     expect('maxLines' in get()).toBe(false);
+    editor.history.run('paragraphs', (tx) => {
+      setParagraphSpacing(tx, get(), 12.345);
+      setParagraphIndent(tx, get(), -4);
+    });
+    expect(get().paragraphSpacing).toBe(12.35);
+    expect('paragraphIndent' in get()).toBe(false);
+    editor.history.run('paragraphs', (tx) => setParagraphSpacing(tx, get(), 0));
+    expect('paragraphSpacing' in get()).toBe(false);
 
     const context = { fonts, autoLineHeight: (size: number) => size * 1.2 };
     // Mixed sizes step individually.

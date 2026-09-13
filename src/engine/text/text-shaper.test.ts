@@ -61,6 +61,32 @@ describe('text shaping', () => {
     expect(shaper.measure(text({ characters: 'Привет' }), null).width).toBeGreaterThan(40);
   });
 
+  test('paragraph spacing stacks paragraphs apart and the indent offsets first lines', () => {
+    const two = text({ characters: 'one\ntwo' });
+    const plain = shaper.measure(two, null);
+    const spaced = shaper.measure({ ...two, paragraphSpacing: 20 }, null);
+    expect(spaced.height).toBeCloseTo(plain.height + 20, 0);
+    const indentedSize = shaper.measure({ ...two, paragraphIndent: 30 }, null);
+    expect(indentedSize.width).toBeCloseTo(plain.width + 30, 0);
+    const indented = { ...two, paragraphIndent: 30, size: indentedSize };
+    expect(shaper.caretAt(indented, 0).x).toBeCloseTo(30, 0);
+    expect(shaper.caretAt(indented, 4).x).toBeCloseTo(30, 0);
+    expect(shaper.lineRange(indented, 5)).toEqual([4, 7]);
+    // Centered text isn't indented.
+    expect(shaper.measure({ ...two, paragraphIndent: 30, textAlignHorizontal: 'CENTER' }, null).width).toBeCloseTo(plain.width, 0);
+
+    const laid = { ...two, paragraphSpacing: 20, size: spaced };
+    const first = shaper.caretAt(laid, 0);
+    const second = shaper.caretAt(laid, 4);
+    expect(second.top).toBeGreaterThan(first.bottom + 15);
+    expect(shaper.offsetAt(laid, { x: 1, y: second.top + 2 })).toBe(4);
+    expect(shaper.offsetOnAdjacentLine(laid, 1, 1, first.x)).toBe(4);
+    expect(shaper.selectionRects(laid, 0, 7)).toHaveLength(2);
+    // Max lines is shared across paragraphs.
+    const three = text({ characters: 'a\nb\nc' });
+    expect(shaper.measure({ ...three, maxLines: 2 }, null).height).toBeLessThan(shaper.measure(three, null).height * 0.8);
+  });
+
   test('letter case changes the shaped text and max lines limits the height', () => {
     const lower = shaper.measure(text({ characters: 'hello' }), null).width;
     expect(shaper.measure(text({ characters: 'hello', textCase: 'UPPER' }), null).width).toBeGreaterThan(lower);

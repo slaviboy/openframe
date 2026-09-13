@@ -129,6 +129,18 @@ export function setTextCase(tx: Transaction, node: SceneNode, textCase: TextCase
   setTextStyle(tx, node, { textCase }, range);
 }
 
+/** Space between paragraphs in pixels (0 removes it). */
+export function setParagraphSpacing(tx: Transaction, node: SceneNode, spacing: number): void {
+  const value = Math.min(10_000, Math.max(0, Math.round(spacing * 100) / 100));
+  if (textOf(tx, node)) tx.set(node.id, 'paragraphSpacing', value > 0 ? value : undefined);
+}
+
+/** First-line indent in pixels (0 removes it); it only shows on left-aligned and justified text. */
+export function setParagraphIndent(tx: Transaction, node: SceneNode, indent: number): void {
+  const value = Math.min(10_000, Math.max(0, Math.round(indent * 100) / 100));
+  if (textOf(tx, node)) tx.set(node.id, 'paragraphIndent', value > 0 ? value : undefined);
+}
+
 /** Max lines (auto height and truncated boxes cut off with an ellipsis); undefined removes the limit. */
 export function setMaxLines(tx: Transaction, node: SceneNode, maxLines: number | undefined): void {
   if (textOf(tx, node)) tx.set(node.id, 'maxLines', maxLines === undefined ? undefined : Math.min(10_000, Math.max(1, Math.round(maxLines))));

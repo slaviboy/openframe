@@ -149,6 +149,10 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
 - **Text style:**
   - Line height: auto is the font's own; pixels and percent become a height multiplier with half leading.
   - Letter spacing in percent is relative to the font size.
+- **Paragraphs:** each paragraph (text between line breaks) is its own SkParagraph ([`core/text/paragraphs.ts`](../src/core/text/paragraphs.ts)), laid out at a common width and stacked with `paragraphSpacing` between them.
+  - A first-line indent is a zero-height placeholder before the paragraph's first character, for left-aligned and justified text. Paragraph-local offsets are shifted by that one placeholder.
+  - An empty paragraph shapes a zero-width space in the style of the character before it.
+  - `maxLines` is shared in order (`lineBudgets`), and truncation hides every paragraph after the first one it cuts. The first paragraph always keeps at least one line.
 - **Layout by `textAutoResize`:**
   - Auto width is laid out at its natural width (never narrower than the box).
   - Everything else wraps to the box width.
