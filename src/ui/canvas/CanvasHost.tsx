@@ -46,7 +46,9 @@ import {
   undoTextEdit,
   type CaretMove,
 } from '@/editor/interactions/text-edit';
-import { toggleFontStyle } from '@/editor/commands/text';
+import { stepTextProperty, toggleFontStyle, toggleTextDecoration } from '@/editor/commands/text';
+import { autoLineHeight } from '@/editor/commands/builtin';
+import type { Transaction } from '@/core/history/history';
 import { addFontFaces } from '../fonts/font-faces';
 import { imageFilesOf } from '../images/import-image';
 import { IS_MAC } from '../keyboard/keyboard-controller';
@@ -389,6 +391,10 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
     };
     const onTextKeyDown = (e: KeyboardEvent) => {
       if (!editor.state.getSnapshot().textEdit || e.isComposing) return;
+      if (onTextFormatKey(e)) {
+        schedule();
+        return;
+      }
       const mod = IS_MAC ? e.metaKey : e.ctrlKey;
       const extend = e.shiftKey;
       const word = IS_MAC ? e.altKey : e.ctrlKey;
@@ -453,6 +459,32 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
         redoTextEdit(editor);
       }
       schedule();
+    };
+    /**
+     * Formatting shortcuts while editing, applied to the selected characters (or the whole layer with
+     * a caret): underline (⌥U / Ctrl+U), strikethrough (⇧⌘X), and font size, weight, letter spacing
+     * and line height steps on , and . (matched by physical key, since modifiers change `key`).
+     */
+    const onTextFormatKey = (e: KeyboardEvent): boolean => {
+      const target = textEditTarget(editor);
+      if (!target || editor.history.inTransaction) return false;
+      const mod = IS_MAC ? e.metaKey : e.ctrlKey;
+      const range = textStyleRange(editor, target.node.id);
+      const run = (label: string, apply: (tx: Transaction) => void) => {
+        e.preventDefault();
+        editor.history.run(label, apply);
+        return true;
+      };
+      if (e.code === 'KeyU' && (IS_MAC ? e.altKey && !e.metaKey && !e.ctrlKey : e.ctrlKey && !e.altKey) && !e.shiftKey) {
+        return run('Underline', (tx) => toggleTextDecoration(tx, target.node, 'UNDERLINE', range));
+      }
+      if (e.code === 'KeyX' && mod && e.shiftKey && !e.altKey) return run('Strikethrough', (tx) => toggleTextDecoration(tx, target.node, 'STRIKETHROUGH', range));
+      if (e.code !== 'Period' && e.code !== 'Comma') return false;
+      const direction = e.code === 'Period' ? 1 : -1;
+      const property = mod && e.shiftKey && !e.altKey ? 'fontSize' : mod && e.altKey && !e.shiftKey ? 'fontWeight' : !mod && e.altKey && e.shiftKey ? 'lineHeight' : !mod && e.altKey ? 'letterSpacing' : null;
+      if (!property) return false;
+      const context = { fonts: editor.textLayout?.availableFonts() ?? [], autoLineHeight: (size: number) => autoLineHeight(editor, size) };
+      return run('Change text', (tx) => stepTextProperty(tx, target.node, property, direction, context, range));
     };
     const onTextCopy = (e: ClipboardEvent) => {
       if (!editor.state.getSnapshot().textEdit) return;

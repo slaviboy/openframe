@@ -46,6 +46,7 @@ import { rectangleCorners, resolveCornerRadii, roundedPolygon, type PathCommand 
 import type { TextNode } from '@/core/schema/document';
 import type { TextShaper } from '../text/text-shaper';
 import { textSegments, type TextSegment } from '@/core/text/style-runs';
+import { isGradientPaint } from '@/core/schema/document';
 import { adjustmentValues, hasAdjustments } from '@/core/image/adjustments';
 import { imageQuad } from '@/core/image/crop';
 import { imagePlacement } from '@/core/image/image-fit';
@@ -910,7 +911,17 @@ export class SceneRenderer {
   private drawText(canvas: Canvas, node: TextNode, paintFor: (segment: TextSegment) => CkPaint): void {
     const shaper = this.textShaper;
     if (!shaper || node.characters === '') return;
-    const painter = { background: this.transparentPaint(), paint: paintFor };
+    const painter = {
+      background: this.transparentPaint(),
+      paint: paintFor,
+      // Decorations take the segment's top visible fill color (the first stop of a gradient; black for images and patterns).
+      decorationColor: (segment: TextSegment) => {
+        const top = [...segment.fills].reverse().find((p) => p.visible && p.opacity > 0);
+        if (top?.type === 'SOLID') return this.color(top.color, top.opacity);
+        if (top && isGradientPaint(top) && top.gradientStops[0]) return this.color(top.gradientStops[0].color, top.opacity);
+        return this.ck.BLACK;
+      },
+    };
     const { paragraph, dy } = shaper.layOut(node, shaper.build(node, painter), (maxLines) => shaper.build(node, painter, maxLines));
     canvas.drawParagraph(paragraph, 0, dy);
     paragraph.delete();

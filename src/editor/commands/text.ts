@@ -17,9 +17,10 @@
 
 import type { Transaction } from '@/core/history/history';
 import { valuesEqual } from '@/core/ops/equality';
-import type { LetterSpacing, LineHeight, Paint, SceneNode, TextAlignHorizontal, TextAlignVertical, TextAutoResize, TextNode } from '@/core/schema/document';
+import type { LetterSpacing, LineHeight, Paint, SceneNode, TextAlignHorizontal, TextAlignVertical, TextAutoResize, TextCase, TextDecoration, TextNode } from '@/core/schema/document';
 import { fontStyleName, parseFontStyle } from '@/core/text/font-style';
-import { clearRunKeys, rangeValues, styleRange, TEXT_STYLE_KEYS, type TextStyleKey, type TextStyleOverrides } from '@/core/text/style-runs';
+import { clearRunKeys, layerFieldValue, rangeValues, styleRange, TEXT_STYLE_KEYS, textSegments, type TextStyle, type TextStyleKey, type TextStyleOverrides } from '@/core/text/style-runs';
+import { stepFontSize, stepFontWeight, stepLetterSpacing, stepLineHeight } from '@/core/text/typography-steps';
 import type { FontFamilyInfo } from '@/core/text/text-layout';
 
 /**
@@ -47,7 +48,7 @@ export function setTextStyle(tx: Transaction, node: SceneNode, overrides: TextSt
     return;
   }
   const keys = TEXT_STYLE_KEYS.filter((key) => overrides[key] !== undefined);
-  for (const key of keys) tx.set(node.id, key, overrides[key]);
+  for (const key of keys) tx.set(node.id, key, layerFieldValue(key, overrides[key]!));
   const updated = tx.store.getOrThrow(node.id) as TextNode;
   const runs = clearRunKeys(updated, keys);
   if (!valuesEqual(runs, updated.styleRuns)) tx.set(node.id, 'styleRuns', runs);
@@ -110,6 +111,81 @@ export function toggleFontStyle(tx: Transaction, node: SceneNode, axis: 'bold' |
   const available = fonts.find((f) => f.family === family)?.styles;
   if (available && !available.includes(style)) return;
   setTextStyle(tx, node, { fontName: { family, style } }, range);
+}
+
+/** Underline or strikethrough on (or off, when all of the range already has it). */
+export function toggleTextDecoration(tx: Transaction, node: SceneNode, decoration: Exclude<TextDecoration, 'NONE'>, range: TextRange = null): void {
+  const text = textOf(tx, node);
+  if (!text) return;
+  const current = rangeValues(text, range?.start ?? 0, range?.end ?? text.characters.length, 'textDecoration');
+  setTextStyle(tx, node, { textDecoration: current.every((d) => d === decoration) ? 'NONE' : decoration }, range);
+}
+
+export function setTextDecoration(tx: Transaction, node: SceneNode, decoration: TextDecoration, range: TextRange = null): void {
+  setTextStyle(tx, node, { textDecoration: decoration }, range);
+}
+
+export function setTextCase(tx: Transaction, node: SceneNode, textCase: TextCase, range: TextRange = null): void {
+  setTextStyle(tx, node, { textCase }, range);
+}
+
+/** Max lines (auto height and truncated boxes cut off with an ellipsis); undefined removes the limit. */
+export function setMaxLines(tx: Transaction, node: SceneNode, maxLines: number | undefined): void {
+  if (textOf(tx, node)) tx.set(node.id, 'maxLines', maxLines === undefined ? undefined : Math.min(10_000, Math.max(1, Math.round(maxLines))));
+}
+
+/**
+ * Steps a style property over a range (or the whole layer). Mixed values step individually: every
+ * differently styled stretch changes from its own value. Returns false when nothing could change.
+ */
+function stepTextStyle<K extends TextStyleKey>(tx: Transaction, node: SceneNode, key: K, range: TextRange, step: (value: TextStyle[K]) => TextStyle[K] | null): boolean {
+  const text = textOf(tx, node);
+  if (!text) return false;
+  const from = range?.start ?? 0;
+  const to = range?.end ?? text.characters.length;
+  const values = rangeValues(text, from, to, key);
+  if (values.length <= 1 || to <= from) {
+    const next = values[0] !== undefined ? step(values[0]) : null;
+    if (next === null) return false;
+    setTextStyle(tx, node, { [key]: next } as TextStyleOverrides, range);
+    return true;
+  }
+  let changed = false;
+  for (const segment of textSegments(text).filter((s) => s.end > from && s.start < to)) {
+    const next = step(segment[key]);
+    if (next === null) continue;
+    setTextStyle(tx, node, { [key]: next } as TextStyleOverrides, { start: Math.max(from, segment.start), end: Math.min(to, segment.end) });
+    changed = true;
+  }
+  return changed;
+}
+
+/** Typography shortcuts: font size by 1, weight to the next available style, letter spacing by 0.1, line height by 1. */
+export function stepTextProperty(
+  tx: Transaction,
+  node: SceneNode,
+  property: 'fontSize' | 'fontWeight' | 'letterSpacing' | 'lineHeight',
+  direction: 1 | -1,
+  context: { readonly fonts: readonly FontFamilyInfo[]; readonly autoLineHeight: (fontSize: number) => number },
+  range: TextRange = null,
+): boolean {
+  switch (property) {
+    case 'fontSize':
+      return stepTextStyle(tx, node, 'fontSize', range, (size) => stepFontSize(size, direction));
+    case 'letterSpacing':
+      return stepTextStyle(tx, node, 'letterSpacing', range, (spacing) => stepLetterSpacing(spacing, direction));
+    case 'lineHeight': {
+      const text = textOf(tx, node);
+      const size = text ? (rangeValues(text, range?.start ?? 0, range?.end ?? text.characters.length, 'fontSize')[0] ?? text.fontSize) : 12;
+      return stepTextStyle(tx, node, 'lineHeight', range, (lineHeight) => stepLineHeight(lineHeight, context.autoLineHeight(size), direction));
+    }
+    case 'fontWeight':
+      return stepTextStyle(tx, node, 'fontName', range, (name) => {
+        const styles = context.fonts.find((f) => f.family === name.family)?.styles ?? [];
+        const style = stepFontWeight(name.style, styles, direction);
+        return style ? { family: name.family, style } : null;
+      });
+  }
 }
 
 export function setTextAlignHorizontal(tx: Transaction, node: SceneNode, align: TextAlignHorizontal): void {

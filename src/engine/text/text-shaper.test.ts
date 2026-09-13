@@ -61,6 +61,14 @@ describe('text shaping', () => {
     expect(shaper.measure(text({ characters: 'Привет' }), null).width).toBeGreaterThan(40);
   });
 
+  test('letter case changes the shaped text and max lines limits the height', () => {
+    const lower = shaper.measure(text({ characters: 'hello' }), null).width;
+    expect(shaper.measure(text({ characters: 'hello', textCase: 'UPPER' }), null).width).toBeGreaterThan(lower);
+    const long = text({ characters: 'one two three four five six seven eight', textAutoResize: 'HEIGHT' });
+    const full = shaper.measure(long, 60).height;
+    expect(shaper.measure({ ...long, maxLines: 1 }, 60).height).toBeLessThan(full / 2);
+  });
+
   test('carets, hit testing and selection follow the laid-out glyphs', () => {
     const node = text({ characters: 'Hello world' });
     const size = shaper.measure(node, null);

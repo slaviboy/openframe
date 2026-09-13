@@ -154,6 +154,10 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
   - Everything else wraps to the box width.
   - Fixed and truncated boxes are offset vertically by `textAlignVertical`.
   - Truncated boxes are rebuilt with `maxLines` set to the lines that fit and an ellipsis.
+- **Decoration, case and max lines:**
+  - Underline and strikethrough become SkParagraph decorations. Their thickness is the font size ÷ 16 (at least 1). Their color is the segment's top visible fill: the paint's color, a gradient's first stop, or black for images and patterns. Decorations don't take the glyph paint.
+  - Letter case is applied to each segment's characters when building the paragraph (`applyTextCase`). Characters whose case would change their length stay as typed, so offsets still match. Small caps enables the `smcp` feature.
+  - `maxLines` sets the paragraph's max lines and an ellipsis.
 - **Drawing:** each visible fill is drawn as a paragraph built with `pushPaintStyle`, so gradients, images and patterns shade the glyphs. Outline mode paints the glyphs with the hairline paint. A background blur on text uses the text box.
 - **Editing and measuring:** the same shaper implements the editor's `TextLayoutService` (measure, caret, hit, selection rectangles, line navigation). Paragraphs are cached per layer by node identity (up to 256), so what is measured is what is drawn.
 

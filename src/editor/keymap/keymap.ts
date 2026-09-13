@@ -78,6 +78,9 @@ export function eventKey(e: KeyEventLike): string {
   if (e.code === 'Backslash') return '\\';
   if (e.code === 'Slash') return '/';
   if (e.code === 'Quote') return "'";
+  // Physical comma and period (Shift and Option change `key` to <, >, ≤, ≥ on macOS).
+  if (e.code === 'Comma') return ',';
+  if (e.code === 'Period') return '.';
   if (e.key === 'Backspace') return 'Delete';
   return e.key.length === 1 ? e.key.toUpperCase() : e.key;
 }

@@ -25,6 +25,7 @@ import { nextGrapheme, previousGrapheme } from '@/core/text/text-editing';
 import type { FontFamilyInfo, TextCaretBox, TextLayoutService } from '@/core/text/text-layout';
 import { isFallbackFamily } from './font-files';
 import { textSegments, type TextSegment, type TextStyle as RunsStyle } from '@/core/text/style-runs';
+import { applyTextCase } from '@/core/text/letter-case';
 
 /** Font bytes to register under a family name. */
 export interface FontSource {
@@ -36,9 +37,14 @@ export interface FontSource {
 export interface TextPainter {
   readonly background: CkPaint;
   paint(segment: TextSegment): CkPaint;
+  /** Color of underlines and strikethroughs (decorations don't take the glyph paint). */
+  decorationColor?(segment: TextSegment): Float32Array;
 }
 
-type RunStyle = Pick<RunsStyle, 'fontName' | 'fontSize' | 'lineHeight' | 'letterSpacing'>;
+type RunStyle = Pick<RunsStyle, 'fontName' | 'fontSize' | 'lineHeight' | 'letterSpacing'> & {
+  readonly textDecoration?: RunsStyle['textDecoration'] | undefined;
+  readonly textCase?: RunsStyle['textCase'] | undefined;
+};
 
 /** Layout width for text that never wraps. */
 const UNBOUNDED = 1e6;
@@ -131,7 +137,7 @@ export class TextShaper implements TextLayoutService {
     this.provider.delete();
   }
 
-  private textStyle(style: RunStyle): TextStyle {
+  private textStyle(style: RunStyle, decorationColor?: Float32Array): TextStyle {
     const ck = this.ck;
     const { weight, italic } = parseFontStyle(style.fontName.style);
     const weights: EmbindEnumEntity[] = [
@@ -155,6 +161,14 @@ export class TextShaper implements TextLayoutService {
       fontVariations: [{ axis: 'wght', value: weight }],
       letterSpacing: style.letterSpacing.unit === 'PIXELS' ? style.letterSpacing.value : (style.letterSpacing.value / 100) * style.fontSize,
       ...(lineHeight !== null ? { heightMultiplier: lineHeight, halfLeading: true } : {}),
+      ...(style.textCase === 'SMALL_CAPS' ? { fontFeatures: [{ name: 'smcp', value: 1 }] } : {}),
+      ...(style.textDecoration === 'UNDERLINE' || style.textDecoration === 'STRIKETHROUGH'
+        ? {
+            decoration: style.textDecoration === 'UNDERLINE' ? ck.UnderlineDecoration : ck.LineThroughDecoration,
+            decorationThickness: Math.max(1, style.fontSize / 16),
+            ...(decorationColor ? { decorationColor } : {}),
+          }
+        : {}),
     });
   }
 
@@ -163,7 +177,7 @@ export class TextShaper implements TextLayoutService {
    * each segment is painted with the paint it returns over `background` (otherwise black). Not
    * laid out; the caller deletes it.
    */
-  build(node: TextNode, painter?: TextPainter, maxLines?: number): Paragraph {
+  build(node: TextNode, painter?: TextPainter, maxLines: number | undefined = node.maxLines): Paragraph {
     const ck = this.ck;
     const align = { LEFT: ck.TextAlign.Left, CENTER: ck.TextAlign.Center, RIGHT: ck.TextAlign.Right, JUSTIFIED: ck.TextAlign.Justify }[node.textAlignHorizontal];
     const style = new ck.ParagraphStyle({
@@ -171,17 +185,18 @@ export class TextShaper implements TextLayoutService {
       textAlign: align,
       // Rounding widths up would wrap auto-width text laid out at its exact natural width.
       applyRoundingHack: false,
-      ...(node.textAutoResize === 'TRUNCATE' ? { ellipsis: '…' } : {}),
+      ...(node.textAutoResize === 'TRUNCATE' || node.maxLines !== undefined ? { ellipsis: '…' } : {}),
       ...(maxLines !== undefined ? { maxLines } : {}),
     });
     const builder = ck.ParagraphBuilder.MakeFromFontProvider(style, this.provider);
     const segments = textSegments(node);
     for (const segment of segments) {
-      const textStyle = this.textStyle(segment);
+      const textStyle = this.textStyle(segment, painter?.decorationColor?.(segment));
       // Painters may reuse one paint object: pushing copies it into the run.
       if (painter) builder.pushPaintStyle(textStyle, painter.paint(segment), painter.background);
       else builder.pushStyle(textStyle);
-      builder.addText(node.characters === '' ? EMPTY : node.characters.slice(segment.start, segment.end));
+      // Letter case keeps every character's length, so offsets still match the stored text.
+      builder.addText(node.characters === '' ? EMPTY : applyTextCase(node.characters.slice(segment.start, segment.end), segment.textCase));
       builder.pop();
     }
     const paragraph = builder.build();

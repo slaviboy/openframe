@@ -35,11 +35,16 @@ import {
   setFontStyle,
   setLetterSpacing,
   setLineHeight,
+  setMaxLines,
   setTextAlignHorizontal,
   setTextAlignVertical,
   setTextAutoResize,
+  setTextCase,
+  toggleTextDecoration,
   type TextRange,
 } from '@/editor/commands/text';
+import { TEXT_CASE_LABELS } from '@/core/text/letter-case';
+import type { TextCase } from '@/core/schema/document';
 import { textStyleRange } from '@/editor/interactions/text-edit';
 import type { IconName } from '../../icons/Icon';
 import { useEditor, useEditorState } from '../../hooks/useEditor';
@@ -126,6 +131,11 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
   const lineHeight = single(valuesOf(nodes, range, 'lineHeight'));
   const letterSpacings = valuesOf(nodes, range, 'letterSpacing');
   const letterSpacing = single(letterSpacings);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const decoration = single(valuesOf(nodes, range, 'textDecoration'));
+  const textCase = single(valuesOf(nodes, range, 'textCase'));
+  const maxLinesValues = [...new Set(nodes.map((n) => n.maxLines))];
+  const maxLines = maxLinesValues.length === 1 ? maxLinesValues[0] : undefined;
   const hAlign = shared(nodes, (n) => n.textAlignHorizontal);
   const vAlign = shared(nodes, (n) => n.textAlignVertical);
   const run = (label: string, apply: (tx: Transaction, node: TextNode) => void) => editor.history.run(label, (tx) => nodes.forEach((n) => apply(tx, n)));
@@ -184,6 +194,38 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
           ))}
         </div>
       </div>
+      <button type="button" className={styles.disclosure} aria-expanded={settingsOpen} onClick={() => setSettingsOpen((open) => !open)}>
+        Type settings
+      </button>
+      {settingsOpen && (
+        <div className={styles.typeSettings} role="group" aria-label="Type settings">
+          <div className={styles.buttonRow} role="group" aria-label="Decoration">
+            <IconButton icon="underline" label="Underline" pressed={decoration === 'UNDERLINE'} onClick={() => run('Underline', (tx, n) => toggleTextDecoration(tx, n, 'UNDERLINE', range))} />
+            <IconButton icon="strikethrough" label="Strikethrough" pressed={decoration === 'STRIKETHROUGH'} onClick={() => run('Strikethrough', (tx, n) => toggleTextDecoration(tx, n, 'STRIKETHROUGH', range))} />
+          </div>
+          <select className={primitives.select} aria-label="Letter case" value={textCase ?? ''} onChange={(e) => run('Change letter case', (tx, n) => setTextCase(tx, n, e.target.value as TextCase, range))}>
+            {textCase === undefined && <option value="">Mixed</option>}
+            {(Object.keys(TEXT_CASE_LABELS) as TextCase[]).map((value) => (
+              <option key={value} value={value}>
+                {TEXT_CASE_LABELS[value]}
+              </option>
+            ))}
+          </select>
+          <div className={styles.buttonRow}>
+            <NumberField
+              label="≡"
+              ariaLabel="Max lines"
+              testId="field-max-lines"
+              min={1}
+              max={10_000}
+              decimals={0}
+              value={maxLines}
+              onChange={(v) => run('Change max lines', (tx, n) => setMaxLines(tx, n, v))}
+            />
+            {maxLines !== undefined && <IconButton icon="minus" label="Remove max lines" onClick={() => run('Remove max lines', (tx, n) => setMaxLines(tx, n, undefined))} />}
+          </div>
+        </div>
+      )}
     </>
   );
 }

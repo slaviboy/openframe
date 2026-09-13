@@ -259,3 +259,28 @@
   color: var(--fg-danger, #e03e1a);
   font-size: var(--text-xs);
 }
+
+.disclosure {
+  align-self: flex-start;
+  height: 22px;
+  padding: 0 var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm, 4px);
+  background: transparent;
+  color: var(--fg-secondary);
+  font-size: var(--text-xs);
+}
+
+.disclosure:hover,
+.disclosure[aria-expanded='true'] {
+  color: var(--fg-primary);
+}
+
+.typeSettings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+}

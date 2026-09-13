@@ -31,9 +31,13 @@ import {
   setLineHeight,
   setTextAlignHorizontal,
   setTextAutoResize,
+  setMaxLines,
+  setTextCase,
   setTextFills,
+  stepTextProperty,
   textStyleValue,
   toggleFontStyle,
+  toggleTextDecoration,
 } from './text';
 
 let editor: Editor;
@@ -118,6 +122,37 @@ describe('text properties', () => {
     expect(textStyleValue(get(), 'fills')).toBeUndefined();
     editor.history.undo();
     expect(get().styleRuns).toBeUndefined();
+  });
+
+  test('decoration, letter case, max lines and typography steps', () => {
+    editor.history.run('type', (tx) => tx.set(id, 'characters', 'Hello world'));
+    editor.history.run('u', (tx) => toggleTextDecoration(tx, get(), 'UNDERLINE', { start: 0, end: 5 }));
+    expect(textStyleValue(get(), 'textDecoration', { start: 0, end: 5 })).toBe('UNDERLINE');
+    expect(textStyleValue(get(), 'textDecoration')).toBeUndefined();
+    editor.history.run('u', (tx) => toggleTextDecoration(tx, get(), 'UNDERLINE', { start: 0, end: 5 }));
+    expect(get().styleRuns).toBeUndefined();
+    editor.history.run('case', (tx) => setTextCase(tx, get(), 'UPPER'));
+    expect(get().textCase).toBe('UPPER');
+    editor.history.run('case', (tx) => setTextCase(tx, get(), 'ORIGINAL'));
+    expect('textCase' in get()).toBe(false);
+    editor.history.run('max', (tx) => setMaxLines(tx, get(), 2.4));
+    expect(get().maxLines).toBe(2);
+    editor.history.run('max', (tx) => setMaxLines(tx, get(), undefined));
+    expect('maxLines' in get()).toBe(false);
+
+    const context = { fonts, autoLineHeight: (size: number) => size * 1.2 };
+    // Mixed sizes step individually.
+    editor.history.run('size', (tx) => setFontSize(tx, get(), 20, { start: 0, end: 5 }));
+    editor.history.run('step', (tx) => stepTextProperty(tx, get(), 'fontSize', 1, context));
+    expect(textStyleValue(get(), 'fontSize', { start: 0, end: 5 })).toBe(21);
+    expect(textStyleValue(get(), 'fontSize', { start: 5, end: 11 })).toBe(13);
+    expect(editor.history.run('weight', (tx) => stepTextProperty(tx, get(), 'fontWeight', 1, context))).toBe(true);
+    expect(get().fontName.style).toBe('Bold');
+    expect(editor.history.run('weight', (tx) => stepTextProperty(tx, get(), 'fontWeight', 1, context))).toBe(false);
+    editor.history.run('spacing', (tx) => stepTextProperty(tx, get(), 'letterSpacing', -1, context));
+    expect(get().letterSpacing).toEqual({ unit: 'PERCENT', value: -0.1 });
+    editor.history.run('lh', (tx) => stepTextProperty(tx, get(), 'lineHeight', 1, context));
+    expect(get().lineHeight).toEqual({ unit: 'PIXELS', value: 26 });
   });
 
   test('the Scale tool scales font size and pixel spacing', () => {

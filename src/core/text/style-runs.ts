@@ -16,7 +16,7 @@
  */
 
 import { valuesEqual } from '../ops/equality';
-import type { FontName, LetterSpacing, LineHeight, Paint, TextNode } from '../schema/document';
+import type { FontName, LetterSpacing, LineHeight, Paint, TextCase, TextDecoration, TextNode } from '../schema/document';
 
 /**
  * Mixed styles within a text layer. The layer's own properties are the default style; `styleRuns`
@@ -32,6 +32,8 @@ export interface TextStyle {
   readonly lineHeight: LineHeight;
   readonly letterSpacing: LetterSpacing;
   readonly fills: readonly Paint[];
+  readonly textDecoration: TextDecoration;
+  readonly textCase: TextCase;
 }
 
 export type TextStyleKey = keyof TextStyle;
@@ -49,13 +51,31 @@ export interface TextSegment extends TextStyle {
   readonly end: number;
 }
 
-export const TEXT_STYLE_KEYS: readonly TextStyleKey[] = ['fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'fills'];
+export const TEXT_STYLE_KEYS: readonly TextStyleKey[] = ['fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'fills', 'textDecoration', 'textCase'];
 
-type RunsNode = Pick<TextNode, 'characters' | 'fontName' | 'fontSize' | 'lineHeight' | 'letterSpacing' | 'fills'> & { readonly styleRuns?: readonly TextStyleRun[] | undefined };
+type RunsNode = Pick<TextNode, 'characters' | 'fontName' | 'fontSize' | 'lineHeight' | 'letterSpacing' | 'fills'> & {
+  readonly styleRuns?: readonly TextStyleRun[] | undefined;
+  readonly textDecoration?: TextDecoration | undefined;
+  readonly textCase?: TextCase | undefined;
+};
 
 /** The layer's default style. */
 export function baseTextStyle(node: RunsNode): TextStyle {
-  return { fontName: node.fontName, fontSize: node.fontSize, lineHeight: node.lineHeight, letterSpacing: node.letterSpacing, fills: node.fills };
+  return {
+    fontName: node.fontName,
+    fontSize: node.fontSize,
+    lineHeight: node.lineHeight,
+    letterSpacing: node.letterSpacing,
+    fills: node.fills,
+    textDecoration: node.textDecoration ?? 'NONE',
+    textCase: node.textCase ?? 'ORIGINAL',
+  };
+}
+
+/** The layer field value for a style value: defaults (no decoration, as typed) are stored as absent. */
+export function layerFieldValue<K extends TextStyleKey>(key: K, value: TextStyle[K]): TextStyle[K] | undefined {
+  if ((key === 'textDecoration' && value === 'NONE') || (key === 'textCase' && value === 'ORIGINAL')) return undefined;
+  return value;
 }
 
 function withOverrides(base: TextStyle, overrides: TextStyleOverrides): TextStyle {

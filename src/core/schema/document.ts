@@ -441,6 +441,11 @@ export const TextAlignVerticalSchema = z.enum(['TOP', 'CENTER', 'BOTTOM']);
  */
 export const TextAutoResizeSchema = z.enum(['WIDTH_AND_HEIGHT', 'HEIGHT', 'NONE', 'TRUNCATE']);
 
+/** Underline or strikethrough. */
+export const TextDecorationSchema = z.enum(['NONE', 'UNDERLINE', 'STRIKETHROUGH']);
+/** Letter case, applied when displaying (the characters stay as typed); small caps uses the font's `smcp` feature. */
+export const TextCaseSchema = z.enum(['ORIGINAL', 'UPPER', 'LOWER', 'TITLE', 'SMALL_CAPS']);
+
 /** Properties a range of characters can override in a text layer (mixed styles). */
 export const TextStyleOverridesSchema = z.object({
   fontName: FontNameSchema.optional(),
@@ -448,6 +453,8 @@ export const TextStyleOverridesSchema = z.object({
   lineHeight: LineHeightSchema.optional(),
   letterSpacing: LetterSpacingSchema.optional(),
   fills: z.array(PaintSchema).max(256).optional(),
+  textDecoration: TextDecorationSchema.optional(),
+  textCase: TextCaseSchema.optional(),
 });
 /** Overrides on the characters [start, end) (UTF-16 offsets). */
 export const TextStyleRunSchema = z.object({ start: z.number().int().min(0), end: z.number().int().min(1), style: TextStyleOverridesSchema });
@@ -469,6 +476,12 @@ export const TextNodeSchema = z.object({
   autoRename: z.boolean().optional(),
   /** Mixed styles: sorted, non-overlapping overrides of the layer's style on character ranges. Absent when uniform. */
   styleRuns: z.array(TextStyleRunSchema).max(100_000).optional(),
+  /** Absent means no decoration. */
+  textDecoration: TextDecorationSchema.optional(),
+  /** Absent means as typed. */
+  textCase: TextCaseSchema.optional(),
+  /** Text beyond this many lines is cut off with an ellipsis (auto height or truncated boxes). Absent means no limit. */
+  maxLines: z.number().int().min(1).max(10_000).optional(),
 });
 
 export const NodeSchema = z.discriminatedUnion('type', [
@@ -542,6 +555,8 @@ export type LetterSpacing = z.infer<typeof LetterSpacingSchema>;
 export type TextAlignHorizontal = z.infer<typeof TextAlignHorizontalSchema>;
 export type TextAlignVertical = z.infer<typeof TextAlignVerticalSchema>;
 export type TextAutoResize = z.infer<typeof TextAutoResizeSchema>;
+export type TextDecoration = z.infer<typeof TextDecorationSchema>;
+export type TextCase = z.infer<typeof TextCaseSchema>;
 export type TextNode = z.infer<typeof TextNodeSchema>;
 export type SceneNode = FrameNode | GroupNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | SectionNode | SliceNode | TextNode;
 export type Node = z.infer<typeof NodeSchema>;

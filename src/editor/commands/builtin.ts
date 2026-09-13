@@ -321,7 +321,61 @@ const COLOR_PROFILE_COMMANDS: CommandDefinition[] = (['SRGB', 'DISPLAY_P3'] as c
 }));
 
 import { beginTextEdit } from '../interactions/text-edit';
-import { toggleFontStyle } from './text';
+import { stepTextProperty, toggleFontStyle, toggleTextDecoration } from './text';
+import type { SceneNode as TextTarget } from '@/core/schema/document';
+
+/** Text layers in the selection when not editing text (while editing, the text input applies these to the selected characters). */
+const selectedTextLayers = (e: Editor): TextTarget[] =>
+  e.state.getSnapshot().textEdit === null && e.selection.length > 0 && e.selection.every((id) => e.doc.get(id)?.type === 'TEXT') ? e.selection.map((id) => e.doc.getOrThrow(id) as TextTarget) : [];
+
+/** The font's own line height at a size (for stepping Auto line height), measured by the text engine. */
+export function autoLineHeight(e: Editor, fontSize: number): number {
+  const probe = e.selection.map((id) => e.doc.get(id)).find((n) => n?.type === 'TEXT');
+  if (!probe || probe.type !== 'TEXT' || !e.textLayout) return Math.round(fontSize * 1.21);
+  return e.textLayout.measure({ ...probe, characters: 'X', fontSize, lineHeight: { unit: 'AUTO' }, styleRuns: undefined, maxLines: undefined }, null).height;
+}
+
+const TEXT_FORMAT_COMMANDS: CommandDefinition[] = [
+  ...(
+    [
+      ['text.underline', 'Underline', 'UNDERLINE', ['Alt+U', 'Ctrl+U']],
+      ['text.strikethrough', 'Strikethrough', 'STRIKETHROUGH', ['Mod+Shift+X']],
+    ] as const
+  ).map(
+    ([id, label, decoration, shortcuts]): CommandDefinition => ({
+      id,
+      label,
+      category: 'Text',
+      shortcuts,
+      enabled: (e) => selectedTextLayers(e).length > 0,
+      run: (e) => e.history.run(label, (tx) => selectedTextLayers(e).forEach((n) => toggleTextDecoration(tx, n, decoration))),
+    }),
+  ),
+  ...(
+    [
+      ['text.increaseFontSize', 'Increase font size', 'fontSize', 1, 'Mod+Shift+.'],
+      ['text.decreaseFontSize', 'Decrease font size', 'fontSize', -1, 'Mod+Shift+,'],
+      ['text.increaseFontWeight', 'Increase font weight', 'fontWeight', 1, 'Mod+Alt+.'],
+      ['text.decreaseFontWeight', 'Decrease font weight', 'fontWeight', -1, 'Mod+Alt+,'],
+      ['text.increaseLetterSpacing', 'Increase letter spacing', 'letterSpacing', 1, 'Alt+.'],
+      ['text.decreaseLetterSpacing', 'Decrease letter spacing', 'letterSpacing', -1, 'Alt+,'],
+      ['text.increaseLineHeight', 'Increase line height', 'lineHeight', 1, 'Alt+Shift+.'],
+      ['text.decreaseLineHeight', 'Decrease line height', 'lineHeight', -1, 'Alt+Shift+,'],
+    ] as const
+  ).map(
+    ([id, label, property, direction, shortcut]): CommandDefinition => ({
+      id,
+      label,
+      category: 'Text',
+      shortcuts: [shortcut],
+      enabled: (e) => selectedTextLayers(e).length > 0,
+      run: (e) => {
+        const context = { fonts: e.textLayout?.availableFonts() ?? [], autoLineHeight: (size: number) => autoLineHeight(e, size) };
+        e.history.run(label, (tx) => selectedTextLayers(e).forEach((n) => stepTextProperty(tx, n, property, direction, context)));
+      },
+    }),
+  ),
+];
 
 export const BUILTIN_COMMANDS: CommandDefinition[] = [
   ...COLOR_PROFILE_COMMANDS,
@@ -359,6 +413,7 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
         ),
     }),
   ),
+  ...TEXT_FORMAT_COMMANDS,
   // Before Select children, so Return on a text layer edits its text.
   {
     id: 'text.edit',
