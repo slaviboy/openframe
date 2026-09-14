@@ -22,6 +22,7 @@ import type { Vec2 } from '@/core/math/vec';
 import type { Editor } from '../editor';
 import { HANDLE_AXES, type HandleId } from '../interactions/transform';
 import { worldToScreen } from '../viewport/viewport';
+import { isComponentSet } from '@/core/document/variants';
 
 export interface SelectionFrame {
   /** Maps the unit-less box (0..width, 0..height) to world space. */
@@ -124,6 +125,37 @@ export function sectionTitleRect(editor: Editor, id: Id): Rect | null {
     width: Math.min(titleTextWidth(node.name) + SECTION_TITLE_PADDING * 2, maxWidth),
     height: SECTION_TITLE_HEIGHT,
   };
+}
+
+/** Size of the + button below a selected component set, which adds a variant. */
+export const ADD_VARIANT_BUTTON_SIZE = 20;
+
+/**
+ * Screen rectangle of the + button just below a selected component set (under its size label), or null when the
+ * selection isn't a single unlocked component set.
+ */
+export function addVariantButtonRect(editor: Editor): Rect | null {
+  const [id, ...rest] = editor.selection;
+  const node = id !== undefined && rest.length === 0 ? editor.doc.get(id) : undefined;
+  if (node?.type !== 'FRAME' || !isComponentSet(node) || node.locked) return null;
+  const v = editor.state.viewport;
+  const world = editor.scene.worldTransform(node.id);
+  const corners = [
+    { x: 0, y: 0 },
+    { x: node.size.width, y: 0 },
+    { x: node.size.width, y: node.size.height },
+    { x: 0, y: node.size.height },
+  ].map((corner) => worldToScreen(v, apply(world, corner)));
+  const bottom = Math.max(...corners.map((corner) => corner.y));
+  const cx = corners.reduce((sum, corner) => sum + corner.x, 0) / 4;
+  // The size label sits 6 px below the selection and is 16 px tall; the button leaves another 6 px.
+  return { x: Math.round(cx - ADD_VARIANT_BUTTON_SIZE / 2), y: Math.round(bottom + 28), width: ADD_VARIANT_BUTTON_SIZE, height: ADD_VARIANT_BUTTON_SIZE };
+}
+
+/** Whether a screen point is on the + button below a selected component set. */
+export function hitAddVariantButton(editor: Editor, screen: Vec2): boolean {
+  const r = addVariantButtonRect(editor);
+  return r !== null && screen.x >= r.x && screen.x <= r.x + r.width && screen.y >= r.y && screen.y <= r.y + r.height;
 }
 
 /** Visits sections top-down in paint order (page children first, nested sections after their parent). */

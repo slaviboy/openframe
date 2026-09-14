@@ -53,7 +53,7 @@ import type { GuideRef } from '../stores/editor-store';
 import { RULER_SIZE, rulerTicks } from './rulers';
 import { worldToScreen } from '../viewport/viewport';
 import type { ChromeTheme } from './chrome-theme';
-import { forEachSection, handlePoint, isLineFrame, screenQuad, sectionTitleRect, selectionFrame, type SelectionFrame } from './selection-geometry';
+import { forEachSection, handlePoint, isLineFrame, screenQuad, sectionTitleRect, selectionFrame, type SelectionFrame, addVariantButtonRect } from './selection-geometry';
 
 export interface OverlayInput {
   readonly editor: Editor;
@@ -155,6 +155,8 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
     ctx.setLineDash([]);
     drawHandles(ctx, editor, frame, theme);
     drawSizeLabel(ctx, quad, frame, theme, isLineFrame(editor, frame));
+    const addVariant = addVariantButtonRect(editor);
+    if (addVariant) drawAddVariantButton(ctx, addVariant, theme);
   }
 
   if (input.insertion) {
@@ -994,6 +996,24 @@ function drawSectionTitles(ctx: CanvasRenderingContext2D, input: OverlayInput, s
     ctx.fillStyle = active ? theme.labelText : theme.sectionTitleText;
     ctx.fillText(truncate(ctx, node.name, rect.width - 16), Math.round(rect.x) + 8, rect.y + rect.height / 2 + 0.5);
   });
+}
+
+/** The purple + button below a selected component set, which adds a variant. */
+function drawAddVariantButton(ctx: CanvasRenderingContext2D, rect: { x: number; y: number; width: number; height: number }, theme: ChromeTheme): void {
+  const cx = rect.x + rect.width / 2;
+  const cy = rect.y + rect.height / 2;
+  ctx.fillStyle = theme.component;
+  ctx.beginPath();
+  ctx.arc(cx, cy, rect.width / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = theme.labelText;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(cx - 5, cy);
+  ctx.lineTo(cx + 5, cy);
+  ctx.moveTo(cx, cy - 5);
+  ctx.lineTo(cx, cy + 5);
+  ctx.stroke();
 }
 
 function truncate(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {

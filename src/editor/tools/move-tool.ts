@@ -54,7 +54,7 @@ import {
   handleCursor,
   hitHandle,
   hitRotationCorner,
-  hitSectionTitle,
+  hitAddVariantButton, hitSectionTitle,
   isLineFrame,
   rotateCursor,
   selectionFrame,
@@ -436,6 +436,11 @@ export class MoveTool implements Tool {
 
     // Section titles select (and drag) their section; double-click renames it.
     editor.scene.ensure(editor.pageId);
+    // The + below a selected component set adds a variant.
+    if (hitAddVariantButton(editor, p.screen)) {
+      editor.commands.run('object.addVariant');
+      return;
+    }
     const titled = hitSectionTitle(editor, p.screen);
     if (titled) {
       if (p.clickCount >= 2) {
