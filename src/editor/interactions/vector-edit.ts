@@ -25,6 +25,7 @@ import type { Paint, Transform, VectorNode } from '@/core/schema/document';
 import { cutVertex, deleteVertices, healVertices, moveVertices, nearestOnSegments, splitSegment } from '@/core/vector/vector-edit';
 import { bendVertex, oppositeEnd, setTangent, tangentAt, type SegmentEnd } from '@/core/vector/vector-bend';
 import { eraseNetwork } from '@/core/vector/vector-erase';
+import { addWidthPoint, chainPointAt, nearestOnChain, snapPosition, strokeChain, widthAt, type StrokeChain, type WidthPoint } from '@/core/vector/vector-width';
 import { regionAt, setRegionFills } from '@/core/vector/vector-paint';
 import type { VectorNetwork } from '@/core/vector/vector-network';
 import { paintsEqual } from '../commands/properties';
@@ -71,6 +72,21 @@ const editedVector = (editor: Editor): VectorNode | null => {
   const node = state ? editor.doc.get(state.nodeId) : undefined;
   return node?.type === 'VECTOR' ? node : null;
 };
+
+/** Deletes the selected width points of the vector being edited (Variable width tool), as one undo step. */
+export function deleteSelectedWidthPoints(editor: Editor): boolean {
+  const state = editor.state.getSnapshot().vectorEdit;
+  const node = editedVector(editor);
+  const selected = new Set(state?.widthPoints ?? []);
+  if (!state || !node || selected.size === 0) return false;
+  const rest = (node.strokeWidths ?? []).filter((_, i) => !selected.has(i));
+  editor.history.run('Delete width points', (tx) => tx.set(node.id, 'strokeWidths', rest.length > 0 ? rest : undefined));
+  editor.state.setVectorEdit({ ...state, widthPoints: [] });
+  return true;
+}
+
+/** Screen distance a width point's knobs keep from the path at least, so thin strokes stay easy to widen. */
+export const WIDTH_KNOB_MIN_PX = 12;
 
 /** The Eraser's weight in canvas units: the one set for it, else 10. */
 export const eraserWeight = (editor: Editor): number => editor.state.getSnapshot().vectorEdit?.eraserWeight ?? 10;
@@ -154,6 +170,19 @@ interface EraseDrag {
   erased: boolean;
 }
 
+/** Dragging with the Variable width tool: a width point's knob (its width) or the point itself (along the path). */
+interface WidthDrag {
+  readonly tx: Transaction;
+  readonly kind: 'width' | 'move';
+  readonly index: number;
+  readonly start: readonly WidthPoint[];
+  /** World to layer space, and screen pixels per layer unit, when the drag started. */
+  readonly inverse: Matrix;
+  readonly pxPerUnit: number;
+  readonly down: PointerInfo;
+  moved: boolean;
+}
+
 interface PointDrag {
   tx: Transaction;
   start: VectorNetwork;
@@ -173,6 +202,7 @@ interface PointDrag {
  * The handles of selected points can be dragged; handles that mirrored each other keep mirroring.
  * With Paint (⇧B), clicking a closed region fills it with the paint, or removes a fill that already matches it; a drag paints every region it crosses.
  * With the Eraser (⇧E), a drag removes the area it passes over: open paths are clipped and closed regions lose that area.
+ * With Variable width, clicking the stroke adds a width point; dragging a knob sets its width, dragging the point moves it along the path.
  */
 export class VectorEditController implements Tool {
   readonly id = 'move' as const;
@@ -181,6 +211,8 @@ export class VectorEditController implements Tool {
   private handle: HandleGesture | null = null;
   private painting: PaintDrag | null = null;
   private erasing: EraseDrag | null = null;
+  private widthDrag: WidthDrag | null = null;
+  private widthHover: Vec2 | null = null;
   private hover: { readonly region: number; readonly remove: boolean } | null = null;
 
   constructor(
@@ -189,7 +221,7 @@ export class VectorEditController implements Tool {
   ) {}
 
   get active(): boolean {
-    return this.drag !== null || this.lasso !== null || this.handle !== null || this.painting !== null || this.erasing !== null;
+    return this.drag !== null || this.lasso !== null || this.handle !== null || this.painting !== null || this.erasing !== null || this.widthDrag !== null;
   }
 
   /** Screen outline of the lasso being drawn, for the overlay. */
@@ -200,6 +232,11 @@ export class VectorEditController implements Tool {
   /** The region under the pointer with the Paint tool, and whether a click there removes its fill. */
   get paintHover(): { readonly region: number; readonly remove: boolean } | null {
     return this.editor.state.getSnapshot().vectorEdit?.tool === 'paint' ? this.hover : null;
+  }
+
+  /** Where a click would add a width point (screen), while the Variable width tool hovers the stroke. */
+  get widthHoverPoint(): Vec2 | null {
+    return this.editor.state.getSnapshot().vectorEdit?.tool === 'width' && !this.widthDrag ? this.widthHover : null;
   }
 
   /** The eraser's path on screen and its width there, while erasing. */
@@ -226,6 +263,36 @@ export class VectorEditController implements Tool {
     editor.scene.ensure(editor.pageId);
     const toWorld = editor.scene.worldTransform(node.id);
     const v = editor.state.viewport;
+    if (state.tool === 'width') {
+      const widthInverse = invert(toWorld);
+      const chain = strokeChain(node.vectorNetwork);
+      if (!widthInverse || !chain || node.strokeDashes) return;
+      const local = apply(widthInverse, p.world);
+      const pxPerUnit = Math.hypot(toWorld.a, toWorld.b) * v.zoom || 1;
+      const points = node.strokeWidths ?? [];
+      const tolerance = this.tolerancePx / pxPerUnit;
+      const hitPoint = this.hitWidthPoint(chain, points, local, tolerance, WIDTH_KNOB_MIN_PX / pxPerUnit);
+      if (hitPoint) {
+        const current = state.widthPoints ?? [];
+        const widthPoints = p.shift ? (current.includes(hitPoint.index) ? current.filter((i) => i !== hitPoint.index) : [...current, hitPoint.index]) : current.includes(hitPoint.index) ? current : [hitPoint.index];
+        editor.state.setVectorEdit({ ...state, widthPoints });
+        const label = hitPoint.kind === 'width' ? 'Change stroke width' : 'Move width point';
+        this.widthDrag = { tx: editor.history.begin(label), kind: hitPoint.kind, index: hitPoint.index, start: points, inverse: widthInverse, pxPerUnit, down: p, moved: false };
+        return;
+      }
+      const nearest = nearestOnChain(chain, local);
+      if (nearest.distance > Math.max(tolerance, widthAt(points, nearest.position, node.strokeWeight) / 2)) {
+        editor.state.setVectorEdit({ ...state, widthPoints: [] });
+        return;
+      }
+      // Ctrl places the point exactly under the pointer, without snapping.
+      const total = chain.lengths[chain.lengths.length - 1]!;
+      const position = p.ctrl ? nearest.position : snapPosition(chain, points, nearest.position, tolerance / total);
+      const added = addWidthPoint(points, position, widthAt(points, position, node.strokeWeight));
+      editor.history.run('Add width point', (tx) => tx.set(node.id, 'strokeWidths', added.points));
+      editor.state.setVectorEdit({ ...state, widthPoints: [added.index] });
+      return;
+    }
     if (state.tool === 'eraser') {
       const eraseInverse = invert(toWorld);
       if (!eraseInverse || !editor.geometry) return;
@@ -328,6 +395,14 @@ export class VectorEditController implements Tool {
   }
 
   pointerMove(p: PointerInfo): void {
+    if (this.widthDrag) {
+      this.dragWidth(this.widthDrag, p);
+      return;
+    }
+    if (this.editor.state.getSnapshot().vectorEdit?.tool === 'width') {
+      this.hoverWidth(p);
+      return;
+    }
     if (this.erasing) {
       this.erase(p);
       return;
@@ -370,6 +445,13 @@ export class VectorEditController implements Tool {
   }
 
   pointerUp(): void {
+    const widthDrag = this.widthDrag;
+    if (widthDrag) {
+      this.widthDrag = null;
+      if (widthDrag.moved) this.editor.history.commit(widthDrag.tx);
+      else this.editor.history.cancel(widthDrag.tx);
+      return;
+    }
     const erasing = this.erasing;
     if (erasing) {
       this.erasing = null;
@@ -402,6 +484,63 @@ export class VectorEditController implements Tool {
     this.drag = null;
     if (d.moved) this.editor.history.commit(d.tx);
     else this.editor.history.cancel(d.tx);
+  }
+
+  /** The width point under a layer-space point: one of its knobs (to change its width) or the point on the path (to move it). */
+  private hitWidthPoint(chain: StrokeChain, points: readonly WidthPoint[], local: Vec2, tolerance: number, minReach: number): { index: number; kind: 'width' | 'move' } | null {
+    for (let i = points.length - 1; i >= 0; i--) {
+      const { point, normal } = chainPointAt(chain, points[i]!.position);
+      const reach = Math.max(points[i]!.width / 2, minReach);
+      for (const side of [1, -1]) {
+        if (Math.hypot(local.x - (point.x + normal.x * reach * side), local.y - (point.y + normal.y * reach * side)) <= tolerance) return { index: i, kind: 'width' };
+      }
+      if (Math.hypot(local.x - point.x, local.y - point.y) <= tolerance) return { index: i, kind: 'move' };
+    }
+    return null;
+  }
+
+  private dragWidth(g: WidthDrag, p: PointerInfo): void {
+    const node = editedVector(this.editor);
+    const chain = node ? strokeChain(node.vectorNetwork) : null;
+    const current = g.start[g.index];
+    if (!node || !chain || !current) return;
+    if (!g.moved && Math.hypot(p.screen.x - g.down.screen.x, p.screen.y - g.down.screen.y) < 3) return;
+    g.moved = true;
+    const local = apply(g.inverse, p.world);
+    let next: WidthPoint;
+    if (g.kind === 'width') {
+      // The width follows the pointer's distance from the path at the point, on either side.
+      const { point } = chainPointAt(chain, current.position);
+      next = { ...current, width: Math.round(Math.hypot(local.x - point.x, local.y - point.y) * 200) / 100 };
+    } else {
+      const nearest = nearestOnChain(chain, local);
+      const others = g.start.filter((_, i) => i !== g.index);
+      const total = chain.lengths[chain.lengths.length - 1]!;
+      next = { ...current, position: p.ctrl ? nearest.position : snapPosition(chain, others, nearest.position, this.tolerancePx / g.pxPerUnit / total) };
+    }
+    g.tx.set(node.id, 'strokeWidths', g.start.map((w, i) => (i === g.index ? next : w)));
+    g.tx.flushPreview();
+    this.editor.requestRender();
+  }
+
+  private hoverWidth(p: PointerInfo): void {
+    const node = editedVector(this.editor);
+    const chain = node ? strokeChain(node.vectorNetwork) : null;
+    let next: Vec2 | null = null;
+    if (node && chain && !node.strokeDashes) {
+      const toWorld = this.editor.scene.worldTransform(node.id);
+      const inverse = invert(toWorld);
+      const pxPerUnit = Math.hypot(toWorld.a, toWorld.b) * this.editor.state.viewport.zoom || 1;
+      if (inverse) {
+        const nearest = nearestOnChain(chain, apply(inverse, p.world));
+        const reach = Math.max(this.tolerancePx / pxPerUnit, widthAt(node.strokeWidths ?? [], nearest.position, node.strokeWeight) / 2);
+        if (nearest.distance <= reach) next = worldToScreen(this.editor.state.viewport, apply(toWorld, nearest.point));
+      }
+    }
+    if (next?.x !== this.widthHover?.x || next?.y !== this.widthHover?.y) {
+      this.widthHover = next;
+      this.editor.requestRender();
+    }
   }
 
   /** Extends the eraser's path to the pointer and erases along the whole path from the starting network. */
@@ -472,6 +611,11 @@ export class VectorEditController implements Tool {
   }
 
   cancel(): boolean {
+    if (this.widthDrag) {
+      this.editor.history.cancel(this.widthDrag.tx);
+      this.widthDrag = null;
+      return true;
+    }
     if (this.erasing) {
       this.editor.history.cancel(this.erasing.tx);
       this.erasing = null;

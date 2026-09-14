@@ -830,6 +830,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
           {nodes.every((n) => n.type !== 'TEXT') && <PaintSection title="Stroke" field="strokes" nodes={geometryNodes} defaultPaint={() => solid(BLACK)} />}
         </>
       )}
+      <WidthPointSection />
       <VectorEraserSection />
       <VectorPaintSection />
       <SelectionColorsSection nodes={nodes} />
@@ -840,6 +841,40 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
 }
 
 type GeometryNode = Extract<SceneNode, { fills: readonly Paint[] }>;
+
+/** The width of the selected width points while the Variable width tool is picked in vector edit mode. */
+function WidthPointSection() {
+  const editor = useEditor();
+  const state = useEditorState((s) => s.vectorEdit);
+  const gesture = useGesture('Change stroke width');
+  const node = state ? editor.doc.get(state.nodeId) : undefined;
+  if (state?.tool !== 'width' || node?.type !== 'VECTOR' || !state.widthPoints?.length) return null;
+  const points = node.strokeWidths ?? [];
+  const selected = new Set(state.widthPoints.filter((i) => points[i] !== undefined));
+  if (selected.size === 0) return null;
+  const widths = [...new Set([...selected].map((i) => points[i]!.width))];
+  return (
+    <Section title="Width point">
+      <NumberField
+        label="W"
+        ariaLabel="Stroke width at the width point"
+        testId="field-width-point"
+        min={0}
+        max={1000}
+        decimals={2}
+        value={widths.length === 1 ? widths[0] : undefined}
+        onGestureStart={gesture.start}
+        onGestureEnd={gesture.end}
+        onChange={(v) =>
+          gesture.change((tx) => {
+            const current = (tx.store.getOrThrow(node.id) as Extract<SceneNode, { type: 'VECTOR' }>).strokeWidths ?? [];
+            tx.set(node.id, 'strokeWidths', current.map((w, i) => (selected.has(i) ? { ...w, width: v } : w)));
+          })
+        }
+      />
+    </Section>
+  );
+}
 
 /** The Eraser's weight while the Eraser is picked in vector edit mode. */
 function VectorEraserSection() {

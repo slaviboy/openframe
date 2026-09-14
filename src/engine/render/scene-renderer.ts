@@ -21,6 +21,7 @@ import type { Effect } from '@/core/schema/document';
 const isNormalBlend = (mode: string): boolean => mode === 'NORMAL' || mode === 'PASS_THROUGH';
 import { maskRuns } from '@/core/scene/masks';
 import { arcCommands } from '@/core/geometry/arc';
+import { strokeChain, variableWidthOutline } from '@/core/vector/vector-width';
 import { networkStrokePath, regionFillPath, type VectorNetwork } from '@/core/vector/vector-network';
 import type { BooleanOperationNode, VectorNode } from '@/core/schema/document';
 import { stackingOrder } from '@/core/layout/auto-layout';
@@ -1232,7 +1233,20 @@ export class SceneRenderer {
         canvas.drawPath(fillPath, this.fillPaint);
       }
     }
-    if (node.strokeWeight > 0 && node.vectorNetwork.segments.length > 0) {
+    const widths = node.strokeWidths;
+    const chain = widths && widths.length > 0 && !node.strokeDashes ? strokeChain(node.vectorNetwork) : null;
+    if (widths && chain) {
+      // A variable-width stroke is its outline, filled with the stroke paints.
+      const builder = new this.ck.PathBuilder();
+      for (const polygon of variableWidthOutline(chain, widths, node.strokeWeight)) builder.addPolygon(polygon.flatMap((q) => [q.x, q.y]), true);
+      const outline = builder.detachAndDelete();
+      for (const paint of node.strokes) {
+        if (!paint.visible || paint.opacity <= 0) continue;
+        this.configurePaint(this.fillPaint, paint, node.size);
+        canvas.drawPath(outline, this.fillPaint);
+      }
+      outline.delete();
+    } else if (node.strokeWeight > 0 && node.vectorNetwork.segments.length > 0) {
       const strokePath = this.pathFrom(networkStrokePath(node.vectorNetwork));
       this.applyStrokeStyle(node);
       const cap = node.endpointCap === 'ROUND' ? this.ck.StrokeCap.Round : node.endpointCap === 'SQUARE' ? this.ck.StrokeCap.Square : this.ck.StrokeCap.Butt;

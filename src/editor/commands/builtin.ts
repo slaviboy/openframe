@@ -30,7 +30,7 @@ import { layersWithSame, matchingLayers } from './select-similar';
 import { canTidyUp, tidyUpSelection } from './tidy';
 import { canToggleMask, toggleMask } from './masks';
 import { canFlatten, flattenSelection } from './flatten';
-import { beginVectorEdit, canBeginVectorEdit, deleteSelectedPoints, healSelectedPoints, setVectorEditTool, endVectorEdit } from '../interactions/vector-edit';
+import { beginVectorEdit, canBeginVectorEdit, deleteSelectedPoints, deleteSelectedWidthPoints, healSelectedPoints, setVectorEditTool, endVectorEdit } from '../interactions/vector-edit';
 import { isInFlow, moveInFlow } from '@/core/layout/flow-order';
 import { addAutoLayout, canAddAutoLayout, canRemoveAutoLayout, removeAutoLayout, suggestAutoLayoutForSelection } from './auto-layout';
 import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/core/color/color-profile';
@@ -522,6 +522,24 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     palette: false,
     enabled: (e) => e.state.getSnapshot().vectorEdit !== null,
     run: (e) => setVectorEditTool(e, 'eraser'),
+  },
+  // Variable width has no shortcut: it is picked from the secondary toolbar.
+  {
+    id: 'vector.toolWidth',
+    label: 'Variable width',
+    category: 'Edit',
+    palette: false,
+    enabled: (e) => e.state.getSnapshot().vectorEdit !== null,
+    run: (e) => setVectorEditTool(e, 'width'),
+  },
+  {
+    id: 'vector.deleteWidthPoints',
+    label: 'Delete width points',
+    category: 'Edit',
+    shortcuts: ['Delete'],
+    palette: false,
+    enabled: (e) => (e.state.getSnapshot().vectorEdit?.widthPoints?.length ?? 0) > 0,
+    run: (e) => deleteSelectedWidthPoints(e),
   },
   {
     id: 'vector.edit',

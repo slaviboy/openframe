@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { chainPointAt, strokeChain } from '@/core/vector/vector-width';
+import { WIDTH_KNOB_MIN_PX } from '../interactions/vector-edit';
 import { selectedHandles } from '../interactions/vector-handles';
 import { arcCommands } from '@/core/geometry/arc';
 import type { Id } from '@/core/ids/ids';
@@ -72,6 +74,8 @@ export interface OverlayInput {
   readonly vectorPaintHover?: { readonly region: number; readonly remove: boolean } | null;
   /** The eraser's path on screen and its width, while erasing in vector edit mode. */
   readonly vectorEraser?: { readonly points: readonly Vec2[]; readonly width: number } | null;
+  /** Where the Variable width tool would add a width point (screen). */
+  readonly vectorWidthHover?: Vec2 | null;
   /** Text editing chrome; `caretVisible` is the blink phase. */
   readonly textEdit?: { readonly caretVisible: boolean } | null;
   /** Snapping guides of the current move, in world coordinates. */
@@ -631,6 +635,42 @@ function drawVectorEdit(ctx: CanvasRenderingContext2D, input: OverlayInput): voi
     ctx.lineWidth = 1.5;
     ctx.stroke();
     ctx.restore();
+  }
+  if (state.tool === 'width') {
+    // Width points: a pink line across the stroke with a knob at each side (at least 12px out) and the point on the path.
+    const pink = '#ff24bd';
+    const chain = strokeChain(node.vectorNetwork);
+    const pxPerUnit = Math.hypot(m.a, m.b) * v.zoom || 1;
+    const selectedWidths = new Set(state.widthPoints ?? []);
+    if (chain) {
+      (node.strokeWidths ?? []).forEach((w, i) => {
+        const { point, normal } = chainPointAt(chain, w.position);
+        const reach = Math.max(w.width / 2, WIDTH_KNOB_MIN_PX / pxPerUnit);
+        const a = toScreen({ x: point.x + normal.x * reach, y: point.y + normal.y * reach });
+        const b = toScreen({ x: point.x - normal.x * reach, y: point.y - normal.y * reach });
+        const c = toScreen(point);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.strokeStyle = pink;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+        for (const [q, r] of [[a, 3], [b, 3], [c, 4]] as const) {
+          ctx.beginPath();
+          ctx.arc(q.x, q.y, r, 0, Math.PI * 2);
+          ctx.fillStyle = q === c && selectedWidths.has(i) ? pink : theme.handleFill;
+          ctx.fill();
+          ctx.stroke();
+        }
+      });
+    }
+    const hoverPoint = input.vectorWidthHover;
+    if (hoverPoint) {
+      ctx.beginPath();
+      ctx.arc(hoverPoint.x, hoverPoint.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = pink;
+      ctx.fill();
+    }
   }
   // Bézier handles of the selected points: a line from the point to a round knob.
   for (const h of selectedHandles(editor)) {

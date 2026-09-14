@@ -80,8 +80,8 @@ export interface EditorState {
   readonly vectorEdit: VectorEditRef | null;
 }
 
-/** Tool of vector edit mode's secondary toolbar: Move (V) drags points; Lasso (Q) selects the points inside a drawn outline; Cut (X) breaks the path where it is clicked; Bend pulls Bézier handles out of a point; Paint (⇧B) fills closed regions; Eraser (⇧E) removes the area it is dragged over. */
-export type VectorEditTool = 'move' | 'lasso' | 'cut' | 'bend' | 'paint' | 'eraser';
+/** Tool of vector edit mode's secondary toolbar: Move (V) drags points; Lasso (Q) selects the points inside a drawn outline; Cut (X) breaks the path where it is clicked; Bend pulls Bézier handles out of a point; Paint (⇧B) fills closed regions; Eraser (⇧E) removes the area it is dragged over; Variable width sets the stroke's width at points along the path. */
+export type VectorEditTool = 'move' | 'lasso' | 'cut' | 'bend' | 'paint' | 'eraser' | 'width';
 
 /** Vector edit mode on a vector layer: the indices of its selected points, and the secondary toolbar's tool (absent: Move). */
 export interface VectorEditRef {
@@ -92,6 +92,8 @@ export interface VectorEditRef {
   readonly paint?: Paint;
   /** The Eraser's weight, in canvas units; absent means 10. */
   readonly eraserWeight?: number;
+  /** Indices of the selected width points (Variable width tool) in the layer's `strokeWidths`. */
+  readonly widthPoints?: readonly number[];
 }
 
 /** A value field open on an auto layout frame's padding or gap handle; `mode` is which sides a padding value applies to. */

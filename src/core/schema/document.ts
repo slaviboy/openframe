@@ -547,6 +547,14 @@ export const VectorNodeSchema = z.object({
   vectorNetwork: VectorNetworkSchema,
   /** Cap of the network's open ends; absent means NONE. */
   endpointCap: StrokeCapSchema.optional(),
+  /**
+   * Width points of a variable-width stroke (Variable width tool): each a position (0–1 of the path's
+   * length) and the stroke's full width there, in any order. Absent means the uniform stroke weight.
+   */
+  strokeWidths: z
+    .array(z.object({ position: z.number().min(0).max(1), width: z.number().min(0) }))
+    .max(1000)
+    .optional(),
 });
 
 /**
