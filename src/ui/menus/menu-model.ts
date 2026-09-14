@@ -92,7 +92,7 @@ const MAIN_MENU: readonly (readonly [string, readonly (readonly string[])[]])[] 
     ],
   ],
   ['Page', [['page.add', 'page.duplicate', 'page.delete']]],
-  ['Preferences', [['preferences.smartSymbols', 'preferences.nudgeAmount']]],
+  ['Preferences', [['preferences.spellCheck', 'preferences.smartSymbols', 'preferences.nudgeAmount']]],
   ['Help', [['help.keyboardShortcuts']]],
 ];
 

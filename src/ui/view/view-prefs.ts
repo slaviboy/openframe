@@ -36,6 +36,8 @@ export interface ViewPrefs {
   readonly propertyLabels: boolean;
   /** Typing converts character sequences (->, (c), straight quotes …) to symbols. */
   readonly smartSymbols: boolean;
+  /** Misspelled words in text being edited are underlined, with suggestions on right-click. */
+  readonly spellCheck: boolean;
   /** Arrow-key nudge distance, in canvas pixels. */
   readonly nudgeSmall: number;
   /** Shift + arrow-key nudge distance, in canvas pixels. */
@@ -55,6 +57,7 @@ export const VIEW_PREF_DEFAULTS: ViewPrefs = {
   snapToPixelGrid: true,
   propertyLabels: false,
   smartSymbols: false,
+  spellCheck: true,
   nudgeSmall: 1,
   nudgeBig: 10,
 };
@@ -83,6 +86,7 @@ function readStored(): ViewPrefs {
       snapToPixelGrid: flag('snapToPixelGrid'),
       propertyLabels: flag('propertyLabels'),
       smartSymbols: flag('smartSymbols'),
+      spellCheck: flag('spellCheck'),
       nudgeSmall: amount('nudgeSmall'),
       nudgeBig: amount('nudgeBig'),
     };
@@ -169,5 +173,12 @@ export const VIEW_PREF_COMMANDS: CommandDefinition[] = [
     category: 'View',
     checked: () => viewPrefs.getSnapshot().smartSymbols,
     run: () => viewPrefs.toggle('smartSymbols'),
+  },
+  {
+    id: 'preferences.spellCheck',
+    label: 'Check spelling',
+    category: 'View',
+    checked: () => viewPrefs.getSnapshot().spellCheck,
+    run: () => viewPrefs.toggle('spellCheck'),
   },
 ];

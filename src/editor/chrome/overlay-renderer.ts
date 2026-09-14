@@ -28,6 +28,7 @@ import { isSceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 import { cropImageWorldQuad } from '../interactions/crop';
 import { textEditTarget } from '../interactions/text-edit';
+import { misspelledRanges } from '@/core/text/spelling';
 import { selectionEnd, selectionStart } from '@/core/text/text-editing';
 import { gradientEditChrome, type GradientChrome } from '../interactions/gradient-edit';
 import { blurEditChrome } from '../interactions/blur-edit';
@@ -335,6 +336,42 @@ function drawTextEditChrome(ctx: CanvasRenderingContext2D, editor: Editor, theme
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
+  // Misspelled words get a red wavy underline along the bottom of their text.
+  if (editor.spelling) {
+    ctx.save();
+    ctx.strokeStyle = SPELLING_COLOR;
+    ctx.lineWidth = 1;
+    for (const word of misspelledRanges(node.characters, editor.spelling)) {
+      for (const r of layout.selectionRects(node, word.start, word.end)) {
+        drawWavyLine(ctx, at(r.x, r.y + r.height), at(r.x + r.width, r.y + r.height));
+      }
+    }
+    ctx.restore();
+  }
+}
+
+const SPELLING_COLOR = '#e5484d';
+
+/** A small wavy line between two screen points (a spelling underline). */
+function drawWavyLine(ctx: CanvasRenderingContext2D, from: Vec2, to: Vec2): void {
+  const length = Math.hypot(to.x - from.x, to.y - from.y);
+  if (length < 1) return;
+  const ux = (to.x - from.x) / length;
+  const uy = (to.y - from.y) / length;
+  // Perpendicular, pointing down the text.
+  const nx = -uy;
+  const ny = ux;
+  const step = 2;
+  const amplitude = 1.5;
+  ctx.beginPath();
+  for (let d = 0, i = 0; d <= length; d += step, i++) {
+    const offset = i % 2 === 0 ? -amplitude : amplitude;
+    const x = from.x + ux * d + nx * (offset - 1);
+    const y = from.y + uy * d + ny * (offset - 1);
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
 }
 
 function drawCropChrome(ctx: CanvasRenderingContext2D, editor: Editor, quad: readonly Vec2[], theme: ChromeTheme): void {

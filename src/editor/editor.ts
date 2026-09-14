@@ -23,6 +23,7 @@ import type { Id, IdGenerator } from '@/core/ids/ids';
 import { unionAll, type Rect } from '@/core/math/rect';
 import { SceneIndex } from '@/core/scene/scene-index';
 import type { TextLayoutService } from '@/core/text/text-layout';
+import type { SpellChecker } from '@/core/text/spelling';
 import { createTextFinalizer } from '@/core/text/text-resize';
 import type { Color, Transform } from '@/core/schema/document';
 import type { Vec2 } from '@/core/math/vec';
@@ -91,6 +92,14 @@ export class Editor {
   setTextLayout(layout: TextLayoutService | null): void {
     this.textLayout = layout;
     this.state.setTextLayoutReady(layout !== null);
+  }
+
+  /** Spell checker for text being edited (misspelled words are underlined), or null when spelling isn't checked. */
+  spelling: SpellChecker | null = null;
+
+  setSpellChecker(checker: SpellChecker | null): void {
+    this.spelling = checker;
+    this.requestRender();
   }
 
   /** Installs (or removes, with null) the canvas pixel reader used by the eyedropper. */

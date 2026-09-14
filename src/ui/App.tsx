@@ -27,6 +27,7 @@ import { setSnapToPixelGrid } from '@/editor/interactions/transform';
 import { StorageError } from '@/platform/idb/persistence';
 import { CanvasHost, type CanvasContextMenu } from './canvas/CanvasHost';
 import { LinkPopover } from './canvas/LinkPopover';
+import { spellingEntries } from './menus/spelling-menu';
 import { EmojiSuggestions } from './canvas/EmojiSuggestions';
 import { MissingFontsDialog } from './dialogs/MissingFontsDialog';
 import { clipboardCommands } from './clipboard/clipboard-commands';
@@ -250,6 +251,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
             editorState.selectedGuide
               ? guideMenuEntries(editor)
               : [
+                  ...spellingEntries(editor, contextMenu.spelling),
                   ...selectLayerEntries(editor, contextMenu.layers),
                   ...contextMenu.pasteEntries,
                   ...(editor.selection.length > 0 ? objectMenuEntries(editor) : canvasMenuEntries(editor)),

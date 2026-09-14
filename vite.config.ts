@@ -28,7 +28,11 @@ export default defineConfig({
   // The reference help-center mirror lives next to the app; it is not part of the build.
   server: { watch: { ignored: ['**/docs-mirror/**'] } },
   resolve: {
-    alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
+    alias: {
+      '@': fileURLToPath(new URL('./src', import.meta.url)),
+      // The English Hunspell dictionary's files, imported raw (the package's own entry reads them with Node's fs).
+      'dictionary-en-files': fileURLToPath(new URL('./node_modules/dictionary-en', import.meta.url)),
+    },
   },
   worker: { format: 'es' },
   build: {

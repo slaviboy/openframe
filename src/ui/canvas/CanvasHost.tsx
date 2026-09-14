@@ -38,6 +38,8 @@ import { loadEmojiFont } from '@/engine/text/bundled-fonts';
 import { viewPrefs } from '../view/view-prefs';
 import { emojiSuggest } from './emoji-suggest';
 import { precacheDeferredAssets } from '@/platform/sw-register';
+import { misspelledWordAt } from '@/core/text/spelling';
+import { loadSpellChecker } from '../text/spell-checker';
 import { worldToScreen } from '@/editor/viewport/viewport';
 import {
   deleteText,
@@ -73,6 +75,8 @@ export interface CanvasContextMenu {
   readonly layers: readonly Id[];
   /** Pointer position in world coordinates, for "Paste here". */
   readonly world: Vec2;
+  /** A misspelled word under the pointer in the text being edited, with its suggestions. */
+  readonly spelling?: { readonly start: number; readonly end: number; readonly suggestions: readonly string[] } | undefined;
 }
 
 interface CanvasHostProps {
@@ -112,6 +116,8 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
   const themeRef = useRef(theme);
   const rulersRef = useRef(rulers);
   const contextMenuRef = useRef(onContextMenu);
+  // Exposed as data-spelling once the spell checker is installed (E2E waits for it).
+  const [spellingReady, setSpellingReady] = useState(false);
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
 
   useEffect(() => {
@@ -170,6 +176,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
     let shaper: TextShaper | null = null;
     let unsubscribeFonts = () => {};
     let unsubscribeEmoji = () => {};
+    let unsubscribeSpelling = () => {};
     const textInput = textInputRef.current!;
     // Caret blink phase while editing text; restarts visible whenever the selection changes.
     let caretVisible = true;
@@ -314,6 +321,29 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
         };
         unsubscribeEmoji = editor.history.subscribe(loadEmojiWhenUsed);
         loadEmojiWhenUsed();
+        // Spelling: the dictionary loads the first time text is edited with Check spelling on, and follows the preference.
+        const syncSpelling = () => {
+          const wanted = viewPrefs.getSnapshot().spellCheck && editor.state.getSnapshot().textEdit !== null;
+          if (!viewPrefs.getSnapshot().spellCheck) {
+            if (editor.spelling) editor.setSpellChecker(null);
+            return;
+          }
+          if (!wanted || editor.spelling) return;
+          loadSpellChecker()
+            .then((checker) => {
+              if (disposed || !viewPrefs.getSnapshot().spellCheck) return;
+              editor.setSpellChecker(checker);
+              setSpellingReady(true);
+            })
+            .catch((error: unknown) => console.error(error));
+        };
+        const unsubscribePrefs = viewPrefs.subscribe(syncSpelling);
+        const unsubscribeState = editor.state.subscribe(syncSpelling);
+        unsubscribeSpelling = () => {
+          unsubscribePrefs();
+          unsubscribeState();
+        };
+        syncSpelling();
         editor.setTextLayout(shaper);
         resize();
         setStatus({ kind: 'ready' });
@@ -596,11 +626,22 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
         shift: e.shiftKey,
       });
     };
+    /** The misspelled word at a world point in the text being edited, with up to five suggestions. */
+    const spellingAt = (world: Vec2): CanvasContextMenu['spelling'] => {
+      const target = textEditTarget(editor);
+      const checker = editor.spelling;
+      if (!target || !checker || !editor.textLayout) return undefined;
+      const local = editor.scene.toLocal(target.node.id, world);
+      if (!local) return undefined;
+      const word = misspelledWordAt(target.node.characters, editor.textLayout.offsetAt(target.node, local), checker);
+      return word ? { start: word.start, end: word.end, suggestions: checker.suggest(word.word).slice(0, 5) } : undefined;
+    };
     const onContextMenu = (e: MouseEvent) => {
       e.preventDefault();
       if (tools.tool.active) return;
       tools.contextSelect(sample(e));
-      contextMenuRef.current?.({ x: e.clientX, y: e.clientY, layers: tools.layersUnder(sample(e)), world: tools.toPointer(sample(e)).world });
+      const world = tools.toPointer(sample(e)).world;
+      contextMenuRef.current?.({ x: e.clientX, y: e.clientY, layers: tools.layersUnder(sample(e)), world, spelling: spellingAt(world) });
       schedule();
     };
 
@@ -638,6 +679,8 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
       editor.setTextLayout(null);
       unsubscribeFonts();
       unsubscribeEmoji();
+      unsubscribeSpelling();
+      editor.setSpellChecker(null);
       renderer?.dispose();
       shaper?.dispose();
       surface?.delete();
@@ -645,7 +688,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
   }, [editor, tools]);
 
   return (
-    <div ref={containerRef} className={styles.host} data-testid="canvas" data-canvas-host="" data-ready={status.kind === 'ready' || undefined}>
+    <div ref={containerRef} className={styles.host} data-testid="canvas" data-canvas-host="" data-ready={status.kind === 'ready' || undefined} data-spelling={spellingReady || undefined}>
       <canvas ref={sceneRef} className={styles.layer} aria-hidden="true" />
       <canvas
         ref={overlayRef}
