@@ -176,7 +176,8 @@ export async function bootstrap(): Promise<AppSession> {
   const unsubscribePage = editor.state.subscribe(() => {
     if (editor.pageId === lastPage || viewing) return;
     lastPage = editor.pageId;
-    void persistence.updateFileRecord(file.id, { lastPageId: lastPage });
+    // Remembering the page is best effort: storage that is briefly unavailable doesn't matter here.
+    void persistence.updateFileRecord(file.id, { lastPageId: lastPage }).catch(() => undefined);
   });
 
   const flush = () => void autosaver.flush().catch(() => undefined);

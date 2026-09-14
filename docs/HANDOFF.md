@@ -83,12 +83,14 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - the `CHANGE_TO` action between variants, which instances inherit
     - presentation view switches instances in a runtime copy (`src/editor/prototype-runtime.ts`)
     - drag to connect onto variants
+  - The WebKit storage flake fix (the commit after interactive components):
+    - timed autosave flushes catch their errors and retry when storage is briefly unavailable
+    - the lastPageId write is best effort
+    - the presentation tab retries opening storage
 
 ## In progress (uncommitted)
 
-1. **WebKit storage flake.** Being fixed: `openPresentation` retries opening IndexedDB when WebKit reports it unavailable while the editor tab holds it (`src/app/present.ts`).
-
-**Known flake to investigate:** WebKit's `e2e/presentation.spec.ts` once logged `StorageError: Browser storage is unavailable` when the presentation tab opened IndexedDB while the editor tab held it. It passed on retry.
+1. **Variables in prototypes.** Next: Set variable, Set variable mode and Conditional actions with expressions (the evaluator is in `src/core/prototype/expressions.ts`), running in presentation view against a runtime copy of the variables.
 
 ## Next (M10, in order)
 

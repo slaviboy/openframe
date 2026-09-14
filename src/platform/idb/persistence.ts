@@ -454,6 +454,8 @@ export interface AutosaverOptions {
   flushDelayMs?: number;
   /** Compact after this many journal batches. */
   compactEvery?: number;
+  /** How long to wait before trying again when storage was briefly unavailable. */
+  retryDelayMs?: number;
   onStatus?: (status: SaveStatus) => void;
 }
 
@@ -480,9 +482,15 @@ export class Autosaver {
     if (ops.length === 0) return;
     this.pending.push(...ops);
     this.setStatus({ state: 'pending' });
-    if (this.timer === null) {
-      this.timer = setTimeout(() => void this.flush(), this.options.flushDelayMs ?? 250);
-    }
+    if (this.timer === null) this.schedule(this.options.flushDelayMs ?? 250);
+  }
+
+  /** Flushes after a delay; a failure shows in the save status (and a transient one retries) instead of escaping. */
+  private schedule(delayMs: number): void {
+    this.timer = setTimeout(() => {
+      this.timer = null;
+      void this.flush().catch(() => undefined);
+    }, delayMs);
   }
 
   /** Writes all pending ops now. Resolves once they are durable (or rejects). */
@@ -509,7 +517,10 @@ export class Autosaver {
           this.setStatus(this.pending.length > 0 ? { state: 'pending' } : { state: 'saved', at: now() });
         } catch (error) {
           this.pending = [...batch, ...this.pending];
-          this.setStatus({ state: 'error', error: error instanceof StorageError ? error : classify(error) });
+          const storageError = error instanceof StorageError ? error : classify(error);
+          this.setStatus({ state: 'error', error: storageError });
+          // Storage that is briefly unavailable (e.g. while another tab opens it) is tried again.
+          if (storageError.reason === 'unavailable' && this.timer === null && !this.disposed) this.schedule(this.options.retryDelayMs ?? 1000);
           throw error;
         }
       });
@@ -524,7 +535,10 @@ export class Autosaver {
     this.setStatus({ state: 'saved', at: this.options.now() });
   }
 
+  private disposed = false;
+
   dispose(): void {
+    this.disposed = true;
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
   }

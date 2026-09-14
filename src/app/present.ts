@@ -19,7 +19,7 @@ import type { AppSession } from './bootstrap';
 import { IdGenerator, type Id } from '@/core/ids/ids';
 import { topLevelFrame } from '@/core/prototype/reactions';
 import { Editor } from '@/editor/editor';
-import { LocalPersistence } from '@/platform/idb/persistence';
+import { LocalPersistence, StorageError } from '@/platform/idb/persistence';
 import { createReplicaId } from '@/platform/replica';
 
 /** What presentation view shows: a local file's page, starting at a frame (or its first flow). */
@@ -56,9 +56,28 @@ export interface PresentationSession {
   dispose(): void;
 }
 
+/** Attempts at opening browser storage, and the pause between them. */
+const STORAGE_ATTEMPTS = 4;
+const STORAGE_RETRY_MS = 250;
+
+/**
+ * Opens browser storage, trying again for a moment when it reports being unavailable: the editor's tab may still be
+ * writing the file when presentation view's tab opens it (WebKit refuses the second connection meanwhile).
+ */
+async function openStorage(): Promise<LocalPersistence> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await LocalPersistence.open();
+    } catch (error) {
+      if (!(error instanceof StorageError) || error.reason !== 'unavailable' || attempt >= STORAGE_ATTEMPTS) throw error;
+      await new Promise((resolve) => setTimeout(resolve, STORAGE_RETRY_MS * attempt));
+    }
+  }
+}
+
 /** Opens a local file read-only for presentation view, on the page to present. */
 export async function openPresentation(params: PresentParams): Promise<PresentationSession> {
-  const persistence = await LocalPersistence.open();
+  const persistence = await openStorage();
   try {
     const opened = await persistence.openFile(params.fileId);
     const ids = new IdGenerator(createReplicaId());

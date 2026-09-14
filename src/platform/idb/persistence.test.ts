@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { createEmptyDocument, keyOnTop, makeRectangle } from '@/core/document/factory';
 import { assertDocumentInvariants } from '@/core/document/invariants';
 import type { DocumentStore } from '@/core/document/store';
@@ -114,6 +114,31 @@ describe('LocalPersistence', () => {
   test('settings round trip', async () => {
     await persistence.setSetting('theme', 'dark');
     expect(await persistence.getSetting('theme')).toBe('dark');
+  });
+});
+
+describe('autosave when storage is briefly unavailable', () => {
+  test('a failed save shows in the status and is tried again, keeping its edits, without an uncaught error', async () => {
+    await persistence.createFile('f1', store, NOW);
+    const append = vi.spyOn(persistence, 'appendJournal').mockRejectedValueOnce(new StorageError('Browser storage is unavailable.', 'unavailable'));
+    const statuses: SaveStatus['state'][] = [];
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    const saver = new Autosaver({ persistence, fileId: 'f1', store, now: () => NOW, flushDelayMs: 5, retryDelayMs: 5, onStatus: (s) => statuses.push(s.state) });
+    try {
+      history.subscribe((change) => saver.record(change.ops));
+      addRect(1);
+      await vi.waitFor(() => expect(statuses.at(-1)).toBe('saved'), { timeout: 2000 });
+      expect(statuses).toContain('error');
+      // The retry wrote the batch that failed.
+      expect(append).toHaveBeenCalledTimes(2);
+      expect(await persistence.journalBatchCount('f1')).toBe(1);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+      saver.dispose();
+    }
   });
 });
 
