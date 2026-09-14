@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import { bendVertex, oppositeEnd, setTangent, tangentAt, vertexEnds, vertexHandles } from './vector-bend';
+import { bendVertex, moveHandles, oppositeEnd, setTangent, tangentAt, vertexEnds, vertexHandles } from './vector-bend';
 import { straightSegment, type VectorNetwork } from './vector-network';
 
 const square: VectorNetwork = {
@@ -71,5 +71,18 @@ describe('bend', () => {
     expect(tangentAt(changed, { segment: 2, side: 'end' })).toEqual({ x: 5, y: 5 });
     expect(tangentAt(changed, { segment: 2, side: 'start' })).toEqual({ x: 0, y: 0 });
     expect(square.segments[2]!.tangentEnd).toEqual({ x: 0, y: 0 });
+  });
+
+  test('handles selected together move by the same amount, each once', () => {
+    const bent = bendVertex(square, 1, { x: 20, y: 0 });
+    const ends = [
+      { segment: 0, side: 'end' },
+      { segment: 1, side: 'start' },
+      { segment: 1, side: 'start' },
+    ] as const;
+    const moved = moveHandles(bent, ends, { x: 0, y: 10 });
+    expect(tangentAt(moved, ends[0])).toEqual({ x: -20, y: 10 });
+    expect(tangentAt(moved, ends[1])).toEqual({ x: 20, y: 10 });
+    expect(moved.segments[2]).toBe(bent.segments[2]);
   });
 });

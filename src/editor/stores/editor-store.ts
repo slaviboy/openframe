@@ -19,6 +19,7 @@ import type { DocumentStore } from '@/core/document/store';
 import type { Id } from '@/core/ids/ids';
 import type { CropAspect } from '@/core/image/crop';
 import type { Paint } from '@/core/schema/document';
+import type { SegmentEnd } from '@/core/vector/vector-bend';
 import { DEFAULT_VIEWPORT, type Viewport } from '../viewport/viewport';
 import { Observable } from './observable';
 
@@ -94,6 +95,8 @@ export interface VectorEditRef {
   readonly eraserWeight?: number;
   /** Indices of the selected width points (Variable width tool) in the layer's `strokeWidths`. */
   readonly widthPoints?: readonly number[];
+  /** Bézier handles Shift-selected to move together, as the segment ends they belong to. */
+  readonly selectedHandles?: readonly SegmentEnd[];
 }
 
 /** A value field open on an auto layout frame's padding or gap handle; `mode` is which sides a padding value applies to. */

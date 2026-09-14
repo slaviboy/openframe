@@ -24,7 +24,7 @@ import { nodeContainsLocal } from '@/core/scene/scene-index';
 import { DEFAULT_SHAPE_FILL, solid } from '@/core/document/factory';
 import type { Paint, Transform, VectorNode } from '@/core/schema/document';
 import { cutVertex, deleteVertices, healVertices, moveVertices, nearestOnSegments, splitSegment } from '@/core/vector/vector-edit';
-import { bendVertex, oppositeEnd, setTangent, tangentAt, type SegmentEnd } from '@/core/vector/vector-bend';
+import { bendVertex, moveHandles, oppositeEnd, setTangent, tangentAt, type SegmentEnd } from '@/core/vector/vector-bend';
 import { keyBetween } from '@/core/ids/fractional-index';
 import { matrixOf } from '@/core/scene/scene-index';
 import { divideNetwork } from '@/core/vector/vector-divide';
@@ -155,6 +155,7 @@ type HandleGesture = {
 } & (
   | { readonly kind: 'bend'; readonly vertex: number; /** A point was added on the path first. */ readonly added: boolean }
   | { readonly kind: 'handle'; readonly end: SegmentEnd; readonly origin: { readonly x: number; readonly y: number }; readonly mirror: SegmentEnd | null }
+  | { readonly kind: 'handles'; readonly ends: readonly SegmentEnd[] }
 );
 
 /** Painting regions: the paint set on (or, when the first region already showed it, removed from) each region the drag crosses. */
@@ -232,7 +233,8 @@ interface PointDrag {
  * With two or more points selected, their bounding box resizes them (Shift keeps proportions, Alt resizes from the
  * center) or, dragged from just outside a corner, rotates them (Shift snaps to 15°).
  * With Bend, pressing on a point (or a path, adding a point) and dragging pulls out mirrored handles.
- * The handles of selected points can be dragged; handles that mirrored each other keep mirroring.
+ * The handles of selected points can be dragged; handles that mirrored each other keep mirroring. Shift-click selects
+ * several handles, and dragging one of them moves them all together.
  * With Paint (⇧B), clicking a closed region fills it with the paint, or removes a fill that already matches it; a drag paints every region it crosses.
  * With the Eraser (⇧E), a drag removes the area it passes over: open paths are clipped and closed regions lose that area.
  * With Variable width, clicking the stroke adds a width point; dragging a knob sets its width, dragging the point moves it along the path.
@@ -364,6 +366,18 @@ export class VectorEditController implements Tool {
     const startInverse = invert(toWorld);
     const handle = state.tool === 'cut' || !startInverse ? null : hitHandle(editor, p.screen, this.tolerancePx);
     if (handle && startInverse) {
+      const chosen = state.selectedHandles ?? [];
+      const isChosen = chosen.some((e) => e.segment === handle.end.segment && e.side === handle.end.side);
+      if (p.shift) {
+        // Shift-click selects handles to move together.
+        const selectedHandles = isChosen ? chosen.filter((e) => e.segment !== handle.end.segment || e.side !== handle.end.side) : [...chosen, handle.end];
+        editor.state.setVectorEdit({ ...state, selectedHandles });
+        return;
+      }
+      if (isChosen && chosen.length > 1) {
+        this.handle = { kind: 'handles', tx: editor.history.begin('Move handles'), start: node.vectorNetwork, startTransform: node.transform, startInverse, down: p, moved: false, ends: chosen };
+        return;
+      }
       const network = node.vectorNetwork;
       const opposite = oppositeEnd(network, handle.end);
       const t = tangentAt(network, handle.end);
@@ -440,7 +454,7 @@ export class VectorEditController implements Tool {
     }
     if (hit !== -1) {
       const selected = p.shift ? (state.vertices.includes(hit) ? state.vertices.filter((i) => i !== hit) : [...state.vertices, hit]) : state.vertices.includes(hit) ? state.vertices : [hit];
-      editor.state.setVectorEdit({ ...state, nodeId: node.id, vertices: selected });
+      editor.state.setVectorEdit({ ...state, nodeId: node.id, vertices: selected, ...(state.selectedHandles?.length ? { selectedHandles: [] } : {}) });
       if (selected.includes(hit)) {
         this.drag = { tx: editor.history.begin('Move points'), start: node.vectorNetwork, startTransform: node.transform, down: p, vertices: selected, moved: false };
       }
@@ -753,6 +767,10 @@ export class VectorEditController implements Tool {
     if (g.kind === 'bend') {
       const origin = g.start.vertices[g.vertex]!;
       network = bendVertex(g.start, g.vertex, { x: local.x - origin.x, y: local.y - origin.y });
+    } else if (g.kind === 'handles') {
+      // Every selected handle copies the movement from the press.
+      const pressed = apply(g.startInverse, g.down.world);
+      network = moveHandles(g.start, g.ends, { x: local.x - pressed.x, y: local.y - pressed.y });
     } else {
       const tangent = { x: local.x - g.origin.x, y: local.y - g.origin.y };
       network = setTangent(g.start, g.end, tangent);

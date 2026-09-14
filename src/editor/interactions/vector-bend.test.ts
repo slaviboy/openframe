@@ -111,4 +111,22 @@ describe('bend tool and handles in vector edit mode', () => {
     // The point itself didn't move.
     expect(editState()?.vertices).toEqual([1]);
   });
+
+  test('Shift-clicking handles selects them, and dragging one moves every selected handle the same way', () => {
+    editor.commands.run('vector.toolBend');
+    drag([200, 100], [220, 100]);
+    editor.commands.run('vector.toolMove');
+    // Handles at (180, 100) and (220, 100).
+    tools.pointerDown({ ...sample(180, 100), shift: true });
+    tools.pointerUp({ ...sample(180, 100), shift: true });
+    tools.pointerDown({ ...sample(220, 100), shift: true });
+    tools.pointerUp({ ...sample(220, 100), shift: true });
+    expect(editState()?.selectedHandles).toEqual([
+      { segment: 0, side: 'end' },
+      { segment: 1, side: 'start' },
+    ]);
+    drag([220, 100], [220, 120]);
+    expect(network().segments[0]!.tangentEnd).toEqual({ x: -20, y: 20 });
+    expect(network().segments[1]!.tangentStart).toEqual({ x: 20, y: 20 });
+  });
 });

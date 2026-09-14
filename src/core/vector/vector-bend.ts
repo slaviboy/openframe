@@ -86,6 +86,23 @@ export function bendVertex(network: VectorNetwork, vertex: number, handle: Vec2)
   return setTangent(setTangent(network, leaving, handle), other, opposite);
 }
 
+/**
+ * Moves several handles together (Shift-selected handles, dragged as one): each segment end's tangent is
+ * offset by the same `delta`, so every handle copies the movement. Each end moves once.
+ */
+export function moveHandles(network: VectorNetwork, ends: readonly SegmentEnd[], delta: Vec2): VectorNetwork {
+  const seen = new Set<string>();
+  let result = network;
+  for (const end of ends) {
+    const key = `${end.segment}:${end.side}`;
+    if (seen.has(key) || !result.segments[end.segment]) continue;
+    seen.add(key);
+    const t = tangentAt(result, end);
+    result = setTangent(result, end, { x: t.x + delta.x, y: t.y + delta.y });
+  }
+  return result;
+}
+
 /** The handles at the given vertices: every segment end there whose tangent isn't zero. */
 export function vertexHandles(network: VectorNetwork, vertices: readonly number[]): VertexHandle[] {
   return [...new Set(vertices)].flatMap((vertex) => {

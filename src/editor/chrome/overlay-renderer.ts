@@ -676,6 +676,7 @@ function drawVectorEdit(ctx: CanvasRenderingContext2D, input: OverlayInput): voi
     }
   }
   // Bézier handles of the selected points: a line from the point to a round knob.
+  const chosenHandles = state.selectedHandles ?? [];
   for (const h of selectedHandles(editor)) {
     ctx.beginPath();
     ctx.moveTo(h.vertexScreen.x, h.vertexScreen.y);
@@ -685,7 +686,7 @@ function drawVectorEdit(ctx: CanvasRenderingContext2D, input: OverlayInput): voi
     ctx.stroke();
     ctx.beginPath();
     ctx.arc(h.screen.x, h.screen.y, 3.5, 0, Math.PI * 2);
-    ctx.fillStyle = theme.handleFill;
+    ctx.fillStyle = chosenHandles.some((e) => e.segment === h.end.segment && e.side === h.end.side) ? theme.selection : theme.handleFill;
     ctx.fill();
     ctx.stroke();
   }
