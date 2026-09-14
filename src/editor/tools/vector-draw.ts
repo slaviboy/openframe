@@ -16,8 +16,10 @@
  */
 
 import type { Transaction } from '@/core/history/history';
+import { applyLinear } from '@/core/math/matrix';
+import { matrixOf } from '@/core/scene/scene-index';
 import type { Id } from '@/core/ids/ids';
-import type { VectorNode } from '@/core/schema/document';
+import type { Transform, VectorNode } from '@/core/schema/document';
 import { networkBounds, transformNetwork, type VectorNetwork } from '@/core/vector/vector-network';
 
 /**
@@ -28,6 +30,19 @@ export function placeNetwork(tx: Transaction, id: Id, network: VectorNetwork): v
   const bounds = networkBounds(network) ?? { x: 0, y: 0, width: 0, height: 0 };
   const t = (tx.store.getOrThrow(id) as VectorNode).transform;
   tx.set(id, 'transform', [t[0], t[1], t[2], t[3], bounds.x, bounds.y]);
+  tx.set(id, 'size', { width: bounds.width, height: bounds.height });
+  tx.set(id, 'vectorNetwork', transformNetwork(network, { x: bounds.x, y: bounds.y }, 1, 1));
+}
+
+/**
+ * Refits an edited vector layer: the box moves (along the layer's own rotation) to the network's
+ * bounds and the network is stored relative to it. `base` is the transform the network's coordinates
+ * are relative to (the layer's transform when a drag started).
+ */
+export function refitVector(tx: Transaction, id: Id, network: VectorNetwork, base: Transform = (tx.store.getOrThrow(id) as VectorNode).transform): void {
+  const bounds = networkBounds(network) ?? { x: 0, y: 0, width: 0, height: 0 };
+  const offset = applyLinear(matrixOf(base), { x: bounds.x, y: bounds.y });
+  tx.set(id, 'transform', [base[0], base[1], base[2], base[3], base[4] + offset.x, base[5] + offset.y]);
   tx.set(id, 'size', { width: bounds.width, height: bounds.height });
   tx.set(id, 'vectorNetwork', transformNetwork(network, { x: bounds.x, y: bounds.y }, 1, 1));
 }

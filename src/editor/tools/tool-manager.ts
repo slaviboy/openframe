@@ -31,6 +31,7 @@ import { EyedropperTool, type EyedropperSample } from './eyedropper-tool';
 import { LayerPickTool } from './layer-pick-tool';
 import { ImagePlaceTool } from './image-tool';
 import { LineTool } from './line-tool';
+import { VectorEditController } from '../interactions/vector-edit';
 import { PenTool } from './pen-tool';
 import { PencilTool } from './pencil-tool';
 import { TextTool } from './text-tool';
@@ -100,6 +101,8 @@ export class ToolManager {
   readonly blurEdit: BlurEditController;
   /** Caret and text selection pointer handling (active while `textEdit` is set). */
   readonly textEdit: TextEditController;
+  /** Point editing of a vector layer (active while `vectorEdit` is set). */
+  readonly vectorEdit: VectorEditController;
   /** Guide under the pointer, for the overlay. */
   hoveredGuide: GuideRef | null = null;
   private readonly tools: Record<ToolId, Tool>;
@@ -117,6 +120,7 @@ export class ToolManager {
     this.gradientEdit = new GradientEditController(editor, this.env.hitTolerancePx);
     this.blurEdit = new BlurEditController(editor, this.env.hitTolerancePx);
     this.textEdit = new TextEditController(editor, this.env.hitTolerancePx);
+    this.vectorEdit = new VectorEditController(editor, this.env.hitTolerancePx);
     watchTextEdit(editor);
     editor.pickLayerFromCanvas = () => {
       const current = editor.state.getSnapshot().tool;
@@ -379,6 +383,7 @@ export class ToolManager {
     if (state.croppingId !== null) return this.crop;
     if (state.gradientEdit !== null) return this.gradientEdit;
     if (state.blurEdit !== null) return this.blurEdit;
+    if (state.vectorEdit !== null) return this.vectorEdit;
     return null;
   }
 

@@ -41,6 +41,7 @@ import { resizedTrack } from '@/core/layout/grid-track-handles';
 import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
 import { flowInsertionIndex, flowInsertionLine, moveToFlowIndex } from '@/core/layout/flow-order';
 import { beginCrop } from '../interactions/crop';
+import { beginVectorEdit } from '../interactions/vector-edit';
 import { beginTextEditAt } from '../interactions/text-edit';
 import { resizedTextMode } from '../commands/text';
 import { resolveCornerRadii } from '@/core/geometry/corners';
@@ -539,6 +540,8 @@ export class MoveTool implements Tool {
           // Double-clicking a text layer edits its text with the caret at the click.
           if (only && editor.doc.get(only)?.type === 'TEXT' && beginTextEditAt(editor, only, p.world)) break;
           // Double-clicking a layer with an image fill (and no children) starts cropping it.
+          // Double-clicking a vector layer edits its points.
+          if (only && editor.doc.get(only)?.type === 'VECTOR' && beginVectorEdit(editor, only)) break;
           if (only && editor.doc.children(only).length === 0 && beginCrop(editor, only)) break;
           this.enterChild(p);
         }

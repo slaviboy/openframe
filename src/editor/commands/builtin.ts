@@ -30,6 +30,7 @@ import { layersWithSame, matchingLayers } from './select-similar';
 import { canTidyUp, tidyUpSelection } from './tidy';
 import { canToggleMask, toggleMask } from './masks';
 import { canFlatten, flattenSelection } from './flatten';
+import { beginVectorEdit, canBeginVectorEdit, deleteSelectedPoints, endVectorEdit } from '../interactions/vector-edit';
 import { isInFlow, moveInFlow } from '@/core/layout/flow-order';
 import { addAutoLayout, canAddAutoLayout, canRemoveAutoLayout, removeAutoLayout, suggestAutoLayoutForSelection } from './auto-layout';
 import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/core/color/color-profile';
@@ -455,6 +456,33 @@ const TEXT_FORMAT_COMMANDS: CommandDefinition[] = [
 
 export const BUILTIN_COMMANDS: CommandDefinition[] = [
   ...COLOR_PROFILE_COMMANDS,
+  // Vector edit mode, registered first: Return and Delete act on the vector's points while it is being edited.
+  {
+    id: 'vector.edit',
+    label: 'Edit vector',
+    category: 'Edit',
+    shortcuts: ['Enter'],
+    enabled: canBeginVectorEdit,
+    run: (e) => beginVectorEdit(e, e.selection[0]!),
+  },
+  {
+    id: 'vector.done',
+    label: 'Done editing vector',
+    category: 'Edit',
+    shortcuts: ['Enter'],
+    palette: false,
+    enabled: (e) => e.state.getSnapshot().vectorEdit !== null,
+    run: (e) => endVectorEdit(e),
+  },
+  {
+    id: 'vector.deletePoints',
+    label: 'Delete points',
+    category: 'Edit',
+    shortcuts: ['Delete'],
+    palette: false,
+    enabled: (e) => (e.state.getSnapshot().vectorEdit?.vertices.length ?? 0) > 0,
+    run: (e) => deleteSelectedPoints(e),
+  },
   // Registered before the align commands: ⇧⌥A removes auto layout when the selection has any, and aligns left to the parent otherwise.
   {
     id: 'layout.addAutoLayout',

@@ -30,6 +30,7 @@ import { cropImageWorldQuad } from '../interactions/crop';
 import { isUprightHandle, selectedLayoutHandles } from '../interactions/layout-handles';
 import { GRID_EDGE_BAND_PX, selectedGridTracks } from '../interactions/grid-tracks';
 import { trackLabel } from '@/core/layout/grid-track-handles';
+import { networkStrokePath } from '@/core/vector/vector-network';
 import { textEditTarget } from '../interactions/text-edit';
 import { misspelledRanges } from '@/core/text/spelling';
 import { selectionEnd, selectionStart } from '@/core/text/text-editing';
@@ -126,6 +127,7 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
   if (frame && state.selection.length > 1) drawSmartSelection(ctx, input);
   drawLayoutHandles(ctx, input);
   drawGridTracks(ctx, input);
+  drawVectorEdit(ctx, input);
   if (frame) {
     const quad = screenQuad(editor, frame);
     // Slices are invisible in the scene, so their outline is dashed.
@@ -543,6 +545,45 @@ function drawSmartSelection(ctx: CanvasRenderingContext2D, input: OverlayInput):
     ctx.roundRect(Math.round(p.x - w / 2), Math.round(p.y - h / 2), w, h, 1.5);
     ctx.fill();
   }
+  ctx.restore();
+}
+
+/** Vector edit mode: the edited layer's segments and its points, selected points filled. */
+function drawVectorEdit(ctx: CanvasRenderingContext2D, input: OverlayInput): void {
+  const { editor, theme } = input;
+  const state = editor.state.getSnapshot().vectorEdit;
+  const node = state ? editor.doc.get(state.nodeId) : undefined;
+  if (!state || node?.type !== 'VECTOR') return;
+  const v = editor.state.viewport;
+  const m = editor.scene.worldTransform(node.id);
+  const toScreen = (p: Vec2) => worldToScreen(v, apply(m, p));
+  ctx.save();
+  ctx.beginPath();
+  for (const command of networkStrokePath(node.vectorNetwork)) {
+    if (command.op === 'Z') ctx.closePath();
+    else if (command.op === 'C') {
+      const [c1, c2, to] = [toScreen({ x: command.x1, y: command.y1 }), toScreen({ x: command.x2, y: command.y2 }), toScreen(command)];
+      ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, to.x, to.y);
+    } else {
+      const to = toScreen(command);
+      if (command.op === 'M') ctx.moveTo(to.x, to.y);
+      else ctx.lineTo(to.x, to.y);
+    }
+  }
+  ctx.strokeStyle = theme.selection;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  const selected = new Set(state.vertices);
+  const size = 7;
+  node.vectorNetwork.vertices.forEach((vertex, i) => {
+    const p = toScreen(vertex);
+    ctx.beginPath();
+    ctx.rect(Math.round(p.x - size / 2) + 0.5, Math.round(p.y - size / 2) + 0.5, size, size);
+    ctx.fillStyle = selected.has(i) ? theme.selection : theme.handleFill;
+    ctx.fill();
+    ctx.strokeStyle = theme.selection;
+    ctx.stroke();
+  });
   ctx.restore();
 }
 

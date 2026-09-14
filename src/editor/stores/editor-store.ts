@@ -75,6 +75,14 @@ export interface EditorState {
   readonly suggested: ReadonlySet<Id>;
   /** The value field open on a spacing handle of the selected auto layout frame, or null. */
   readonly layoutValueEdit: LayoutValueEditRef | null;
+  /** Vector edit mode (Return on a vector layer), or null. */
+  readonly vectorEdit: VectorEditRef | null;
+}
+
+/** Vector edit mode on a vector layer, with the indices of its selected points. */
+export interface VectorEditRef {
+  readonly nodeId: Id;
+  readonly vertices: readonly number[];
 }
 
 /** A value field open on an auto layout frame's padding or gap handle; `mode` is which sides a padding value applies to. */
@@ -133,6 +141,7 @@ export class EditorStore extends Observable<EditorState> {
       textLayoutReady: false,
       suggested: new Set(),
       layoutValueEdit: null,
+      vectorEdit: null,
     });
   }
 
@@ -251,6 +260,10 @@ export class EditorStore extends Observable<EditorState> {
     this.setState({ rightTab });
   }
 
+  setVectorEdit(vectorEdit: VectorEditRef | null): void {
+    this.setState({ vectorEdit });
+  }
+
   setLayoutValueEdit(layoutValueEdit: LayoutValueEditRef | null): void {
     this.setState({ layoutValueEdit });
   }
@@ -279,6 +292,9 @@ export class EditorStore extends Observable<EditorState> {
     // A handle's value field belongs to its frame's selection.
     const valueEdit = this.state.layoutValueEdit;
     if (valueEdit && !(normalized.length === 1 && normalized[0] === valueEdit.frameId)) this.setState({ layoutValueEdit: null });
+    // Vector edit mode belongs to its layer's selection.
+    const vectorEdit = this.state.vectorEdit;
+    if (vectorEdit && !(normalized.length === 1 && normalized[0] === vectorEdit.nodeId)) this.setState({ vectorEdit: null });
     const unchanged = normalized.length === this.state.selection.length && normalized.every((id, i) => id === this.state.selection[i]);
     if (unchanged && this.state.selectedGuide === null) return;
     // Selecting anything other than the layer being cropped leaves crop mode.
