@@ -25,12 +25,13 @@ import {
   type BoundField,
   type ComponentPropertyType,
 } from '@/core/document/component-properties';
-import { isInstance, isMainComponent, swapInstance } from '@/core/document/instances';
+import { isInstance, isMainComponent, swapInstance, wouldCycle } from '@/core/document/instances';
 import { componentSetProperties, isComponentSet } from '@/core/document/variants';
 import type { Transaction } from '@/core/history/history';
 import type { Id } from '@/core/ids/ids';
 import type { ComponentPropertyDefinition, SceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
+import { localComponents, type LocalComponent } from './insert-instance';
 
 type Definitions = Readonly<Record<string, ComponentPropertyDefinition>>;
 type PropertyValue = boolean | string;
@@ -195,4 +196,11 @@ export function setPreferredValues(editor: Editor, ownerId: Id, name: string, pr
   if (!definition || JSON.stringify(definition) === JSON.stringify(current)) return false;
   editor.history.run('Change preferred instances', (tx) => setDefinitions(tx, ownerId, { ...definitions, [name]: definition }));
   return true;
+}
+
+/** The components an instance swap property of `ownerId` can use: the file's components that wouldn't put the owner inside itself. */
+export function swapCandidates(editor: Editor, ownerId: Id): LocalComponent[] {
+  const owner = sceneNode(editor, ownerId);
+  const containers = owner ? ownerComponents(editor.doc, owner).map((component) => component.id) : [];
+  return localComponents(editor).filter((component) => !containers.some((container) => wouldCycle(editor.doc, component.id, container)));
 }

@@ -46,7 +46,7 @@ import { AutoLayoutFields, LayoutSizingFields } from './AutoLayoutFields';
 import { GridChildFields } from './GridLayoutFields';
 import { setIgnoreAutoLayout } from '@/editor/commands/auto-layout';
 import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
-import type { FrameNode } from '@/core/schema/document';
+import type { FrameNode, ComponentPropertyDefinition } from '@/core/schema/document';
 import { TextResizingButtons, TypographyFields } from './TypographyFields';
 import type { LayoutGuide, TextNode } from '@/core/schema/document';
 import { convertLayoutGuide, defaultLayoutGuide, type LayoutGuideAlignment, type LayoutGuidePattern } from '@/core/layout/layout-guides';
@@ -62,7 +62,7 @@ import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
 import { canCreateComponent, canCreateMultipleComponents, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
 import { addVariant, canAddVariant, canCombineAsVariants, combineAsVariants, deleteVariantProperty, instanceVariant, moveVariantProperty, renameVariantProperty, renameVariantValue, setInstanceVariant } from '@/editor/commands/variants';
 import { componentSetProperties, defaultVariant, parseVariantName, variantErrors } from '@/core/document/variants';
-import { bindingOwner, isInInstance, propertyDefinitions, propertyOwner, type ComponentPropertyType } from '@/core/document/component-properties';
+import { bindingOwner, isInInstance, PROPERTY_FIELD, propertyDefinitions, propertyOwner, type ComponentPropertyType } from '@/core/document/component-properties';
 import {
   applyComponentProperty,
   canHaveProperties,
@@ -72,10 +72,12 @@ import {
   renameComponentProperty,
   setComponentPropertyDefault,
   setInstanceProperty,
+  setPreferredValues,
+  swapCandidates,
 } from '@/editor/commands/component-properties';
 import { commandItem } from '../../menus/menu-model';
 import { Menu, type MenuEntry } from '../../primitives/Menu';
-import { localComponents } from '@/editor/commands/insert-instance';
+import { localComponents, type LocalComponent } from '@/editor/commands/insert-instance';
 import { swapInstanceFor } from '@/editor/commands/swap-instance';
 import { canResetOverrides, overrideLabel, resetSelectedOverride, resetSelectedOverrides, selectionOverriddenFields } from '@/editor/commands/reset-overrides';
 import { eraserWeight, vectorEditPaint } from '@/editor/interactions/vector-edit';
@@ -593,6 +595,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
           </button>
         )}
         {single && isInInstance(editor.doc, single.id) && <InstanceActions />}
+        {bindable && single?.type === 'FRAME' && single.instance && <PropertyBinding layerId={single.id} type="INSTANCE_SWAP" />}
         {nodes.length > 1 && <span className={styles.count}>{nodes.length} layers</span>}
       </div>
       {single && <ComponentSection node={single} />}
@@ -947,6 +950,7 @@ function CreatePropertyButton({ onChoose }: { onChoose: (type: ComponentProperty
           entries={[
             { kind: 'item', id: 'boolean', label: 'Boolean', onSelect: () => onChoose('BOOLEAN') },
             { kind: 'item', id: 'text', label: 'Text', onSelect: () => onChoose('TEXT') },
+            { kind: 'item', id: 'instance-swap', label: 'Instance swap', onSelect: () => onChoose('INSTANCE_SWAP') },
           ]}
           anchor={anchor}
           placement="bottom-start"
@@ -957,16 +961,19 @@ function CreatePropertyButton({ onChoose }: { onChoose: (type: ComponentProperty
   );
 }
 
-/** Creating a component property: a name and a default value. */
+/** Creating a component property: a name and a default value (for an instance swap property, a component and the preferred components). */
 function CreatePropertyForm({ ownerId, type, onDone }: { ownerId: string; type: ComponentPropertyType; onDone: () => void }) {
   const editor = useEditor();
+  const components = type === 'INSTANCE_SWAP' ? swapCandidates(editor, ownerId) : [];
   const [name, setName] = useState('');
-  const [value, setValue] = useState<boolean | string>(type === 'BOOLEAN' ? true : '');
+  const [value, setValue] = useState<boolean | string>(type === 'BOOLEAN' ? true : type === 'INSTANCE_SWAP' ? (components[0]?.id ?? '') : '');
+  const [preferred, setPreferred] = useState<readonly string[]>([]);
   const create = () => {
-    if (createComponentProperty(editor, ownerId, type, name, value)) onDone();
+    if (createComponentProperty(editor, ownerId, type, name, value, { preferredValues: preferred })) onDone();
   };
+  const label = type === 'BOOLEAN' ? 'Create boolean property' : type === 'TEXT' ? 'Create text property' : 'Create instance swap property';
   return (
-    <div role="group" aria-label={type === 'BOOLEAN' ? 'Create boolean property' : 'Create text property'}>
+    <div role="group" aria-label={label}>
       <input
         autoFocus
         className={primitives.textInput}
@@ -980,17 +987,18 @@ function CreatePropertyForm({ ownerId, type, onDone }: { ownerId: string; type: 
           if (e.key === 'Escape') onDone();
         }}
       />
-      {typeof value === 'boolean' ? (
+      {type === 'BOOLEAN' && (
         <label className={styles.checkbox}>
-          <input type="checkbox" checked={value} onChange={(e) => setValue(e.target.checked)} />
+          <input type="checkbox" checked={value === true} onChange={(e) => setValue(e.target.checked)} />
           Default value
         </label>
-      ) : (
+      )}
+      {type === 'TEXT' && (
         <input
           className={primitives.textInput}
           aria-label="New property default value"
           placeholder="Default value"
-          value={value}
+          value={String(value)}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             e.stopPropagation();
@@ -998,9 +1006,99 @@ function CreatePropertyForm({ ownerId, type, onDone }: { ownerId: string; type: 
           }}
         />
       )}
+      {type === 'INSTANCE_SWAP' && (
+        <>
+          <select className={primitives.select} aria-label="New property default value" value={String(value)} onChange={(e) => setValue(e.target.value)}>
+            {components.map((component) => (
+              <option key={component.id} value={component.id}>
+                {component.name}
+              </option>
+            ))}
+          </select>
+          <PreferredComponents label="Preferred instances" components={components} preferred={preferred} onChange={setPreferred} />
+        </>
+      )}
       <button type="button" className={gradientStyles.textButton} onClick={create}>
         Create property
       </button>
+    </div>
+  );
+}
+
+/** Checkboxes choosing the preferred components of an instance swap property. */
+function PreferredComponents({ label, components, preferred, onChange }: { label: string; components: readonly LocalComponent[]; preferred: readonly string[]; onChange: (preferred: string[]) => void }) {
+  return (
+    <div role="group" aria-label={label}>
+      {components.map((component) => (
+        <label key={component.id} className={styles.checkbox}>
+          <input
+            type="checkbox"
+            aria-label={`Preferred ${component.name}`}
+            checked={preferred.includes(component.id)}
+            onChange={(e) => onChange(e.target.checked ? [...preferred, component.id] : preferred.filter((id) => id !== component.id))}
+          />
+          {component.name}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+/** An instance swap property's default component and preferred components, in its row of the Properties section. */
+function SwapPropertyDefault({ ownerId, name, definition }: { ownerId: string; name: string; definition: Extract<ComponentPropertyDefinition, { type: 'INSTANCE_SWAP' }> }) {
+  const editor = useEditor();
+  const [editing, setEditing] = useState(false);
+  const components = swapCandidates(editor, ownerId);
+  const preferred = definition.preferredValues ?? [];
+  return (
+    <>
+      <select className={primitives.select} aria-label={`Default value of ${name}`} value={definition.defaultValue} onChange={(e) => setComponentPropertyDefault(editor, ownerId, name, e.target.value)}>
+        {!components.some((component) => component.id === definition.defaultValue) && (
+          <option value={definition.defaultValue}>{(editor.doc.get(definition.defaultValue) as SceneNode | undefined)?.name ?? 'Missing component'}</option>
+        )}
+        {components.map((component) => (
+          <option key={component.id} value={component.id}>
+            {component.name}
+          </option>
+        ))}
+      </select>
+      <button type="button" className={gradientStyles.textButton} aria-expanded={editing} onClick={() => setEditing(!editing)}>
+        {preferred.length === 0 ? 'Preferred instances' : `Preferred instances (${preferred.length})`}
+      </button>
+      {editing && <PreferredComponents label={`Preferred instances of ${name}`} components={components} preferred={preferred} onChange={(next) => setPreferredValues(editor, ownerId, name, next)} />}
+    </>
+  );
+}
+
+/** An instance swap property on an instance: a dropdown, marked with the instance icon, of the preferred components first and then all components. */
+function InstanceSwapControl({ instanceId, name, preferred, value }: { instanceId: string; name: string; preferred: readonly string[]; value: string }) {
+  const editor = useEditor();
+  const components = localComponents(editor);
+  const preferredComponents = preferred.map((id) => components.find((component) => component.id === id)).filter((component): component is LocalComponent => component !== undefined);
+  return (
+    <div className={styles.grid2}>
+      <span className={styles.hint}>
+        <Icon name="instance" size={16} /> {name}
+      </span>
+      <select className={primitives.select} aria-label={name} value={value} onChange={(e) => setInstanceProperty(editor, instanceId, name, e.target.value)}>
+        {!components.some((component) => component.id === value) && <option value={value}>{(editor.doc.get(value) as SceneNode | undefined)?.name ?? 'Missing component'}</option>}
+        {preferredComponents.length > 0 && (
+          <optgroup label="Preferred">
+            {preferredComponents.map((component) => (
+              <option key={`preferred-${component.id}`} value={component.id}>
+                {component.name}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        <optgroup label="All components">
+          {components.map((component) => (
+            <option key={component.id} value={component.id}>
+              {component.name}
+            </option>
+          ))}
+        </optgroup>
+      </select>
     </div>
   );
 }
@@ -1016,8 +1114,7 @@ function ComponentPropertyRows({ ownerId, creating, onCreated }: { ownerId: stri
   const definitions = propertyDefinitions(editor.doc.get(ownerId) as SceneNode);
   return (
     <>
-      {/* Instance swap properties get their own controls. */}
-      {Object.entries(definitions).filter(([, definition]) => definition.type !== 'INSTANCE_SWAP').map(([name, definition]) => (
+      {Object.entries(definitions).map(([name, definition]) => (
         <div
           key={name}
           role="group"
@@ -1049,7 +1146,9 @@ function ComponentPropertyRows({ ownerId, creating, onCreated }: { ownerId: stri
               {name}
             </span>
           )}
-          {definition.type === 'BOOLEAN' ? (
+          {definition.type === 'INSTANCE_SWAP' ? (
+            <SwapPropertyDefault ownerId={ownerId} name={name} definition={definition} />
+          ) : definition.type === 'BOOLEAN' ? (
             <label className={styles.checkbox}>
               <input type="checkbox" aria-label={`Default value of ${name}`} checked={definition.defaultValue} onChange={(e) => setComponentPropertyDefault(editor, ownerId, name, e.target.checked)} />
               {definition.defaultValue ? 'True' : 'False'}
@@ -1093,11 +1192,11 @@ function ComponentPropertiesSection({ ownerId }: { ownerId: string }) {
   );
 }
 
-/** Applies a component property to a layer of a main component: its visibility (boolean) or its text (text properties). */
+/** Applies a component property to a layer nested in a main component: its visibility, its text, or (a nested instance) its component. */
 function PropertyBinding({ layerId, type }: { layerId: string; type: ComponentPropertyType }) {
   const editor = useEditor();
   const layer = editor.doc.get(layerId) as SceneNode;
-  const current = layer.componentPropertyReferences?.[type === 'BOOLEAN' ? 'visible' : 'characters'] ?? '';
+  const current = layer.componentPropertyReferences?.[PROPERTY_FIELD[type]] ?? '';
   const names = Object.entries(propertyDefinitions(bindingOwner(editor.doc, layerId)))
     .filter(([, definition]) => definition.type === type)
     .map(([name]) => name);
@@ -1105,7 +1204,7 @@ function PropertyBinding({ layerId, type }: { layerId: string; type: ComponentPr
   return (
     <select
       className={primitives.select}
-      aria-label={type === 'BOOLEAN' ? 'Visibility property' : 'Text property'}
+      aria-label={type === 'BOOLEAN' ? 'Visibility property' : type === 'TEXT' ? 'Text property' : 'Instance swap property'}
       value={current}
       onChange={(e) => applyComponentProperty(editor, layerId, type, e.target.value === '' ? null : e.target.value)}
     >
@@ -1124,10 +1223,11 @@ function InstanceProperties({ instanceId }: { instanceId: string }) {
   const editor = useEditor();
   return (
     <>
-      {Object.entries(propertyDefinitions(propertyOwner(editor.doc, instanceId)))
-        .filter(([, definition]) => definition.type !== 'INSTANCE_SWAP')
-        .map(([name, definition]) => {
+      {Object.entries(propertyDefinitions(propertyOwner(editor.doc, instanceId))).map(([name, definition]) => {
         const value = instancePropertyValue(editor, instanceId, name);
+        if (definition.type === 'INSTANCE_SWAP') {
+          return <InstanceSwapControl key={name} instanceId={instanceId} name={name} preferred={definition.preferredValues ?? []} value={typeof value === 'string' ? value : definition.defaultValue} />;
+        }
         return definition.type === 'BOOLEAN' ? (
           <label key={name} className={styles.checkbox}>
             <input type="checkbox" checked={value === true} onChange={(e) => setInstanceProperty(editor, instanceId, name, e.target.checked)} />

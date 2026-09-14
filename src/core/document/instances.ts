@@ -167,6 +167,8 @@ export function swapInstance(tx: Transaction, instanceId: Id, mainId: Id, nextId
   const main = store.get(mainId);
   if (!instance || !isSceneNode(instance) || !isInstance(instance) || !main || !isSceneNode(main) || !isMainComponent(main)) return false;
   if (instance.type === 'FRAME' && instance.instance?.mainId === mainId) return false;
+  // A component can't be put inside itself, directly or through another component.
+  if (wouldCycle(store, mainId, instance.parent.id)) return false;
   const kept = keptChanges(store, instance);
   const placement = Object.fromEntries([...ROOT_PLACEMENT].filter((name) => field(instance, name) !== undefined).map((name) => [name, field(instance, name)]));
   const nested = instance.source !== undefined ? { source: instance.source, overrides: ['instance'] } : {};
@@ -178,6 +180,27 @@ export function swapInstance(tx: Transaction, instanceId: Id, mainId: Id, nextId
   restoreChanges(tx, instanceId, kept);
   rebuildCopies(tx, instanceId, nextId);
   return true;
+}
+
+/** Whether a main component is `targetId`, or contains it through the instances among its layers (at any depth). */
+export function componentContains(store: DocumentStore, mainId: Id, targetId: Id, seen: Set<Id> = new Set()): boolean {
+  if (mainId === targetId) return true;
+  if (seen.has(mainId) || !store.get(mainId)) return false;
+  seen.add(mainId);
+  for (const id of store.descendants(mainId, false)) {
+    const node = store.get(id);
+    if (node?.type === 'FRAME' && node.instance && componentContains(store, node.instance.mainId, targetId, seen)) return true;
+  }
+  return false;
+}
+
+/** Whether an instance of `mainId` under `parentId` would put a main component inside itself. */
+export function wouldCycle(store: DocumentStore, mainId: Id, parentId: Id): boolean {
+  for (let cur: Id | null = parentId; cur !== null; cur = store.parentOf(cur)) {
+    const node = store.get(cur);
+    if (node && isSceneNode(node) && isMainComponent(node) && componentContains(store, mainId, cur)) return true;
+  }
+  return false;
 }
 
 /** Pasted copies of a main component's layers become an instance of it (while it is still in the document). */

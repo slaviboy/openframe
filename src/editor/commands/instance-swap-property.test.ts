@@ -30,8 +30,10 @@ import {
   setComponentPropertyDefault,
   setInstanceProperty,
   setPreferredValues,
+  swapCandidates,
 } from './component-properties';
 import { insertInstance } from './insert-instance';
+import { swapInstanceFor } from './swap-instance';
 
 let editor: Editor;
 let a: string;
@@ -131,5 +133,21 @@ describe('instance swap properties', () => {
     expect(deleteComponentProperty(editor, b, 'Icon')).toBe(true);
     expect(node(aInB).componentPropertyReferences).toBeUndefined();
     expect(node(aInB).instance).toEqual({ mainId: a });
+  });
+});
+
+describe('components inside themselves', () => {
+  test('a nested instance cannot be swapped to the component it is in, or to a component containing that one', () => {
+    expect(swapInstanceFor(editor, aInB, b)).toBe(false);
+    const wrapped = insertInstance(editor, b)!;
+    editor.state.select([wrapped]);
+    editor.commands.run('object.createComponent');
+    const c = editor.selection[0]!;
+    expect(swapInstanceFor(editor, aInB, c)).toBe(false);
+    const candidates = swapCandidates(editor, b).map((component) => component.id);
+    expect(candidates).toEqual(expect.arrayContaining([a, other, third]));
+    expect(candidates).not.toContain(b);
+    expect(candidates).not.toContain(c);
+    expect(swapInstanceFor(editor, aInB, other)).toBe(true);
   });
 });
