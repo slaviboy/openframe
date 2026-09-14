@@ -16,22 +16,62 @@
  */
 
 import { useState } from 'react';
-import { COMPONENT_DRAG_TYPE, insertInstance, localComponents } from '@/editor/commands/insert-instance';
+import { assetTree, COMPONENT_DRAG_TYPE, componentLeafName, insertInstance, localComponents, type AssetFolder, type LocalComponent } from '@/editor/commands/insert-instance';
 import { Icon } from '../../icons/Icon';
 import { useDocumentRevision, useEditor } from '../../hooks/useEditor';
 import styles from '../find/FindPanel.module.css';
+import assetStyles from './AssetsPanel.module.css';
+
+/** Indentation per folder level. */
+const INDENT = 12;
 
 /**
- * Assets tab (⌥2): the main components in this file, searchable by name and description. Clicking one inserts an
- * instance next to its main component; dragging one onto the canvas inserts it where it is dropped.
+ * Assets tab (⌥2): the main components in this file, searchable by name and description, listed in folders (their
+ * page, the sections and frames they're in, and the parts of their names before a slash) or flat. Clicking one
+ * inserts an instance next to its main component; dragging one onto the canvas inserts it where it is dropped.
  */
 export function AssetsPanel() {
   const editor = useEditor();
   useDocumentRevision();
   const [query, setQuery] = useState('');
+  const [subFolders, setSubFolders] = useState(true);
   const needle = query.trim().toLowerCase();
   // Descriptions are searched too, so they can tag components with keywords.
   const components = localComponents(editor).filter((c) => needle === '' || c.name.toLowerCase().includes(needle) || (c.description?.toLowerCase().includes(needle) ?? false));
+
+  const item = (component: LocalComponent, label: string, depth: number) => (
+    <li key={component.id}>
+      <button
+        type="button"
+        className={styles.result}
+        style={{ paddingLeft: `calc(var(--space-3) + ${depth * INDENT}px)` }}
+        draggable
+        title="Click to insert, or drag onto the canvas"
+        onClick={() => insertInstance(editor, component.id)}
+        onDragStart={(e) => {
+          e.dataTransfer.setData(COMPONENT_DRAG_TYPE, component.id);
+          e.dataTransfer.effectAllowed = 'copy';
+        }}
+      >
+        <Icon name="component" size={16} />
+        <span className={styles.name}>{label}</span>
+      </button>
+    </li>
+  );
+
+  const folderItems = (folder: AssetFolder, depth: number): React.ReactNode[] => [
+    ...folder.folders.map((child) => (
+      <li key={`folder-${depth}-${child.name}`}>
+        <div className={assetStyles.folder} style={{ paddingLeft: `calc(var(--space-3) + ${depth * INDENT}px)` }}>
+          {child.name}
+        </div>
+        <ul className={assetStyles.group} role="group" aria-label={child.name}>
+          {folderItems(child, depth + 1)}
+        </ul>
+      </li>
+    )),
+    ...folder.components.map((component) => item(component, componentLeafName(component.name), depth)),
+  ];
 
   return (
     <section className={styles.panel} aria-label="Assets">
@@ -48,28 +88,16 @@ export function AssetsPanel() {
           onKeyDown={(e) => e.stopPropagation()}
         />
       </header>
+      <div className={assetStyles.options}>
+        <button type="button" className={styles.chip} aria-pressed={subFolders} onClick={() => setSubFolders(!subFolders)}>
+          Show sub-folders
+        </button>
+      </div>
       <p className={styles.count} role="status" aria-live="polite">
         {components.length === 0 ? (needle === '' ? 'No components in this file' : 'No matching components') : 'Local components'}
       </p>
       <ul className={styles.results} aria-label="Local components">
-        {components.map((component) => (
-          <li key={component.id}>
-            <button
-              type="button"
-              className={styles.result}
-              draggable
-              title="Click to insert, or drag onto the canvas"
-              onClick={() => insertInstance(editor, component.id)}
-              onDragStart={(e) => {
-                e.dataTransfer.setData(COMPONENT_DRAG_TYPE, component.id);
-                e.dataTransfer.effectAllowed = 'copy';
-              }}
-            >
-              <Icon name="component" size={16} />
-              <span className={styles.name}>{component.name}</span>
-            </button>
-          </li>
-        ))}
+        {subFolders ? folderItems(assetTree(editor, components), 0) : components.map((component) => item(component, component.name, 0))}
       </ul>
     </section>
   );

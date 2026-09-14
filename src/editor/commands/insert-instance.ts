@@ -76,3 +76,60 @@ export function insertInstance(editor: Editor, mainId: Id, at?: Vec2): Id | null
   editor.revealRect(editor.selectionBounds([id]));
   return id;
 }
+
+/**
+ * The folders a local component is listed in on the Assets tab: its page, the sections and frames it's inside, then
+ * each part of its name before the last slash (Button/Primary/Large is listed as Large in Button › Primary). A
+ * component set is listed where the set is.
+ */
+export function componentFolders(editor: Editor, component: LocalComponent): string[] {
+  const parentOfListed = editor.doc.parentOf(component.id);
+  const start = parentOfListed !== null && isComponentSet(editor.doc.get(parentOfListed) as SceneNode | undefined) ? parentOfListed : component.id;
+  const containers: string[] = [];
+  for (let cur = editor.doc.parentOf(start); cur !== null && cur !== component.pageId; cur = editor.doc.parentOf(cur)) {
+    const node = editor.doc.get(cur) as SceneNode | undefined;
+    if (node?.type === 'SECTION' || node?.type === 'FRAME') containers.unshift(node.name);
+  }
+  const page = editor.doc.get(component.pageId);
+  const pageName = page && 'name' in page ? String(page.name) : 'Page';
+  return [pageName, ...containers, ...nameParts(component.name).slice(0, -1)];
+}
+
+const nameParts = (name: string): string[] =>
+  name
+    .split('/')
+    .map((part) => part.trim())
+    .filter((part) => part !== '');
+
+/** The name a component is listed under inside its folder: the part after the last slash. */
+export const componentLeafName = (name: string): string => nameParts(name).at(-1) ?? name;
+
+/** A folder of the Assets tab, with its sub-folders and components (both sorted by name). */
+export interface AssetFolder {
+  readonly name: string;
+  readonly folders: AssetFolder[];
+  readonly components: LocalComponent[];
+}
+
+/** Local components arranged in their folders. */
+export function assetTree(editor: Editor, components: readonly LocalComponent[]): AssetFolder {
+  const root: AssetFolder = { name: '', folders: [], components: [] };
+  for (const component of components) {
+    let folder = root;
+    for (const name of componentFolders(editor, component)) {
+      let next = folder.folders.find((candidate) => candidate.name === name);
+      if (!next) {
+        next = { name, folders: [], components: [] };
+        folder.folders.push(next);
+      }
+      folder = next;
+    }
+    folder.components.push(component);
+  }
+  const sort = (folder: AssetFolder): void => {
+    folder.folders.sort((a, b) => a.name.localeCompare(b.name));
+    folder.folders.forEach(sort);
+  };
+  sort(root);
+  return root;
+}
