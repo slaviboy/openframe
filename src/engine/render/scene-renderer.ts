@@ -107,6 +107,8 @@ export interface RenderOptions {
   readonly cropping?: Id | null;
   /** The file's color profile: how document color values are interpreted. */
   readonly colorProfile?: ColorProfile;
+  /** Draw only this layer and its children (thumbnails), on a transparent background. */
+  readonly only?: Id;
 }
 
 interface DrawContext {
@@ -224,7 +226,7 @@ export class SceneRenderer {
       this.outlinePaint.setColor(light ? this.ck.BLACK : this.ck.WHITE);
     }
     canvas.save();
-    canvas.clear(page?.type === 'PAGE' ? this.color(page.backgroundColor) : this.ck.WHITE);
+    canvas.clear(options.only !== undefined ? this.ck.TRANSPARENT : page?.type === 'PAGE' ? this.color(page.backgroundColor) : this.ck.WHITE);
     const s = view.zoom * view.dpr;
     canvas.scale(view.dpr, view.dpr);
     canvas.scale(view.zoom, view.zoom);
@@ -232,10 +234,47 @@ export class SceneRenderer {
     const visible: Rect = { x: view.x, y: view.y, width: view.width / view.zoom, height: view.height / view.zoom };
     index.ensure(pageId);
     const ctx: DrawContext = { store, index, visible, stats, pixelSize: 1 / s, outlines: options.outlines ?? false, includeHidden: options.includeHidden ?? false, cropping: options.cropping ?? null };
-    this.drawChildren(canvas, store.children(pageId), ctx);
+    if (options.only !== undefined) {
+      // A single layer: its parents' transform, then the layer with its children.
+      const parentId = store.parentOf(options.only);
+      if (parentId !== null && parentId !== pageId) {
+        const w = index.worldTransform(parentId);
+        canvas.concat([w.a, w.c, w.e, w.b, w.d, w.f, 0, 0, 1]);
+      }
+      this.drawNode(canvas, options.only, ctx);
+    } else {
+      this.drawChildren(canvas, store.children(pageId), ctx);
+    }
     canvas.restore();
     stats.ms = performance.now() - start;
     return stats;
+  }
+
+  /**
+   * A PNG of one layer and its children alone on a transparent background (ThumbnailService), scaled to fit
+   * `size` × `size` CSS pixels at `dpr` and never enlarged more than 4×; null when the layer has no area.
+   */
+  thumbnail(store: DocumentStore, index: SceneIndex, pageId: Id, id: Id, size: number, dpr: number, colorProfile?: ColorProfile): Uint8Array | null {
+    index.ensure(pageId);
+    const bounds = index.paintBounds(id) ?? index.worldBounds(id);
+    if (!bounds || bounds.width <= 0 || bounds.height <= 0) return null;
+    const zoom = Math.min(size / bounds.width, size / bounds.height, 4);
+    const width = Math.max(1, Math.ceil(bounds.width * zoom));
+    const height = Math.max(1, Math.ceil(bounds.height * zoom));
+    const surface = this.ck.MakeSurface(Math.ceil(width * dpr), Math.ceil(height * dpr));
+    if (!surface) return null;
+    try {
+      this.render(surface.getCanvas(), store, index, pageId, { x: bounds.x, y: bounds.y, zoom, width, height, dpr }, { only: id, ...(colorProfile ? { colorProfile } : {}) });
+      surface.flush();
+      const image = surface.makeImageSnapshot();
+      try {
+        return image.encodeToBytes();
+      } finally {
+        image.delete();
+      }
+    } finally {
+      surface.delete();
+    }
   }
 
   /**

@@ -396,6 +396,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
         syncSpelling();
         editor.setTextLayout(shaper);
         editor.setGeometry(renderer);
+        editor.setThumbnails(renderer);
         resize();
         setStatus({ kind: 'ready' });
         precacheDeferredAssets();
@@ -729,6 +730,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
       textInput.removeEventListener('paste', onTextPaste);
       editor.setTextLayout(null);
       editor.setGeometry(null);
+      editor.setThumbnails(null);
       unsubscribeFonts();
       unsubscribeEmoji();
       unsubscribeCjk();

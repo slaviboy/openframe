@@ -15,15 +15,39 @@
  * limitations under the License.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { documentColorProfile } from '@/core/color/color-profile';
 import { assetTree, COMPONENT_DRAG_TYPE, componentLeafName, insertInstance, localComponents, type AssetFolder, type LocalComponent } from '@/editor/commands/insert-instance';
 import { Icon } from '../../icons/Icon';
-import { useDocumentRevision, useEditor } from '../../hooks/useEditor';
+import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import styles from '../find/FindPanel.module.css';
 import assetStyles from './AssetsPanel.module.css';
 
 /** Indentation per folder level. */
 const INDENT = 12;
+/** Thumbnail size in the grid view, in CSS pixels. */
+const THUMBNAIL_SIZE = 64;
+
+/** Base64 of binary data, in chunks so large images don't overflow the argument list. */
+function base64(bytes: Uint8Array): string {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+}
+
+/** A component's thumbnail, drawn by the rendering engine from its current state. */
+function ComponentThumbnail({ component }: { component: LocalComponent }) {
+  const editor = useEditor();
+  const revision = useDocumentRevision();
+  const ready = useEditorState((s) => s.textLayoutReady);
+  const src = useMemo(() => {
+    const bytes = ready ? editor.thumbnails?.thumbnail(editor.doc, editor.scene, component.pageId, component.id, THUMBNAIL_SIZE, window.devicePixelRatio || 1, documentColorProfile(editor.doc)) : null;
+    return bytes ? `data:image/png;base64,${base64(bytes)}` : null;
+    // The document changes in place, so its revision is what says the thumbnail must be drawn again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, component.pageId, component.id, revision, ready]);
+  return src ? <img className={assetStyles.thumbnail} src={src} alt="" draggable={false} /> : <span className={assetStyles.thumbnail} />;
+}
 
 /**
  * Assets tab (⌥2): the main components in this file, searchable by name and description, listed in folders (their
@@ -35,6 +59,7 @@ export function AssetsPanel() {
   useDocumentRevision();
   const [query, setQuery] = useState('');
   const [subFolders, setSubFolders] = useState(true);
+  const [view, setView] = useState<'list' | 'grid'>('list');
   const needle = query.trim().toLowerCase();
   // Descriptions are searched too, so they can tag components with keywords.
   const components = localComponents(editor).filter((c) => needle === '' || c.name.toLowerCase().includes(needle) || (c.description?.toLowerCase().includes(needle) ?? false));
@@ -43,8 +68,8 @@ export function AssetsPanel() {
     <li key={component.id}>
       <button
         type="button"
-        className={styles.result}
-        style={{ paddingLeft: `calc(var(--space-3) + ${depth * INDENT}px)` }}
+        className={view === 'grid' ? assetStyles.tile : styles.result}
+        style={view === 'grid' ? undefined : { paddingLeft: `calc(var(--space-3) + ${depth * INDENT}px)` }}
         draggable
         title="Click to insert, or drag onto the canvas"
         onClick={() => insertInstance(editor, component.id)}
@@ -53,11 +78,20 @@ export function AssetsPanel() {
           e.dataTransfer.effectAllowed = 'copy';
         }}
       >
-        <Icon name="component" size={16} />
-        <span className={styles.name}>{label}</span>
+        {view === 'grid' ? <ComponentThumbnail component={component} /> : <Icon name="component" size={16} />}
+        <span className={view === 'grid' ? assetStyles.tileName : styles.name}>{label}</span>
       </button>
     </li>
   );
+  // In the grid view, a folder's components sit in a grid of tiles.
+  const items = (components: readonly LocalComponent[], label: (c: LocalComponent) => string, depth: number, key: string): React.ReactNode[] =>
+    view === 'grid' && components.length > 0
+      ? [
+          <li key={`grid-${key}`}>
+            <ul className={assetStyles.grid}>{components.map((component) => item(component, label(component), depth))}</ul>
+          </li>,
+        ]
+      : components.map((component) => item(component, label(component), depth));
 
   const folderItems = (folder: AssetFolder, depth: number): React.ReactNode[] => [
     ...folder.folders.map((child) => (
@@ -70,7 +104,7 @@ export function AssetsPanel() {
         </ul>
       </li>
     )),
-    ...folder.components.map((component) => item(component, componentLeafName(component.name), depth)),
+    ...items(folder.components, (component) => componentLeafName(component.name), depth, `${depth}-${folder.name}`),
   ];
 
   return (
@@ -89,6 +123,12 @@ export function AssetsPanel() {
         />
       </header>
       <div className={assetStyles.options}>
+        <button type="button" className={styles.chip} aria-pressed={view === 'list'} onClick={() => setView('list')}>
+          List
+        </button>
+        <button type="button" className={styles.chip} aria-pressed={view === 'grid'} onClick={() => setView('grid')}>
+          Grid
+        </button>
         <button type="button" className={styles.chip} aria-pressed={subFolders} onClick={() => setSubFolders(!subFolders)}>
           Show sub-folders
         </button>
@@ -97,7 +137,7 @@ export function AssetsPanel() {
         {components.length === 0 ? (needle === '' ? 'No components in this file' : 'No matching components') : 'Local components'}
       </p>
       <ul className={styles.results} aria-label="Local components">
-        {subFolders ? folderItems(assetTree(editor, components), 0) : components.map((component) => item(component, component.name, 0))}
+        {subFolders ? folderItems(assetTree(editor, components), 0) : items(components, (component) => component.name, 0, 'flat')}
       </ul>
     </section>
   );

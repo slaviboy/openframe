@@ -28,6 +28,7 @@ import { unionAll, type Rect } from '@/core/math/rect';
 import { SceneIndex } from '@/core/scene/scene-index';
 import type { TextLayoutService } from '@/core/text/text-layout';
 import type { GeometryService } from '@/core/vector/geometry-service';
+import type { ThumbnailService } from '@/core/scene/thumbnail-service';
 import type { SpellChecker } from '@/core/text/spelling';
 import { createTextFinalizer, fitTextBox } from '@/core/text/text-resize';
 import type { Color, Transform } from '@/core/schema/document';
@@ -104,6 +105,13 @@ export class Editor {
 
   setGeometry(geometry: GeometryService | null): void {
     this.geometry = geometry;
+  }
+
+  /** Layer thumbnails from the rendering engine (Assets grid); installed by the canvas host once the engine loads. */
+  thumbnails: ThumbnailService | null = null;
+
+  setThumbnails(thumbnails: ThumbnailService | null): void {
+    this.thumbnails = thumbnails;
   }
 
   /** Spell checker for text being edited (misspelled words are underlined), or null when spelling isn't checked. */
