@@ -1560,7 +1560,7 @@ export class SceneRenderer {
   private imageShader(paint: ImagePaint, size: Size, frame: CkImage | null = null): Shader {
     const ck = this.ck;
     // `frame` is a video's current frame, drawn instead of the stored image.
-    const image = frame ?? (paint.imageHash ? this.decodedImage(paint.imageHash) : null);
+    const image = frame ?? (paint.imageHash ? this.decodedImage(paint.imageHash, paint.gifFrame ?? 0) : null);
     if (!image) {
       this.checker ??= this.makeChecker();
       if (!this.checker) return ck.Shader.MakeColor(ck.Color4f(0.8, 0.8, 0.8, 1), ck.ColorSpace.SRGB);
@@ -1579,17 +1579,32 @@ export class SceneRenderer {
     return adjusted;
   }
 
-  private decodedImage(hash: string): CkImage | null {
-    const cached = this.imageCache.get(hash);
+  /** A stored image, decoded: for an animated GIF, the frame asked for (frames past the last wrap around). */
+  private decodedImage(hash: string, frame = 0): CkImage | null {
+    const key = frame > 0 ? `${hash}#${frame}` : hash;
+    const cached = this.imageCache.get(key);
     if (cached !== undefined) return cached;
     const asset = this.images?.get(hash);
     if (!asset) {
       this.images?.request(hash);
       return null;
     }
-    const image = this.ck.MakeImageFromEncoded(asset.bytes);
-    this.imageCache.set(hash, image);
+    const image = frame > 0 ? this.animatedFrame(asset.bytes, frame) : this.ck.MakeImageFromEncoded(asset.bytes);
+    this.imageCache.set(key, image);
     return image;
+  }
+
+  /** A frame of an animated image; the image itself when it isn't animated. */
+  private animatedFrame(bytes: Uint8Array, frame: number): CkImage | null {
+    const animation = this.ck.MakeAnimatedImageFromEncoded(bytes);
+    if (!animation) return this.ck.MakeImageFromEncoded(bytes);
+    try {
+      const count = Math.max(1, animation.getFrameCount());
+      for (let i = 0; i < frame % count; i++) animation.decodeNextFrame();
+      return animation.makeImageAtCurrentFrame();
+    } finally {
+      animation.delete();
+    }
   }
 
   /** 16×16 tile of 8px white and light gray squares. */

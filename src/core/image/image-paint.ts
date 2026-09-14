@@ -71,6 +71,13 @@ export function rotateImage90(paint: ImagePaint): ImagePaint {
   return next === 0 ? rest : { ...rest, rotation: next as 90 | 180 | 270 };
 }
 
+/** Sets the frame of an animated GIF the canvas shows, from 0 (the first frame is stored as absent). */
+export function setGifFrame(paint: ImagePaint, frame: number): ImagePaint {
+  const { gifFrame: _previous, ...rest } = paint;
+  const next = Math.max(0, Math.min(9999, Math.round(frame)));
+  return next === 0 ? rest : { ...rest, gifFrame: next };
+}
+
 /** Changes the scale mode; tile size and crop transform are only kept for the modes that use them. */
 export function setImageScaleMode(paint: ImagePaint, mode: ImageScaleMode): ImagePaint {
   const { scalingFactor, imageTransform, ...rest } = paint;

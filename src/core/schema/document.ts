@@ -293,6 +293,8 @@ export const ImagePaintSchema = z.object({
   scalingFactor: z.number().positive().optional(),
   /** Clockwise quarter turns of the image within the layer (FILL, FIT, TILE); absent means 0. */
   rotation: z.union([z.literal(90), z.literal(180), z.literal(270)]).optional(),
+  /** An animated GIF: the frame the canvas shows, counted from 0 (absent means the first). Presentation view plays it. */
+  gifFrame: z.number().int().min(1).max(9999).optional(),
   /** Non-destructive color adjustments; absent when all are 0. */
   filters: ImageFiltersSchema.optional(),
   opacity: unit,

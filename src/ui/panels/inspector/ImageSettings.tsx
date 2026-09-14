@@ -23,6 +23,7 @@ import {
   rotateImage90,
   setImageAdjustment,
   setImageScaleMode,
+  setGifFrame,
   setTileScale,
   withImage,
 } from '@/core/image/image-paint';
@@ -195,6 +196,20 @@ export function ImageSettings({ label, paint, onEdit, onScrub, onGestureStart, o
           onGestureStart={onGestureStart}
           onGestureEnd={onGestureEnd}
           onChange={(v) => onScrub((p) => setTileScale(p, v))}
+        />
+      )}
+      {gif && (
+        // The frame of the GIF the canvas shows (presentation view plays it from the start).
+        <NumberField
+          label="Frame"
+          ariaLabel={`${label} GIF frame`}
+          min={1}
+          max={10000}
+          decimals={0}
+          value={(paint.gifFrame ?? 0) + 1}
+          onGestureStart={onGestureStart}
+          onGestureEnd={onGestureEnd}
+          onChange={(v) => onScrub((p) => setGifFrame(p, v - 1))}
         />
       )}
       <button type="button" className={gradientStyles.textButton} onClick={() => input.current?.click()}>

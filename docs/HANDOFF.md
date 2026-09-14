@@ -175,6 +175,9 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - `matchingInteractions` and `updateInteractionsAt` in `src/editor/commands/prototype.ts`
     - the Interaction details button selects them
     - `matchedSelection` in PrototypePanel.tsx edits them together
+  - A GIF's canvas frame (the commit after Select matching interactions):
+    - `gifFrame` on image paints, set with `setGifFrame` from the Fill section's Frame field
+    - `SceneRenderer.decodedImage` decodes that frame with CanvasKit's `AnimatedImage`
 
 ## In progress (uncommitted)
 
@@ -184,7 +187,6 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 1. The smaller pending sub-items in the M10 rows:
    - dragging a manual overlay into place on the canvas
-   - choosing which frame of a GIF the canvas shows
    - responsive scaling
 
 **Stop after M10.** When every M10 row is finished and committed, stop and report to the user. Don't start M11 until the user says to continue. After that, M11–M15 follow `docs/FEATURE_MATRIX.md` (the rows marked Planned or In progress) in milestone order.
