@@ -66,6 +66,7 @@ import { Menu, type MenuEntry } from '../primitives/Menu';
 import type { Box } from '../primitives/position';
 import { gamepadCode } from '@/core/prototype/gamepad';
 import { useGamepadButtons } from '../hooks/useGamepadButtons';
+import { AccessibilityMessage, AccessibleContent, SkipToContent } from './AccessibleContent';
 import { FlowDescription } from './FlowDescription';
 import { PresentationRenderer } from './presentation-renderer';
 import styles from './PresentationView.module.css';
@@ -147,6 +148,11 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
   const [error, setError] = useState<string | null>(null);
   const [scaling, setScaling] = useState<ScalingMode>('FIT');
   const [showHints, setShowHints] = useState(true);
+  /** Accessibility mode: the content of the frames shown as HTML for screen readers (Skip to content, or Options). */
+  const [accessible, setAccessible] = useState(false);
+  const [accessibleMessage, setAccessibleMessage] = useState('');
+  /** The scene the accessible content is placed on, updated as the frames shown or their places change. */
+  const [accessibleScene, setAccessibleScene] = useState<PresentedScene | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<Box | null>(null);
   const [screenBox, setScreenBox] = useState<Rect | null>(null);
@@ -182,6 +188,9 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     scene: null as PresentedScene | null,
     scaling,
     showHints,
+    accessible,
+    /** Where the accessible content was last placed (the frames drawn and their places). */
+    accessibleKey: '',
     follow,
     device: null as DevicePreset | null,
     runtime: null as RuntimeDocument | null,
@@ -318,11 +327,12 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     const state = live.current;
     state.scaling = scaling;
     state.showHints = showHints;
+    state.accessible = accessible;
     state.follow = follow;
     state.device = device;
     state.deviceScaling = deviceScaling;
     schedule();
-  }, [scaling, showHints, follow, device, deviceScaling, schedule]);
+  }, [scaling, showHints, accessible, follow, device, deviceScaling, schedule]);
 
   // Inline preview: edits redraw the frames, and selecting another frame on the canvas jumps to it.
   useEffect(() => {
@@ -383,6 +393,14 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
       }
       const scene = composeScene(doc, current, state.viewport, state.deviceScaling ?? state.scaling, state.scrollY, playing, deviceScreenIn(state.device, state.viewport));
       state.scene = scene;
+      // Accessibility mode places its content on the scene whenever the frames drawn or their places change.
+      if (state.accessible) {
+        const key = scene.items.map((item) => (item.kind === 'frame' ? `${item.frameId}@${Math.round(item.x)},${Math.round(item.y)},${Math.round(item.width)}` : item.kind)).join('|');
+        if (key !== state.accessibleKey) {
+          state.accessibleKey = key;
+          setAccessibleScene(scene);
+        }
+      }
       const origins = scene.items
         .flatMap((item) =>
           item.kind === 'frame' && current.overlays.includes(item.frameId)
@@ -497,6 +515,13 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     };
   }, [doc, run, ready]);
 
+  // The accessibility message dismisses itself.
+  useEffect(() => {
+    if (!accessibleMessage) return;
+    const timer = window.setTimeout(() => setAccessibleMessage(''), 4000);
+    return () => window.clearTimeout(timer);
+  }, [accessibleMessage]);
+
   // After delay interactions of the frames shown run once their delay passes.
   const shownKey = player ? shownFrames(player).join('|') : '';
   useEffect(() => {
@@ -510,7 +535,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      if (target && (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.closest('[role="menu"]'))) return;
+      if (target && (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.tagName === 'A' || target.closest('[role="menu"]'))) return;
       if (MODIFIER_CODES.has(e.code) || e.repeat) return;
       const current = live.current.player;
       if (!current) return;
@@ -667,8 +692,21 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
 
   const screenIndex = player ? screens.indexOf(player.frameId) : -1;
   const nameOf = (id: Id) => doc.get(id)?.name ?? '';
+  /** Turns accessibility mode on or off (announcing it when on). */
+  const setAccessibility = (on: boolean) => {
+    live.current.accessibleKey = '';
+    setAccessible(on);
+    setAccessibleMessage(on ? 'Now adapting content for screen readers' : '');
+    schedule();
+  };
+  /** A link or button of the accessible content was activated: its layer's On click interaction runs. */
+  const activate = (nodeId: Id) => {
+    const found = findReaction(doc, [nodeId], 'ON_CLICK');
+    if (found) run(found.reaction, found.nodeId);
+  };
   const menuEntries: MenuEntry[] = [
     { kind: 'item', id: 'hints', label: 'Show hints on click', checked: showHints, onSelect: () => setShowHints((on) => !on) },
+    { kind: 'item', id: 'accessible', label: 'Adapt content for screen readers', checked: accessible, onSelect: () => setAccessibility(!accessible) },
     ...(inlineMode ? [{ kind: 'item', id: 'follow', label: 'Follow prototype', checked: follow, onSelect: () => setFollow((on) => !on) } satisfies MenuEntry] : []),
     { kind: 'separator', id: 'scaling-separator' },
     ...SCALING_MODES.map((mode): MenuEntry => ({ kind: 'item', id: mode, label: SCALING_LABELS[mode], checked: scaling === mode, onSelect: () => setScaling(mode) })),
@@ -691,6 +729,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
 
   return (
     <div ref={rootRef} className={inlineMode ? styles.inlineRoot : styles.root} {...(inlineMode ? { role: 'region', 'aria-label': 'Preview', tabIndex: 0 } : {})}>
+      {!inlineMode && <SkipToContent onActivate={() => setAccessibility(true)} />}
       {inline && (
         <header className={styles.toolbar}>
           <span className={styles.title}>{player ? nameOf(player.frameId) : 'Preview'}</span>
@@ -761,6 +800,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
         >
           <canvas ref={canvasRef} className={styles.canvas} />
           {screenBox && <div className={styles.screenBox} data-testid="presentation-screen" style={{ left: screenBox.x, top: screenBox.y, width: screenBox.width, height: screenBox.height }} />}
+          {accessible && player && accessibleScene && <AccessibleContent doc={doc} index={sceneIndex} scene={accessibleScene} frameIds={shownFrames(player)} onActivate={activate} />}
           {!player && <p className={styles.message}>Add a frame to this page to present it.</p>}
           {error && (
             <p className={styles.message} role="alert">
@@ -783,6 +823,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
           </button>
         )}
       </footer>
+      <AccessibilityMessage text={accessibleMessage} />
       {menuAnchor && <Menu label="Options" entries={menuEntries} anchor={menuAnchor} placement="bottom-start" onClose={closeMenu} />}
     </div>
   );

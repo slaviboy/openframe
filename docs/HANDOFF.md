@@ -142,14 +142,21 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - `useGamepadButtons` polls connected gamepads in presentation view and while the Key field has focus
     - the E2E spec stubs `navigator.getGamepads`
 
+  - Accessible prototypes (the commit after gamepad triggers):
+    - `accessibleContent` in `src/core/prototype/accessibility.ts` maps a screen to sections, links, buttons, images and text
+    - `AccessibleContent` and `SkipToContent` (src/ui/present) render it over the canvas
+    - Options has "Adapt content for screen readers"
+
 ## In progress (uncommitted)
 
-1. **Accessible prototypes.**
+1. **The smaller pending sub-items in the M10 rows** (see Next).
 
 ## Next (M10, in order)
 
-1. Accessible prototypes, manual overlay positions, rich-text flow descriptions, gamepad triggers.
-2. The smaller pending sub-items in the M10 rows:
+1. The smaller pending sub-items in the M10 rows:
+   - lists and inline links in accessible text layers
+   - dragging a manual overlay into place on the canvas
+   - choosing which frame of a GIF the canvas shows
    - reset component state
    - copy/paste interactions
    - marquee-selecting connections
