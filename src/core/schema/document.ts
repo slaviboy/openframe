@@ -294,6 +294,8 @@ const SceneFields = {
   blendMode: BlendModeSchema,
   /** Shadows and blurs, in paint order. Absent when the layer has none. */
   effects: z.array(EffectSchema).max(64).optional(),
+  /** Inside a main component or variant: the component properties (by name) this layer's visibility and text follow. */
+  componentPropertyReferences: z.object({ visible: z.string().min(1).max(200).optional(), characters: z.string().min(1).max(200).optional() }).optional(),
   /** Constrain proportions: width and height edits keep the aspect ratio. Absent means off. */
   constrainProportions: z.boolean().optional(),
   /** How the layer responds when its parent frame is resized. Absent means left and top. */
@@ -409,6 +411,13 @@ export const GridTrackSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('HUG') }),
 ]);
 
+/** A component property: boolean properties drive layer visibility, text properties the text of text layers. */
+export const ComponentPropertyDefinitionSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('BOOLEAN'), defaultValue: z.boolean() }),
+  z.object({ type: z.literal('TEXT'), defaultValue: z.string().max(1_000_000) }),
+]);
+export type ComponentPropertyDefinition = z.infer<typeof ComponentPropertyDefinitionSchema>;
+
 export const FrameNodeSchema = z.object({
   ...SceneFields,
   ...GeometryFields,
@@ -430,6 +439,8 @@ export const FrameNodeSchema = z.object({
       link: z.string().max(2_000).optional(),
     })
     .optional(),
+  /** Main components and component sets: their component properties by name, in creation order. */
+  componentPropertyDefinitions: z.record(z.string().min(1).max(200), ComponentPropertyDefinitionSchema).optional(),
   /** Present when the frame is an instance of a main component. */
   instance: z.object({ mainId: IdSchema }).optional(),
   /** Frame guides (for frames directly on the page or in a section). Absent when none. */
