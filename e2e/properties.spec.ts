@@ -30,6 +30,8 @@ async function draw(page: Page, tool: string, from: [number, number], to: [numbe
 async function contextMenu(page: Page, at: [number, number], item: string) {
   const box = (await page.getByTestId('canvas').boundingBox())!;
   await page.mouse.click(box.x + at[0], box.y + at[1], { button: 'right' });
+  // Copy properties and Paste properties are in the Copy/Paste as submenu.
+  await page.getByRole('menuitem', { name: 'Copy/Paste as' }).click();
   await page.locator('[role^="menuitem"]', { hasText: item }).click();
 }
 

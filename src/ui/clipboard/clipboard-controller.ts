@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { exportSvg } from '@/core/export/svg-document';
 import type { Vec2 } from '@/core/math/vec';
 import { pastePayload, type PasteMode } from '@/editor/clipboard/paste';
 import {
@@ -215,6 +216,54 @@ export class ClipboardController {
     } catch {
       // Permission denied or unsupported: the in-tab copy remains available.
     }
+  }
+
+  /** Writes one clipboard item to the system clipboard; false when the browser can't or won't (a notice says why). */
+  private async writeItem(item: Record<string, Blob>, failure: string): Promise<boolean> {
+    if (!navigator.clipboard || !('write' in navigator.clipboard) || typeof ClipboardItem === 'undefined') {
+      this.onError('This browser doesn’t allow writing to the clipboard.');
+      return false;
+    }
+    try {
+      await navigator.clipboard.write([new ClipboardItem(item)]);
+      return true;
+    } catch {
+      this.onError(failure);
+      return false;
+    }
+  }
+
+  /** Copy as PNG (⇧⌘C): the selected layer as a PNG image at 2×, written to the system clipboard. */
+  async copyAsPng(): Promise<void> {
+    const [id] = this.editor.selection;
+    const pageId = id === undefined ? null : this.editor.doc.pageOf(id);
+    if (id === undefined || pageId === null) return;
+    const engine = this.editor.thumbnails;
+    if (!engine) {
+      this.onError('The rendering engine is still loading.');
+      return;
+    }
+    this.editor.scene.ensure(pageId);
+    const bytes = engine.exportImage(this.editor.doc, this.editor.scene, pageId, id, 2, 'PNG');
+    if (!bytes) {
+      this.onError('Nothing to copy: the layer has no visible area.');
+      return;
+    }
+    await this.writeItem({ 'image/png': new Blob([bytes as BlobPart], { type: 'image/png' }) }, 'The image could not be copied to the clipboard.');
+  }
+
+  /** Copy as SVG: the selected layer as SVG markup, written to the system clipboard as text. */
+  async copyAsSvg(): Promise<void> {
+    const [id] = this.editor.selection;
+    if (id === undefined) return;
+    const geometry = this.editor.geometry;
+    const result = exportSvg(this.editor.doc, id, geometry ? { strokeOutline: (layer) => geometry.strokeOutline(layer) } : {});
+    if (!result) {
+      this.onError('Nothing to copy: the layer has no area.');
+      return;
+    }
+    const copied = await this.writeItem({ 'text/plain': new Blob([result.svg], { type: 'text/plain' }) }, 'The SVG could not be copied to the clipboard.');
+    if (copied && result.skipped.length > 0) this.onError(`Copied as SVG. Left out of the SVG: ${result.skipped.join(', ')}`);
   }
 
   /** Paste properties (⌥⌘V): reads properties from the system clipboard when permitted, else this tab's last copy. */

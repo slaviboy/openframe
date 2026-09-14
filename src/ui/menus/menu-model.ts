@@ -138,9 +138,8 @@ function swapInstanceEntries(editor: Editor): MenuEntry[] {
 }
 
 function objectCommandEntries(editor: Editor): MenuEntry[] {
-  return commandSections(editor, [
+  const entries = commandSections(editor, [
     ['edit.copy', 'edit.cut', 'edit.paste', 'edit.pasteReplace'],
-    ['edit.copyProperties', 'edit.pasteProperties'],
     ['edit.duplicate', 'edit.delete'],
     ['arrange.bringToFront', 'arrange.bringForward', 'arrange.sendBackward', 'arrange.sendToBack'],
     ['object.group', 'object.frameSelection', 'object.wrapInSection', 'object.ungroup', 'object.removeSection', 'object.useAsMask', 'object.flatten', 'object.outlineStroke'],
@@ -151,6 +150,15 @@ function objectCommandEntries(editor: Editor): MenuEntry[] {
     ['object.toggleVisible', 'object.toggleLocked', 'object.rename'],
     ['file.setThumbnail', 'file.restoreThumbnail'],
   ]);
+  // "Copy/Paste as" follows Copy, Cut and Paste, as in the reference.
+  const copyPasteAs = commandSections(editor, [
+    ['edit.copyAsPng', 'edit.copyAsSvg'],
+    ['edit.copyProperties', 'edit.pasteProperties'],
+  ]);
+  if (copyPasteAs.length === 0) return entries;
+  const firstSeparator = entries.findIndex((entry) => entry.kind === 'separator');
+  const at = firstSeparator === -1 ? entries.length : firstSeparator;
+  return [...entries.slice(0, at), { kind: 'submenu', id: 'copy-paste-as', label: 'Copy/Paste as', entries: copyPasteAs }, ...entries.slice(at)];
 }
 
 /** "Select layer" submenu listing the layers under the pointer (canvas context menu only). */

@@ -53,6 +53,8 @@ test('a highlighted layout guide row copies that guide onto another frame', asyn
   await page.getByRole('treeitem', { name: /Frame 2/ }).click();
   await expect(page.getByLabel('Layout guide 1 type')).toHaveCount(0);
   await page.mouse.click(box.x + 700, box.y + 300, { button: 'right' });
+  // Paste properties is in the Copy/Paste as submenu.
+  await page.getByRole('menuitem', { name: 'Copy/Paste as' }).click();
   await page.locator('[role^="menuitem"]', { hasText: 'Paste properties' }).click();
   await expect(page.getByLabel('Layout guide 1 type')).toHaveValue('COLUMNS');
 });

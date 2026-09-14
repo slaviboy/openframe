@@ -47,6 +47,22 @@ export function clipboardCommands(clipboard: ClipboardController): CommandDefini
       run: () => void clipboard.copyProperties(),
     },
     {
+      id: 'edit.copyAsPng',
+      label: 'Copy as PNG',
+      category: 'Edit',
+      // ⇧⌘C / Ctrl+Shift+C fire no native clipboard event, so this is a real shortcut.
+      shortcuts: ['Mod+Shift+C'],
+      enabled: (e) => e.selection.length === 1 && hasLayerSelection(e),
+      run: () => void clipboard.copyAsPng(),
+    },
+    {
+      id: 'edit.copyAsSvg',
+      label: 'Copy as SVG',
+      category: 'Edit',
+      enabled: (e) => e.selection.length === 1 && hasLayerSelection(e),
+      run: () => void clipboard.copyAsSvg(),
+    },
+    {
       id: 'edit.pasteProperties',
       label: 'Paste properties',
       category: 'Edit',
