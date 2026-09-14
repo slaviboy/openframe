@@ -60,6 +60,7 @@ import gradientStyles from './Gradient.module.css';
 import { gradientCss } from './gradient-css';
 import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
 import { canCreateComponent, createComponent } from '@/editor/commands/components';
+import { canResetOverrides, resetSelectedOverrides } from '@/editor/commands/reset-overrides';
 import { eraserWeight, vectorEditPaint } from '@/editor/interactions/vector-edit';
 import { invert, applyLinear } from '@/core/math/matrix';
 import {
@@ -558,6 +559,11 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       <div className={styles.typeHeader}>
         <span className={styles.typeLabel}>{typeLabel}</span>
         {canCreateComponent(editor) && <IconButton icon="component" label="Create component" onClick={() => createComponent(editor)} />}
+        {canResetOverrides(editor) && (
+          <button type="button" className={gradientStyles.textButton} onClick={() => resetSelectedOverrides(editor)}>
+            Reset all changes
+          </button>
+        )}
         {nodes.length > 1 && <span className={styles.count}>{nodes.length} layers</span>}
       </div>
       {tool === 'scale' && <ScaleSection nodes={nodes} />}

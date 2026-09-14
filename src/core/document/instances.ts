@@ -98,6 +98,50 @@ function ownerOf(store: DocumentStore, id: Id): { readonly kind: 'main' | 'insta
   return null;
 }
 
+/** The main component's layer an instance layer mirrors: the main component itself for the instance frame. */
+function mainLayerOf(store: DocumentStore, layer: SceneNode, root: SceneNode): SceneNode | undefined {
+  const id = layer.id === root.id && root.type === 'FRAME' ? root.instance?.mainId : layer.source;
+  const main = id === undefined ? undefined : store.get(id);
+  return main && isSceneNode(main) ? main : undefined;
+}
+
+/**
+ * Reset all changes: every overridden field of the given instances (with their layers) or instance
+ * layers takes the main component's value again, and the layers follow the component for it.
+ */
+export function resetOverrides(tx: Transaction, ids: readonly Id[]): void {
+  const store = tx.store;
+  for (const id of ids) {
+    const owner = ownerOf(store, id);
+    if (owner?.kind !== 'instance') continue;
+    const layers = id === owner.root.id ? [id, ...store.descendants(id, false)] : [id];
+    for (const layerId of layers) {
+      const layer = store.get(layerId);
+      if (!layer || !isSceneNode(layer) || !layer.overrides) continue;
+      const main = mainLayerOf(store, layer, owner.root);
+      for (const name of layer.overrides) {
+        const value = main ? field(main, name) : undefined;
+        // Document values are plain JSON data, so a JSON round trip copies them.
+        tx.set(layerId, name, value === undefined ? undefined : (JSON.parse(JSON.stringify(value)) as unknown));
+      }
+      tx.set(layerId, 'overrides', undefined);
+    }
+  }
+}
+
+/** Whether any of the given layers is, or contains, an instance layer with overrides. */
+export function hasOverrides(store: DocumentStore, ids: readonly Id[]): boolean {
+  return ids.some((id) => {
+    const owner = ownerOf(store, id);
+    if (owner?.kind !== 'instance') return false;
+    const layers = id === owner.root.id ? [id, ...store.descendants(id, false)] : [id];
+    return layers.some((layerId) => {
+      const layer = store.get(layerId);
+      return layer !== undefined && isSceneNode(layer) && (layer.overrides?.length ?? 0) > 0;
+    });
+  });
+}
+
 /**
  * Keeps instances in step with their main components (history finalizer; registered first, so it sees
  * the transaction's own edits):
@@ -133,7 +177,11 @@ export function componentFinalizer(tx: Transaction): void {
     if (owner.kind === 'instance') {
       if (isOverridable(op.field)) {
         const overrides = node.overrides ?? [];
-        if (!overrides.includes(op.field)) tx.set(op.id, 'overrides', [...overrides, op.field]);
+        // Back to the main component's value (as when resetting), the field follows the component again.
+        const main = mainLayerOf(store, node, owner.root);
+        const matchesMain = main !== undefined && same(field(main, op.field), op.value);
+        if (matchesMain && overrides.includes(op.field)) tx.set(op.id, 'overrides', overrides.length > 1 ? overrides.filter((f) => f !== op.field) : undefined);
+        else if (!matchesMain && !overrides.includes(op.field)) tx.set(op.id, 'overrides', [...overrides, op.field]);
       } else if (!(isRoot && (ROOT_PLACEMENT.has(op.field) || op.field === 'size'))) {
         tx.set(op.id, op.field, op.prev);
       }

@@ -38,6 +38,7 @@ import { beginCrop, cropTarget, endCrop } from '../interactions/crop';
 import { BOOLEAN_NAMES, booleanSelection, canBooleanSelection } from './boolean';
 import { canCreateComponent, createComponent } from './components';
 import { canDetachInstance, detachInstances } from './detach';
+import { canResetOverrides, resetSelectedOverrides } from './reset-overrides';
 import { canOutlineStroke, outlineStrokeSelection } from './outline-stroke';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
 
@@ -189,6 +190,13 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     shortcuts: ['Mod+Alt+B'],
     enabled: canDetachInstance,
     run: (e) => detachInstances(e),
+  },
+  {
+    id: 'object.resetOverrides',
+    label: 'Reset all changes',
+    category: 'Object',
+    enabled: canResetOverrides,
+    run: (e) => resetSelectedOverrides(e),
   },
   {
     id: 'object.frameSelection',
