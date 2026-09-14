@@ -111,6 +111,8 @@ export interface RenderOptions {
   readonly colorProfile?: ColorProfile;
   /** Draw only this layer and its children (thumbnails), on a transparent background. */
   readonly only?: Id;
+  /** Presentation view: the current frame of a playing video fill, by video hash (null draws its poster). */
+  readonly videoFrame?: (videoHash: string) => CkImage | null;
 }
 
 interface DrawContext {
@@ -167,6 +169,8 @@ export class SceneRenderer {
   private readonly patternSources = new Set<Id>();
   /** Color profile of the page being rendered. */
   private profile: ColorProfile = 'SRGB';
+  /** The current frames of video fills while rendering (presentation view). */
+  private videoFrame: ((videoHash: string) => CkImage | null) | null = null;
 
   constructor(
     private readonly ck: CanvasKit,
@@ -218,6 +222,7 @@ export class SceneRenderer {
   render(canvas: Canvas, store: DocumentStore, index: SceneIndex, pageId: Id, view: RenderView, options: RenderOptions = {}): RenderStats {
     const start = performance.now();
     this.profile = options.colorProfile ?? 'SRGB';
+    this.videoFrame = options.videoFrame ?? null;
     this.drawStore = store;
     const stats: RenderStats = { drawn: 0, culled: 0, ms: 0 };
     const page = store.get(pageId);
@@ -1526,8 +1531,9 @@ export class SceneRenderer {
       target.setShader(shader ?? (null as never));
       target.setColor(shader ? this.ck.Color4f(1, 1, 1, paint.opacity) : this.ck.TRANSPARENT);
     } else if (paint.type === 'IMAGE' || paint.type === 'VIDEO') {
-      // A video fill shows its poster on the canvas (presentation view plays the video).
-      const shader = this.imageShader(paint.type === 'VIDEO' ? { ...paint, type: 'IMAGE' } : paint, size);
+      // A video fill shows its poster, or in presentation view the current frame of the video playing.
+      const frame = paint.type === 'VIDEO' ? (this.videoFrame?.(paint.videoHash) ?? null) : null;
+      const shader = this.imageShader(paint.type === 'VIDEO' ? { ...paint, type: 'IMAGE' } : paint, size, frame);
       target.setShader(shader);
       shader.delete();
       target.setColor(this.ck.Color4f(1, 1, 1, paint.opacity));
@@ -1546,9 +1552,10 @@ export class SceneRenderer {
    * edges, TILE repeats). Images not loaded yet are requested from the image source and drawn
    * as a checkerboard placeholder until they arrive, as are paints without an image.
    */
-  private imageShader(paint: ImagePaint, size: Size): Shader {
+  private imageShader(paint: ImagePaint, size: Size, frame: CkImage | null = null): Shader {
     const ck = this.ck;
-    const image = paint.imageHash ? this.decodedImage(paint.imageHash) : null;
+    // `frame` is a video's current frame, drawn instead of the stored image.
+    const image = frame ?? (paint.imageHash ? this.decodedImage(paint.imageHash) : null);
     if (!image) {
       this.checker ??= this.makeChecker();
       if (!this.checker) return ck.Shader.MakeColor(ck.Color4f(0.8, 0.8, 0.8, 1), ck.ColorSpace.SRGB);

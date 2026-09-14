@@ -54,6 +54,8 @@ import { parseExpression } from '@/core/prototype/expressions';
 import { collectionVariables, isVariableCollection, localCollections } from '@/core/variables/document';
 import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
 import { needsBiggerContent, OVERFLOW_DIRECTIONS, OVERFLOW_LABELS, overflowOf, SCROLL_BEHAVIOR_LABELS, SCROLL_BEHAVIORS, scrollFrameOf, type OverflowDirection, type ScrollBehavior } from '@/core/prototype/scroll';
+import { videoFillsOf, videoOptionsOf, type VideoOptions } from '@/core/prototype/video';
+import { setVideoOptions } from '@/editor/commands/video';
 import type { Editor } from '@/editor/editor';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import { IconButton } from '../../primitives/IconButton';
@@ -688,6 +690,36 @@ function OverlaySection({ node }: { node: SceneNode }) {
  * flow starting point (and its overlay settings when it opens as an overlay); and the selected layers' interactions. +
  * adds one (to each selected layer), and an interaction opens its details — trigger, actions, destination and animation.
  */
+/** Video: how the video fills of the selected layers play in presentation view (autoplay, loop and sound). */
+function VideoSection({ nodes }: { nodes: readonly SceneNode[] }) {
+  const editor = useEditor();
+  const options = nodes.flatMap((node) => videoFillsOf(node)).map((fill) => videoOptionsOf(fill.paint));
+  if (options.length === 0) return null;
+  const ids = nodes.map((node) => node.id);
+  const every = (key: keyof VideoOptions) => options.every((option) => option[key]);
+  return (
+    <section className={inspector.section} aria-label="Video">
+      <header className={inspector.sectionHeader}>
+        <h3 className={inspector.sectionTitle}>Video</h3>
+      </header>
+      <div className={inspector.sectionBody}>
+        <label className={inspector.checkbox}>
+          <input type="checkbox" checked={every('autoplay')} onChange={(e) => setVideoOptions(editor, ids, { autoplay: e.target.checked })} />
+          Autoplay
+        </label>
+        <label className={inspector.checkbox}>
+          <input type="checkbox" checked={every('loop')} onChange={(e) => setVideoOptions(editor, ids, { loop: e.target.checked })} />
+          Loop
+        </label>
+        <label className={inspector.checkbox}>
+          <input type="checkbox" checked={!options.some((option) => option.muted)} onChange={(e) => setVideoOptions(editor, ids, { muted: !e.target.checked })} />
+          Sound
+        </label>
+      </div>
+    </section>
+  );
+}
+
 export function PrototypePanel() {
   const editor = useEditor();
   useDocumentRevision();
@@ -761,6 +793,7 @@ export function PrototypePanel() {
           </div>
         )}
       </section>
+      <VideoSection nodes={nodes} />
       <ScrollBehaviorSection nodes={nodes} />
       {frame && isOverlayDestination(editor.doc, editor.doc.pageOf(frame.id) ?? frame.parent.id, frame.id) && <OverlaySection node={frame} />}
     </div>

@@ -151,6 +151,8 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
   const [variantLabel, setVariantLabel] = useState('');
   /** Variables set while playing, as "name=value" (shown on the stage for tests). */
   const [variableLabel, setVariableLabel] = useState('');
+  /** The video fills shown, as "layer=playing" or "layer=paused" (shown on the stage for tests). */
+  const [videoLabel, setVideoLabel] = useState('');
   const closeMenu = () => setMenuAnchor(null);
 
   // Mutable playback state the draw loop and input handlers share.
@@ -178,6 +180,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     variantChanges: new Map<Id, Id>(),
     variantLabel: '',
     variableLabel: '',
+    videoLabel: '',
     deviceScaling: null as ScalingMode | null,
     frame: 0,
     box: '',
@@ -366,7 +369,15 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
       }
       const scene = composeScene(doc, current, state.viewport, state.deviceScaling ?? state.scaling, state.scrollY, playing, deviceScreenIn(state.device, state.viewport));
       state.scene = scene;
+      // The videos of the frames shown play, and the view keeps drawing while they do.
+      const videos = state.renderer.syncVideos(shownFrames(current));
       state.renderer.draw(scene, background, now < state.hintsUntil ? state.hintRects : [], state.frameScroll);
+      if (videos.some((video) => video.playing)) schedule();
+      const videoText = videos.map((video) => `${doc.get(video.nodeId)?.name ?? video.nodeId}=${video.playing ? 'playing' : 'paused'}`).join(';');
+      if (videoText !== state.videoLabel) {
+        state.videoLabel = videoText;
+        setVideoLabel(videoText);
+      }
       const label = [...state.frameScroll]
         .filter(([, offset]) => offset.x !== 0 || offset.y !== 0)
         .map(([id, offset]) => `${doc.get(id)?.name ?? id}:${Math.round(offset.x)},${Math.round(offset.y)}`)
@@ -679,6 +690,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
           data-device={device?.preset.name}
           data-variants={variantLabel}
           data-variables={variableLabel}
+          data-videos={videoLabel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

@@ -288,6 +288,12 @@ export const VideoPaintSchema = z.object({
   imageTransform: TransformSchema.optional(),
   scalingFactor: z.number().positive().optional(),
   rotation: z.union([z.literal(90), z.literal(180), z.literal(270)]).optional(),
+  /** Presentation view: whether the video plays when its frame shows (absent means it does). */
+  autoplay: z.boolean().optional(),
+  /** Presentation view: whether the video starts over when it ends. */
+  loop: z.boolean().optional(),
+  /** Presentation view: whether the video plays without sound. */
+  muted: z.boolean().optional(),
   opacity: unit,
   visible: z.boolean(),
   blendMode: BlendModeSchema,

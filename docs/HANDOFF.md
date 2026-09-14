@@ -109,9 +109,19 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - the canvas draws the poster; `VideoSettings` previews the video in the Fill section
     - the E2E fixtures are `e2e/media/clip.webm` and `clip.mp4`, made with ffmpeg; all three browsers decode both
 
+  - Video playback (the commit after video fills):
+    - `PresentationRenderer.syncVideos` plays the video fills of the frames shown in hidden `<video>` elements
+    - `SceneRenderer`'s `videoFrame` render option draws their current frames
+    - the Prototype tab's Video section (`setVideoOptions` in `src/editor/commands/video.ts`)
+    - the stage shows `data-videos` for tests
+
 ## In progress (uncommitted)
 
-1. **Video playback in presentation view and the Video section (autoplay, loop, sound).** Then video triggers and actions, and animated GIFs.
+1. **Video triggers and actions.**
+   - Triggers: When video hits (a time), When video ends.
+   - Actions: play, pause or toggle; mute, unmute or toggle; set to a time; jump forward or backward.
+   - Reset video state.
+   - Then animated GIFs.
 
 ## Next (M10, in order)
 

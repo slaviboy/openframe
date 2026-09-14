@@ -25,6 +25,7 @@ import { matchedLayersStore, smartAnimateStore, withoutMatchingLayersStore } fro
 import type { RuntimeDocument } from '@/editor/prototype-runtime';
 import { topLevelFrame } from '@/core/prototype/reactions';
 import { scrolledFrameStore } from '@/core/prototype/scroll';
+import { videoFillsIn, videoOptionsOf, type VideoOptions } from '@/core/prototype/video';
 import type { Vec2 } from '@/core/math/vec';
 import { SceneIndex } from '@/core/scene/scene-index';
 import type { Color, SceneNode } from '@/core/schema/document';
@@ -38,6 +39,12 @@ import { loadCjkSubsets } from '@/engine/text/cjk-fonts';
 import { TextShaper } from '@/engine/text/text-shaper';
 
 const HINT_COLOR = { r: 13 / 255, g: 153 / 255, b: 1 };
+
+/** A video fill shown, and whether its video is playing. */
+export interface VideoState {
+  readonly nodeId: Id;
+  readonly playing: boolean;
+}
 
 /**
  * Draws presentation view with CanvasKit: each frame is rendered once at its scale into an image, and the scene
@@ -54,6 +61,14 @@ export class PresentationRenderer {
   private readonly scrolled = new Map<Id, { readonly key: string; readonly image: CkImage | null }>();
   /** The document interactive components switched variants in, drawn instead of the editor's; null for the editor's. */
   private runtime: RuntimeDocument | null = null;
+  /** The elements playing video fills, by video hash. */
+  private readonly videos = new Map<string, { readonly element: HTMLVideoElement; readonly url: string }>();
+  /** The videos of the frames shown at the last sync. */
+  private shownVideos = new Set<string>();
+  /** Whether each frame holds video fills. */
+  private readonly videoFrames = new Map<Id, boolean>();
+  /** Video frames made for the frame being rendered, deleted once it is. */
+  private readonly videoImages: CkImage[] = [];
 
   private get doc(): DocumentStore {
     return this.runtime?.doc ?? this.editor.doc;
@@ -135,6 +150,7 @@ export class PresentationRenderer {
     this.frames.clear();
     for (const entry of this.scrolled.values()) entry.image?.delete();
     this.scrolled.clear();
+    this.videoFrames.clear();
     this.onInvalidate();
   }
 
@@ -166,11 +182,19 @@ export class PresentationRenderer {
     const surface = ck.MakeSurface(Math.max(1, Math.ceil(width * this.size.dpr)), Math.max(1, Math.ceil(height * this.size.dpr)));
     if (!surface) return null;
     try {
-      renderer.render(surface.getCanvas(), store, index, editor.pageId, { x: origin.x, y: origin.y, zoom: scale, width, height, dpr: this.size.dpr }, { only: frameId, colorProfile: documentColorProfile(editor.doc) });
+      renderer.render(
+        surface.getCanvas(),
+        store,
+        index,
+        editor.pageId,
+        { x: origin.x, y: origin.y, zoom: scale, width, height, dpr: this.size.dpr },
+        { only: frameId, colorProfile: documentColorProfile(editor.doc), videoFrame: (hash) => this.videoImage(hash) },
+      );
       surface.flush();
       return surface.makeImageSnapshot();
     } finally {
       surface.delete();
+      for (const image of this.videoImages.splice(0)) image.delete();
     }
   }
 
@@ -213,6 +237,86 @@ export class PresentationRenderer {
     return this.renderFrame(store, index, frameId, scale);
   }
 
+  /** Whether a frame holds video fills (drawn fresh each time, with the videos' current frames). */
+  private hasVideo(frameId: Id): boolean {
+    let has = this.videoFrames.get(frameId);
+    if (has === undefined) this.videoFrames.set(frameId, (has = videoFillsIn(this.doc, frameId).length > 0));
+    return has;
+  }
+
+  /** A frame rendered now, with its scrolled content (not cached). */
+  private freshFrameImage(frameId: Id, scale: number, scroll: ReadonlyMap<Id, Vec2>): CkImage | null {
+    const scrolled = [...scroll].some(([id, offset]) => (offset.x !== 0 || offset.y !== 0) && topLevelFrame(this.doc, id) === frameId);
+    return scrolled ? this.storeFrameImage(scrolledFrameStore(this.doc, frameId, scroll), frameId, scale) : this.renderFrame(this.doc, this.index, frameId, scale);
+  }
+
+  /** A video's current frame as an image, for the frame being rendered (null until the video has one). */
+  private videoImage(hash: string): CkImage | null {
+    const video = this.videos.get(hash);
+    if (!this.ck || !video || video.element.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) return null;
+    const image = this.ck.MakeImageFromCanvasImageSource(video.element);
+    this.videoImages.push(image);
+    return image;
+  }
+
+  /**
+   * Plays the video fills of the frames shown: a video starts when its frame shows if it autoplays (without sound when
+   * the browser doesn't allow sound yet), loops when set to, and pauses where it is when its frame is no longer shown.
+   * Returns the video fills shown and whether each is playing.
+   */
+  syncVideos(frameIds: readonly Id[]): VideoState[] {
+    const shown = new Map<string, { readonly nodeId: Id; readonly options: VideoOptions }>();
+    for (const frameId of frameIds) {
+      for (const fill of videoFillsIn(this.doc, frameId)) if (!shown.has(fill.paint.videoHash)) shown.set(fill.paint.videoHash, { nodeId: fill.nodeId, options: videoOptionsOf(fill.paint) });
+    }
+    for (const [hash, video] of this.videos) if (!shown.has(hash) && this.shownVideos.has(hash)) video.element.pause();
+    const states: VideoState[] = [];
+    for (const [hash, { nodeId, options }] of shown) {
+      const video = this.videoFor(hash);
+      if (video) {
+        video.element.loop = options.loop;
+        if (!this.shownVideos.has(hash) && options.autoplay) this.play(video.element, options.muted);
+      }
+      states.push({ nodeId, playing: video !== null && !video.element.paused && !video.element.ended });
+    }
+    // A video whose bytes weren't loaded yet counts as shown once its element exists, so it starts then.
+    this.shownVideos = new Set([...shown.keys()].filter((hash) => this.videos.has(hash)));
+    return states;
+  }
+
+  /** The element playing a video, made once its bytes are loaded (requested when they aren't yet). */
+  private videoFor(hash: string): { readonly element: HTMLVideoElement; readonly url: string } | null {
+    const existing = this.videos.get(hash);
+    if (existing) return existing;
+    const asset = this.editor.images.get(hash);
+    if (!asset) {
+      this.editor.images.request(hash);
+      return null;
+    }
+    const element = document.createElement('video');
+    element.playsInline = true;
+    element.preload = 'auto';
+    // Kept in the page, out of sight: some browsers don't decode videos that aren't.
+    element.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+    const url = URL.createObjectURL(new Blob([asset.bytes as Uint8Array<ArrayBuffer>], { type: asset.mime }));
+    for (const type of ['loadeddata', 'play', 'pause', 'ended', 'seeked']) element.addEventListener(type, () => this.onInvalidate());
+    element.src = url;
+    document.body.append(element);
+    const video = { element, url };
+    this.videos.set(hash, video);
+    return video;
+  }
+
+  private play(element: HTMLVideoElement, muted: boolean): void {
+    element.muted = muted;
+    element.play().catch(() => {
+      // Browsers allow sound only after the user interacts with the page: play without it.
+      if (element.muted) return;
+      element.muted = true;
+      element.play().catch(() => undefined);
+    });
+  }
+
   draw(scene: PresentedScene | null, background: Color, hints: readonly Rect[], scroll: ReadonlyMap<Id, Vec2> = new Map()): void {
     const { ck, surface, paint } = this;
     if (!ck || !surface || !paint) return;
@@ -249,14 +353,16 @@ export class PresentationRenderer {
         continue;
       }
       if (item.alpha <= 0) continue;
-      // Smart animate and Animate matching layers frames are drawn fresh rather than cached.
+      // Smart animate, Animate matching layers and frames with videos are drawn fresh rather than cached.
       const live = item.smart
         ? this.smartFrameImage(item.smart.from, item.frameId, item.smart.progress, item.scale)
         : item.matched
           ? this.storeFrameImage(matchedLayersStore(this.doc, item.matched.from, item.frameId, item.matched.progress), item.frameId, item.scale)
           : item.without
             ? this.storeFrameImage(withoutMatchingLayersStore(this.doc, item.frameId, item.without), item.frameId, item.scale)
-            : null;
+            : this.hasVideo(item.frameId)
+              ? this.freshFrameImage(item.frameId, item.scale, scroll)
+              : null;
       const image = live ?? this.scrolledFrameImage(item.frameId, item.scale, scroll) ?? this.frameImage(item.frameId, item.scale);
       if (!image) continue;
       paint.setColor(ck.Color4f(0, 0, 0, Math.min(1, item.alpha)));
@@ -288,5 +394,13 @@ export class PresentationRenderer {
     this.surface = null;
     this.paint?.delete();
     this.renderer?.dispose();
+    for (const { element, url } of this.videos.values()) {
+      element.pause();
+      element.removeAttribute('src');
+      element.load();
+      element.remove();
+      URL.revokeObjectURL(url);
+    }
+    this.videos.clear();
   }
 }
