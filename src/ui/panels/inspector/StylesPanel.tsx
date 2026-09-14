@@ -81,7 +81,7 @@ export function StyleSwatch({ style }: { style: StyleNode }) {
   return <span className={`${css.swatch} ${background === undefined ? css.image : ''}`} style={background === undefined ? undefined : { background }} aria-hidden="true" />;
 }
 
-function Dialog({ title, onClose, children, footer, onSubmit }: { title: string; onClose: () => void; children: ReactNode; footer: ReactNode; onSubmit?: () => void }) {
+export function Dialog({ title, onClose, children, footer, onSubmit }: { title: string; onClose: () => void; children: ReactNode; footer: ReactNode; onSubmit?: () => void }) {
   const titleId = `dialog-${title.toLowerCase().replaceAll(' ', '-')}`;
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -157,7 +157,7 @@ function StyleDialog({ title, submitLabel, name: initialName = '', description: 
 }
 
 /** Asks for a name, for a new folder or a renamed one. */
-function NameDialog({ title, label, initial = '', submitLabel, onSubmit, onClose }: { title: string; label: string; initial?: string; submitLabel: string; onSubmit: (name: string) => void; onClose: () => void }) {
+export function NameDialog({ title, label, initial = '', submitLabel, onSubmit, onClose }: { title: string; label: string; initial?: string; submitLabel: string; onSubmit: (name: string) => void; onClose: () => void }) {
   const [name, setName] = useState(initial);
   return (
     <Dialog

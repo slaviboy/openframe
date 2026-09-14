@@ -26,6 +26,7 @@ import { Inspector } from '../panels/inspector/Inspector';
 import { AssetsPanel } from '../panels/assets/AssetsPanel';
 import { LayersPanel } from '../panels/layers/LayersPanel';
 import { PagesPanel } from '../panels/pages/PagesPanel';
+import { VariablesView } from '../panels/variables/VariablesView';
 import { Menu } from '../primitives/Menu';
 import { PropertyLabelsContext } from '../primitives/property-labels';
 import { viewPrefs } from '../view/view-prefs';
@@ -57,6 +58,7 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
   const hasSelection = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().selection.length > 0);
   const findOpen = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().findOpen);
   const assetsOpen = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().assetsOpen);
+  const variablesOpen = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().variablesOpen);
   const propertyLabels = useSyncExternalStore(viewPrefs.subscribe, () => viewPrefs.getSnapshot().propertyLabels);
 
   const showLeft = uiMode === 'full';
@@ -96,13 +98,35 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
               {mainMenuAnchor && (
                 <Menu label="Main menu" entries={mainMenuEntries(session.editor)} anchor={mainMenuAnchor} placement="bottom-start" onClose={closeMainMenu} />
               )}
-              <button type="button" className={styles.railTab} aria-current={!assetsOpen ? 'page' : undefined} title="File" onClick={() => editorState.setAssetsOpen(false)}>
+              <button
+                type="button"
+                className={styles.railTab}
+                aria-current={!assetsOpen && !variablesOpen ? 'page' : undefined}
+                title="File"
+                onClick={() => {
+                  editorState.setAssetsOpen(false);
+                  editorState.setVariablesOpen(false);
+                }}
+              >
                 <Icon name="file" />
                 <span className={styles.railLabel}>File</span>
               </button>
-              <button type="button" className={styles.railTab} aria-current={assetsOpen ? 'page' : undefined} title="Assets" onClick={() => editorState.setAssetsOpen(true)}>
+              <button
+                type="button"
+                className={styles.railTab}
+                aria-current={assetsOpen && !variablesOpen ? 'page' : undefined}
+                title="Assets"
+                onClick={() => {
+                  editorState.setAssetsOpen(true);
+                  editorState.setVariablesOpen(false);
+                }}
+              >
                 <Icon name="component" />
                 <span className={styles.railLabel}>Assets</span>
+              </button>
+              <button type="button" className={styles.railTab} aria-current={variablesOpen ? 'page' : undefined} title="Variables" onClick={() => editorState.setVariablesOpen(!variablesOpen)}>
+                <Icon name="variables" />
+                <span className={styles.railLabel}>Variables</span>
               </button>
               {/* File notifications sit at the bottom of the navigation bar. */}
               <MissingFontsNotice className={styles.railNotice} />
@@ -135,6 +159,7 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
           </aside>
         )}
         {uiMode !== 'hidden' && <Toolbar />}
+        {variablesOpen && uiMode !== 'hidden' && <VariablesView onClose={() => editorState.setVariablesOpen(false)} />}
       </div>
     </SessionContext.Provider>
   );

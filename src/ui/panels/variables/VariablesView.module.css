@@ -1,0 +1,248 @@
+/*
+ * Copyright (C) 2026 Stanislav Georgiev
+ * https://github.com/slaviboy
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.view {
+  position: absolute;
+  inset: var(--panel-gap);
+  z-index: calc(var(--z-panels) + 1);
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--panel-radius);
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.title {
+  margin: 0;
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar {
+  flex: none;
+  width: 220px;
+  padding: var(--space-2);
+  border-right: 1px solid var(--border);
+  overflow: auto;
+}
+
+.sidebarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+  color: var(--fg-secondary);
+}
+
+.collections {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.collection {
+  width: 100%;
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+.collection[aria-pressed='true'],
+tr[data-selected] > th {
+  background: color-mix(in srgb, var(--accent, #0d99ff) 18%, transparent);
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.search {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: var(--bg-control);
+  color: inherit;
+  font: inherit;
+}
+
+.tableWrap {
+  flex: 1;
+  overflow: auto;
+}
+
+.table {
+  min-width: 100%;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  height: 36px;
+  padding: 0 var(--space-2);
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  white-space: nowrap;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bg-panel);
+  color: var(--fg-secondary);
+  font-weight: 500;
+}
+
+.table td {
+  min-width: 200px;
+}
+
+.group th {
+  color: var(--fg-secondary);
+  font-weight: 500;
+}
+
+.name,
+.modeHeader,
+.aliasName {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 28px;
+  padding: 0 var(--space-1);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+}
+
+.type {
+  display: inline-grid;
+  width: 16px;
+  place-items: center;
+  color: var(--fg-secondary);
+}
+
+.addMode {
+  width: 40px;
+}
+
+.alias {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+}
+
+.text {
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--space-1);
+  border: 1px solid transparent;
+  border-radius: var(--radius-xs);
+  background: none;
+  color: inherit;
+  font: inherit;
+}
+
+.text:hover,
+.text:focus {
+  border-color: var(--border);
+}
+
+.boolean,
+.check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.none,
+.muted,
+.status {
+  color: var(--fg-secondary);
+}
+
+.muted {
+  margin-inline-start: var(--space-2);
+}
+
+.status {
+  min-height: 1.5em;
+  margin: 0;
+  padding: var(--space-1) var(--space-3);
+}
+
+.empty {
+  display: grid;
+  flex: 1;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-2);
+}
+
+.fieldset {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+}
+
+.syntax {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  align-items: center;
+  gap: var(--space-2);
+}

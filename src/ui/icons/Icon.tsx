@@ -112,6 +112,7 @@ const PATHS = {
     </>
   ),
   detach: <path d="M12 4.5l3 3M19.5 12l-3 3M12 19.5l-3-3M4.5 12l3-3M6 6l12 12" />,
+  variables: <path d="M12 4.5l6.5 3.75v7.5L12 19.5l-6.5-3.75v-7.5zM12 9.5v5M9.5 12h5" />,
   more: (
     <>
       <circle cx="7" cy="12" r="1" fill="currentColor" stroke="none" />

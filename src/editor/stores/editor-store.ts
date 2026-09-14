@@ -59,6 +59,8 @@ export interface EditorState {
   readonly findOpen: boolean;
   /** The navigation bar's Assets tab is showing (⌥2) instead of the file's pages and layers. */
   readonly assetsOpen: boolean;
+  /** The navigation bar's Variables tab is showing the variables view over the canvas. */
+  readonly variablesOpen: boolean;
   /** Anchor used by the Scale panel's multiplier and dimension fields. */
   readonly scaleAnchor: ScaleAnchor;
   /** Layer whose image fill is being cropped (crop mode), or null. */
@@ -154,6 +156,7 @@ export class EditorStore extends Observable<EditorState> {
       dialog: null,
       findOpen: false,
       assetsOpen: false,
+      variablesOpen: false,
       scaleAnchor: 'nw',
       croppingId: null,
       cropAspect: 'FREE',
@@ -254,6 +257,10 @@ export class EditorStore extends Observable<EditorState> {
 
   setAssetsOpen(assetsOpen: boolean): void {
     this.setState({ assetsOpen });
+  }
+
+  setVariablesOpen(variablesOpen: boolean): void {
+    this.setState({ variablesOpen });
   }
 
   openDialog(dialog: EditorDialog | null): void {
