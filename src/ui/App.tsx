@@ -94,7 +94,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
   const editorState = useSyncExternalStore(editor.state.subscribe, editor.state.getSnapshot);
   const prefs = useSyncExternalStore(viewPrefs.subscribe, viewPrefs.getSnapshot);
   const outlines = useMemo(() => ({ outlines: prefs.outlines, includeHidden: prefs.outlineHidden }), [prefs.outlines, prefs.outlineHidden]);
-  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [palette, setPalette] = useState<'commands' | 'components' | null>(null);
   const [contextMenu, setContextMenu] = useState<(CanvasContextMenu & { pasteEntries: MenuEntry[] }) | null>(null);
   const [uiMode, setUiMode] = useState<UiMode>('full');
   const uiModeRef = useRef(uiMode);
@@ -107,7 +107,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
     setContextMenu({ ...menu, pasteEntries: pasteHereEntries(clipboard?.canPaste() ?? false, () => void clipboard?.paste('default', menu.world)) });
   }, []);
   const closeShortcuts = useCallback(() => setShortcutsOpen(false), []);
-  const closePalette = useCallback(() => setPaletteOpen(false), []);
+  const closePalette = useCallback(() => setPalette(null), []);
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
   const closeDialog = useCallback(() => editor.state.openDialog(null), [editor]);
   const restoreUi = useCallback(() => setUiMode('full'), []);
@@ -148,7 +148,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
         label: 'Command palette',
         category: 'View',
         shortcuts: ['Mod+K', 'Mod+/'],
-        run: () => setPaletteOpen(true),
+        run: () => setPalette('commands'),
       },
       {
         id: 'view.assetsTab',
@@ -157,6 +157,13 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
         shortcuts: ['Alt+2'],
         checked: () => editor.state.getSnapshot().assetsOpen,
         run: () => editor.state.setAssetsOpen(!editor.state.getSnapshot().assetsOpen),
+      },
+      {
+        id: 'view.quickInsert',
+        label: 'Quick insert',
+        category: 'View',
+        shortcuts: ['Shift+I'],
+        run: () => setPalette('components'),
       },
       {
         id: 'view.toggleHideUi',
@@ -273,7 +280,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
         />
       )}
       {shortcutsOpen && uiMode !== 'hidden' && <ShortcutsPanel editor={editor} onClose={closeShortcuts} />}
-      {paletteOpen && <CommandPalette editor={editor} onClose={closePalette} />}
+      {palette && <CommandPalette editor={editor} mode={palette} onClose={closePalette} />}
       {editorState.dialog === 'batchRename' && <BatchRenameDialog editor={editor} onClose={closeDialog} />}
       {editorState.dialog === 'nudgeAmount' && <NudgeDialog onClose={closeDialog} />}
       {editorState.tool === 'image' && <PlaceImageHint tools={tools} />}
