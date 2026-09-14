@@ -27,6 +27,8 @@ export interface PresentParams {
   readonly fileId: string;
   readonly pageId: Id;
   readonly nodeId: Id | null;
+  /** Hide UI: presentation view opens without its toolbar, footer and flows sidebar (hide-ui=1). */
+  readonly hideUi?: boolean;
 }
 
 /** The address of presentation view for a file's page. */
@@ -38,6 +40,7 @@ export function presentUrl(base: string, params: PresentParams): string {
   url.searchParams.set('file', params.fileId);
   url.searchParams.set('page', params.pageId);
   if (params.nodeId) url.searchParams.set('node', params.nodeId);
+  if (params.hideUi) url.searchParams.set('hide-ui', '1');
   return url.toString();
 }
 
@@ -47,7 +50,7 @@ export function presentParams(search: string): PresentParams | null {
   const fileId = query.get('file');
   const pageId = query.get('page');
   if (query.get('present') !== '1' || !fileId || !pageId) return null;
-  return { fileId, pageId, nodeId: query.get('node') || null };
+  return { fileId, pageId, nodeId: query.get('node') || null, hideUi: query.get('hide-ui') === '1' };
 }
 
 export interface PresentationSession {

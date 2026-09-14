@@ -55,5 +55,5 @@ export function PresentApp({ params }: { params: PresentParams }) {
       </div>
     );
   }
-  return <PresentationView session={load.session} startNodeId={params.nodeId} />;
+  return <PresentationView session={load.session} startNodeId={params.nodeId} hideUi={params.hideUi} />;
 }

@@ -106,6 +106,8 @@ interface Press {
 export interface PresentationViewProps {
   readonly session: PresentationSession;
   readonly startNodeId: Id | null;
+  /** Presentation view opened with its toolbar, footer and flows sidebar hidden (the address's hide-ui=1). */
+  readonly hideUi?: boolean | undefined;
   /**
    * Inline preview in the editor: compact chrome, keys only while the preview has focus, following edits to the
    * document and the frame selected on the canvas.
@@ -118,7 +120,7 @@ export interface PresentationViewProps {
  * interactions run, and transitions animate. The toolbar shows and hides the flows sidebar and holds the options
  * (hotspot hints and scaling) and fullscreen; the footer moves between screens and restarts the flow (R).
  */
-export function PresentationView({ session, startNodeId, inline }: PresentationViewProps) {
+export function PresentationView({ session, startNodeId, inline, hideUi = false }: PresentationViewProps) {
   const { editor } = session;
   const inlineMode = inline !== undefined;
   // Interactive components play in a copy of the document with the variants they switched to.
@@ -148,6 +150,10 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
   const [error, setError] = useState<string | null>(null);
   const [scaling, setScaling] = useState<ScalingMode>('FIT');
   const [showHints, setShowHints] = useState(true);
+  /** Enable keyboard shortcuts: R, ← and → and F (the prototype's own Key/Gamepad interactions always run). */
+  const [shortcuts, setShortcuts] = useState(true);
+  /** Hide UI: no toolbar, footer or flows sidebar (presentation view only). */
+  const [uiHidden, setUiHidden] = useState(hideUi && inline === undefined);
   /** Accessibility mode: the content of the frames shown as HTML for screen readers (Skip to content, or Options). */
   const [accessible, setAccessible] = useState(false);
   const [accessibleMessage, setAccessibleMessage] = useState('');
@@ -555,7 +561,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
         run(found.reaction, found.nodeId);
         return;
       }
-      if (keys.length !== 1) return;
+      if (keys.length !== 1 || !shortcuts) return;
       if (e.code === 'KeyR') restartAt(start);
       else if (e.code === 'ArrowRight') step(1);
       else if (e.code === 'ArrowLeft') step(-1);
@@ -568,7 +574,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     const target: HTMLElement | Window | null = inlineMode ? rootRef.current : window;
     target?.addEventListener('keydown', onKeyDown as EventListener);
     return () => target?.removeEventListener('keydown', onKeyDown as EventListener);
-  }, [doc, restartAt, run, start, step, toggleFullscreen, inlineMode]);
+  }, [doc, restartAt, run, start, step, toggleFullscreen, inlineMode, shortcuts]);
 
   // Key/Gamepad interactions from a connected gamepad's buttons (in presentation view; the inline preview takes keys only).
   useGamepadButtons(!inlineMode, (button) => {
@@ -707,6 +713,16 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     setAccessibleMessage(on ? 'Now adapting content for screen readers' : '');
     schedule();
   };
+  /** Hide UI, or show it again: the address keeps hide-ui=1 while it is hidden, so reopening it keeps the UI hidden. */
+  const setHidden = (hidden: boolean) => {
+    setUiHidden(hidden);
+    setMenuAnchor(null);
+    const url = new URL(window.location.href);
+    if (hidden) url.searchParams.set('hide-ui', '1');
+    else url.searchParams.delete('hide-ui');
+    window.history.replaceState(window.history.state, '', url);
+    setAccessibleMessage(hidden ? 'The toolbar and footer are hidden. Select Show UI to show them again.' : '');
+  };
   /** A link or button of the accessible content was activated: its layer's On click interaction runs. */
   const activate = (nodeId: Id) => {
     const found = findReaction(doc, [nodeId], 'ON_CLICK');
@@ -715,6 +731,12 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
   const menuEntries: MenuEntry[] = [
     { kind: 'item', id: 'hints', label: 'Show hints on click', checked: showHints, onSelect: () => setShowHints((on) => !on) },
     { kind: 'item', id: 'accessible', label: 'Adapt content for screen readers', checked: accessible, onSelect: () => setAccessibility(!accessible) },
+    ...(inlineMode
+      ? []
+      : ([
+          { kind: 'item', id: 'shortcuts', label: 'Enable keyboard shortcuts', checked: shortcuts, onSelect: () => setShortcuts((on) => !on) },
+          { kind: 'item', id: 'hide-ui', label: 'Hide UI', onSelect: () => setHidden(true) },
+        ] satisfies MenuEntry[])),
     ...(inlineMode ? [{ kind: 'item', id: 'follow', label: 'Follow prototype', checked: follow, onSelect: () => setFollow((on) => !on) } satisfies MenuEntry] : []),
     { kind: 'separator', id: 'scaling-separator' },
     ...SCALING_MODES.map((mode): MenuEntry => ({ kind: 'item', id: mode, label: SCALING_LABELS[mode], checked: scaling === mode, onSelect: () => setScaling(mode) })),
@@ -753,7 +775,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
           </button>
         </header>
       )}
-      {!inline && <header className={styles.toolbar}>
+      {!inline && !uiHidden && <header className={styles.toolbar}>
         <button type="button" className={styles.button} aria-pressed={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>
           Flows
         </button>
@@ -767,7 +789,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
         </button>
       </header>}
       <div className={styles.body}>
-        {sidebarOpen && !inlineMode && (
+        {sidebarOpen && !inlineMode && !uiHidden && (
           <aside className={styles.sidebar} aria-label="Flows">
             {flows.length === 0 ? (
               <p className={styles.muted}>This page has no flows.</p>
@@ -817,20 +839,27 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
           )}
         </div>
       </div>
-      <footer className={styles.footer}>
-        <button type="button" className={styles.button} aria-label="Previous screen" disabled={screenIndex <= 0} onClick={() => step(-1)}>
-          ←
-        </button>
-        <span role="status">{screenIndex >= 0 ? `${screenIndex + 1} / ${screens.length}` : ''}</span>
-        <button type="button" className={styles.button} aria-label="Next screen" disabled={screenIndex < 0 || screenIndex >= screens.length - 1} onClick={() => step(1)}>
-          →
-        </button>
-        {!inlineMode && (
-          <button type="button" className={styles.button} onClick={() => restartAt(start)}>
-            Restart
+      {!uiHidden && (
+        <footer className={styles.footer}>
+          <button type="button" className={styles.button} aria-label="Previous screen" disabled={screenIndex <= 0} onClick={() => step(-1)}>
+            ←
           </button>
-        )}
-      </footer>
+          <span role="status">{screenIndex >= 0 ? `${screenIndex + 1} / ${screens.length}` : ''}</span>
+          <button type="button" className={styles.button} aria-label="Next screen" disabled={screenIndex < 0 || screenIndex >= screens.length - 1} onClick={() => step(1)}>
+            →
+          </button>
+          {!inlineMode && (
+            <button type="button" className={styles.button} onClick={() => restartAt(start)}>
+              Restart
+            </button>
+          )}
+        </footer>
+      )}
+      {uiHidden && (
+        <button type="button" className={styles.button} style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }} onClick={() => setHidden(false)}>
+          Show UI
+        </button>
+      )}
       <AccessibilityMessage text={accessibleMessage} />
       {menuAnchor && <Menu label="Options" entries={menuEntries} anchor={menuAnchor} placement="bottom-start" onClose={closeMenu} />}
     </div>
