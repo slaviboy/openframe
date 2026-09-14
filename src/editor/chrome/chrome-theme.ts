@@ -27,6 +27,8 @@ export interface ChromeTheme {
   /** Equal-spacing indicators while moving. */
   readonly spacing: string;
   readonly component: string;
+  /** Slot indicators on the canvas. */
+  readonly slot: string;
   readonly handleFill: string;
   readonly labelText: string;
   readonly frameTitle: string;
@@ -57,6 +59,7 @@ const base = {
   guide: '#f24822',
   spacing: '#e0249a',
   component: '#9747ff',
+  slot: '#ff24bd',
   handleFill: '#ffffff',
   labelText: '#ffffff',
   frameTitleSelected: '#0d99ff',

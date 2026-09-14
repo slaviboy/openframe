@@ -73,6 +73,10 @@ export interface EditorState {
   readonly textEdit: TextEditRef | null;
   /** Component set whose variants are being multi-edited (Q), or null. */
   readonly multiEditSetId: Id | null;
+  /** Slot of an instance that Add instances inserts into, while its component list is open; or null. */
+  readonly addInstancesSlotId: Id | null;
+  /** A warning for the canvas, such as a slot past its limits; or null. */
+  readonly notice: string | null;
   /** The link editor is open for the text being edited (⇧⌘U, Create link). */
   readonly linkEditing: boolean;
   /** The text engine is installed, so fonts can be checked against what it has. */
@@ -157,6 +161,8 @@ export class EditorStore extends Observable<EditorState> {
       blurEdit: null,
       textEdit: null,
       multiEditSetId: null,
+      addInstancesSlotId: null,
+      notice: null,
       linkEditing: false,
       textLayoutReady: false,
       suggested: new Set(),
@@ -176,6 +182,16 @@ export class EditorStore extends Observable<EditorState> {
   /** Starts multi-editing the variants of a component set, or ends it with null. */
   setMultiEditSet(setId: Id | null): void {
     if (this.state.multiEditSetId !== setId) this.setState({ multiEditSetId: setId });
+  }
+
+  /** Opens Add instances for a slot of an instance, or closes it with null. */
+  openAddInstances(slotId: Id | null): void {
+    if (this.state.addInstancesSlotId !== slotId) this.setState({ addInstancesSlotId: slotId });
+  }
+
+  /** Shows a warning on the canvas, or clears it with null. */
+  setNotice(notice: string | null): void {
+    if (this.state.notice !== notice) this.setState({ notice });
   }
 
   setTextLayoutReady(textLayoutReady: boolean): void {
@@ -258,7 +274,7 @@ export class EditorStore extends Observable<EditorState> {
 
   setActivePage(pageId: Id): void {
     if (this.doc.get(pageId)?.type !== 'PAGE') return;
-    this.setState({ activePageId: pageId, selection: [], selectedGuide: null, hoverId: null, renamingId: null, croppingId: null, gradientEdit: null, blurEdit: null, textEdit: null, multiEditSetId: null });
+    this.setState({ activePageId: pageId, selection: [], selectedGuide: null, hoverId: null, renamingId: null, croppingId: null, gradientEdit: null, blurEdit: null, textEdit: null, multiEditSetId: null, addInstancesSlotId: null });
   }
 
   setViewport(viewport: Viewport, pageId: Id = this.state.activePageId): void {

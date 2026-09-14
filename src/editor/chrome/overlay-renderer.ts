@@ -55,6 +55,7 @@ import { worldToScreen } from '../viewport/viewport';
 import type { ChromeTheme } from './chrome-theme';
 import { forEachSection, handlePoint, isLineFrame, screenQuad, sectionTitleRect, selectionFrame, type SelectionFrame, addVariantButtonRect } from './selection-geometry';
 import { variantsOf } from '@/core/document/variants';
+import { slotIndicators } from '@/core/document/component-properties';
 
 export interface OverlayInput {
   readonly editor: Editor;
@@ -138,6 +139,8 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
   if (state.hoverId && !selected.has(state.hoverId)) {
     outlineNode(ctx, editor, state.hoverId, theme.selection, theme.hoverWidth);
   }
+  // Slots: a pink box around the slots of the hovered instance, and around empty slots set to show.
+  for (const slot of slotIndicators(editor.doc, editor.pageId, state.hoverId)) outlineNode(ctx, editor, slot, theme.slot, 1);
 
   if (state.selection.length > 1) {
     for (const id of state.selection) outlineNode(ctx, editor, id, theme.selection, theme.selectionWidth);

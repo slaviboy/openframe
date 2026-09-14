@@ -45,6 +45,10 @@ import { shortcutUsage } from './shortcuts/shortcut-usage';
 import { THEME_COMMANDS } from './theme/theme-store';
 import { useThemePreference } from './theme/useTheme';
 import { VIEW_PREF_COMMANDS, viewPrefs } from './view/view-prefs';
+import { instanceSlotOf } from '@/core/document/instances';
+import { slotLimitWarning } from '@/core/document/component-properties';
+import type { ChangeSet } from '@/core/history/history';
+import { AddInstancesDialog } from './dialogs/AddInstancesDialog';
 
 type LoadState = { kind: 'loading' } | { kind: 'ready'; session: AppSession } | { kind: 'error'; message: string };
 
@@ -112,7 +116,25 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
   const closeDialog = useCallback(() => editor.state.openDialog(null), [editor]);
   const restoreUi = useCallback(() => setUiMode('full'), []);
   const [notice, setNotice] = useState<string | null>(null);
-  const closeNotice = useCallback(() => setNotice(null), []);
+  const closeNotice = useCallback(() => {
+    setNotice(null);
+    editor.state.setNotice(null);
+  }, [editor]);
+  // A change that takes a slot of an instance past its limits shows a warning.
+  useEffect(
+    () =>
+      editor.history.subscribe((changes: ChangeSet) => {
+        if (changes.source !== 'commit') return;
+        for (const id of changes.structural) {
+          const warning = instanceSlotOf(editor.doc, id) === id ? slotLimitWarning(editor.doc, id) : null;
+          if (warning) {
+            editor.state.setNotice(warning);
+            return;
+          }
+        }
+      }),
+    [editor],
+  );
   /** Imports image files and places them at a world point (default: the center of the visible canvas). */
   const placeFiles = useCallback(
     async (files: File[], world?: Vec2) => {
@@ -281,12 +303,13 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
       )}
       {shortcutsOpen && uiMode !== 'hidden' && <ShortcutsPanel editor={editor} onClose={closeShortcuts} />}
       {palette && <CommandPalette editor={editor} mode={palette} onClose={closePalette} />}
+      {editorState.addInstancesSlotId && <AddInstancesDialog editor={editor} slotId={editorState.addInstancesSlotId} onClose={() => editor.state.openAddInstances(null)} />}
       {editorState.dialog === 'batchRename' && <BatchRenameDialog editor={editor} onClose={closeDialog} />}
       {editorState.dialog === 'nudgeAmount' && <NudgeDialog onClose={closeDialog} />}
       {editorState.tool === 'image' && <PlaceImageHint tools={tools} />}
       {editorState.tool === 'pickLayer' && <ToolHint text="Click a layer to use as the pattern source · Esc to cancel" />}
       {editorState.tool === 'eyedropper' && <ToolHint text="Click to apply a color from the canvas · Esc to cancel" />}
-      {notice && <Notice message={notice} onClose={closeNotice} />}
+      {(notice ?? editorState.notice) && <Notice message={(notice ?? editorState.notice)!} onClose={closeNotice} />}
     </>
   );
 }

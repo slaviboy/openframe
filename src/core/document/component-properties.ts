@@ -17,7 +17,8 @@
 
 import type { Id } from '../ids/ids';
 import { isSceneNode, type ComponentPropertyDefinition, type SceneNode } from '../schema/document';
-import { isInstance, isMainComponent } from './instances';
+import { instanceSlotOf, isInstance, isMainComponent } from './instances';
+import type { DocumentStore } from './store';
 import { isComponentSet, variantsOf } from './variants';
 
 export type ComponentPropertyType = ComponentPropertyDefinition['type'];
@@ -145,4 +146,66 @@ export function exposedInstances(store: PropertyStore, instanceId: Id): FrameLay
     if (node?.type === 'FRAME' && node.instance && node.isExposedInstance && enclosingInstance(store, id) === instanceId) found.push(node);
   }
   return found;
+}
+
+/** A slot's content measured against its slot property's limits. */
+export interface SlotLimits {
+  readonly name: string;
+  readonly count: number;
+  readonly minLayers: number | undefined;
+  readonly maxLayers: number | undefined;
+  readonly onlyPreferred: boolean;
+  readonly preferred: readonly Id[];
+  /** Layers that aren't instances of a preferred component, when only preferred instances are allowed. */
+  readonly notPreferred: readonly Id[];
+}
+
+/** The limits of a slot frame (in an instance or a main component), or null for a layer that isn't a slot. */
+export function slotLimits(store: DocumentStore, slotId: Id): SlotLimits | null {
+  const slot = sceneNodeAt(store, slotId);
+  const name = slot?.componentPropertyReferences?.slot;
+  const definition = name ? propertyDefinitions(propertyOwner(store, slotId))[name] : undefined;
+  if (!name || definition?.type !== 'SLOT') return null;
+  const children = store.children(slotId);
+  const preferred = definition.preferredValues ?? [];
+  const notPreferred = definition.onlyPreferred
+    ? children.filter((id) => {
+        const child = sceneNodeAt(store, id);
+        return !(child?.type === 'FRAME' && child.instance && preferred.includes(child.instance.mainId));
+      })
+    : [];
+  return { name, count: children.length, minLayers: definition.minLayers, maxLayers: definition.maxLayers, onlyPreferred: definition.onlyPreferred === true, preferred, notPreferred };
+}
+
+/** The warning for a slot whose content is past its limits, or null. */
+export function slotLimitWarning(store: DocumentStore, slotId: Id): string | null {
+  const limits = slotLimits(store, slotId);
+  if (!limits) return null;
+  const layers = (n: number) => `${n} ${n === 1 ? 'layer' : 'layers'}`;
+  if (limits.maxLayers !== undefined && limits.count > limits.maxLayers) return `${limits.name} has ${layers(limits.count)}, more than its maximum of ${limits.maxLayers}.`;
+  if (limits.minLayers !== undefined && limits.count < limits.minLayers) return `${limits.name} has ${layers(limits.count)}, fewer than its minimum of ${limits.minLayers}.`;
+  if (limits.notPreferred.length > 0) return `${limits.name} only allows preferred instances.`;
+  return null;
+}
+
+/** The slots the canvas marks in pink: those of the hovered instance, and the empty slots of instances set to show when empty. */
+export function slotIndicators(store: DocumentStore, pageId: Id, hoverId: Id | null): Id[] {
+  const found = new Set<Id>();
+  let instance: Id | null = null;
+  for (let cur: Id | null = hoverId; cur !== null; cur = store.parentOf(cur)) {
+    const node = sceneNodeAt(store, cur);
+    if (!node) break;
+    if (isInstance(node)) {
+      instance = cur;
+      break;
+    }
+  }
+  if (instance !== null) for (const id of store.descendants(instance, false)) if (instanceSlotOf(store, id) === id) found.add(id);
+  for (const id of store.descendants(pageId, false)) {
+    if (instanceSlotOf(store, id) !== id || store.children(id).length > 0) continue;
+    const name = sceneNodeAt(store, id)?.componentPropertyReferences?.slot;
+    const definition = name ? propertyDefinitions(propertyOwner(store, id))[name] : undefined;
+    if (definition?.type === 'SLOT' && definition.showEmpty) found.add(id);
+  }
+  return [...found];
 }

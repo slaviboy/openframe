@@ -16,12 +16,13 @@
  */
 
 import { keyOnTop } from '@/core/document/factory';
-import { instantiate, isMainComponent } from '@/core/document/instances';
+import { instantiate, isMainComponent, acceptsLayers, wouldCycle } from '@/core/document/instances';
 import { defaultVariant, isComponentSet } from '@/core/document/variants';
 import type { Id } from '@/core/ids/ids';
 import type { Vec2 } from '@/core/math/vec';
 import { isSceneNode, type SceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
+import { propertyDefinitions, propertyOwner } from '@/core/document/component-properties';
 
 /** Drag data type of a component dragged from the Assets tab (its value is the main component's id). */
 export const COMPONENT_DRAG_TYPE = 'application/x-openframe-component';
@@ -132,4 +133,27 @@ export function assetTree(editor: Editor, components: readonly LocalComponent[])
   };
   sort(root);
   return root;
+}
+
+/**
+ * Add instances: inserts an instance of a main component into a slot of an instance, at its top-left (a slot with auto layout
+ * places it in its flow), filling the slot's counter-axis when the slot is set to. Refuses containers outside slots and
+ * components that would end up inside themselves. The instance is selected; one undo step.
+ */
+export function insertInstanceInto(editor: Editor, mainId: Id, slotId: Id): Id | null {
+  const main = editor.doc.get(mainId);
+  const slot = editor.doc.get(slotId);
+  if (!main || !isSceneNode(main) || !isMainComponent(main) || !slot || !isSceneNode(slot) || !acceptsLayers(editor.doc, slotId) || wouldCycle(editor.doc, mainId, slotId)) return null;
+  const name = slot.componentPropertyReferences?.slot;
+  const definition = name ? propertyDefinitions(propertyOwner(editor.doc, slotId))[name] : undefined;
+  const flow = slot.type === 'FRAME' && (slot.layoutMode === 'HORIZONTAL' || slot.layoutMode === 'VERTICAL') ? slot.layoutMode : null;
+  const fill = definition?.type === 'SLOT' && definition.fillCounterAxis === true && flow !== null;
+  const id = editor.history.run('Add instance', (tx) => {
+    const created = instantiate(tx, mainId, slotId, keyOnTop(tx.store, slotId), () => editor.ids.next());
+    tx.set(created, 'transform', [1, 0, 0, 1, 0, 0] satisfies SceneNode['transform']);
+    if (fill) tx.set(created, flow === 'HORIZONTAL' ? 'layoutSizingVertical' : 'layoutSizingHorizontal', 'FILL');
+    return created;
+  });
+  editor.state.select([id]);
+  return id;
 }

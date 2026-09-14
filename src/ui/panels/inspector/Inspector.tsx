@@ -62,7 +62,7 @@ import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
 import { canCreateComponent, canCreateMultipleComponents, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
 import { addVariant, canAddVariant, canCombineAsVariants, combineAsVariants, deleteVariantProperty, instanceVariant, moveVariantProperty, renameVariantProperty, renameVariantValue, setInstanceVariant } from '@/editor/commands/variants';
 import { componentSetProperties, defaultVariant, parseVariantName, variantErrors } from '@/core/document/variants';
-import { bindingOwner, boundLayers, exposableInstances, exposedInstances, isInInstance, PROPERTY_FIELD, propertyDefinitions, propertyOwner, type ComponentPropertyType } from '@/core/document/component-properties';
+import { bindingOwner, boundLayers, exposableInstances, exposedInstances, isInInstance, PROPERTY_FIELD, propertyDefinitions, propertyOwner, type ComponentPropertyType, slotLimits } from '@/core/document/component-properties';
 import {
   applyComponentProperty,
   canHaveProperties,
@@ -1130,6 +1130,62 @@ function PreferredComponents({ label, components, preferred, onChange }: { label
   );
 }
 
+/** A slot property on an instance: Modified when its content changed, Add instances, and its Limits as met or not. */
+function InstanceSlotRow({ instanceId, name }: { instanceId: string; name: string }) {
+  const editor = useEditor();
+  const [details, setDetails] = useState(false);
+  const slots = boundLayers(editor.doc, instanceId, name)
+    .filter(({ field }) => field === 'slot')
+    .map(({ id }) => id);
+  const slot = slots[0];
+  const modified = slots.some((id) => ((editor.doc.get(id) as SceneNode | undefined)?.overrides ?? []).includes('slotContent'));
+  const limits = slot === undefined ? null : slotLimits(editor.doc, slot);
+  const layers = (n: number) => `${n} ${n === 1 ? 'layer' : 'layers'}`;
+  const rules = limits
+    ? [
+        ...(limits.minLayers !== undefined ? [{ label: `At least ${layers(limits.minLayers)}`, met: limits.count >= limits.minLayers }] : []),
+        ...(limits.maxLayers !== undefined ? [{ label: `At most ${layers(limits.maxLayers)}`, met: limits.count <= limits.maxLayers }] : []),
+        ...(limits.onlyPreferred ? [{ label: 'Only preferred instances', met: limits.notPreferred.length === 0 }] : []),
+      ]
+    : [];
+  const met = rules.every((rule) => rule.met);
+  return (
+    <div role="group" aria-label={`Slot ${name}`}>
+      <div className={styles.grid2}>
+        <span className={styles.hint}>
+          {name}
+          {modified ? ' · Modified' : ''}
+        </span>
+        {slot !== undefined && (
+          <button type="button" className={gradientStyles.textButton} onClick={() => editor.state.openAddInstances(slot)}>
+            Add instances
+          </button>
+        )}
+      </div>
+      {rules.length > 0 && (
+        // Limits turn orange while one isn't met.
+        <button type="button" className={gradientStyles.textButton} aria-expanded={details} data-met={met} style={met ? undefined : { color: '#f24822' }} onClick={() => setDetails(!details)}>
+          Limits
+        </button>
+      )}
+      {details && (
+        <ul aria-label={`Limits of ${name}`}>
+          {rules.map((rule) => (
+            <li key={rule.label} data-met={rule.met}>
+              {rule.met ? '✓' : '!'} {rule.label}
+            </li>
+          ))}
+        </ul>
+      )}
+      {details && limits && limits.notPreferred.length > 0 && (
+        <button type="button" className={gradientStyles.textButton} onClick={() => editor.state.select([...limits.notPreferred])}>
+          View layers
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** Convert to slot, for a frame nested in a main component: to a new slot property, or to one of the component's slot properties. */
 function ConvertToSlotButton({ layerId }: { layerId: string }) {
   const editor = useEditor();
@@ -1415,16 +1471,7 @@ function InstanceProperties({ instanceId, nested = false }: { instanceId: string
     <>
       {Object.entries(propertyDefinitions(propertyOwner(editor.doc, instanceId))).map(([name, definition]) => {
         const value = instancePropertyValue(editor, instanceId, name);
-        if (definition.type === 'SLOT') {
-          // A slot changed on this instance is tagged Modified.
-          const modified = boundLayers(editor.doc, instanceId, name).some(({ id }) => ((editor.doc.get(id) as SceneNode | undefined)?.overrides ?? []).includes('slotContent'));
-          return (
-            <div key={name} className={styles.grid2}>
-              <span className={styles.hint}>{name}</span>
-              <span className={styles.hint}>{modified ? 'Modified' : 'Slot'}</span>
-            </div>
-          );
-        }
+        if (definition.type === 'SLOT') return <InstanceSlotRow key={name} instanceId={instanceId} name={name} />;
         if (definition.type === 'INSTANCE_SWAP') {
           return <InstanceSwapControl key={name} instanceId={instanceId} name={name} preferred={definition.preferredValues ?? []} value={typeof value === 'string' ? value : definition.defaultValue} />;
         }
