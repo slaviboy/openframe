@@ -202,3 +202,18 @@
 .typeIcon[data-component] {
   color: var(--accent-component);
 }
+
+/* The variable modes set on a layer. */
+.modeTag {
+  flex: none;
+  max-width: 80px;
+  margin-inline-start: var(--space-1);
+  padding: 0 4px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

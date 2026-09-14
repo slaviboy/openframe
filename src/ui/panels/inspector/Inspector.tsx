@@ -125,7 +125,7 @@ const VERTICAL_CONSTRAINTS: readonly (readonly [Constraint, string])[] = [
 ];
 import { ImageSettings, ImageSwatch } from './ImageSettings';
 import { AppliedStyle, LocalStylesSection, StyleButton } from './StylesPanel';
-import { BoundPaint, VariableModeButton, VariableNumberField, VariantVariableButton } from './VariableFields';
+import { BoundPaint, sharedBoundVariable, VariableBindingControl, VariableModeButton, VariableNumberField, VariantVariableButton, VisibilityControl } from './VariableFields';
 import { PatternSettings } from './PatternSettings';
 import { PAINT_BLEND_OPTIONS } from './blend-modes';
 import { ColorControl } from './ColorControl';
@@ -529,6 +529,54 @@ function PageSection() {
   );
 }
 
+/** The Text section for text layers: their text content, or the string or number variable it comes from (Apply variable). */
+function TextContentSection({ texts }: { texts: TextNode[] }) {
+  const editor = useEditor();
+  const [draft, setDraft] = useState<string | null>(null);
+  const contents = new Set(texts.map((n) => n.characters));
+  const current = contents.size === 1 ? [...contents][0]! : undefined;
+  const bound = sharedBoundVariable(editor, texts, 'characters');
+  const commit = () => {
+    if (draft === null) return;
+    const next = draft;
+    setDraft(null);
+    if (next === current) return;
+    // Replacing the text drops the style runs of the old text.
+    editor.history.run('Edit text', (tx) =>
+      texts.forEach((n) => {
+        if ((tx.store.getOrThrow(n.id) as TextNode).characters === next) return;
+        tx.set(n.id, 'characters', next);
+        tx.set(n.id, 'styleRuns', undefined);
+      }),
+    );
+  };
+  return (
+    <Section title="Text" actions={<VariableBindingControl nodes={texts} field="characters" label="Text content" />}>
+      {!bound && (
+        <textarea
+          className={styles.textContent}
+          aria-label="Text content"
+          rows={2}
+          value={draft ?? current ?? ''}
+          placeholder={current === undefined ? 'Mixed' : undefined}
+          spellCheck={false}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Escape') {
+              setDraft(null);
+              e.currentTarget.blur();
+            } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+              e.currentTarget.blur();
+            }
+          }}
+        />
+      )}
+    </Section>
+  );
+}
+
 function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
   const editor = useEditor();
   const move = useGesture('Move');
@@ -743,7 +791,15 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         )}
       </Section>
       {!allSlices && (
-      <Section title="Appearance" styleAction={<VariableModeButton ids={nodes.map((n) => n.id)} />} actions={bindable && single ? <PropertyBinding layerId={single.id} type="BOOLEAN" /> : undefined}>
+      <Section
+        title="Appearance"
+        styleAction={
+          <>
+            <VisibilityControl nodes={nodes} />
+            <VariableModeButton ids={nodes.map((n) => n.id)} />
+          </>
+        }
+        actions={bindable && single ? <PropertyBinding layerId={single.id} type="BOOLEAN" /> : undefined}>
         <div className={styles.grid2}>
           <VariableNumberField
             nodes={nodes}
@@ -890,6 +946,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         )}
       </Section>
       )}
+      {texts.length === nodes.length && <TextContentSection texts={texts} />}
       {texts.length === nodes.length && (
         <Section title="Typography" styleAction={<StyleButton slot="text" ids={texts.map((n) => n.id)} />} applied={<AppliedStyle slot="text" nodes={texts} />} actions={bindable && single?.type === 'TEXT' ? <PropertyBinding layerId={single.id} type="TEXT" /> : undefined}>
           <TypographyFields nodes={texts} />

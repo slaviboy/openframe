@@ -17,10 +17,11 @@
 
 import { useState } from 'react';
 import type { Id } from '@/core/ids/ids';
-import { isSceneNode, type Paint, type SceneNode } from '@/core/schema/document';
+import { isSceneNode, type Paint, type SceneNode, type VariableNode } from '@/core/schema/document';
 import { isVariable, localCollections, resolveForLayer, variableLookup, VARIANT_BINDING_PREFIX, type BindableField, type VariablePaintField } from '@/core/variables/document';
 import type { ResolvedValue } from '@/core/variables/resolve';
 import { bindVariable, bindVariantVariable, setExplicitVariableMode, unbindPaintVariable, unbindVariable, unbindVariantVariable, variablesFor, variantVariablesFor } from '@/editor/commands/variables';
+import type { Editor } from '@/editor/editor';
 import dialogStyles from '../../dialogs/Dialog.module.css';
 import { useEditor } from '../../hooks/useEditor';
 import { IconButton } from '../../primitives/IconButton';
@@ -220,6 +221,72 @@ export function VariantVariableButton({ instanceId, property }: { instanceId: Id
           )}
         </Dialog>
       )}
+    </>
+  );
+}
+
+/** The variable bound to a property on every one of the layers, when they share one. */
+export function sharedBoundVariable(editor: Editor, nodes: readonly SceneNode[], field: BindableField): VariableNode | undefined {
+  const refs = new Set(nodes.map((n) => n.boundVariables?.[field]?.id));
+  const [ref] = refs;
+  const variable = refs.size === 1 && ref !== undefined ? editor.doc.get(ref) : undefined;
+  return isVariable(variable) ? variable : undefined;
+}
+
+/** A property's variable: its name (click to change it) with Detach variable while the layers share one, else Apply variable. */
+export function VariableBindingControl({ nodes, field, label }: { nodes: readonly SceneNode[]; field: BindableField; label: string }) {
+  const editor = useEditor();
+  const [picking, setPicking] = useState(false);
+  const ids = nodes.map((n) => n.id);
+  const variable = sharedBoundVariable(editor, nodes, field);
+  return (
+    <>
+      {variable ? (
+        <span className={styles.boundPaint} role="group" aria-label={`${label} variable`}>
+          <button type="button" className={styles.boundNameButton} title="Change variable" onClick={() => setPicking(true)}>
+            {variable.name}
+          </button>
+          <IconButton icon="detach" label={`Detach variable from ${label.toLowerCase()}`} onClick={() => unbindVariable(editor, ids, field)} />
+        </span>
+      ) : (
+        <IconButton icon="variables" label={`Apply variable to ${label.toLowerCase()}`} onClick={() => setPicking(true)} />
+      )}
+      {picking && <VariablePicker ids={ids} field={field} onClose={() => setPicking(false)} />}
+    </>
+  );
+}
+
+/** Shows or hides the selected layers; right-click to apply a boolean (or "true"/"false" string) variable to their visibility. */
+export function VisibilityControl({ nodes }: { nodes: readonly SceneNode[] }) {
+  const editor = useEditor();
+  const [picking, setPicking] = useState(false);
+  const ids = nodes.map((n) => n.id);
+  const variable = sharedBoundVariable(editor, nodes, 'visible');
+  const hidden = nodes.length > 0 && nodes.every((n) => !n.visible);
+  return (
+    <>
+      {variable ? (
+        <span className={styles.boundPaint} role="group" aria-label="Visibility variable">
+          <button type="button" className={styles.boundNameButton} title="Change variable" onClick={() => setPicking(true)}>
+            {variable.name}
+          </button>
+          <IconButton icon="detach" label="Detach variable from visibility" onClick={() => unbindVariable(editor, ids, 'visible')} />
+        </span>
+      ) : (
+        <span
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setPicking(true);
+          }}
+        >
+          <IconButton
+            icon={hidden ? 'eyeOff' : 'eye'}
+            label={hidden ? 'Show layers' : 'Hide layers'}
+            onClick={() => editor.history.run(hidden ? 'Show layers' : 'Hide layers', (tx) => ids.forEach((id) => tx.set(id, 'visible', hidden)))}
+          />
+        </span>
+      )}
+      {picking && <VariablePicker ids={ids} field="visible" onClose={() => setPicking(false)} />}
     </>
   );
 }

@@ -17,7 +17,7 @@
 
 import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { Id } from '@/core/ids/ids';
-import { isSceneNode } from '@/core/schema/document';
+import { isSceneNode, type SceneNode } from '@/core/schema/document';
 import { moveLayers, type DropPosition } from '@/editor/commands/layers';
 import { Icon } from '../../icons/Icon';
 import { layerIcon } from '../../icons/layer-icons';
@@ -282,6 +282,7 @@ export function LayersPanel() {
                     {node.name}
                   </span>
                 )}
+                <ModeTag node={node} />
                 {/* Kept out of the row's accessible name, which is the layer name. */}
                 {suggested.has(row.id) && <span className={styles.suggested} aria-hidden="true" title="Suggested auto layout" />}
                 <span className={styles.actions} data-persist={node.locked || !node.visible || undefined}>
@@ -347,5 +348,21 @@ function RenameInput({ initial, onDone }: { initial: string; onDone: (value: str
         if (e.key === 'Escape') finish(initial);
       }}
     />
+  );
+}
+
+/** The variable modes set on a layer: the mode's name, or how many modes (listed on hover). Kept out of the row's accessible name. */
+function ModeTag({ node }: { node: SceneNode }) {
+  const editor = useEditor();
+  const tags = Object.entries(node.explicitVariableModes ?? {}).flatMap(([collectionId, modeId]) => {
+    const collection = editor.doc.get(collectionId);
+    const mode = collection?.type === 'VARIABLE_COLLECTION' ? collection.modes.find((m) => m.modeId === modeId) : undefined;
+    return collection && mode ? [{ collection: collection.name, mode: mode.name }] : [];
+  });
+  if (tags.length === 0) return null;
+  return (
+    <span className={styles.modeTag} title={tags.map((t) => `${t.collection}: ${t.mode}`).join('\n')} aria-hidden="true" data-testid="mode-tag">
+      {tags.length === 1 ? tags[0]!.mode : `${tags.length} modes`}
+    </span>
   );
 }

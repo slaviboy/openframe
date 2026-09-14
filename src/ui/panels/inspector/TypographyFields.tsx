@@ -84,7 +84,9 @@ import { useEditor, useEditorState } from '../../hooks/useEditor';
 import { useGesture } from '../../hooks/useGesture';
 import { IconButton } from '../../primitives/IconButton';
 import { NumberField } from '../../primitives/NumberField';
-import { VariableNumberField } from './VariableFields';
+import type { BindableField } from '@/core/variables/document';
+import { unbindVariable } from '@/editor/commands/variables';
+import { sharedBoundVariable, VariableBindingControl, VariableNumberField, VariablePicker } from './VariableFields';
 import primitives from '../../primitives/primitives.module.css';
 import styles from './Inspector.module.css';
 
@@ -186,10 +188,22 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
   const hAlign = shared(nodes, (n) => n.textAlignHorizontal);
   const vAlign = shared(nodes, (n) => n.textAlignVertical);
   const run = (label: string, apply: (tx: Transaction, node: TextNode) => void) => editor.history.run(label, (tx) => nodes.forEach((n) => apply(tx, n)));
+  // The variable picker for line height or letter spacing (= in the field).
+  const [picking, setPicking] = useState<BindableField | null>(null);
+  const boundTo = (field: BindableField) => {
+    const variable = sharedBoundVariable(editor, nodes, field);
+    return variable ? { name: variable.name, onDetach: () => unbindVariable(editor, nodes.map((n) => n.id), field) } : undefined;
+  };
 
   return (
     <>
       <FamilyControl nodes={nodes} range={range} family={family} available={available} />
+      {/* Labelled so they don't share a name with the Font family and Font style controls. */}
+      <div className={styles.buttonRow}>
+        <VariableBindingControl nodes={nodes} field="fontFamily" label="Typeface" />
+        <VariableBindingControl nodes={nodes} field="fontStyle" label="Weight or style" />
+      </div>
+      {picking && <VariablePicker ids={nodes.map((n) => n.id)} field={picking} onClose={() => setPicking(null)} />}
       <div className={styles.grid2}>
         <select className={primitives.select} aria-label="Font style" value={style ?? ''} onChange={(e) => run('Change font style', (tx, n) => setFontStyle(tx, n, e.target.value, range))}>
           {(style === undefined || !styleOptions.includes(style)) && <option value={style ?? ''}>{style ?? 'Mixed'}</option>}
@@ -217,6 +231,8 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
         <ValueField
           label="Line height"
           short="↕"
+          variable={boundTo('lineHeight')}
+          onApplyVariable={() => setPicking('lineHeight')}
           testId="field-line-height"
           text={lineHeight ? formatLineHeight(lineHeight) : ''}
           parse={parseLineHeight}
@@ -225,6 +241,8 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
         <ValueField
           label="Letter spacing"
           short="|A|"
+          variable={boundTo('letterSpacing')}
+          onApplyVariable={() => setPicking('letterSpacing')}
           testId="field-letter-spacing"
           text={letterSpacing ? formatLetterSpacing(letterSpacing) : ''}
           parse={(input) => parseLetterSpacing(input, letterSpacings[0]?.unit ?? 'PERCENT')}
@@ -330,7 +348,9 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
             ))}
           </select>
           <div className={styles.grid2}>
-            <NumberField
+            <VariableNumberField
+              nodes={nodes}
+              field="paragraphSpacing"
               label="¶↕"
               ariaLabel="Paragraph spacing"
               testId="field-paragraph-spacing"
@@ -339,7 +359,9 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
               value={paragraphSpacing}
               onChange={(v) => run('Change paragraph spacing', (tx, n) => setParagraphSpacing(tx, n, v))}
             />
-            <NumberField
+            <VariableNumberField
+              nodes={nodes}
+              field="paragraphIndent"
               label="¶→"
               ariaLabel="Paragraph indent"
               testId="field-paragraph-indent"
@@ -562,7 +584,27 @@ function FamilyControl({ nodes, range, family, available }: { nodes: readonly Te
 }
 
 /** A text field whose value is parsed on Enter or blur (Esc restores it); empty while mixed. */
-function ValueField<T>({ label, short, testId, text, parse, onCommit }: { label: string; short: string; testId: string; text: string; parse: (input: string) => T | null; onCommit: (value: T) => void }) {
+function ValueField<T>({
+  label,
+  short,
+  testId,
+  text,
+  parse,
+  onCommit,
+  variable,
+  onApplyVariable,
+}: {
+  label: string;
+  short: string;
+  testId: string;
+  text: string;
+  parse: (input: string) => T | null;
+  onCommit: (value: T) => void;
+  /** The variable bound to the property: the field shows its name, with Detach variable. */
+  variable?: { readonly name: string; readonly onDetach: () => void } | undefined;
+  /** Opens the variable picker: typing = in the field, or clicking a bound variable's name. */
+  onApplyVariable?: (() => void) | undefined;
+}) {
   const [draft, setDraft] = useState<string | null>(null);
   const commit = () => {
     if (draft === null) return;
@@ -570,6 +612,17 @@ function ValueField<T>({ label, short, testId, text, parse, onCommit }: { label:
     setDraft(null);
     if (parsed !== null) onCommit(parsed);
   };
+  if (variable) {
+    return (
+      <span className={`${styles.valueField} ${styles.boundPaint}`} role="group" aria-label={`${label} variable`}>
+        <span aria-hidden="true">{short}</span>
+        <button type="button" className={styles.boundNameButton} title="Change variable" onClick={onApplyVariable}>
+          {variable.name}
+        </button>
+        <IconButton icon="detach" label={`Detach variable from ${label.toLowerCase()}`} onClick={variable.onDetach} />
+      </span>
+    );
+  }
   return (
     <label className={styles.valueField} title={label}>
       <span aria-hidden="true">{short}</span>
@@ -583,6 +636,12 @@ function ValueField<T>({ label, short, testId, text, parse, onCommit }: { label:
         onBlur={commit}
         onKeyDown={(e) => {
           e.stopPropagation();
+          if (e.key === '=' && onApplyVariable) {
+            e.preventDefault();
+            setDraft(null);
+            onApplyVariable();
+            return;
+          }
           if (e.key === 'Enter') e.currentTarget.blur();
           if (e.key === 'Escape') {
             setDraft(null);
