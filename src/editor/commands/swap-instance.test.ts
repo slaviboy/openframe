@@ -22,7 +22,7 @@ import { IdGenerator } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { BUILTIN_COMMANDS } from './builtin';
-import { instanceToSwap, swapInstanceFor } from './swap-instance';
+import { instanceToSwap, relatedComponents, swapInstanceFor } from './swap-instance';
 
 let editor: Editor;
 let first: string;
@@ -103,5 +103,12 @@ describe('instance to swap on drop', () => {
     });
     expect(instanceToSwap(editor, { x: 420, y: 20 }, false)).toBeNull();
     expect(instanceToSwap(editor, { x: 420, y: 20 }, true)).toBe(nested);
+  });
+});
+
+describe('related components', () => {
+  test('are the main components next to the instance\'s main component, for the right-click Swap instance menu', () => {
+    expect(relatedComponents(editor, instance).map((component) => component.id)).toEqual([first, second]);
+    expect(relatedComponents(editor, first)).toEqual([]);
   });
 });

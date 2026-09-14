@@ -20,6 +20,7 @@ import type { Editor } from '@/editor/editor';
 import { formatShortcut } from '@/editor/keymap/keymap';
 import { IS_MAC } from '../keyboard/keyboard-controller';
 import type { MenuEntry } from '../primitives/Menu';
+import { relatedComponents, swapInstanceFor } from '@/editor/commands/swap-instance';
 
 /** A menu item bound to a registered command; null when the command is not registered. */
 export function commandItem(editor: Editor, id: string): MenuEntry | null {
@@ -108,6 +109,35 @@ export function mainMenuEntries(editor: Editor): MenuEntry[] {
 
 /** Context menu for selected layers (canvas and layers panel). */
 export function objectMenuEntries(editor: Editor): MenuEntry[] {
+  return [...objectCommandEntries(editor), ...swapInstanceEntries(editor)];
+}
+
+/** "Swap instance" for a single selected instance: the related components, with its own checked. */
+function swapInstanceEntries(editor: Editor): MenuEntry[] {
+  const [id, ...rest] = editor.selection;
+  const instance = id !== undefined && rest.length === 0 ? editor.doc.get(id) : undefined;
+  if (instance?.type !== 'FRAME' || !instance.instance) return [];
+  const mainId = instance.instance.mainId;
+  const related = relatedComponents(editor, instance.id);
+  if (!related.some((component) => component.id !== mainId)) return [];
+  return [
+    { kind: 'separator', id: 'swap-instance-separator' },
+    {
+      kind: 'submenu',
+      id: 'swap-instance',
+      label: 'Swap instance',
+      entries: related.map((component): MenuEntry => ({
+        kind: 'item',
+        id: `swap-${component.id}`,
+        label: component.name,
+        checked: component.id === mainId,
+        onSelect: () => void swapInstanceFor(editor, instance.id, component.id),
+      })),
+    },
+  ];
+}
+
+function objectCommandEntries(editor: Editor): MenuEntry[] {
   return commandSections(editor, [
     ['edit.copy', 'edit.cut', 'edit.paste', 'edit.pasteReplace'],
     ['edit.copyProperties', 'edit.pasteProperties'],

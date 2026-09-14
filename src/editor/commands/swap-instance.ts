@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import { isInstance, swapInstance } from '@/core/document/instances';
+import { isInstance, isMainComponent, swapInstance } from '@/core/document/instances';
 import type { Id } from '@/core/ids/ids';
 import type { Vec2 } from '@/core/math/vec';
 import { hitTestDeepest } from '@/core/scene/hit-test';
-import { isSceneNode } from '@/core/schema/document';
+import { isSceneNode, type SceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 
 /**
@@ -47,4 +47,19 @@ export function instanceToSwap(editor: Editor, world: Vec2, nested: boolean): Id
     if (nested || node.parent.id === editor.pageId) return id;
   }
   return null;
+}
+
+/**
+ * The related components an instance can be swapped to from the right-click menu: the main components in the
+ * same frame (or page, or component set) as its main component, in layer order.
+ */
+export function relatedComponents(editor: Editor, instanceId: Id): SceneNode[] {
+  const instance = editor.doc.get(instanceId) as SceneNode | undefined;
+  if (instance?.type !== 'FRAME' || !instance.instance) return [];
+  const parent = editor.doc.parentOf(instance.instance.mainId);
+  if (parent === null) return [];
+  return editor.doc
+    .children(parent)
+    .map((id) => editor.doc.get(id) as SceneNode | undefined)
+    .filter((node): node is SceneNode => node !== undefined && isMainComponent(node));
 }

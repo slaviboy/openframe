@@ -267,7 +267,7 @@ export function LayersPanel() {
                 >
                   <Icon name={row.expanded ? 'caretDown' : 'caretRight'} size={16} />
                 </button>
-                <Icon name={layerIcon(node)} size={16} className={styles.typeIcon} />
+                <Icon name={layerIcon(node)} size={16} className={styles.typeIcon} data-component={layerIcon(node) === 'component' || undefined} />
                 {renamingId === row.id ? (
                   <RenameInput
                     initial={node.name}

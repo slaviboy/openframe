@@ -129,7 +129,7 @@ export function FindPanel() {
           return (
             <li key={result.id}>
               <button type="button" className={styles.result} aria-current={index === active || undefined} onClick={() => choose(result)}>
-                <Icon name={layerIcon(node)} size={16} />
+                <Icon name={layerIcon(node)} size={16} style={layerIcon(node) === 'component' ? { color: 'var(--accent-component)' } : undefined} />
                 <span className={styles.name}>{node.name}</span>
                 {page && <span className={styles.page}>{page.name}</span>}
               </button>

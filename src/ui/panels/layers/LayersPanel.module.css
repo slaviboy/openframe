@@ -197,3 +197,8 @@
   border-radius: 50%;
   background: var(--color-accent, #0d99ff);
 }
+
+/* Components are identified by the purple Component icon. */
+.typeIcon[data-component] {
+  color: var(--accent-component);
+}
