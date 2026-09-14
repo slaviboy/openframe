@@ -125,6 +125,10 @@ export type PresentedItem =
       readonly alpha: number;
       /** Smart animate: the frame is drawn `progress` of the way from the frame left, its matching layers blended. */
       readonly smart?: { readonly from: Id; readonly progress: number };
+      /** Animate matching layers: the frame is drawn without its layers that match layers of this frame (they animate on their own). */
+      readonly without?: Id;
+      /** Animate matching layers: only the frame's layers matching the frame left, blended `progress` of the way from them. */
+      readonly matched?: { readonly from: Id; readonly progress: number };
     }
   /** An overlay's background, over the screen. */
   | { readonly kind: 'dim'; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly color: Color }
@@ -173,9 +177,9 @@ export function composeScene(store: DocumentStore, state: PlayerState, viewport:
   const y = fits ? top : -scrollY * scale;
   const inView = { width, height: fits ? height : area.height };
   const items: PresentedItem[] = [];
-  const place = (frameId: Id, left: number, upper: number, offset: LayerOffset, smart?: { from: Id; progress: number }) => {
+  const place = (frameId: Id, left: number, upper: number, offset: LayerOffset, smart?: { from: Id; progress: number }, layers?: { without: Id } | { matched: { from: Id; progress: number } }) => {
     const size = sizeOf(store, frameId);
-    items.push({ kind: 'frame', frameId, x: left + offset.dx, y: upper + offset.dy, width: size.width * scale, height: size.height * scale, scale, alpha: offset.alpha, ...(smart ? { smart } : {}) });
+    items.push({ kind: 'frame', frameId, x: left + offset.dx, y: upper + offset.dy, width: size.width * scale, height: size.height * scale, scale, alpha: offset.alpha, ...(smart ? { smart } : {}), ...layers });
   };
   const smartAnimates = (playingTransition: PlayingTransition, from: Id, to: Id) => playingTransition.effect.transition.type === 'SMART_ANIMATE' && canSmartAnimate(store, from, to);
 
@@ -188,8 +192,11 @@ export function composeScene(store: DocumentStore, state: PlayerState, viewport:
     const fromSize = sizeOf(store, from);
     const fromLeft = (area.width - fromSize.width * scale) / 2;
     const fromTop = fromSize.height * scale <= area.height ? (area.height - fromSize.height * scale) / 2 : 0;
-    const drawFrom = () => place(from, fromLeft, fromTop, offsets.from);
-    const drawTo = () => place(state.frameId, x, y, offsets.to);
+    const transition = screenTransition.effect.transition;
+    // Animate matching layers: the frames move without their matching layers, which smart animate in place above them.
+    const matching = 'matchLayers' in transition && transition.matchLayers && canSmartAnimate(store, from, state.frameId);
+    const drawFrom = () => place(from, fromLeft, fromTop, offsets.from, undefined, matching ? { without: state.frameId } : undefined);
+    const drawTo = () => place(state.frameId, x, y, offsets.to, undefined, matching ? { without: from } : undefined);
     if (offsets.toOnTop) {
       drawFrom();
       drawTo();
@@ -197,6 +204,7 @@ export function composeScene(store: DocumentStore, state: PlayerState, viewport:
       drawTo();
       drawFrom();
     }
+    if (matching) place(state.frameId, x, y, STILL, undefined, { matched: { from, progress: screenTransition.progress } });
   } else {
     place(state.frameId, x, y, STILL);
   }

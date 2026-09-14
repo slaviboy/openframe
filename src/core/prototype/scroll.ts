@@ -20,6 +20,7 @@ import { ROOT_ID, type Id } from '../ids/ids';
 import type { Vec2 } from '../math/vec';
 import type { SceneIndex } from '../scene/scene-index';
 import type { Node, SceneNode } from '../schema/document';
+import { matchLayers } from './smart-animate';
 
 export type OverflowDirection = NonNullable<SceneNode['overflowDirection']>;
 export type ScrollBehavior = NonNullable<SceneNode['scrollBehavior']>;
@@ -158,4 +159,31 @@ function stuckInParent(store: DocumentStore, frameId: Id, node: SceneNode, offse
     return { ...node, transform: [a, b, c, d, e, Math.min(stuck, Math.max(f, parent.size.height - node.size.height))] } as SceneNode;
   }
   return node;
+}
+
+/** The part of a top-level frame's name that matches for state sharing: the prefix before its last slash, or the whole name. */
+const sharedName = (name: string): string => {
+  const slash = name.lastIndexOf('/');
+  return (slash < 0 ? name : name.slice(0, slash)).trim();
+};
+
+/** Whether top-level frames with these names share state: identical names, or a common prefix before a slash ("Checkout / Empty" and "Checkout / Complete"). */
+export const namesShareState = (a: string, b: string): boolean => a.trim() === b.trim() || (a.includes('/') && b.includes('/') && sharedName(a) === sharedName(b));
+
+/**
+ * State sharing of scroll position: navigating between matching top-level frames (in the same page or section), the
+ * destination's scrolling frames take the scroll offsets of their matching layers in the frame left, kept within their
+ * own limits. The offsets to set, by the destination's layers; empty when the frames don't match.
+ */
+export function sharedScrollOffsets(store: DocumentStore, index: SceneIndex, fromFrame: Id, toFrame: Id, offsets: ReadonlyMap<Id, Vec2>): Map<Id, Vec2> {
+  const out = new Map<Id, Vec2>();
+  const from = scene(store, fromFrame);
+  const to = scene(store, toFrame);
+  if (!from || !to || fromFrame === toFrame || store.parentOf(fromFrame) !== store.parentOf(toFrame) || !namesShareState(from.name, to.name)) return out;
+  for (const [destination, source] of matchLayers(store, fromFrame, toFrame)) {
+    const offset = offsets.get(source);
+    if (!offset || overflowOf(scene(store, destination)) === 'NONE') continue;
+    out.set(destination, clampScroll(offset, scrollLimits(store, index, destination)));
+  }
+  return out;
 }

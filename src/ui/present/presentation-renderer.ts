@@ -21,7 +21,7 @@ import type { Id } from '@/core/ids/ids';
 import type { Rect } from '@/core/math/rect';
 import type { DocumentStore } from '@/core/document/store';
 import type { PresentedScene } from '@/core/prototype/presentation';
-import { smartAnimateStore } from '@/core/prototype/smart-animate';
+import { matchedLayersStore, smartAnimateStore, withoutMatchingLayersStore } from '@/core/prototype/smart-animate';
 import type { RuntimeDocument } from '@/editor/prototype-runtime';
 import { topLevelFrame } from '@/core/prototype/reactions';
 import { scrolledFrameStore } from '@/core/prototype/scroll';
@@ -202,11 +202,15 @@ export class PresentationRenderer {
 
   /** The destination of a smart animate transition, `progress` of the way from the frame left (not cached). */
   private smartFrameImage(fromFrame: Id, toFrame: Id, progress: number, scale: number): CkImage | null {
+    return this.storeFrameImage(smartAnimateStore(this.doc, fromFrame, toFrame, progress), toFrame, scale);
+  }
+
+  /** A frame of a scratch document holding it (not cached). */
+  private storeFrameImage(store: DocumentStore, frameId: Id, scale: number): CkImage | null {
     if (!this.ck || !this.renderer) return null;
-    const store = smartAnimateStore(this.doc, fromFrame, toFrame, progress);
     const index = new SceneIndex(store);
     index.ensure(this.editor.pageId);
-    return this.renderFrame(store, index, toFrame, scale);
+    return this.renderFrame(store, index, frameId, scale);
   }
 
   draw(scene: PresentedScene | null, background: Color, hints: readonly Rect[], scroll: ReadonlyMap<Id, Vec2> = new Map()): void {
@@ -245,8 +249,14 @@ export class PresentationRenderer {
         continue;
       }
       if (item.alpha <= 0) continue;
-      // A smart animate frame changes every tick, so it is drawn fresh rather than cached.
-      const live = item.smart ? this.smartFrameImage(item.smart.from, item.frameId, item.smart.progress, item.scale) : null;
+      // Smart animate and Animate matching layers frames are drawn fresh rather than cached.
+      const live = item.smart
+        ? this.smartFrameImage(item.smart.from, item.frameId, item.smart.progress, item.scale)
+        : item.matched
+          ? this.storeFrameImage(matchedLayersStore(this.doc, item.matched.from, item.frameId, item.matched.progress), item.frameId, item.scale)
+          : item.without
+            ? this.storeFrameImage(withoutMatchingLayersStore(this.doc, item.frameId, item.without), item.frameId, item.scale)
+            : null;
       const image = live ?? this.scrolledFrameImage(item.frameId, item.scale, scroll) ?? this.frameImage(item.frameId, item.scale);
       if (!image) continue;
       paint.setColor(ck.Color4f(0, 0, 0, Math.min(1, item.alpha)));

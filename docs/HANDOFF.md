@@ -100,14 +100,24 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - `stuckInParent` in scroll.ts keeps nested sticky layers within their parent
     - the overlay "badge" was dropped: the docs mirror doesn't describe one
 
+  - Shared scroll position and Animate matching layers (the commit after touch scrolling):
+    - matching frames share scroll position (`sharedScrollOffsets` in scroll.ts)
+    - matching layers animate on moving transitions (`matchedLayersStore` / `withoutMatchingLayersStore` in smart-animate.ts, and `without` / `matched` frame items)
+
 ## In progress (uncommitted)
 
-1. **State memorization of scroll position; Animate matching layers on the moving transitions.**
+1. **Video fills with video triggers and actions (M10 video row).**
 
 ## Next (M10, in order)
 
-
-2. Video fills with video triggers and actions (M10 video row).
-3. Accessible prototypes, manual overlay positions, rich-text flow descriptions, gamepad triggers.
+1. Accessible prototypes, manual overlay positions, rich-text flow descriptions, gamepad triggers.
+2. The smaller pending sub-items in the M10 rows:
+   - reset component state
+   - copy/paste interactions
+   - marquee-selecting connections
+   - responsive scaling
+   - reordering actions and else-if
+   - the fixed layer rules with Animate matching layers
+   - scroll bars
 
 **Stop after M10.** When every M10 row is finished and committed, stop and report to the user. Don't start M11 until the user says to continue. After that, M11–M15 follow `docs/FEATURE_MATRIX.md` (the rows marked Planned or In progress) in milestone order.

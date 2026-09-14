@@ -22,7 +22,7 @@ import { History } from '../history/history';
 import { IdGenerator } from '../ids/ids';
 import { SceneIndex } from '../scene/scene-index';
 import type { SceneNode } from '../schema/document';
-import { clampScroll, needsBiggerContent, scrolledFrameStore, scrollFrameOf, scrollLimits, wheelScrollTarget } from './scroll';
+import { clampScroll, namesShareState, needsBiggerContent, scrolledFrameStore, scrollFrameOf, scrollLimits, sharedScrollOffsets, wheelScrollTarget } from './scroll';
 
 let store: DocumentStore;
 let index: SceneIndex;
@@ -44,6 +44,11 @@ beforeEach(() => {
     // A sticky title nested in a card.
     tx.create(makeFrame(shape('card', 'screen', 0, 80, 100, 40)));
     tx.create({ ...makeRectangle(shape('title', 'card', 0, 0, 100, 10)), scrollBehavior: 'STICKY_SCROLLS' });
+    // A frame with the same name, and matching scrolling layers: its scroll positions are shared.
+    tx.create({ ...makeFrame(shape('screen2', page, 600, 0, 100, 100)), name: 'screen', overflowDirection: 'VERTICAL' });
+    tx.create({ ...makeRectangle(shape('long2', 'screen2', 0, 150, 50, 20)), name: 'long' });
+    tx.create({ ...makeFrame(shape('slider2', 'screen2', 0, 40, 60, 30)), name: 'slider', overflowDirection: 'HORIZONTAL' });
+    tx.create({ ...makeRectangle(shape('slide2', 'slider2', 50, 0, 50, 30)), name: 'slide' });
   });
   index = new SceneIndex(store);
   index.ensure(page);
@@ -78,6 +83,25 @@ describe('prototype scrolling', () => {
     expect(y('slider')).toBe(-10);
     expect(scrolled.children('screen').at(-1)).toBe('bar');
     expect(scrolled.has('empty')).toBe(false);
+  });
+
+  test('matching frames share scroll positions: identical names or a common prefix before a slash', () => {
+    expect(namesShareState('Checkout / Empty', 'Checkout / Complete')).toBe(true);
+    expect(namesShareState('Home', 'Home')).toBe(true);
+    expect(namesShareState('Home', 'Cart')).toBe(false);
+    expect(namesShareState('A / B / 1', 'A / C / 1')).toBe(false);
+    const offsets = new Map([
+      ['screen', { x: 0, y: 80 }],
+      ['slider', { x: 30, y: 0 }],
+    ]);
+    // Kept within the destination's own limits (its content is shorter).
+    expect(sharedScrollOffsets(store, index, 'screen', 'screen2', offsets)).toEqual(
+      new Map([
+        ['screen2', { x: 0, y: 70 }],
+        ['slider2', { x: 30, y: 0 }],
+      ]),
+    );
+    expect(sharedScrollOffsets(store, index, 'screen', 'empty', offsets).size).toBe(0);
   });
 
   test('a nested sticky layer sticks at the frame top within its parent, then scrolls away with it', () => {

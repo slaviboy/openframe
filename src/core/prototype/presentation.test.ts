@@ -21,9 +21,10 @@ import type { DocumentStore } from '../document/store';
 import { History } from '../history/history';
 import { IdGenerator } from '../ids/ids';
 import { SceneIndex } from '../scene/scene-index';
-import type { PrototypeTransition } from '../schema/document';
+import type { PrototypeTransition, SceneNode } from '../schema/document';
 import type { PlayerState } from './player';
 import { composeScene, frameAtPoint, layerRects, maxScrollY, screenScale, scrollOffsetOf, transitionOffsets } from './presentation';
+import { matchedLayersStore, withoutMatchingLayersStore } from './smart-animate';
 
 let store: DocumentStore;
 let index: SceneIndex;
@@ -41,6 +42,9 @@ beforeEach(() => {
     tx.create(makeFrame(shape('home', page, 100, 100, 400, 300)));
     tx.create(makeRectangle(shape('button', 'home', 20, 40, 100, 50)));
     tx.create(makeFrame(shape('about', page, 600, 100, 400, 300)));
+    // A layer matching the button in home (the same name in the same place).
+    tx.create({ ...makeRectangle(shape('about-button', 'about', 220, 40, 100, 50)), name: 'button' });
+    tx.create(makeRectangle(shape('about-text', 'about', 20, 200, 100, 20)));
     tx.create({ ...makeFrame(shape('menu', page, 0, 600, 200, 100)), overlay: { position: 'BOTTOM_CENTER', closeOnClickOutside: true, background: { r: 0, g: 0, b: 0, a: 0.5 } } });
     tx.create(makeFrame(shape('long', page, 0, 900, 400, 2000)));
   });
@@ -114,5 +118,22 @@ describe('presentation layout', () => {
     const effect = { type: 'transition', from: 'home', to: 'about', overlay: false, transition: { type: 'SMART_ANIMATE', easing: { type: 'LINEAR' }, duration: 300 } } as const;
     const scene = composeScene(store, state({ frameId: 'about' }), { width: 800, height: 600 }, 'FIT', 0, { effect, progress: 0.5 });
     expect(scene.items).toEqual([{ kind: 'frame', frameId: 'about', x: 200, y: 150, width: 400, height: 300, scale: 1, alpha: 1, smart: { from: 'home', progress: 0.5 } }]);
+  });
+
+  test('Animate matching layers: the frames move without their matching layers, which smart animate still above them', () => {
+    const effect = { type: 'transition', from: 'home', to: 'about', overlay: false, transition: { ...push, matchLayers: true } } as const;
+    const scene = composeScene(store, state({ frameId: 'about' }), { width: 800, height: 600 }, 'FIT', 0, { effect, progress: 0.5 });
+    expect(scene.items).toEqual([
+      { kind: 'frame', frameId: 'home', x: 0, y: 150, width: 400, height: 300, scale: 1, alpha: 1, without: 'about' },
+      { kind: 'frame', frameId: 'about', x: 400, y: 150, width: 400, height: 300, scale: 1, alpha: 1, without: 'home' },
+      { kind: 'frame', frameId: 'about', x: 200, y: 150, width: 400, height: 300, scale: 1, alpha: 1, matched: { from: 'home', progress: 0.5 } },
+    ]);
+    // The moving frames leave out the matching button; the still layer holds only it, halfway there, on a frame without fill.
+    expect(withoutMatchingLayersStore(store, 'home', 'about').has('button')).toBe(false);
+    expect(withoutMatchingLayersStore(store, 'about', 'home').has('about-text')).toBe(true);
+    const matched = matchedLayersStore(store, 'home', 'about', 0.5);
+    expect(matched.has('about-text')).toBe(false);
+    expect((matched.getOrThrow('about-button') as SceneNode).transform[4]).toBe(120);
+    expect((matched.getOrThrow('about') as SceneNode & { fills: unknown[] }).fills).toEqual([]);
   });
 });

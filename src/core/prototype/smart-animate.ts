@@ -180,3 +180,51 @@ export function smartAnimateStore(store: DocumentStore, fromFrame: Id, toFrame: 
   visitSource(fromFrame);
   return new DocumentStore(store.meta, nodes);
 }
+
+/** The document root and the page and sections a frame is in, top down. */
+function ancestorNodes(store: DocumentStore, frameId: Id): Node[] {
+  const nodes: Node[] = [];
+  for (let id = store.parentOf(frameId); id !== null && id !== ROOT_ID; id = store.parentOf(id)) nodes.unshift(store.getOrThrow(id));
+  nodes.unshift(store.getOrThrow(ROOT_ID));
+  return nodes;
+}
+
+/**
+ * Animate matching layers on a moving transition: only the destination's layers that match layers of the frame left,
+ * blended `progress` of the way from them (their children only in the destination dissolving in), in a frame without
+ * its fill, strokes or effects. Drawn still over the moving frames, which leave those layers out.
+ */
+export function matchedLayersStore(store: DocumentStore, fromFrame: Id, toFrame: Id, progress: number): DocumentStore {
+  const matches = matchLayers(store, fromFrame, toFrame);
+  const fade = Math.min(1, Math.max(0, progress));
+  const frame = scene(store, toFrame)!;
+  const nodes = ancestorNodes(store, toFrame);
+  nodes.push({ ...frame, fills: [], strokes: [], effects: [] } as unknown as SceneNode);
+  // A layer matches only when its parent does (its path includes the parent's), so unmatched subtrees are left out whole.
+  const add = (id: Id, parentMatched: boolean) => {
+    const node = scene(store, id);
+    if (!node) return;
+    const source = matches.get(id);
+    const sourceNode = source ? scene(store, source) : undefined;
+    if (!sourceNode && !parentMatched) return;
+    nodes.push(sourceNode ? blendLayer(sourceNode, node, progress) : { ...node, opacity: node.opacity * fade });
+    for (const child of store.children(id)) add(child, true);
+  };
+  for (const child of store.children(toFrame)) add(child, false);
+  return new DocumentStore(store.meta, nodes);
+}
+
+/** A frame without its layers that match layers of another frame (those animate on their own), as a document holding only that frame. */
+export function withoutMatchingLayersStore(store: DocumentStore, frameId: Id, otherFrameId: Id): DocumentStore {
+  const matched = new Set(matchLayers(store, otherFrameId, frameId).keys());
+  matched.delete(frameId);
+  const nodes = ancestorNodes(store, frameId);
+  const visit = (id: Id) => {
+    const node = scene(store, id);
+    if (!node || matched.has(id)) return;
+    nodes.push(node);
+    store.children(id).forEach(visit);
+  };
+  visit(frameId);
+  return new DocumentStore(store.meta, nodes);
+}

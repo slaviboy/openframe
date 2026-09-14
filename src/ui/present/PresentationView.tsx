@@ -54,7 +54,7 @@ function screenScrollLimit(state: { readonly viewport: Size; readonly scaling: S
   return Math.max(0, size.height * scale - area.height) / scale;
 }
 import { toEasing, topLevelFrame, transitionDurationMs } from '@/core/prototype/reactions';
-import { clampScroll, scrolledFrameStore, scrollFrameOf, scrollLimits, wheelScrollTarget } from '@/core/prototype/scroll';
+import { clampScroll, scrolledFrameStore, scrollFrameOf, scrollLimits, sharedScrollOffsets, wheelScrollTarget } from '@/core/prototype/scroll';
 import type { Vec2 } from '@/core/math/vec';
 import { SceneIndex } from '@/core/scene/scene-index';
 import { buildRuntime, type RuntimeDocument } from '@/editor/prototype-runtime';
@@ -206,6 +206,9 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
           }
           if (effect.resetScroll) {
             for (const id of [...state.frameScroll.keys()]) if (topLevelFrame(doc, id) === effect.to) state.frameScroll.delete(id);
+          } else if (effect.from && !effect.overlay) {
+            // State sharing: a matching destination takes the scroll positions of the frame left.
+            for (const [id, offset] of sharedScrollOffsets(doc, sceneIndex, effect.from, effect.to, state.frameScroll)) state.frameScroll.set(id, offset);
           }
         } else if (effect.type === 'changeTo') {
           // Interactive components: the instance switches variant in the prototype's copy of the document (the file isn't changed).
