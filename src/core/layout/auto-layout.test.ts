@@ -22,7 +22,7 @@ import type { TextLayoutService } from '../text/text-layout';
 import { History } from '../history/history';
 import { IdGenerator } from '../ids/ids';
 import type { FrameNode, SceneNode } from '../schema/document';
-import { applyAutoLayout, applyGridLayout, clearAutoLayout, clearGridLayout, createAutoLayoutFinalizer, setGridAutoPositioning, stackingOrder } from './auto-layout';
+import { applyAutoLayout, applyGridLayout, clearAutoLayout, clearGridLayout, createAutoLayoutFinalizer, gridTracks, setGridAutoPositioning, stackingOrder } from './auto-layout';
 
 function setup() {
   const ids = new IdGenerator('a');
@@ -238,5 +238,35 @@ describe('auto layout', () => {
     expect(node(text).size).toEqual({ width: 40, height: 20 });
     expect(node(rect).transform[5]).toBe(15);
     expect(node(frame).size.height).toBe(25);
+  });
+
+  test('grid tracks report the laid-out columns and rows', () => {
+    const { ids, store, history, page } = setup();
+    const [frame, a, b] = [ids.next(), ids.next(), ids.next()];
+    history.run('create', (tx) => {
+      tx.create({
+        ...makeFrame({ id: frame, parent: { id: page, key: keyOnTop(store, page) }, name: 'G', x: 0, y: 0, width: 10, height: 10 }),
+        layoutMode: 'GRID',
+        layoutSizingHorizontal: 'HUG',
+        layoutSizingVertical: 'HUG',
+        paddingLeft: 5,
+        paddingTop: 5,
+        gridColumnGap: 10,
+        gridColumnSizes: [
+          { type: 'FIXED', value: 100 },
+          { type: 'HUG' },
+        ],
+      });
+      tx.create(makeRectangle({ id: a, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'a', x: 0, y: 0, width: 40, height: 30 }));
+      tx.create(makeRectangle({ id: b, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'b', x: 0, y: 0, width: 50, height: 20 }));
+    });
+    expect(gridTracks(store, frame)).toEqual({
+      columns: [
+        { start: 5, length: 100 },
+        { start: 115, length: 50 },
+      ],
+      rows: [{ start: 5, length: 30 }],
+    });
+    expect(gridTracks(store, a)).toBeNull();
   });
 });

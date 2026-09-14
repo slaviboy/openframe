@@ -35,7 +35,9 @@ import { hitTestDeepest, isArtboardWithChildren, isInteractive, marqueeSelect, s
 import { snapEqualGaps, type GapIndicator } from '@/core/scene/equal-gaps';
 import { measureBetween, type MeasureLine } from '@/core/scene/measure';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
-import { isSceneNode, type FrameNode, type SceneNode } from '@/core/schema/document';
+import { isSceneNode, type FrameNode, type GridTrack, type SceneNode } from '@/core/schema/document';
+import { hitGridTrackEdge } from '../interactions/grid-tracks';
+import { resizedTrack } from '@/core/layout/grid-track-handles';
 import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
 import { flowInsertionIndex, flowInsertionLine, moveToFlowIndex } from '@/core/layout/flow-order';
 import { beginCrop } from '../interactions/crop';
@@ -161,6 +163,18 @@ type Gesture =
       startPadding: Padding;
       startGap: number;
       toWorld: Matrix;
+    }
+  /** Dragging a grid track's edge: the track becomes fixed at its starting length plus the drag. */
+  | {
+      kind: 'grid-track';
+      tx: Transaction;
+      down: PointerInfo;
+      last: PointerInfo;
+      frameId: Id;
+      axis: 'column' | 'row';
+      index: number;
+      startLength: number;
+      toWorld: Matrix;
     };
 
 /**
@@ -260,6 +274,7 @@ export class MoveTool implements Tool {
     if (this.gesture.kind === 'resize') return handleCursor(this.gesture.frame, this.gesture.handle);
     if (this.gesture.kind === 'rotate') return rotateCursor(this.gesture.frame, this.gesture.corner);
     if (this.gesture.kind === 'line-end') return 'crosshair';
+    if (this.gesture.kind === 'grid-track') return this.gesture.axis === 'column' ? 'ew-resize' : 'ns-resize';
     if (this.gesture.kind === 'layout-handle') return isUprightHandle(this.gesture.handle, this.gesture.direction) ? 'ew-resize' : 'ns-resize';
     if (this.gesture.kind === 'spacing') return this.gesture.info.selection.axis === 'x' ? 'ew-resize' : 'ns-resize';
     return this.hoverCursor;
@@ -316,6 +331,25 @@ export class MoveTool implements Tool {
           startPadding: { top: node.paddingTop ?? 0, right: node.paddingRight ?? 0, bottom: node.paddingBottom ?? 0, left: node.paddingLeft ?? 0 },
           startGap: node.itemSpacing ?? 0,
           toWorld: layout.selected.toWorld,
+        };
+        return;
+      }
+    }
+    // Grid track edges near the selected grid frame's top or left side resize their track.
+    if (this.id === 'move') {
+      const edge = hitGridTrackEdge(editor, p.screen, this.env.hitTolerancePx);
+      if (edge) {
+        const bands = edge.axis === 'column' ? edge.selected.columns : edge.selected.rows;
+        this.gesture = {
+          kind: 'grid-track',
+          tx: editor.history.begin(edge.axis === 'column' ? 'Resize column' : 'Resize row'),
+          down: p,
+          last: p,
+          frameId: edge.selected.frameId,
+          axis: edge.axis,
+          index: edge.index,
+          startLength: bands[edge.index]!.length,
+          toWorld: edge.selected.toWorld,
         };
         return;
       }
@@ -462,6 +496,10 @@ export class MoveTool implements Tool {
         g.last = p;
         this.applyRadius(p);
         return;
+      case 'grid-track':
+        g.last = p;
+        this.applyGridTrack(p);
+        return;
       case 'layout-handle':
         g.last = p;
         this.applyLayoutHandle(p);
@@ -527,6 +565,9 @@ export class MoveTool implements Tool {
         this.adoptIntoSections(g.tx, g.starts);
         editor.history.commit(g.tx);
         break;
+      case 'grid-track':
+        editor.history.commit(g.tx);
+        break;
       case 'layout-handle':
         // A click without dragging opens a field to type the value instead.
         if (Math.hypot(p.screen.x - g.down.screen.x, p.screen.y - g.down.screen.y) < this.env.dragThresholdPx) {
@@ -572,7 +613,7 @@ export class MoveTool implements Tool {
     const g = this.gesture;
     const { editor } = this.env;
     this.gesture = { kind: 'idle' };
-    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate' || g.kind === 'line-end' || g.kind === 'spacing' || g.kind === 'radius' || g.kind === 'layout-handle') {
+    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate' || g.kind === 'line-end' || g.kind === 'spacing' || g.kind === 'radius' || g.kind === 'layout-handle' || g.kind === 'grid-track') {
       editor.history.cancel(g.tx);
       return true;
     }
@@ -838,6 +879,24 @@ export class MoveTool implements Tool {
         y1: result.y1 + from.y,
       });
     }
+    g.tx.flushPreview();
+    editor.requestRender();
+  }
+
+  /** A dragged track edge: the track becomes fixed at its starting length plus the drag distance. */
+  private applyGridTrack(p: PointerInfo): void {
+    const g = this.gesture;
+    if (g.kind !== 'grid-track') return;
+    const { editor } = this.env;
+    const frame = g.tx.store.get(g.frameId);
+    if (frame?.type !== 'FRAME') return;
+    const delta = g.axis === 'column' ? (p.world.x - g.down.world.x) / (Math.abs(g.toWorld.a) || 1) : (p.world.y - g.down.world.y) / (Math.abs(g.toWorld.d) || 1);
+    const flex: GridTrack = { type: 'FLEX', value: 1 };
+    const current = g.axis === 'column' ? (frame.gridColumnSizes ?? [flex]) : (frame.gridRowSizes ?? []);
+    // Auto rows become explicit up to the dragged one.
+    const tracks = Array.from({ length: Math.max(current.length, g.index + 1) }, (_, i): GridTrack => current[i] ?? flex);
+    tracks[g.index] = resizedTrack(g.startLength, delta);
+    g.tx.set(g.frameId, g.axis === 'column' ? 'gridColumnSizes' : 'gridRowSizes', tracks);
     g.tx.flushPreview();
     editor.requestRender();
   }

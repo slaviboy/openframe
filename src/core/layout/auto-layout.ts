@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { DocumentStore } from '../document/store';
 import type { Finalizer, Transaction } from '../history/history';
 import { keysBetween } from '../ids/fractional-index';
 import type { Id } from '../ids/ids';
@@ -108,6 +109,33 @@ const gridItem = (child: SceneNode, item: FlowItem): GridItem => ({
   horizontalAlign: child.gridChildHorizontalAlign ?? 'MIN',
   verticalAlign: child.gridChildVerticalAlign ?? 'MIN',
 });
+
+/** The column and row tracks of a grid auto layout frame as currently laid out, in the frame's space; null for other layers. */
+export function gridTracks(store: DocumentStore, frameId: Id): { readonly columns: readonly { start: number; length: number }[]; readonly rows: readonly { start: number; length: number }[] } | null {
+  const frame = store.get(frameId);
+  if (!isAutoLayoutFrame(frame) || frame.layoutMode !== 'GRID') return null;
+  const children = store
+    .children(frameId)
+    .map((id) => store.get(id))
+    .filter((n): n is SceneNode => n !== undefined && isSceneNode(n) && n.visible && n.layoutPositioning !== 'ABSOLUTE');
+  const result = layoutGrid(
+    gridContainer(frame),
+    children.map((child) => {
+      const box = boundsInParent(child);
+      return gridItem(child, {
+        width: box.width,
+        height: box.height,
+        horizontalSizing: horizontalSizing(child, true),
+        verticalSizing: verticalSizing(child, true),
+        minWidth: child.minWidth,
+        maxWidth: child.maxWidth,
+        minHeight: child.minHeight,
+        maxHeight: child.maxHeight,
+      });
+    }),
+  );
+  return { columns: result.columns, rows: result.rows };
+}
 
 /** The cell of every flow child of a grid auto layout frame. */
 export function gridCells(tx: Transaction, frameId: Id): Map<Id, { column: number; row: number }> {

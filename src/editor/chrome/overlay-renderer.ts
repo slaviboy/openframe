@@ -28,6 +28,8 @@ import { isSceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 import { cropImageWorldQuad } from '../interactions/crop';
 import { isUprightHandle, selectedLayoutHandles } from '../interactions/layout-handles';
+import { GRID_EDGE_BAND_PX, selectedGridTracks } from '../interactions/grid-tracks';
+import { trackLabel } from '@/core/layout/grid-track-handles';
 import { textEditTarget } from '../interactions/text-edit';
 import { misspelledRanges } from '@/core/text/spelling';
 import { selectionEnd, selectionStart } from '@/core/text/text-editing';
@@ -123,6 +125,7 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
   const frame = selectionFrame(editor);
   if (frame && state.selection.length > 1) drawSmartSelection(ctx, input);
   drawLayoutHandles(ctx, input);
+  drawGridTracks(ctx, input);
   if (frame) {
     const quad = screenQuad(editor, frame);
     // Slices are invisible in the scene, so their outline is dashed.
@@ -539,6 +542,46 @@ function drawSmartSelection(ctx: CanvasRenderingContext2D, input: OverlayInput):
     ctx.beginPath();
     ctx.roundRect(Math.round(p.x - w / 2), Math.round(p.y - h / 2), w, h, 1.5);
     ctx.fill();
+  }
+  ctx.restore();
+}
+
+/**
+ * Track pills with size labels along the top (columns) and left (rows) sides of the selected grid
+ * frame, and short ticks where track edges can be dragged, while the pointer is over the frame.
+ */
+function drawGridTracks(ctx: CanvasRenderingContext2D, input: OverlayInput): void {
+  const { editor, theme } = input;
+  const selected = selectedGridTracks(editor);
+  if (!selected) return;
+  const hover = editor.state.getSnapshot().hoverId;
+  if (!hover || (hover !== selected.frameId && !editor.doc.isAncestor(selected.frameId, hover))) return;
+  const v = editor.state.viewport;
+  ctx.save();
+  ctx.font = theme.font;
+  ctx.fillStyle = theme.selection;
+  ctx.strokeStyle = theme.selection;
+  ctx.lineWidth = 2;
+  for (const handle of selected.handles) {
+    if (handle.kind === 'pill') {
+      const p = worldToScreen(v, apply(selected.toWorld, handle.at));
+      const column = handle.axis === 'column';
+      const [cx, cy] = column ? [p.x, p.y - 8] : [p.x - 8, p.y];
+      const [w, h] = column ? [16, 4] : [4, 16];
+      ctx.beginPath();
+      ctx.roundRect(Math.round(cx - w / 2), Math.round(cy - h / 2), w, h, 2);
+      ctx.fill();
+      const label = trackLabel((column ? selected.columnSizes : (selected.rowSizes ?? []))[handle.index]);
+      ctx.textAlign = column ? 'center' : 'right';
+      ctx.textBaseline = column ? 'bottom' : 'middle';
+      ctx.fillText(label, column ? cx : cx - 6, column ? cy - 4 : cy);
+    } else {
+      const start = worldToScreen(v, apply(selected.toWorld, handle.from));
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(handle.axis === 'column' ? start.x : start.x + GRID_EDGE_BAND_PX, handle.axis === 'column' ? start.y + GRID_EDGE_BAND_PX : start.y);
+      ctx.stroke();
+    }
   }
   ctx.restore();
 }
