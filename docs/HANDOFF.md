@@ -214,6 +214,9 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - the move tool's `flow-tag` gesture calls `moveFlowStartingPoint` (in `src/editor/commands/prototype.ts`) or `removeFlowStartingPoint` on drop
     - `openInlinePreview` bumps `inlinePreviewKey`, so the preview remounts at the selected frame; the Flows list's Preview uses it too
     - Copy link in the Flow starting point section copies `presentUrl` for the flow
+  - Share prototype in presentation view (the commit after the flow tag):
+    - a Share prototype toolbar button opens a menu whose Copy link copies `presentUrl` built from the tab's own `presentParams`, with the flow selected (`start`) as the node
+    - "Link copied" is a polite live region, not a second `role="status"` (presentation.spec reads the footer's status)
 
 ## In progress (uncommitted)
 
@@ -224,7 +227,7 @@ This file is how work continues after a pause (for example, a usage limit). Read
 1. The pending sub-items left in the M10 rows of `docs/FEATURE_MATRIX.md`:
    - 160 Video / GIF fills: video crop, video from the fill picker, GIF label next to the dimensions, GIF metadata on export
    - 200 Interactive components: the Variant interactions section, animating Change to, sharing states between matching instances
-   - 237 Flows: WYSIWYG description editing, renaming a flow by double-clicking its canvas tag, Copy link from presentation view's Share prototype
+   - 237 Flows: WYSIWYG description editing, renaming a flow by double-clicking its canvas tag
    - 239 Variables: extended collections' modes, library variables, variable picker in expressions
    - 240 Presentation view: responsive scaling, device frames, comments, sharing links
    - 241 Inline preview: flow preview icon, Responsive, Resize to 100%, Respect aspect ratio

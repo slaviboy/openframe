@@ -16,7 +16,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
-import type { PresentationSession } from '@/app/present';
+import { presentParams, presentUrl, type PresentationSession } from '@/app/present';
 import { evaluateEasing, type Easing } from '@/core/anim/easing';
 import type { Id } from '@/core/ids/ids';
 import type { Rect } from '@/core/math/rect';
@@ -169,6 +169,8 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
   const [accessibleScene, setAccessibleScene] = useState<PresentedScene | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<Box | null>(null);
+  const [shareAnchor, setShareAnchor] = useState<Box | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [screenBox, setScreenBox] = useState<Rect | null>(null);
   /** The scrolled frames and their offsets, as "name:x,y" (shown on the stage for tests and assistive tools). */
   const [scrollLabel, setScrollLabel] = useState('');
@@ -819,6 +821,16 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
       Options
     </button>
   );
+  // Share prototype › Copy link: the address of presentation view playing the flow selected (this file, in this browser).
+  const copyLink = () => {
+    const params = presentParams(window.location.search);
+    if (!params) return;
+    void navigator.clipboard?.writeText(presentUrl(window.location.href, { ...params, nodeId: start })).then(
+      () => setLinkCopied(true),
+      () => undefined,
+    );
+  };
+  const shareEntries: MenuEntry[] = [{ kind: 'item', id: 'copy-link', label: 'Copy link', onSelect: copyLink }];
 
   return (
     <div ref={rootRef} className={inlineMode ? styles.inlineRoot : styles.root} {...(inlineMode ? { role: 'region', 'aria-label': 'Preview', tabIndex: 0 } : {})}>
@@ -846,6 +858,25 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
           {session.fileName}
           {player && <span className={styles.screenName}>{nameOf(player.frameId)}</span>}
         </span>
+        {linkCopied && (
+          <span className={styles.screenName} aria-live="polite">
+            Link copied
+          </span>
+        )}
+        <button
+          type="button"
+          className={styles.button}
+          aria-haspopup="menu"
+          aria-expanded={shareAnchor !== null}
+          data-menu-root=""
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setLinkCopied(false);
+            setShareAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
+          }}
+        >
+          Share prototype
+        </button>
         {optionsButton}
         <button type="button" className={styles.button} onClick={toggleFullscreen}>
           Fullscreen
@@ -930,6 +961,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
       )}
       <AccessibilityMessage text={accessibleMessage} />
       {menuAnchor && <Menu label="Options" entries={menuEntries} anchor={menuAnchor} placement="bottom-start" onClose={closeMenu} />}
+      {shareAnchor && <Menu label="Share prototype" entries={shareEntries} anchor={shareAnchor} placement="bottom-start" onClose={() => setShareAnchor(null)} />}
     </div>
   );
 }
