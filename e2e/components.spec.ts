@@ -28,11 +28,11 @@ test('⌥⌘K creates a component from the selection; undo and redo, and it pers
   await page.mouse.move(box.x + 500, box.y + 400, { steps: 5 });
   await page.mouse.up();
 
-  await expect(page.getByRole('button', { name: 'Create component' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Create component', exact: true })).toBeVisible();
   await page.keyboard.press('ControlOrMeta+Alt+K');
   const component = page.getByRole('treeitem', { name: /Component 1/ });
   await expect(component).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('button', { name: 'Create component' })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Create component', exact: true })).toHaveCount(0);
 
   // One undo step: undo removes the component frame, redo brings it back.
   await page.keyboard.press('ControlOrMeta+Z');

@@ -61,7 +61,19 @@ import { gradientCss } from './gradient-css';
 import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
 import { canCreateComponent, canCreateMultipleComponents, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
 import { addVariant, canAddVariant, canCombineAsVariants, combineAsVariants, deleteVariantProperty, instanceVariant, moveVariantProperty, renameVariantProperty, renameVariantValue, setInstanceVariant } from '@/editor/commands/variants';
-import { componentSetProperties, defaultVariant, parseVariantName, variantErrors } from '@/core/document/variants';
+import { componentSetProperties, defaultVariant, isComponentSet, parseVariantName, variantErrors } from '@/core/document/variants';
+import { isMainComponent } from '@/core/document/instances';
+import { isInInstance, propertyDefinitions, propertyOwner, type ComponentPropertyType } from '@/core/document/component-properties';
+import {
+  applyComponentProperty,
+  canHaveProperties,
+  createComponentProperty,
+  deleteComponentProperty,
+  instancePropertyValue,
+  renameComponentProperty,
+  setComponentPropertyDefault,
+  setInstanceProperty,
+} from '@/editor/commands/component-properties';
 import { commandItem } from '../../menus/menu-model';
 import { Menu, type MenuEntry } from '../../primitives/Menu';
 import { localComponents } from '@/editor/commands/insert-instance';
@@ -559,6 +571,8 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
   const changeConstraint = (axis: 'horizontal' | 'vertical', value: Constraint) =>
     editor.history.run('Change constraints', (tx) => nodes.forEach((n) => setConstraint(tx, tx.store.getOrThrow(n.id) as SceneNode, axis, value)));
   const allSlices = nodes.every((n) => n.type === 'SLICE');
+  // A layer nested in a main component or variant can have component properties applied to it.
+  const bindable = !!single && propertyOwner(editor.doc, single.id) !== null && !isInInstance(editor.doc, single.id) && !isMainComponent(single) && !isComponentSet(single);
 
   return (
     <>
@@ -699,7 +713,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         )}
       </Section>
       {!allSlices && (
-      <Section title="Appearance">
+      <Section title="Appearance" actions={bindable && single ? <PropertyBinding layerId={single.id} type="BOOLEAN" /> : undefined}>
         <div className={styles.grid2}>
           <NumberField
             label={<Icon name="opacity" size={16} />}
@@ -843,7 +857,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       </Section>
       )}
       {texts.length === nodes.length && (
-        <Section title="Typography">
+        <Section title="Typography" actions={bindable && single?.type === 'TEXT' ? <PropertyBinding layerId={single.id} type="TEXT" /> : undefined}>
           <TypographyFields nodes={texts} />
         </Section>
       )}
@@ -889,6 +903,222 @@ function CreateComponentOptions() {
   );
 }
 
+/** The create button of a Properties section: a menu of the component property types. */
+function CreatePropertyButton({ onChoose }: { onChoose: (type: ComponentPropertyType) => void }) {
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  return (
+    <>
+      <IconButton icon="plus" label="Create component property" aria-haspopup="menu" onClick={(e) => setAnchor(e.currentTarget.getBoundingClientRect())} />
+      {anchor && (
+        <Menu
+          label="Component property type"
+          entries={[
+            { kind: 'item', id: 'boolean', label: 'Boolean', onSelect: () => onChoose('BOOLEAN') },
+            { kind: 'item', id: 'text', label: 'Text', onSelect: () => onChoose('TEXT') },
+          ]}
+          anchor={anchor}
+          placement="bottom-start"
+          onClose={() => setAnchor(null)}
+        />
+      )}
+    </>
+  );
+}
+
+/** Creating a component property: a name and a default value. */
+function CreatePropertyForm({ ownerId, type, onDone }: { ownerId: string; type: ComponentPropertyType; onDone: () => void }) {
+  const editor = useEditor();
+  const [name, setName] = useState('');
+  const [value, setValue] = useState<boolean | string>(type === 'BOOLEAN' ? true : '');
+  const create = () => {
+    if (createComponentProperty(editor, ownerId, type, name, value)) onDone();
+  };
+  return (
+    <div role="group" aria-label={type === 'BOOLEAN' ? 'Create boolean property' : 'Create text property'}>
+      <input
+        autoFocus
+        className={primitives.textInput}
+        aria-label="New property name"
+        placeholder="Name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') create();
+          if (e.key === 'Escape') onDone();
+        }}
+      />
+      {typeof value === 'boolean' ? (
+        <label className={styles.checkbox}>
+          <input type="checkbox" checked={value} onChange={(e) => setValue(e.target.checked)} />
+          Default value
+        </label>
+      ) : (
+        <input
+          className={primitives.textInput}
+          aria-label="New property default value"
+          placeholder="Default value"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') create();
+          }}
+        />
+      )}
+      <button type="button" className={gradientStyles.textButton} onClick={create}>
+        Create property
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The component properties of a main component or component set: each with its default value. Double-click a
+ * name to rename it and right-click a property to delete it.
+ */
+function ComponentPropertyRows({ ownerId, creating, onCreated }: { ownerId: string; creating: ComponentPropertyType | null; onCreated: () => void }) {
+  const editor = useEditor();
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ name: string; x: number; y: number } | null>(null);
+  const definitions = propertyDefinitions(editor.doc.get(ownerId) as SceneNode);
+  return (
+    <>
+      {Object.entries(definitions).map(([name, definition]) => (
+        <div
+          key={name}
+          role="group"
+          aria-label={`Property ${name}`}
+          className={styles.grid2}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setMenu({ name, x: e.clientX, y: e.clientY });
+          }}
+        >
+          {renaming === name ? (
+            <input
+              autoFocus
+              className={primitives.textInput}
+              aria-label="Property name"
+              defaultValue={name}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Escape') e.currentTarget.value = name;
+                if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
+              }}
+              onBlur={(e) => {
+                if (e.currentTarget.value.trim() !== name) renameComponentProperty(editor, ownerId, name, e.currentTarget.value);
+                setRenaming(null);
+              }}
+            />
+          ) : (
+            <span className={styles.hint} onDoubleClick={() => setRenaming(name)}>
+              {name}
+            </span>
+          )}
+          {definition.type === 'BOOLEAN' ? (
+            <label className={styles.checkbox}>
+              <input type="checkbox" aria-label={`Default value of ${name}`} checked={definition.defaultValue} onChange={(e) => setComponentPropertyDefault(editor, ownerId, name, e.target.checked)} />
+              {definition.defaultValue ? 'True' : 'False'}
+            </label>
+          ) : (
+            <input
+              key={`${name}-${definition.defaultValue}`}
+              className={primitives.textInput}
+              aria-label={`Default value of ${name}`}
+              defaultValue={definition.defaultValue}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') e.currentTarget.blur();
+              }}
+              onBlur={(e) => setComponentPropertyDefault(editor, ownerId, name, e.currentTarget.value)}
+            />
+          )}
+        </div>
+      ))}
+      {creating && <CreatePropertyForm key={creating} ownerId={ownerId} type={creating} onDone={onCreated} />}
+      {menu && (
+        <Menu
+          label="Property actions"
+          entries={[{ kind: 'item', id: 'delete', label: 'Delete property', onSelect: () => deleteComponentProperty(editor, ownerId, menu.name) }]}
+          anchor={{ x: menu.x, y: menu.y, width: 0, height: 0 }}
+          placement="point"
+          onClose={() => setMenu(null)}
+        />
+      )}
+    </>
+  );
+}
+
+/** The Properties section of a main component that isn't a variant. */
+function ComponentPropertiesSection({ ownerId }: { ownerId: string }) {
+  const [creating, setCreating] = useState<ComponentPropertyType | null>(null);
+  return (
+    <Section title="Properties" actions={<CreatePropertyButton onChoose={setCreating} />}>
+      <ComponentPropertyRows ownerId={ownerId} creating={creating} onCreated={() => setCreating(null)} />
+    </Section>
+  );
+}
+
+/** Applies a component property to a layer of a main component: its visibility (boolean) or its text (text properties). */
+function PropertyBinding({ layerId, type }: { layerId: string; type: ComponentPropertyType }) {
+  const editor = useEditor();
+  const layer = editor.doc.get(layerId) as SceneNode;
+  const current = layer.componentPropertyReferences?.[type === 'BOOLEAN' ? 'visible' : 'characters'] ?? '';
+  const names = Object.entries(propertyDefinitions(propertyOwner(editor.doc, layerId)))
+    .filter(([, definition]) => definition.type === type)
+    .map(([name]) => name);
+  if (names.length === 0 && current === '') return null;
+  return (
+    <select
+      className={primitives.select}
+      aria-label={type === 'BOOLEAN' ? 'Visibility property' : 'Text property'}
+      value={current}
+      onChange={(e) => applyComponentProperty(editor, layerId, type, e.target.value === '' ? null : e.target.value)}
+    >
+      <option value="">No property</option>
+      {names.map((name) => (
+        <option key={name} value={name}>
+          {name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** An instance's component properties: a toggle for each boolean property and a text field for each text property. */
+function InstanceProperties({ instanceId }: { instanceId: string }) {
+  const editor = useEditor();
+  return (
+    <>
+      {Object.entries(propertyDefinitions(propertyOwner(editor.doc, instanceId))).map(([name, definition]) => {
+        const value = instancePropertyValue(editor, instanceId, name);
+        return definition.type === 'BOOLEAN' ? (
+          <label key={name} className={styles.checkbox}>
+            <input type="checkbox" checked={value === true} onChange={(e) => setInstanceProperty(editor, instanceId, name, e.target.checked)} />
+            {name}
+          </label>
+        ) : (
+          <div key={name} className={styles.grid2}>
+            <span className={styles.hint}>{name}</span>
+            <input
+              key={`${name}-${String(value)}`}
+              className={primitives.textInput}
+              aria-label={name}
+              defaultValue={typeof value === 'string' ? value : ''}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') e.currentTarget.blur();
+              }}
+              onBlur={(e) => setInstanceProperty(editor, instanceId, name, e.currentTarget.value)}
+            />
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
 /**
  * The Properties section of a component set: its variant properties with their values. Double-click a property
  * to rename it, drag it to reorder, open its values to change them, and right-click it (or press Delete) to delete it.
@@ -899,10 +1129,11 @@ function VariantPropertiesSection({ setId }: { setId: string }) {
   const [editingValues, setEditingValues] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ property: string; x: number; y: number } | null>(null);
   const dragged = useRef<string | null>(null);
+  const [creating, setCreating] = useState<ComponentPropertyType | null>(null);
   const properties = componentSetProperties(editor.doc, setId);
   const errors = variantErrors(editor.doc, setId);
   return (
-    <Section title="Properties">
+    <Section title="Properties" actions={<CreatePropertyButton onChoose={setCreating} />}>
       {properties.map((property, index) => (
         <div
           key={property.name}
@@ -976,6 +1207,7 @@ function VariantPropertiesSection({ setId }: { setId: string }) {
             ))}
         </div>
       ))}
+      <ComponentPropertyRows ownerId={setId} creating={creating} onCreated={() => setCreating(null)} />
       {errors.conflicted.length > 0 && (
         <p className={styles.hint} role="alert">
           {errors.conflicted.length} variants have the same property values. Each variant needs a unique combination of values.
@@ -1053,6 +1285,7 @@ function ComponentSection({ node }: { node: SceneNode }) {
               </div>
             );
           })}
+        <InstanceProperties instanceId={node.id} />
         {description && <p className={styles.hint}>{description}</p>}
         {docs}
       </Section>
@@ -1087,6 +1320,7 @@ function ComponentSection({ node }: { node: SceneNode }) {
       {docs}
     </Section>
     {node.componentSet && <VariantPropertiesSection setId={node.id} />}
+    {node.component && canHaveProperties(editor, node.id) && <ComponentPropertiesSection ownerId={node.id} />}
     </>
   );
 }
