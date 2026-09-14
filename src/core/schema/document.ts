@@ -294,8 +294,10 @@ const SceneFields = {
   blendMode: BlendModeSchema,
   /** Shadows and blurs, in paint order. Absent when the layer has none. */
   effects: z.array(EffectSchema).max(64).optional(),
-  /** Inside a main component or variant: the component properties (by name) this layer's visibility and text follow. */
-  componentPropertyReferences: z.object({ visible: z.string().min(1).max(200).optional(), characters: z.string().min(1).max(200).optional() }).optional(),
+  /** Inside a main component or variant: the component properties (by name) this layer's visibility and text, or for a nested instance its component, follow. */
+  componentPropertyReferences: z
+    .object({ visible: z.string().min(1).max(200).optional(), characters: z.string().min(1).max(200).optional(), mainComponent: z.string().min(1).max(200).optional() })
+    .optional(),
   /** Constrain proportions: width and height edits keep the aspect ratio. Absent means off. */
   constrainProportions: z.boolean().optional(),
   /** How the layer responds when its parent frame is resized. Absent means left and top. */
@@ -411,10 +413,14 @@ export const GridTrackSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('HUG') }),
 ]);
 
-/** A component property: boolean properties drive layer visibility, text properties the text of text layers. */
+/**
+ * A component property: boolean properties drive layer visibility, text properties the text of text layers, and
+ * instance swap properties which component a nested instance is (with preferred components to swap to).
+ */
 export const ComponentPropertyDefinitionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('BOOLEAN'), defaultValue: z.boolean() }),
   z.object({ type: z.literal('TEXT'), defaultValue: z.string().max(1_000_000) }),
+  z.object({ type: z.literal('INSTANCE_SWAP'), defaultValue: IdSchema, preferredValues: z.array(IdSchema).max(1000).optional() }),
 ]);
 export type ComponentPropertyDefinition = z.infer<typeof ComponentPropertyDefinitionSchema>;
 

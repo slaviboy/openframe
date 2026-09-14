@@ -61,9 +61,8 @@ import { gradientCss } from './gradient-css';
 import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
 import { canCreateComponent, canCreateMultipleComponents, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
 import { addVariant, canAddVariant, canCombineAsVariants, combineAsVariants, deleteVariantProperty, instanceVariant, moveVariantProperty, renameVariantProperty, renameVariantValue, setInstanceVariant } from '@/editor/commands/variants';
-import { componentSetProperties, defaultVariant, isComponentSet, parseVariantName, variantErrors } from '@/core/document/variants';
-import { isMainComponent } from '@/core/document/instances';
-import { isInInstance, propertyDefinitions, propertyOwner, type ComponentPropertyType } from '@/core/document/component-properties';
+import { componentSetProperties, defaultVariant, parseVariantName, variantErrors } from '@/core/document/variants';
+import { bindingOwner, isInInstance, propertyDefinitions, propertyOwner, type ComponentPropertyType } from '@/core/document/component-properties';
 import {
   applyComponentProperty,
   canHaveProperties,
@@ -572,7 +571,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
     editor.history.run('Change constraints', (tx) => nodes.forEach((n) => setConstraint(tx, tx.store.getOrThrow(n.id) as SceneNode, axis, value)));
   const allSlices = nodes.every((n) => n.type === 'SLICE');
   // A layer nested in a main component or variant can have component properties applied to it.
-  const bindable = !!single && propertyOwner(editor.doc, single.id) !== null && !isInInstance(editor.doc, single.id) && !isMainComponent(single) && !isComponentSet(single);
+  const bindable = !!single && bindingOwner(editor.doc, single.id) !== null;
 
   return (
     <>
@@ -1017,7 +1016,8 @@ function ComponentPropertyRows({ ownerId, creating, onCreated }: { ownerId: stri
   const definitions = propertyDefinitions(editor.doc.get(ownerId) as SceneNode);
   return (
     <>
-      {Object.entries(definitions).map(([name, definition]) => (
+      {/* Instance swap properties get their own controls. */}
+      {Object.entries(definitions).filter(([, definition]) => definition.type !== 'INSTANCE_SWAP').map(([name, definition]) => (
         <div
           key={name}
           role="group"
@@ -1098,7 +1098,7 @@ function PropertyBinding({ layerId, type }: { layerId: string; type: ComponentPr
   const editor = useEditor();
   const layer = editor.doc.get(layerId) as SceneNode;
   const current = layer.componentPropertyReferences?.[type === 'BOOLEAN' ? 'visible' : 'characters'] ?? '';
-  const names = Object.entries(propertyDefinitions(propertyOwner(editor.doc, layerId)))
+  const names = Object.entries(propertyDefinitions(bindingOwner(editor.doc, layerId)))
     .filter(([, definition]) => definition.type === type)
     .map(([name]) => name);
   if (names.length === 0 && current === '') return null;
@@ -1124,7 +1124,9 @@ function InstanceProperties({ instanceId }: { instanceId: string }) {
   const editor = useEditor();
   return (
     <>
-      {Object.entries(propertyDefinitions(propertyOwner(editor.doc, instanceId))).map(([name, definition]) => {
+      {Object.entries(propertyDefinitions(propertyOwner(editor.doc, instanceId)))
+        .filter(([, definition]) => definition.type !== 'INSTANCE_SWAP')
+        .map(([name, definition]) => {
         const value = instancePropertyValue(editor, instanceId, name);
         return definition.type === 'BOOLEAN' ? (
           <label key={name} className={styles.checkbox}>

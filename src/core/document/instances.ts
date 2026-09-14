@@ -170,9 +170,11 @@ export function swapInstance(tx: Transaction, instanceId: Id, mainId: Id, nextId
   const kept = keptChanges(store, instance);
   const placement = Object.fromEntries([...ROOT_PLACEMENT].filter((name) => field(instance, name) !== undefined).map((name) => [name, field(instance, name)]));
   const nested = instance.source !== undefined ? { source: instance.source, overrides: ['instance'] } : {};
+  // A nested instance keeps the component properties it's bound to.
+  const references = instance.componentPropertyReferences ? { componentPropertyReferences: instance.componentPropertyReferences } : {};
   const parent = instance.parent;
   tx.delete(instanceId);
-  instantiate(tx, mainId, parent.id, parent.key, nextId, { id: instanceId, fields: { ...placement, ...nested } });
+  instantiate(tx, mainId, parent.id, parent.key, nextId, { id: instanceId, fields: { ...placement, ...references, ...nested } });
   restoreChanges(tx, instanceId, kept);
   rebuildCopies(tx, instanceId, nextId);
   return true;
@@ -491,7 +493,7 @@ export function createComponentFinalizer(nextId: () => Id): Finalizer {
           const matchesMain = mainLayerOf(store, node, owner.root) !== undefined && same(mainValue(store, node, owner.root, change.field), change.value);
           if (matchesMain && overrides.includes(change.field)) tx.set(change.id, 'overrides', overrides.length > 1 ? overrides.filter((f) => f !== change.field) : undefined);
           else if (!matchesMain && !overrides.includes(change.field)) tx.set(change.id, 'overrides', [...overrides, change.field]);
-        } else if (!(isRoot && (ROOT_PLACEMENT.has(change.field) || change.field === 'size'))) {
+        } else if (!(isRoot && (ROOT_PLACEMENT.has(change.field) || change.field === 'size' || change.field === 'componentPropertyReferences'))) {
           tx.set(change.id, change.field, change.prev);
           continue;
         }
@@ -499,7 +501,7 @@ export function createComponentFinalizer(nextId: () => Id): Finalizer {
       for (const { node: target, byMain, placementOnly } of linked(change.id)) {
         const current = store.get(target.id);
         if (!current || !isSceneNode(current) || (current.overrides ?? []).includes(change.field)) continue;
-        if (placementOnly && !ROOT_PLACEMENT.has(change.field)) continue;
+        if (placementOnly && !ROOT_PLACEMENT.has(change.field) && change.field !== 'componentPropertyReferences') continue;
         if (byMain) {
           // Instances keep their own placement and, for a variant, the component set's name; a resize reaches
           // the instances that still had the previous size.

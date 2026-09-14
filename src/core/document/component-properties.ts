@@ -22,11 +22,11 @@ import { isComponentSet, variantsOf } from './variants';
 
 export type ComponentPropertyType = ComponentPropertyDefinition['type'];
 
-/** A layer field a component property can drive. */
-export type BoundField = 'visible' | 'characters';
+/** What a component property drives on a layer: its visibility, its text, or (`mainComponent`) the component a nested instance is. */
+export type BoundField = 'visible' | 'characters' | 'mainComponent';
 
-/** The field each component property type drives: boolean properties layer visibility, text properties text content. */
-export const PROPERTY_FIELD: Readonly<Record<ComponentPropertyType, BoundField>> = { BOOLEAN: 'visible', TEXT: 'characters' };
+/** The field each component property type drives: boolean properties layer visibility, text properties text content, instance swap properties a nested instance's component. */
+export const PROPERTY_FIELD: Readonly<Record<ComponentPropertyType, BoundField>> = { BOOLEAN: 'visible', TEXT: 'characters', INSTANCE_SWAP: 'mainComponent' };
 
 /** The part of the document store component properties are read from. */
 interface PropertyStore {
@@ -70,6 +70,18 @@ export function isInInstance(store: PropertyStore, id: Id): boolean {
   return false;
 }
 
+/**
+ * The owner whose component properties a layer can be bound to: the main component (or component set) it is nested
+ * in. Null for main components and component sets themselves and for layers of instances; an instance nested in a
+ * main component can be bound (its visibility, or its component with an instance swap property).
+ */
+export function bindingOwner(store: PropertyStore, id: Id): SceneNode | null {
+  const node = sceneNodeAt(store, id);
+  const parentId = store.parentOf(id);
+  if (!node || parentId === null || isMainComponent(node) || isComponentSet(node) || isInInstance(store, parentId)) return null;
+  return propertyOwner(store, parentId);
+}
+
 /** The component properties of an owner, by name in creation order. */
 export function propertyDefinitions(owner: SceneNode | null): Readonly<Record<string, ComponentPropertyDefinition>> {
   return owner?.type === 'FRAME' ? (owner.componentPropertyDefinitions ?? {}) : {};
@@ -86,7 +98,7 @@ export function boundLayers(store: PropertyStore, rootId: Id, name: string): Arr
   for (const id of [rootId, ...store.descendants(rootId, false)]) {
     const references = sceneNodeAt(store, id)?.componentPropertyReferences;
     if (!references) continue;
-    for (const field of ['visible', 'characters'] as const) if (references[field] === name) bound.push({ id, field });
+    for (const field of ['visible', 'characters', 'mainComponent'] as const) if (references[field] === name) bound.push({ id, field });
   }
   return bound;
 }

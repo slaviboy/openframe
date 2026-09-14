@@ -16,15 +16,16 @@
  */
 
 import {
+  bindingOwner,
   boundLayers,
-  isInInstance,
   ownerComponents,
   PROPERTY_FIELD,
   propertyDefinitions,
   propertyOwner,
+  type BoundField,
   type ComponentPropertyType,
 } from '@/core/document/component-properties';
-import { isInstance, isMainComponent } from '@/core/document/instances';
+import { isInstance, isMainComponent, swapInstance } from '@/core/document/instances';
 import { componentSetProperties, isComponentSet } from '@/core/document/variants';
 import type { Transaction } from '@/core/history/history';
 import type { Id } from '@/core/ids/ids';
@@ -58,20 +59,37 @@ function referencesWithout(layer: SceneNode, field: string): SceneNode['componen
   return Object.keys(rest).length > 0 ? (rest as SceneNode['componentPropertyReferences']) : undefined;
 }
 
-/** A definition of `type` with `value` as its default, or null when the value has the wrong type. */
-function definitionOf(type: ComponentPropertyType, value: PropertyValue): ComponentPropertyDefinition | null {
+/** A definition of `type` with `value` as its default, or null when the value doesn't fit the type. */
+function definitionOf(editor: Editor, type: ComponentPropertyType, value: PropertyValue, preferredValues?: readonly Id[]): ComponentPropertyDefinition | null {
   if (type === 'BOOLEAN') return typeof value === 'boolean' ? { type, defaultValue: value } : null;
-  return typeof value === 'string' ? { type, defaultValue: value } : null;
+  if (type === 'TEXT') return typeof value === 'string' ? { type, defaultValue: value } : null;
+  // Instance swap properties take a main component, and the preferred components to swap to.
+  const isComponent = (id: unknown): id is Id => typeof id === 'string' && isMainComponent(sceneNode(editor, id));
+  if (!isComponent(value) || !(preferredValues ?? []).every(isComponent)) return null;
+  return { type, defaultValue: value, ...(preferredValues && preferredValues.length > 0 ? { preferredValues: [...preferredValues] } : {}) };
+}
+
+/** Gives a bound layer a property value: its visibility or text, or for an instance swap property the component its instance is. */
+function setBoundValue(tx: Transaction, editor: Editor, id: Id, field: BoundField, value: PropertyValue): void {
+  if (field === 'mainComponent') swapInstance(tx, id, value as Id, () => editor.ids.next());
+  else tx.set(id, field, value);
 }
 
 /**
  * Creates a component property on a main component or component set with a name (unique among its component
  * and variant properties) and a default value. One undo step.
  */
-export function createComponentProperty(editor: Editor, ownerId: Id, type: ComponentPropertyType, name: string, defaultValue: PropertyValue): boolean {
+export function createComponentProperty(
+  editor: Editor,
+  ownerId: Id,
+  type: ComponentPropertyType,
+  name: string,
+  defaultValue: PropertyValue,
+  options: { readonly preferredValues?: readonly Id[] } = {},
+): boolean {
   const owner = sceneNode(editor, ownerId);
   const trimmed = name.trim();
-  const definition = definitionOf(type, defaultValue);
+  const definition = definitionOf(editor, type, defaultValue, options.preferredValues);
   if (!owner || !definition || !canHaveProperties(editor, ownerId) || trimmed === '' || takenNames(editor, owner).has(trimmed)) return false;
   editor.history.run('Create component property', (tx) => setDefinitions(tx, ownerId, { ...propertyDefinitions(owner), [trimmed]: definition }));
   return true;
@@ -84,15 +102,15 @@ export function createComponentProperty(editor: Editor, ownerId: Id, type: Compo
  */
 export function applyComponentProperty(editor: Editor, layerId: Id, type: ComponentPropertyType, name: string | null): boolean {
   const layer = sceneNode(editor, layerId);
-  const owner = propertyOwner(editor.doc, layerId);
+  const owner = bindingOwner(editor.doc, layerId);
   const field = PROPERTY_FIELD[type];
-  if (!layer || !owner || isInInstance(editor.doc, layerId) || (field === 'characters' && layer.type !== 'TEXT')) return false;
+  if (!layer || !owner || (field === 'characters' && layer.type !== 'TEXT') || (field === 'mainComponent' && !isInstance(layer))) return false;
   const definition = name === null ? undefined : propertyDefinitions(owner)[name];
   if (name !== null && definition?.type !== type) return false;
   const rest = referencesWithout(layer, field);
   editor.history.run(name === null ? 'Remove component property' : 'Apply component property', (tx) => {
     tx.set(layerId, 'componentPropertyReferences', name === null ? rest : { ...rest, [field]: name });
-    if (definition) tx.set(layerId, field, definition.defaultValue);
+    if (definition) setBoundValue(tx, editor, layerId, field, definition.defaultValue);
   });
   return true;
 }
@@ -105,11 +123,11 @@ export function setComponentPropertyDefault(editor: Editor, ownerId: Id, name: s
   const owner = sceneNode(editor, ownerId);
   const definitions = owner ? propertyDefinitions(owner) : {};
   const current = definitions[name];
-  const definition = current ? definitionOf(current.type, value) : null;
+  const definition = current ? definitionOf(editor, current.type, value, current.type === 'INSTANCE_SWAP' ? current.preferredValues : undefined) : null;
   if (!owner || !current || !definition || current.defaultValue === value) return false;
   editor.history.run('Change property default', (tx) => {
     setDefinitions(tx, ownerId, { ...definitions, [name]: definition });
-    for (const main of ownerComponents(tx.store, owner)) for (const { id, field } of boundLayers(tx.store, main.id, name)) tx.set(id, field, value);
+    for (const main of ownerComponents(tx.store, owner)) for (const { id, field } of boundLayers(tx.store, main.id, name)) setBoundValue(tx, editor, id, field, value);
   });
   return true;
 }
@@ -151,7 +169,8 @@ export function instancePropertyValue(editor: Editor, instanceId: Id, name: stri
   const definition = propertyDefinitions(propertyOwner(editor.doc, instanceId))[name];
   if (!definition) return undefined;
   const [first] = boundLayers(editor.doc, instanceId, name);
-  const value = first ? (sceneNode(editor, first.id) as unknown as Record<string, unknown> | undefined)?.[first.field] : undefined;
+  const layer = first ? sceneNode(editor, first.id) : undefined;
+  const value = !first || !layer ? undefined : first.field === 'mainComponent' ? (layer.type === 'FRAME' ? layer.instance?.mainId : undefined) : (layer as unknown as Record<string, unknown>)[first.field];
   return typeof value === typeof definition.defaultValue ? (value as PropertyValue) : definition.defaultValue;
 }
 
@@ -161,6 +180,19 @@ export function setInstanceProperty(editor: Editor, instanceId: Id, name: string
   const definition = propertyDefinitions(propertyOwner(editor.doc, instanceId))[name];
   const bound = boundLayers(editor.doc, instanceId, name);
   if (!instance || !isInstance(instance) || !definition || typeof value !== typeof definition.defaultValue || bound.length === 0) return false;
-  editor.history.run('Change instance property', (tx) => bound.forEach(({ id, field }) => tx.set(id, field, value)));
+  if (definition.type === 'INSTANCE_SWAP' && !isMainComponent(sceneNode(editor, value as Id))) return false;
+  editor.history.run('Change instance property', (tx) => bound.forEach(({ id, field }) => setBoundValue(tx, editor, id, field, value)));
+  return true;
+}
+
+/** Sets the preferred components of an instance swap property, offered first when swapping; an empty list removes them. One undo step. */
+export function setPreferredValues(editor: Editor, ownerId: Id, name: string, preferred: readonly Id[]): boolean {
+  const owner = sceneNode(editor, ownerId);
+  const definitions = owner ? propertyDefinitions(owner) : {};
+  const current = definitions[name];
+  if (!owner || current?.type !== 'INSTANCE_SWAP') return false;
+  const definition = definitionOf(editor, 'INSTANCE_SWAP', current.defaultValue, preferred);
+  if (!definition || JSON.stringify(definition) === JSON.stringify(current)) return false;
+  editor.history.run('Change preferred instances', (tx) => setDefinitions(tx, ownerId, { ...definitions, [name]: definition }));
   return true;
 }
