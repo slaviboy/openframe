@@ -51,19 +51,22 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - `src/app/present.ts`: the `?present=1&file=&page=&node=` URL
     - `src/ui/present/` (`PresentationRenderer`, `PresentationView`, `PresentApp`)
     - Present (Mod+Alt+Enter) opens it in a new tab
+  - Connection noodles (the commit after presentation view):
+    - `src/core/prototype/connections.ts`
+    - `drawPrototypeChrome` in `overlay-renderer.ts` draws the noodles and flow tags while the Prototype tab is open
 
 ## In progress (uncommitted)
 
-1. **Connection noodles on the canvas.** Written but not yet tested; waits for the presentation commit:
-   - `src/core/prototype/connections.ts` and `connections.test.ts`: connections on a page, visible connections for a selection, noodle geometry, hit distance
-   - `src/editor/chrome/overlay-renderer.ts`: `drawPrototypeChrome` draws the noodles and flow tags while the Prototype tab is open
-   - `e2e/prototype-connections.spec.ts`: samples the overlay canvas pixels
+1. **Dragging the + to connect.** In progress:
+   - `src/editor/chrome/prototype-geometry.ts`: the + handle on the selection's right edge while the Prototype tab is open, its hit test, and the destination under the pointer
+   - `src/editor/tools/move-tool.ts`: the `connect` gesture, which adds interactions on drop, and the `connectDrag` getter
+   - `e2e/prototype-connect-drag.spec.ts`
 
-   Next steps: run `npm run check` and the spec, update the matrix row "View prototype connections", run the gate, commit. Then drag the + handle to a destination and click a noodle to select its interaction.
+   Still to do: draw the + handle and the drag noodle in `overlay-renderer.ts` (pass `connectDrag` from `CanvasHost`), run the checks and the spec, update the matrix, run the gate, commit.
 
 ## Next (M10, in order)
 
-1. Dragging + to a destination; clicking a noodle; the overlay badge on the canvas.
+1. Clicking a noodle to select its interaction, and dragging its end to another destination; the overlay badge on the canvas.
 2. Smart animate: interpolate matching layers by name and hierarchy (currently it dissolves).
 3. Scroll overflow (horizontal, vertical, both), fixed and sticky layers, and state memorization of scroll position.
 4. Inline preview (⇧Space) and follow prototype.

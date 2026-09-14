@@ -56,6 +56,8 @@ import type { ChromeTheme } from './chrome-theme';
 import { forEachSection, handlePoint, isLineFrame, screenQuad, sectionTitleRect, selectionFrame, type SelectionFrame, addVariantButtonRect, ADD_INSTANCES_LABEL, addInstancesButtonRect, hoveredInstanceSlots } from './selection-geometry';
 import { variantsOf } from '@/core/document/variants';
 import { slotIndicators } from '@/core/document/component-properties';
+import { noodleBetween, visibleConnections, type Noodle } from '@/core/prototype/connections';
+import { flowsOf } from '@/core/prototype/flows';
 
 export interface OverlayInput {
   readonly editor: Editor;
@@ -107,6 +109,74 @@ export interface OverlayInput {
   readonly dpr: number;
 }
 
+/** Connections and flow starting points on the canvas. */
+export const PROTOTYPE_COLOR = '#0d99ff';
+
+/** A layer's bounds on screen. */
+function screenRectOf(editor: Editor, id: Id): Rect | null {
+  const bounds = editor.scene.worldBounds(id);
+  if (!bounds) return null;
+  const v = editor.state.viewport;
+  const p = worldToScreen(v, bounds);
+  return { x: p.x, y: p.y, width: bounds.width * v.zoom, height: bounds.height * v.zoom };
+}
+
+function drawArrowhead(ctx: CanvasRenderingContext2D, noodle: Noodle): void {
+  const dx = noodle.end.x - noodle.c2.x;
+  const dy = noodle.end.y - noodle.c2.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const ux = dx / length;
+  const uy = dy / length;
+  const size = 8;
+  ctx.beginPath();
+  ctx.moveTo(noodle.end.x, noodle.end.y);
+  ctx.lineTo(noodle.end.x - ux * size - uy * size * 0.6, noodle.end.y - uy * size + ux * size * 0.6);
+  ctx.lineTo(noodle.end.x - ux * size + uy * size * 0.6, noodle.end.y - uy * size - ux * size * 0.6);
+  ctx.closePath();
+  ctx.fill();
+}
+
+/**
+ * Prototype chrome: each flow starting point's name in a blue tag above its frame, and a noodle from each visible
+ * connection's hotspot to its destination (the selection's connections, or every connection with nothing selected).
+ */
+function drawPrototypeChrome(ctx: CanvasRenderingContext2D, input: OverlayInput, selection: readonly Id[]): void {
+  const { editor, theme } = input;
+  ctx.font = theme.font;
+  ctx.textBaseline = 'middle';
+  for (const flow of flowsOf(editor.doc, editor.pageId)) {
+    const rect = screenRectOf(editor, flow.nodeId);
+    if (!rect) continue;
+    const text = `▶ ${flow.name}`;
+    const width = Math.ceil(ctx.measureText(text).width) + 10;
+    const x = Math.round(rect.x);
+    const y = Math.round(rect.y - 40);
+    ctx.fillStyle = PROTOTYPE_COLOR;
+    ctx.beginPath();
+    ctx.roundRect(x, y, width, 18, 4);
+    ctx.fill();
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, x + 5, y + 9.5);
+  }
+  ctx.strokeStyle = PROTOTYPE_COLOR;
+  ctx.fillStyle = PROTOTYPE_COLOR;
+  ctx.lineWidth = 2;
+  for (const connection of visibleConnections(editor.doc, editor.pageId, selection)) {
+    const source = screenRectOf(editor, connection.sourceId);
+    const destination = screenRectOf(editor, connection.destinationId);
+    if (!source || !destination) continue;
+    const noodle = noodleBetween(source, destination);
+    ctx.beginPath();
+    ctx.moveTo(noodle.start.x, noodle.start.y);
+    ctx.bezierCurveTo(noodle.c1.x, noodle.c1.y, noodle.c2.x, noodle.c2.y, noodle.end.x, noodle.end.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(noodle.start.x, noodle.start.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+    drawArrowhead(ctx, noodle);
+  }
+}
+
 const formatNumber = (n: number): string => {
   const r = Math.round(n * 100) / 100;
   return Number.isInteger(r) ? String(r) : r.toFixed(2).replace(/0$/, '');
@@ -129,6 +199,8 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
   if (input.layoutGuides) drawLayoutGuides(ctx, input);
   drawFrameTitles(ctx, input, selected);
   drawSectionTitles(ctx, input, selected);
+  // The Prototype tab shows flow starting points and connections.
+  if (state.rightTab === 'prototype') drawPrototypeChrome(ctx, input, state.selection);
   if (input.rulers) drawRulerGuides(ctx, input);
   if (input.maskOutlines) {
     for (const id of editor.doc.descendants(editor.pageId, false)) {
