@@ -98,6 +98,23 @@ export function defaultVariant(store: VariantStore, setId: Id): SceneNode | null
 }
 
 /**
+ * The variant for a combination of values after `property` changed: the variant with exactly these values,
+ * or else the one with the changed value that matches most of the other values (the first in layer order).
+ */
+export function variantFor(store: VariantStore, setId: Id, values: VariantValues, property: string): SceneNode | null {
+  const wanted = new Map(values);
+  let best: SceneNode | null = null;
+  let bestScore = -1;
+  for (const variant of variantsOf(store, setId)) {
+    const own = new Map(parseVariantName(variant.name) ?? []);
+    if (own.get(property) !== wanted.get(property)) continue;
+    const score = [...wanted].filter(([p, v]) => own.get(p) === v).length;
+    if (score > bestScore) [best, bestScore] = [variant, score];
+  }
+  return best;
+}
+
+/**
  * Variant errors of a component set: `conflicted` variants share the exact same combination of values with
  * another variant, and `corrupted` variants have names that don't follow the `Property=value` syntax.
  */

@@ -22,7 +22,8 @@ import { IdGenerator } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { BUILTIN_COMMANDS } from './builtin';
-import { canCombineAsVariants } from './variants';
+import { insertInstance } from './insert-instance';
+import { canCombineAsVariants, instanceVariant, setInstanceVariant } from './variants';
 
 let editor: Editor;
 let primary: string;
@@ -99,5 +100,50 @@ describe('combine as variants', () => {
     });
     editor.state.select([primary, rect]);
     expect(canCombineAsVariants(editor)).toBe(false);
+  });
+});
+
+describe('configure an instance variant', () => {
+  test('choosing a property value swaps the instance for that variant, named after the set, keeping its position', () => {
+    editor.state.select([primary, secondary]);
+    editor.commands.run('object.combineAsVariants');
+    const set = editor.selection[0]!;
+    const instance = insertInstance(editor, primary)!;
+    editor.history.run('Move', (tx) => tx.set(instance, 'transform', [1, 0, 0, 1, 0, 300]));
+    expect(instanceVariant(editor, instance)).toMatchObject({ set: { id: set }, variant: { id: primary } });
+    expect(node(instance).name).toBe('Button');
+
+    expect(setInstanceVariant(editor, instance, 'Variant', 'Secondary')).toBe(true);
+    expect(node(instance)).toMatchObject({ name: 'Button', instance: { mainId: secondary }, transform: [1, 0, 0, 1, 0, 300] });
+    expect(node(instance).overrides).toBeUndefined();
+    // No variant has this value: nothing changes.
+    expect(setInstanceVariant(editor, instance, 'Property 2', 'Small')).toBe(false);
+    editor.history.undo();
+    expect(node(instance).instance).toEqual({ mainId: primary });
+
+    // Without a variant for the exact combination, the closest one with the chosen value is used.
+    editor.history.run('Rename', (tx) => tx.set(secondary, 'name', 'Variant=Secondary, Property 2=Small'));
+    expect(setInstanceVariant(editor, instance, 'Variant', 'Secondary')).toBe(true);
+    expect(node(instance).instance).toEqual({ mainId: secondary });
+  });
+
+  test('renaming the component set renames its instances, unless they were renamed', () => {
+    editor.state.select([primary, secondary]);
+    editor.commands.run('object.combineAsVariants');
+    const set = editor.selection[0]!;
+    const instance = insertInstance(editor, primary)!;
+    const renamed = insertInstance(editor, secondary)!;
+    editor.history.run('Rename', (tx) => tx.set(renamed, 'name', 'My button'));
+    expect(node(renamed).overrides).toEqual(['name']);
+    editor.history.run('Rename set', (tx) => tx.set(set, 'name', 'CTA'));
+    expect(node(instance).name).toBe('CTA');
+    expect(node(renamed).name).toBe('My button');
+    // Renaming a variant doesn't rename instances, and reset all changes goes back to the set's name.
+    editor.history.run('Rename variant', (tx) => tx.set(primary, 'name', 'Variant=Main, Property 2=Large'));
+    expect(node(instance).name).toBe('CTA');
+    editor.state.select([renamed]);
+    editor.commands.run('object.resetOverrides');
+    expect(node(renamed)).toMatchObject({ name: 'CTA' });
+    expect(node(renamed).overrides).toBeUndefined();
   });
 });

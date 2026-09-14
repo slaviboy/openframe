@@ -83,7 +83,7 @@ export function instantiate(
     const source = store.getOrThrow(sourceId) as SceneNode;
     const id = isRoot && root.id !== undefined ? root.id : nextId();
     const layer = instanceLayer(source, id, parentRef, isRoot ? { mainId } : { source: sourceId });
-    tx.create(isRoot && root.fields ? ({ ...layer, ...root.fields } as SceneNode) : layer);
+    tx.create(isRoot ? ({ ...layer, name: rootName(store, mainId) ?? source.name, ...root.fields } as SceneNode) : layer);
     for (const childId of store.children(sourceId)) {
       const child = store.get(childId);
       if (child && isSceneNode(child)) clone(childId, { id, key: child.parent.key }, false);
@@ -149,6 +149,26 @@ function mainLayerOf(store: DocumentStore, layer: SceneNode, root: SceneNode): S
   return main && isSceneNode(main) ? main : undefined;
 }
 
+/** The component set a main component is a variant of, if any. */
+function componentSetOf(store: DocumentStore, mainId: Id): SceneNode | undefined {
+  const parentId = store.parentOf(mainId);
+  const parent = parentId === null ? undefined : store.get(parentId);
+  return parent?.type === 'FRAME' && parent.componentSet ? parent : undefined;
+}
+
+/** The name an instance takes from its main component: the component set's name for a variant. */
+function rootName(store: DocumentStore, mainId: Id): string | undefined {
+  const main = store.get(mainId);
+  return componentSetOf(store, mainId)?.name ?? (main && isSceneNode(main) ? main.name : undefined);
+}
+
+/** The value an instance layer's field follows: its main layer's, except that instances of a variant are named after the set. */
+function mainValue(store: DocumentStore, layer: SceneNode, root: SceneNode, name: string): unknown {
+  if (name === 'name' && layer.id === root.id && root.type === 'FRAME' && root.instance) return rootName(store, root.instance.mainId);
+  const main = mainLayerOf(store, layer, root);
+  return main ? field(main, name) : undefined;
+}
+
 /**
  * Reset all changes: every overridden field of the given instances (with their layers) or instance
  * layers takes the main component's value again, and the layers follow the component for it.
@@ -162,9 +182,8 @@ export function resetOverrides(tx: Transaction, ids: readonly Id[]): void {
     for (const layerId of layers) {
       const layer = store.get(layerId);
       if (!layer || !isSceneNode(layer) || !layer.overrides) continue;
-      const main = mainLayerOf(store, layer, owner.root);
       for (const name of layer.overrides) {
-        const value = main ? field(main, name) : undefined;
+        const value = mainValue(store, layer, owner.root, name);
         // Document values are plain JSON data, so a JSON round trip copies them.
         tx.set(layerId, name, value === undefined ? undefined : (JSON.parse(JSON.stringify(value)) as unknown));
       }
@@ -216,14 +235,20 @@ export function componentFinalizer(tx: Transaction): void {
     if (op.kind !== 'set') continue;
     const owner = ownerOf(store, op.id);
     const node = store.get(op.id);
+    if (op.field === 'name' && node?.type === 'FRAME' && node.componentSet) {
+      // Renaming a component set renames the instances of its variants, unless they were renamed.
+      for (const variantId of store.children(op.id)) {
+        for (const instance of instancesOf(variantId)) if (!(instance.overrides ?? []).includes('name')) tx.set(instance.id, 'name', op.value);
+      }
+      continue;
+    }
     if (!owner || !node || !isSceneNode(node)) continue;
     const isRoot = owner.root.id === op.id;
     if (owner.kind === 'instance') {
       if (isOverridable(op.field)) {
         const overrides = node.overrides ?? [];
         // Back to the main component's value (as when resetting), the field follows the component again.
-        const main = mainLayerOf(store, node, owner.root);
-        const matchesMain = main !== undefined && same(field(main, op.field), op.value);
+        const matchesMain = mainLayerOf(store, node, owner.root) !== undefined && same(mainValue(store, node, owner.root, op.field), op.value);
         if (matchesMain && overrides.includes(op.field)) tx.set(op.id, 'overrides', overrides.length > 1 ? overrides.filter((f) => f !== op.field) : undefined);
         else if (!matchesMain && !overrides.includes(op.field)) tx.set(op.id, 'overrides', [...overrides, op.field]);
       } else if (!(isRoot && (ROOT_PLACEMENT.has(op.field) || op.field === 'size'))) {
@@ -231,7 +256,8 @@ export function componentFinalizer(tx: Transaction): void {
       }
       continue;
     }
-    if (isRoot && ROOT_PLACEMENT.has(op.field)) continue;
+    // Instances of a variant are named after its component set rather than the variant.
+    if (isRoot && (ROOT_PLACEMENT.has(op.field) || (op.field === 'name' && componentSetOf(store, op.id)))) continue;
     for (const instance of instancesOf(owner.root.id)) {
       const target = isRoot
         ? instance

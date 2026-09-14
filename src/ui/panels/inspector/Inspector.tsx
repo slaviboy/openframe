@@ -60,7 +60,8 @@ import gradientStyles from './Gradient.module.css';
 import { gradientCss } from './gradient-css';
 import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
 import { canCreateComponent, canCreateMultipleComponents, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
-import { canCombineAsVariants, combineAsVariants } from '@/editor/commands/variants';
+import { canCombineAsVariants, combineAsVariants, instanceVariant, setInstanceVariant } from '@/editor/commands/variants';
+import { componentSetProperties, parseVariantName } from '@/core/document/variants';
 import { commandItem } from '../../menus/menu-model';
 import { Menu, type MenuEntry } from '../../primitives/Menu';
 import { localComponents } from '@/editor/commands/insert-instance';
@@ -900,6 +901,8 @@ function ComponentSection({ node }: { node: SceneNode }) {
     </a>
   ) : null;
   if (main.id !== node.id) {
+    const variantOf = instanceVariant(editor, node.id);
+    const values = new Map(variantOf ? (parseVariantName(variantOf.variant.name) ?? []) : []);
     // The instance menu: swap this instance for another component of the file.
     return (
       <Section title="Component">
@@ -910,6 +913,34 @@ function ComponentSection({ node }: { node: SceneNode }) {
             </option>
           ))}
         </select>
+        {variantOf &&
+          // Configure the variant: a dropdown of values for each property of the set, or a toggle for true/false.
+          componentSetProperties(editor.doc, variantOf.set.id).map((property) => {
+            const current = values.get(property.name) ?? '';
+            const on = property.values.find((v) => /^true$/i.test(v));
+            const off = property.values.find((v) => /^false$/i.test(v));
+            if (property.values.length === 2 && on !== undefined && off !== undefined) {
+              return (
+                <label key={property.name} className={styles.checkbox}>
+                  <input type="checkbox" checked={current === on} onChange={(e) => setInstanceVariant(editor, node.id, property.name, e.target.checked ? on : off)} />
+                  {property.name}
+                </label>
+              );
+            }
+            return (
+              <div key={property.name} className={styles.grid2}>
+                <span className={styles.hint}>{property.name}</span>
+                <select className={primitives.select} aria-label={property.name} value={current} onChange={(e) => setInstanceVariant(editor, node.id, property.name, e.target.value)}>
+                  {!property.values.includes(current) && <option value={current} />}
+                  {property.values.map((value) => (
+                    <option key={value} value={value}>
+                      {value}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            );
+          })}
         {description && <p className={styles.hint}>{description}</p>}
         {docs}
       </Section>

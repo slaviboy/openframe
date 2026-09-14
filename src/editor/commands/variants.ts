@@ -16,12 +16,13 @@
  */
 
 import { isMainComponent } from '@/core/document/instances';
-import { isComponentSet, variantNamesFromComponents } from '@/core/document/variants';
+import { isComponentSet, parseVariantName, variantFor, variantNamesFromComponents } from '@/core/document/variants';
 import type { Id } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 import { selectedSceneNodes } from './selection-helpers';
 import { wrapNodes } from './structure';
+import { swapInstanceFor } from './swap-instance';
 
 /** Component sets have a dashed purple stroke and no fill by default. */
 const COMPONENT_SET_STROKE = { type: 'SOLID', color: { r: 0x97 / 255, g: 0x47 / 255, b: 1, a: 1 }, opacity: 1, visible: true, blendMode: 'NORMAL' } as const;
@@ -62,4 +63,26 @@ export function combineAsVariants(editor: Editor): Id | null {
   });
   editor.state.select([setId]);
   return setId;
+}
+
+/** The component set and variant an instance was made from, when its main component is a variant. */
+export function instanceVariant(editor: Editor, instanceId: Id): { set: SceneNode; variant: SceneNode } | null {
+  const instance = editor.doc.get(instanceId) as SceneNode | undefined;
+  if (instance?.type !== 'FRAME' || !instance.instance) return null;
+  const variant = editor.doc.get(instance.instance.mainId) as SceneNode | undefined;
+  const setId = variant ? editor.doc.parentOf(variant.id) : null;
+  const set = setId === null ? undefined : (editor.doc.get(setId) as SceneNode | undefined);
+  return variant && set && isComponentSet(set) ? { set, variant } : null;
+}
+
+/**
+ * Configures an instance's variant: gives one of its properties another value, which swaps the instance for
+ * the variant of its component set with that combination (or the closest one), keeping the instance's changes.
+ */
+export function setInstanceVariant(editor: Editor, instanceId: Id, property: string, value: string): boolean {
+  const found = instanceVariant(editor, instanceId);
+  if (!found) return false;
+  const values = (parseVariantName(found.variant.name) ?? []).filter(([p]) => p !== property);
+  const target = variantFor(editor.doc, found.set.id, [...values, [property, value]], property);
+  return target !== null && target.id !== found.variant.id && swapInstanceFor(editor, instanceId, target.id);
 }
