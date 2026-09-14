@@ -92,6 +92,21 @@ describe('constraints', () => {
     expect(drag.box().x).toBe(170);
   });
 
+  test('with preview finalizers, children follow a resize drag before it commits', () => {
+    const { store, history, frame, box } = setup('MAX');
+    const live = new History<null>({ store, captureMeta: () => null, restoreMeta: () => undefined, finalizers: [constraintsFinalizer], previewFinalizers: [constraintsFinalizer] });
+    expect(history.canUndo).toBe(true);
+    const tx = live.begin('drag');
+    tx.set(frame, 'size', { width: 150, height: 100 });
+    tx.flushPreview();
+    expect(box().x).toBe(120);
+    tx.set(frame, 'size', { width: 200, height: 100 });
+    tx.flushPreview();
+    expect(box().x).toBe(170);
+    live.cancel(tx);
+    expect(box().x).toBe(70);
+  });
+
   test('a nested frame stretched by its parent passes the resize on to its children', () => {
     const { ids, store, history, frame, page } = setup('MIN');
     const inner = ids.next();

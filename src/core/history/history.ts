@@ -104,6 +104,8 @@ export class Transaction {
     readonly store: DocumentStore,
     readonly label: string,
     private readonly onPreview: (ops: readonly Op[]) => void,
+    /** Runs before each preview is emitted, e.g. finalizers that keep layout live during a drag. */
+    private readonly beforePreview: (tx: Transaction) => void = () => {},
   ) {}
 
   get ops(): readonly Op[] {
@@ -156,6 +158,7 @@ export class Transaction {
    */
   flushPreview(): void {
     if (!this.dirty) return;
+    this.beforePreview(this);
     this.dirty = false;
     this.onPreview(this.recorded);
   }
@@ -183,6 +186,11 @@ export interface HistoryOptions<Meta> {
   captureMeta: () => Meta;
   restoreMeta: (meta: Meta) => void;
   finalizers?: Finalizer[];
+  /**
+   * Finalizers that also run before every preview of an open transaction, so derived layout follows a
+   * drag live. They must be safe to run repeatedly (compute from the ops' original values).
+   */
+  previewFinalizers?: Finalizer[];
   /** Development invariant check run after every change. */
   validate?: (store: DocumentStore) => void;
   limit?: number;
@@ -237,7 +245,14 @@ export class History<Meta> {
 
   begin(label: string, options: TransactionOptions = {}): Transaction {
     if (this.active) throw new Error(`Cannot begin "${label}": "${this.active.tx.label}" is still active`);
-    const tx = new Transaction(this.store, label, (ops) => this.emit(buildChangeSet(ops, 'preview', this.store)));
+    const tx = new Transaction(
+      this.store,
+      label,
+      (ops) => this.emit(buildChangeSet(ops, 'preview', this.store)),
+      (open) => {
+        for (const finalize of this.options.previewFinalizers ?? []) finalize(open);
+      },
+    );
     this.active = { tx, metaBefore: this.options.captureMeta(), mergeKey: options.mergeKey };
     this.activeUndoable = options.undoable ?? true;
     return tx;

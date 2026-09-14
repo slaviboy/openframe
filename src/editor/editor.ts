@@ -154,6 +154,8 @@ export class Editor {
       // Text boxes fit their content before groups measure their children.
       // Constraints move children of resized frames before text boxes fit and groups measure them.
       finalizers: [constraintsFinalizer, createTextFinalizer(() => this.textLayout), groupFinalizer],
+      // Children follow their frame's constraints live while it is resized.
+      previewFinalizers: [constraintsFinalizer],
       ...(options.validate ? { validate: assertDocumentInvariants } : {}),
     });
     // The scene index must learn about every change before anything renders or hit-tests.
