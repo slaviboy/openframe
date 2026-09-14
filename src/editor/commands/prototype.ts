@@ -19,6 +19,8 @@ import type { Transaction } from '@/core/history/history';
 import type { Id } from '@/core/ids/ids';
 import { DEFAULT_OVERLAY, flowForNewConnection, flowsOf, nextFlowName } from '@/core/prototype/flows';
 import { makeReaction, topLevelFrame, triggerAllowed } from '@/core/prototype/reactions';
+import { canonicalStringify } from '@/core/serialize/serialize';
+import { matchingLayers } from './select-similar';
 import type { FlowStartingPoint, OverlaySettings, PageNode, Reaction, SceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 
@@ -97,6 +99,47 @@ export function pasteInteractions(editor: Editor, ids: readonly Id[], pasted: re
       }
     }),
   );
+  return true;
+}
+
+/**
+ * Select matching interactions: the interactions identical to one on a layer (the same actions, with their destinations)
+ * on that layer and on the matching layers in the other top-level frames, as connections to select (its own first).
+ */
+export function matchingInteractions(editor: Editor, sourceId: Id, reactionIndex: number): ConnectionRef[] {
+  const reaction = reactionsOf(editor.doc.get(sourceId) as SceneNode | undefined)[reactionIndex];
+  if (!reaction) return [];
+  const key = canonicalStringify(reaction.actions);
+  const refs: ConnectionRef[] = [{ sourceId, reactionIndex, actionIndex: 0 }];
+  for (const id of matchingLayers(editor, [sourceId])) {
+    if (id === sourceId) continue;
+    reactionsOf(editor.doc.get(id) as SceneNode | undefined).forEach((candidate, index) => {
+      if (canonicalStringify(candidate.actions) === key) refs.push({ sourceId: id, reactionIndex: index, actionIndex: 0 });
+    });
+  }
+  return refs;
+}
+
+/**
+ * Changes several interactions at once (matching interactions selected together): each becomes `reaction`, keeping its
+ * own trigger where its layer can't take the new one. One undo step; false when none of them exists.
+ */
+export function updateInteractionsAt(editor: Editor, refs: readonly ConnectionRef[], reaction: Reaction): boolean {
+  const targets = refs.filter((ref, i) => refs.findIndex((other) => other.sourceId === ref.sourceId && other.reactionIndex === ref.reactionIndex) === i && reactionsOf(editor.doc.get(ref.sourceId) as SceneNode | undefined)[ref.reactionIndex] !== undefined);
+  if (targets.length === 0) return false;
+  editor.history.run('Change interactions', (tx) => {
+    for (const ref of targets) {
+      const current = reactionsOf(tx.store.get(ref.sourceId) as SceneNode);
+      const trigger = triggerAllowed(current, reaction.trigger.type, ref.reactionIndex) ? reaction.trigger : current[ref.reactionIndex]!.trigger;
+      const next = { ...reaction, trigger };
+      startFlowForConnection(tx, ref.sourceId, next, ref.reactionIndex);
+      tx.set(
+        ref.sourceId,
+        'reactions',
+        current.map((existing, i) => (i === ref.reactionIndex ? next : existing)),
+      );
+    }
+  });
   return true;
 }
 

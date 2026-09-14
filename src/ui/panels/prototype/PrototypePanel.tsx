@@ -56,7 +56,24 @@ import {
 import { DEFAULT_OVERLAY_BACKGROUND, flowsOf, isOverlayDestination, OVERLAY_POSITION_LABELS, overlaySettings } from '@/core/prototype/flows';
 import { topLevelFrame } from '@/core/prototype/reactions';
 import type { Color, MediaAction, OverlaySettings, PrototypeAction, PrototypeEasing, PrototypeTransition, Reaction, SceneNode } from '@/core/schema/document';
-import { addFlowStartingPoint, addInteraction, removeFlowStartingPoint, removeInteraction, setOverflowDirection, setOverlaySettings, setPrototypeBackground, setPrototypeDevice, setScrollBehavior, updateFlowStartingPoint, updateInteraction } from '@/editor/commands/prototype';
+import {
+  addFlowStartingPoint,
+  addInteraction,
+  matchingInteractions,
+  removeFlowStartingPoint,
+  removeInteraction,
+  setOverflowDirection,
+  setOverlaySettings,
+  setPrototypeBackground,
+  setPrototypeDevice,
+  setScrollBehavior,
+  updateFlowStartingPoint,
+  updateInteraction,
+  updateInteractionsAt,
+  type ConnectionRef,
+} from '@/editor/commands/prototype';
+import type { DocumentStore } from '@/core/document/store';
+import { canonicalStringify } from '@/core/serialize/serialize';
 import { DEVICE_CATEGORIES, presetsIn } from '@/core/document/frame-presets';
 import { effectiveDevice } from '@/core/prototype/device';
 import { parseExpression } from '@/core/prototype/expressions';
@@ -594,10 +611,23 @@ function ConditionalFields({
 }
 
 /** The Interaction details of one interaction: its trigger (with its delay or key) and its actions. */
-function InteractionDetails({ ids, hotspotId, reactions, index }: { ids: readonly Id[]; hotspotId: Id; reactions: readonly Reaction[]; index: number }) {
+function InteractionDetails({
+  ids,
+  hotspotId,
+  reactions,
+  index,
+  targets,
+}: {
+  ids: readonly Id[];
+  hotspotId: Id;
+  reactions: readonly Reaction[];
+  index: number;
+  /** Matching interactions selected together: changes apply to each of them. */
+  targets?: readonly ConnectionRef[] | undefined;
+}) {
   const editor = useEditor();
   const reaction = reactions[index]!;
-  const change = (next: Reaction) => updateInteraction(editor, ids, index, next);
+  const change = (next: Reaction) => (targets ? updateInteractionsAt(editor, targets, next) : updateInteraction(editor, ids, index, next));
   const moveActions = (from: ActionPath, to: ActionPath) => {
     const actions = moveAction(reaction.actions, from, to);
     // An interaction keeps at least one action of its own.
@@ -661,6 +691,21 @@ function InteractionDetails({ ids, hotspotId, reactions, index }: { ids: readonl
       >
         Add action
       </button>
+      {!targets && (
+        // The identical interactions on the matching layers in other frames, selected to edit together.
+        <button
+          type="button"
+          className={styles.textButton}
+          disabled={matchingInteractions(editor, hotspotId, index).length < 2}
+          onClick={() => {
+            const refs = matchingInteractions(editor, hotspotId, index);
+            editor.state.select([...new Set(refs.map((ref) => ref.sourceId))]);
+            editor.state.selectConnections(refs);
+          }}
+        >
+          Select matching interactions
+        </button>
+      )}
     </div>
   );
 }
@@ -1000,6 +1045,27 @@ function OverlaySection({ node }: { node: SceneNode }) {
   );
 }
 
+/**
+ * The selected connections when they are identical interactions on the selected layers (as Select matching
+ * interactions selects them), one per interaction; null otherwise.
+ */
+function matchedSelection(store: DocumentStore, nodes: readonly SceneNode[], refs: readonly ConnectionRef[]): ConnectionRef[] | null {
+  if (nodes.length < 2 || refs.length < 2) return null;
+  const unique = refs.filter((ref, i) => refs.findIndex((other) => other.sourceId === ref.sourceId && other.reactionIndex === ref.reactionIndex) === i);
+  const reactionOf = (ref: ConnectionRef) => (store.get(ref.sourceId) as SceneNode | undefined)?.reactions?.[ref.reactionIndex];
+  const first = reactionOf(unique[0]!);
+  if (!first) return null;
+  const key = canonicalStringify(first.actions);
+  const sources = new Set(unique.map((ref) => ref.sourceId));
+  if (!nodes.every((node) => sources.has(node.id))) return null;
+  return unique.every((ref) => {
+    const reaction = reactionOf(ref);
+    return reaction !== undefined && canonicalStringify(reaction.actions) === key;
+  })
+    ? unique
+    : null;
+}
+
 /** Video: how the video fills of the selected layers play in presentation view (autoplay, loop and sound). */
 function VideoSection({ nodes }: { nodes: readonly SceneNode[] }) {
   const editor = useEditor();
@@ -1053,6 +1119,8 @@ export function PrototypePanel() {
   }
   const ids = nodes.map((node) => node.id);
   const mixed = new Set(nodes.map((node) => JSON.stringify(node.reactions ?? []))).size > 1;
+  // Matching interactions selected together are edited together.
+  const matched = matchedSelection(editor.doc, nodes, selectedConnections);
   const reactions = mixed ? [] : (nodes[0]!.reactions ?? []);
   const frame = nodes.length === 1 && topLevelFrame(editor.doc, nodes[0]!.id) === nodes[0]!.id ? nodes[0]! : null;
   // A connection selected on the canvas opens its interaction's details.
@@ -1076,7 +1144,13 @@ export function PrototypePanel() {
             />
           </div>
         </header>
-        {(mixed || reactions.length > 0) && (
+        {matched && (
+          <div className={inspector.sectionBody}>
+            <p className={inspector.hint}>{matched.length} matching interactions are selected: changes apply to all of them.</p>
+            <InteractionDetails ids={ids} hotspotId={matched[0]!.sourceId} reactions={(editor.doc.get(matched[0]!.sourceId) as SceneNode).reactions ?? []} index={matched[0]!.reactionIndex} targets={matched} />
+          </div>
+        )}
+        {!matched && (mixed || reactions.length > 0) && (
           <div className={inspector.sectionBody}>
             {mixed && <p className={inspector.hint}>The selected layers have different interactions. Click + to add one to each.</p>}
             <ul className={styles.list} aria-label="Interaction list">

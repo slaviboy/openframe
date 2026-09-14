@@ -171,6 +171,10 @@ This file is how work continues after a pause (for example, a usage limit). Read
   - Fixed layers with Animate matching layers (the commit after presentation options):
     - in `smart-animate.ts`, `matchedLayersStore` shows matching fixed layers untransitioned and dissolves unmatched fixed layers in place
     - `withoutMatchingLayersStore` leaves those fixed layers out of the moving frames
+  - Select matching interactions (the commit after fixed layers):
+    - `matchingInteractions` and `updateInteractionsAt` in `src/editor/commands/prototype.ts`
+    - the Interaction details button selects them
+    - `matchedSelection` in PrototypePanel.tsx edits them together
 
 ## In progress (uncommitted)
 
