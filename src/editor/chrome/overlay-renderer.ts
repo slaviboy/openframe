@@ -27,6 +27,7 @@ import type { SnapGuide } from '@/core/scene/snapping';
 import { isSceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 import { cropImageWorldQuad } from '../interactions/crop';
+import { isUprightHandle, selectedLayoutHandles } from '../interactions/layout-handles';
 import { textEditTarget } from '../interactions/text-edit';
 import { misspelledRanges } from '@/core/text/spelling';
 import { selectionEnd, selectionStart } from '@/core/text/text-editing';
@@ -121,6 +122,7 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
 
   const frame = selectionFrame(editor);
   if (frame && state.selection.length > 1) drawSmartSelection(ctx, input);
+  drawLayoutHandles(ctx, input);
   if (frame) {
     const quad = screenQuad(editor, frame);
     // Slices are invisible in the scene, so their outline is dashed.
@@ -534,6 +536,29 @@ function drawSmartSelection(ctx: CanvasRenderingContext2D, input: OverlayInput):
   for (const handle of spacingHandles(info.rects, info.selection)) {
     const p = worldToScreen(v, handle);
     const [w, h] = info.selection.axis === 'x' ? [3, 14] : [14, 3];
+    ctx.beginPath();
+    ctx.roundRect(Math.round(p.x - w / 2), Math.round(p.y - h / 2), w, h, 1.5);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+/** Pink spacing handles of the selected auto layout frame, while the pointer is over the frame or its contents. */
+function drawLayoutHandles(ctx: CanvasRenderingContext2D, input: OverlayInput): void {
+  const { editor, theme } = input;
+  const selected = selectedLayoutHandles(editor);
+  if (!selected) return;
+  const hover = editor.state.getSnapshot().hoverId;
+  if (!hover || (hover !== selected.frameId && !editor.doc.isAncestor(selected.frameId, hover))) return;
+  const node = editor.doc.get(selected.frameId);
+  const v = editor.state.viewport;
+  // Too small on screen to tell the handles apart.
+  if (!node || node.type !== 'FRAME' || Math.min(node.size.width * Math.abs(selected.toWorld.a), node.size.height * Math.abs(selected.toWorld.d)) * v.zoom < 48) return;
+  ctx.save();
+  ctx.fillStyle = theme.spacing;
+  for (const handle of selected.handles) {
+    const p = worldToScreen(v, apply(selected.toWorld, handle.at));
+    const [w, h] = isUprightHandle(handle, selected.direction) ? [3, 12] : [12, 3];
     ctx.beginPath();
     ctx.roundRect(Math.round(p.x - w / 2), Math.round(p.y - h / 2), w, h, 1.5);
     ctx.fill();

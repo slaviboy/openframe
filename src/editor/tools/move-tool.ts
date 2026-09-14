@@ -18,7 +18,10 @@
 import { keyOnTop } from '@/core/document/factory';
 import type { Transaction } from '@/core/history/history';
 import type { Id } from '@/core/ids/ids';
-import { apply, invert, multiply } from '@/core/math/matrix';
+import { apply, invert, multiply, type Matrix } from '@/core/math/matrix';
+import { draggedGap, draggedPadding, type LayoutHandle } from '@/core/layout/layout-handles';
+import type { Padding } from '@/core/layout/flow-layout';
+import { hitLayoutHandle, isUprightHandle } from '../interactions/layout-handles';
 import { fromPoints, transformRect, unionAll, type Rect } from '@/core/math/rect';
 import { edgeValues, guidesFor, snapBounds, snapValue, type SnapGuide } from '@/core/scene/snapping';
 import { isLayoutGuideRect, SNAP_THRESHOLD_PX, snapCandidatesFor } from '../interactions/snap-candidates';
@@ -32,7 +35,7 @@ import { hitTestDeepest, isArtboardWithChildren, isInteractive, marqueeSelect, s
 import { snapEqualGaps, type GapIndicator } from '@/core/scene/equal-gaps';
 import { measureBetween, type MeasureLine } from '@/core/scene/measure';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
-import { isSceneNode, type SceneNode } from '@/core/schema/document';
+import { isSceneNode, type FrameNode, type SceneNode } from '@/core/schema/document';
 import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
 import { flowInsertionIndex, flowInsertionLine, moveToFlowIndex } from '@/core/layout/flow-order';
 import { beginCrop } from '../interactions/crop';
@@ -145,6 +148,19 @@ type Gesture =
       down: PointerInfo;
       last: PointerInfo;
       radius: number;
+    }
+  /** Dragging an auto layout frame's padding or gap handle; values come from the drag's start. */
+  | {
+      kind: 'layout-handle';
+      tx: Transaction;
+      down: PointerInfo;
+      last: PointerInfo;
+      frameId: Id;
+      handle: LayoutHandle;
+      direction: 'HORIZONTAL' | 'VERTICAL' | 'GRID';
+      startPadding: Padding;
+      startGap: number;
+      toWorld: Matrix;
     };
 
 /**
@@ -244,6 +260,7 @@ export class MoveTool implements Tool {
     if (this.gesture.kind === 'resize') return handleCursor(this.gesture.frame, this.gesture.handle);
     if (this.gesture.kind === 'rotate') return rotateCursor(this.gesture.frame, this.gesture.corner);
     if (this.gesture.kind === 'line-end') return 'crosshair';
+    if (this.gesture.kind === 'layout-handle') return isUprightHandle(this.gesture.handle, this.gesture.direction) ? 'ew-resize' : 'ns-resize';
     if (this.gesture.kind === 'spacing') return this.gesture.info.selection.axis === 'x' ? 'ew-resize' : 'ns-resize';
     return this.hoverCursor;
   }
@@ -279,6 +296,27 @@ export class MoveTool implements Tool {
         const candidates = snapCandidatesFor(editor, editor.selection);
         const scale = this.id === 'scale' ? captureScale(tx.store, editor.scene, editor.selection) : null;
         this.gesture = { kind: 'resize', down: p, tx, handle, frame, starts, last: p, candidates, guides: [], scale };
+        return;
+      }
+    }
+    // Padding and gap handles of a selected auto layout frame (resize handles on its edges take precedence).
+    if (this.id === 'move') {
+      const layout = hitLayoutHandle(editor, p.screen, this.env.hitTolerancePx);
+      if (layout) {
+        const node = editor.doc.getOrThrow(layout.selected.frameId) as FrameNode;
+        const tx = editor.history.begin(layout.handle.kind === 'gap' ? 'Change gap' : 'Change padding');
+        this.gesture = {
+          kind: 'layout-handle',
+          tx,
+          down: p,
+          last: p,
+          frameId: node.id,
+          handle: layout.handle,
+          direction: layout.selected.direction,
+          startPadding: { top: node.paddingTop ?? 0, right: node.paddingRight ?? 0, bottom: node.paddingBottom ?? 0, left: node.paddingLeft ?? 0 },
+          startGap: node.itemSpacing ?? 0,
+          toWorld: layout.selected.toWorld,
+        };
         return;
       }
     }
@@ -424,6 +462,10 @@ export class MoveTool implements Tool {
         g.last = p;
         this.applyRadius(p);
         return;
+      case 'layout-handle':
+        g.last = p;
+        this.applyLayoutHandle(p);
+        return;
       case 'spacing': {
         g.last = p;
         const delta = g.info.selection.axis === 'x' ? p.world.x - g.down.world.x : p.world.y - g.down.world.y;
@@ -487,6 +529,7 @@ export class MoveTool implements Tool {
         break;
       case 'rotate':
       case 'line-end':
+      case 'layout-handle':
       case 'spacing':
       case 'radius':
         editor.history.commit(g.tx);
@@ -513,13 +556,14 @@ export class MoveTool implements Tool {
     if (g.kind === 'rotate') this.applyRotate({ ...g.last, ...m });
     if (g.kind === 'line-end') this.applyLineEnd({ ...g.last, ...m });
     if (g.kind === 'radius') this.applyRadius({ ...g.last, ...m });
+    if (g.kind === 'layout-handle') this.applyLayoutHandle({ ...g.last, ...m });
   }
 
   cancel(): boolean {
     const g = this.gesture;
     const { editor } = this.env;
     this.gesture = { kind: 'idle' };
-    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate' || g.kind === 'line-end' || g.kind === 'spacing' || g.kind === 'radius') {
+    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate' || g.kind === 'line-end' || g.kind === 'spacing' || g.kind === 'radius' || g.kind === 'layout-handle') {
       editor.history.cancel(g.tx);
       return true;
     }
@@ -784,6 +828,26 @@ export class MoveTool implements Tool {
         x1: result.x1 + from.x,
         y1: result.y1 + from.y,
       });
+    }
+    g.tx.flushPreview();
+    editor.requestRender();
+  }
+
+  /** Padding (⌥ opposite sides, ⌥⇧ all sides) or gap from a handle drag, stepping by the big nudge with ⇧. */
+  private applyLayoutHandle(p: PointerInfo): void {
+    const g = this.gesture;
+    if (g.kind !== 'layout-handle') return;
+    const { editor } = this.env;
+    const delta = { x: (p.world.x - g.down.world.x) / (Math.abs(g.toWorld.a) || 1), y: (p.world.y - g.down.world.y) / (Math.abs(g.toWorld.d) || 1) };
+    if (g.handle.kind === 'gap') {
+      if (g.direction !== 'GRID') g.tx.set(g.frameId, 'itemSpacing', draggedGap(g.startGap, g.direction, delta, p.shift ? editor.nudgeAmounts.big : undefined) || undefined);
+    } else {
+      const mode = p.alt ? (p.shift ? 'all' : 'opposite') : 'side';
+      const next = draggedPadding(g.startPadding, g.handle.side, delta, mode, !p.alt && p.shift ? editor.nudgeAmounts.big : undefined);
+      g.tx.set(g.frameId, 'paddingTop', next.top || undefined);
+      g.tx.set(g.frameId, 'paddingRight', next.right || undefined);
+      g.tx.set(g.frameId, 'paddingBottom', next.bottom || undefined);
+      g.tx.set(g.frameId, 'paddingLeft', next.left || undefined);
     }
     g.tx.flushPreview();
     editor.requestRender();
