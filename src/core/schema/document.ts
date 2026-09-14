@@ -71,12 +71,17 @@ export const BlendModeSchema = z.enum([
   'LUMINOSITY',
 ]);
 
+/** A reference to a variable: a variable's value that follows another variable, or a property bound to a variable. */
+export const VariableAliasSchema = z.object({ type: z.literal('VARIABLE_ALIAS'), id: IdSchema });
+
 export const SolidPaintSchema = z.object({
   type: z.literal('SOLID'),
   color: ColorSchema,
   opacity: unit,
   visible: z.boolean(),
   blendMode: BlendModeSchema,
+  /** The color variable the color comes from, while it is applied. */
+  boundVariables: z.object({ color: VariableAliasSchema }).optional(),
 });
 
 export const GradientStopSchema = z.object({ position: unit, color: ColorSchema });
@@ -278,6 +283,13 @@ export const ConstraintSchema = z.enum(['MIN', 'MAX', 'CENTER', 'STRETCH', 'SCAL
 /** Resizing inside auto layout: `HUG` (auto layout frames) or `FILL` (children of auto layout frames). Absent means fixed. */
 export const LayoutSizingSchema = z.enum(['HUG', 'FILL']);
 
+/** Variables bound to a layer's properties, by property; the properties hold the resolved values. */
+export const BoundVariablesSchema = z
+  .record(z.string().min(1).max(64), VariableAliasSchema)
+  .refine((bindings) => Object.keys(bindings).length <= 64, 'Too many bound variables');
+/** Variable modes set on a layer or page, by collection id; collections not listed are Auto. */
+export const ExplicitVariableModesSchema = z.record(IdSchema, z.string().min(1).max(64)).refine((modes) => Object.keys(modes).length <= 256, 'Too many variable modes');
+
 const BaseNodeFields = {
   id: IdSchema,
   name: z.string().max(10_000),
@@ -296,6 +308,10 @@ const SceneFields = {
   effects: z.array(EffectSchema).max(64).optional(),
   /** The effect style the effects come from, while it is applied. */
   effectStyleId: IdSchema.optional(),
+  /** Variables bound to this layer's properties (see `BINDABLE_FIELDS`); the properties hold the resolved values. */
+  boundVariables: BoundVariablesSchema.optional(),
+  /** Variable modes set on this layer, by collection id; its children inherit them unless they set their own. */
+  explicitVariableModes: ExplicitVariableModesSchema.optional(),
   /** Inside a main component or variant: the component properties (by name) this layer's visibility and text, or for a nested instance its component, follow. */
   componentPropertyReferences: z
     .object({
@@ -398,6 +414,8 @@ export const PageNodeSchema = z.object({
   backgroundColor: ColorSchema,
   /** Canvas guides. Absent when the page has none. */
   guides: GuidesField,
+  /** Variable modes set on the page, by collection id. */
+  explicitVariableModes: ExplicitVariableModesSchema.optional(),
 });
 
 /**
@@ -814,10 +832,35 @@ export const StyleNodeSchema = z.object({
   hangingPunctuation: z.boolean().optional(),
 });
 
+/** A variable collection: a set of variables and modes (the first mode is the default). A child of the document. */
+export const VariableCollectionNodeSchema = z.object({
+  ...BaseNodeFields,
+  type: z.literal('VARIABLE_COLLECTION'),
+  modes: z
+    .array(z.object({ modeId: z.string().min(1).max(64), name: z.string().min(1).max(200) }))
+    .min(1)
+    .max(40),
+});
+
+/** A variable: one value per mode of its collection (its parent), a value or an alias to a variable of the same type. */
+export const VariableNodeSchema = z.object({
+  ...BaseNodeFields,
+  type: z.literal('VARIABLE'),
+  resolvedType: z.enum(['COLOR', 'FLOAT', 'STRING', 'BOOLEAN']),
+  valuesByMode: z.record(z.string().min(1).max(64), z.union([VariableAliasSchema, ColorSchema, z.number().finite(), z.string().max(100_000), z.boolean()])),
+  description: z.string().max(10_000).optional(),
+  /** The properties the variable is offered for; absent means all supported properties. */
+  scopes: z.array(z.string().min(1).max(64)).max(64).optional(),
+  /** Names of the variable in code, per platform. */
+  codeSyntax: z.object({ WEB: z.string().min(1).max(1000).optional(), ANDROID: z.string().min(1).max(1000).optional(), iOS: z.string().min(1).max(1000).optional() }).optional(),
+});
+
 export const NodeSchema = z.discriminatedUnion('type', [
   DocumentNodeSchema,
   PageNodeSchema,
   StyleNodeSchema,
+  VariableCollectionNodeSchema,
+  VariableNodeSchema,
   FrameNodeSchema,
   GroupNodeSchema,
   RectangleNodeSchema,
@@ -875,6 +918,8 @@ export type CornerRadii = z.infer<typeof CornerRadiiSchema>;
 export type DocumentNode = z.infer<typeof DocumentNodeSchema>;
 export type PageNode = z.infer<typeof PageNodeSchema>;
 export type StyleNode = z.infer<typeof StyleNodeSchema>;
+export type VariableCollectionNode = z.infer<typeof VariableCollectionNodeSchema>;
+export type VariableNode = z.infer<typeof VariableNodeSchema>;
 export type FrameNode = z.infer<typeof FrameNodeSchema>;
 export type GroupNode = z.infer<typeof GroupNodeSchema>;
 export type RectangleNode = z.infer<typeof RectangleNodeSchema>;
@@ -913,7 +958,8 @@ export type NodeType = Node['type'];
 export type DocumentMeta = z.infer<typeof DocumentMetaSchema>;
 export type SerializedDocument = z.infer<typeof DocumentSchema>;
 
-export const isSceneNode = (n: Node): n is SceneNode => n.type !== 'DOCUMENT' && n.type !== 'PAGE' && n.type !== 'STYLE';
+export const isSceneNode = (n: Node): n is SceneNode =>
+  n.type !== 'DOCUMENT' && n.type !== 'PAGE' && n.type !== 'STYLE' && n.type !== 'VARIABLE_COLLECTION' && n.type !== 'VARIABLE';
 export const hasGeometry = (n: Node): n is FrameNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | VectorNode | BooleanOperationNode | SectionNode | TextNode =>
   n.type === 'FRAME' ||
   n.type === 'RECTANGLE' ||
