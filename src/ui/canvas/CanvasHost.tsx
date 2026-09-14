@@ -33,6 +33,11 @@ import { loadBundledFonts } from '@/engine/text/bundled-fonts';
 import { TextShaper } from '@/engine/text/text-shaper';
 import { apply } from '@/core/math/matrix';
 import { pastedUrl } from '@/core/text/links';
+import { containsEmoji } from '@/core/text/emoji';
+import { loadEmojiFont } from '@/engine/text/bundled-fonts';
+import { viewPrefs } from '../view/view-prefs';
+import { emojiSuggest } from './emoji-suggest';
+import { precacheDeferredAssets } from '@/platform/sw-register';
 import { worldToScreen } from '@/editor/viewport/viewport';
 import {
   deleteText,
@@ -164,6 +169,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
     let renderer: SceneRenderer | null = null;
     let shaper: TextShaper | null = null;
     let unsubscribeFonts = () => {};
+    let unsubscribeEmoji = () => {};
     const textInput = textInputRef.current!;
     // Caret blink phase while editing text; restarts visible whenever the selection changes.
     let caretVisible = true;
@@ -288,9 +294,30 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
         };
         registerUserFonts();
         unsubscribeFonts = editor.fonts.subscribe(registerUserFonts);
+        // The color emoji font is large, so it loads only once some text contains emoji.
+        let emojiRequested = false;
+        const loadEmojiWhenUsed = () => {
+          if (emojiRequested) return;
+          for (const node of editor.doc.nodes()) {
+            if (node.type !== 'TEXT' || !containsEmoji(node.characters)) continue;
+            emojiRequested = true;
+            loadEmojiFont()
+              .then((font) => {
+                if (disposed || !shaper) return;
+                shaper.registerFallbackFonts([font]);
+                editor.requestRender();
+              })
+              .catch((error: unknown) => console.error(error));
+            break;
+          }
+          if (emojiRequested) unsubscribeEmoji();
+        };
+        unsubscribeEmoji = editor.history.subscribe(loadEmojiWhenUsed);
+        loadEmojiWhenUsed();
         editor.setTextLayout(shaper);
         resize();
         setStatus({ kind: 'ready' });
+        precacheDeferredAssets();
       })
       .catch((error: unknown) => {
         console.error(error);
@@ -355,7 +382,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
       switch (e.inputType) {
         case 'insertText':
         case 'insertReplacementText':
-          insertText(editor, e.data ?? e.dataTransfer?.getData('text/plain') ?? '');
+          insertText(editor, e.data ?? e.dataTransfer?.getData('text/plain') ?? '', { smartSymbols: viewPrefs.getSnapshot().smartSymbols });
           break;
         case 'insertLineBreak':
         case 'insertParagraph':
@@ -400,6 +427,11 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
     const onTextKeyDown = (e: KeyboardEvent) => {
       if (!editor.state.getSnapshot().textEdit || e.isComposing) return;
       plainPaste = e.code === 'KeyV' && e.shiftKey && (IS_MAC ? e.metaKey : e.ctrlKey);
+      // An open emoji list takes ↑/↓, Return, Tab and Esc.
+      if (emojiSuggest.handleKey(e, editor)) {
+        schedule();
+        return;
+      }
       if (onTextFormatKey(e)) {
         schedule();
         return;
@@ -605,6 +637,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
       textInput.removeEventListener('paste', onTextPaste);
       editor.setTextLayout(null);
       unsubscribeFonts();
+      unsubscribeEmoji();
       renderer?.dispose();
       shaper?.dispose();
       surface?.delete();

@@ -32,6 +32,8 @@ declare const self: ServiceWorkerGlobalScope;
 
 // Replaced at build time by the openframe-sw Vite plugin.
 const PRECACHE: readonly string[] = JSON.parse('__OPENFRAME_PRECACHE__');
+/** Cached after the app has started (see the PRECACHE_DEFERRED message). */
+const DEFERRED: readonly string[] = JSON.parse('__OPENFRAME_DEFERRED__');
 const VERSION = '__OPENFRAME_VERSION__';
 const CACHE = `openframe-${VERSION}`;
 
@@ -55,7 +57,25 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('message', (event) => {
-  if ((event.data as { type?: string } | null)?.type === 'SKIP_WAITING') void self.skipWaiting();
+  const type = (event.data as { type?: string } | null)?.type;
+  if (type === 'SKIP_WAITING') void self.skipWaiting();
+  // Sent by the page once the app has started: cache the large lazily loaded assets, one at a time.
+  if (type === 'PRECACHE_DEFERRED') {
+    event.waitUntil(
+      (async () => {
+        const cache = await caches.open(CACHE);
+        for (const path of DEFERRED) {
+          const request = new Request(new URL(path, self.registration.scope));
+          if (await cache.match(request, { ignoreVary: true })) continue;
+          try {
+            await cache.add(request);
+          } catch {
+            // Retried on the next start; until then the asset is fetched and cached when first used.
+          }
+        }
+      })(),
+    );
+  }
 });
 
 self.addEventListener('fetch', (event) => {

@@ -206,6 +206,16 @@ export class TextShaper implements TextLayoutService {
     return this.userFamilies.has(family) ? (this.familyAxes.get(family) ?? []) : BUNDLED_FONT_AXES;
   }
 
+  /** Registers internal fallback fonts loaded later (the color emoji font); cached layouts are dropped. */
+  registerFallbackFonts(fonts: readonly FontSource[]): void {
+    for (const font of fonts) {
+      this.provider.registerFont(font.bytes, font.family);
+      if (!this.families.includes(font.family)) this.families.push(font.family);
+    }
+    this.featureSupport.clear();
+    this.clearCache();
+  }
+
   fontFamilyOf(bytes: Uint8Array): string | null {
     const typeface = this.ck.Typeface.MakeTypefaceFromData(bytes.slice().buffer);
     if (!typeface) return null;

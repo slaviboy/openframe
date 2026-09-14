@@ -38,18 +38,23 @@ export function serviceWorkerPlugin(): Plugin {
       if (!isBuild) return;
       const sw = bundle['sw.js'];
       if (!sw || sw.type !== 'chunk') throw new Error('openframe-sw: sw.js chunk missing');
-      const files = Object.keys(bundle)
-        .filter((name) => name !== 'sw.js' && !name.endsWith('.map'))
-;
+      const files = Object.keys(bundle).filter((name) => name !== 'sw.js' && !name.endsWith('.map'));
+      // Large lazily loaded assets (the color emoji font) are cached after the app has started rather
+      // than at install, so the install doesn't download them while the page loads the CanvasKit wasm.
+      const isDeferred = (name: string) => /(^|\/)emoji-font-data-[^/]*\.js$/.test(name);
       // Paths are relative to the service worker's scope (the app's base path).
-      const precache = [...new Set(['./', 'index.html', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', ...files])].sort();
-      const version = createHash('sha256').update(precache.join('\n')).update(Object.values(bundle).map((b) => (b.type === 'chunk' ? b.code : '')).join('')).digest('hex').slice(0, 12);
-      if (!sw.code.includes('__OPENFRAME_PRECACHE__') || !sw.code.includes('__OPENFRAME_VERSION__')) {
+      const precache = [...new Set(['./', 'index.html', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', ...files.filter((f) => !isDeferred(f))])].sort();
+      const deferred = files.filter(isDeferred).sort();
+      const version = createHash('sha256')
+        .update([...precache, ...deferred].join('\n'))
+        .update(Object.values(bundle).map((b) => (b.type === 'chunk' ? b.code : '')).join(''))
+        .digest('hex')
+        .slice(0, 12);
+      if (!sw.code.includes('__OPENFRAME_PRECACHE__') || !sw.code.includes('__OPENFRAME_DEFERRED__') || !sw.code.includes('__OPENFRAME_VERSION__')) {
         throw new Error('openframe-sw: placeholders not found in sw.js');
       }
-      sw.code = sw.code
-        .replace('__OPENFRAME_PRECACHE__', JSON.stringify(precache).replace(/\\/g, '\\\\').replace(/'/g, "\\'"))
-        .replace('__OPENFRAME_VERSION__', version);
+      const literal = (list: readonly string[]) => JSON.stringify(list).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      sw.code = sw.code.replace('__OPENFRAME_PRECACHE__', literal(precache)).replace('__OPENFRAME_DEFERRED__', literal(deferred)).replace('__OPENFRAME_VERSION__', version);
     },
   };
 }

@@ -67,6 +67,15 @@ export function registerServiceWorker(): void {
   });
 }
 
+/**
+ * Asks the service worker to cache the large lazily loaded assets (the color emoji font). Called once
+ * the app has started, so that download never competes with loading the rendering engine.
+ */
+export function precacheDeferredAssets(): void {
+  if (!import.meta.env.PROD || !('serviceWorker' in navigator)) return;
+  void navigator.serviceWorker.ready.then((registration) => registration.active?.postMessage({ type: 'PRECACHE_DEFERRED' })).catch(() => undefined);
+}
+
 export function applyUpdate(): void {
   if (!waiting) return;
   navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload(), { once: true });

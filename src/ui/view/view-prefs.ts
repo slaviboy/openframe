@@ -34,6 +34,8 @@ export interface ViewPrefs {
   readonly snapToPixelGrid: boolean;
   /** Text captions on properties panel fields. */
   readonly propertyLabels: boolean;
+  /** Typing converts character sequences (->, (c), straight quotes …) to symbols. */
+  readonly smartSymbols: boolean;
   /** Arrow-key nudge distance, in canvas pixels. */
   readonly nudgeSmall: number;
   /** Shift + arrow-key nudge distance, in canvas pixels. */
@@ -52,6 +54,7 @@ export const VIEW_PREF_DEFAULTS: ViewPrefs = {
   pixelGrid: true,
   snapToPixelGrid: true,
   propertyLabels: false,
+  smartSymbols: false,
   nudgeSmall: 1,
   nudgeBig: 10,
 };
@@ -79,6 +82,7 @@ function readStored(): ViewPrefs {
       pixelGrid: flag('pixelGrid'),
       snapToPixelGrid: flag('snapToPixelGrid'),
       propertyLabels: flag('propertyLabels'),
+      smartSymbols: flag('smartSymbols'),
       nudgeSmall: amount('nudgeSmall'),
       nudgeBig: amount('nudgeBig'),
     };
@@ -158,5 +162,12 @@ export const VIEW_PREF_COMMANDS: CommandDefinition[] = [
     category: 'View',
     checked: () => viewPrefs.getSnapshot().propertyLabels,
     run: () => viewPrefs.toggle('propertyLabels'),
+  },
+  {
+    id: 'preferences.smartSymbols',
+    label: 'Use smart quotes/symbols',
+    category: 'View',
+    checked: () => viewPrefs.getSnapshot().smartSymbols,
+    run: () => viewPrefs.toggle('smartSymbols'),
   },
 ];

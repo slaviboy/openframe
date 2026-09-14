@@ -107,6 +107,20 @@ describe('lists while editing', () => {
   });
 });
 
+describe('smart quotes and symbols', () => {
+  test('typing converts sequences and quotes only with the preference on', () => {
+    editor.state.setTool('text');
+    click(100, 100);
+    for (const c of 'a->b') insertText(editor, c);
+    expect(texts()[0]!.characters).toBe('a->b');
+    insertText(editor, ' ');
+    for (const c of '"x" (c)') insertText(editor, c, { smartSymbols: true });
+    expect(texts()[0]!.characters).toBe('a->b “x” ©');
+    for (const c of ' ->') insertText(editor, c, { smartSymbols: true });
+    expect(texts()[0]!.characters).toBe('a->b “x” © →');
+  });
+});
+
 describe('right-to-left editing', () => {
   test('left and right arrows follow reading order in right-to-left paragraphs', () => {
     editor.state.setTool('text');

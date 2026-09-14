@@ -26,6 +26,7 @@ import { paragraphAt, paragraphRanges, paragraphStyleOffset } from '@/core/text/
 import { changeIndentation, setHyperlink, setListType, toggleListType } from '../commands/text';
 import { linkAt, type TextLink } from '@/core/text/links';
 import { directionAt } from '@/core/text/direction';
+import { smartSymbol } from '@/core/text/smart-symbols';
 import {
   caret,
   clampSelection,
@@ -222,7 +223,7 @@ function listItemAt(node: TextNode, offset: number): { start: number; end: numbe
  * empty item moves it out a level (or ends the list at the first level), and "- ", "* ", "1. " or
  * "1) " typed at the start of a paragraph starts a list.
  */
-export function insertText(editor: Editor, text: string): void {
+export function insertText(editor: Editor, text: string, options: { readonly smartSymbols?: boolean } = {}): void {
   const a = active(editor);
   if (!a) return;
   const typed = text.replace(/\r\n?/g, '\n');
@@ -234,6 +235,16 @@ export function insertText(editor: Editor, text: string): void {
         if (item.level > 1) changeIndentation(tx, a.node, -1, at);
         else setListType(tx, a.node, 'NONE', at);
       });
+      return;
+    }
+  }
+  // Use smart quotes/symbols: a typed character completing a sequence ("->", "(c)") or a straight quote becomes a symbol.
+  if (options.smartSymbols && typed.length === 1 && isCollapsed(a.selection)) {
+    const caretAt = a.selection.focus;
+    const start = paragraphAt(paragraphRanges(a.node.characters), caretAt).start;
+    const symbol = smartSymbol(a.node.characters.slice(start, caretAt), typed);
+    if (symbol) {
+      apply(editor, a.session, a.node, a.selection, replaceSelection(a.node.characters, { anchor: caretAt - symbol.remove, focus: caretAt }, symbol.text));
       return;
     }
   }

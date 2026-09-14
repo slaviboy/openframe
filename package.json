@@ -23,7 +23,9 @@
   "dependencies": {
     "@fontsource-variable/noto-sans-arabic": "^5.3.0",
     "@fontsource-variable/noto-sans-hebrew": "^5.3.0",
+    "@fontsource/noto-color-emoji": "^5.3.1",
     "canvaskit-wasm": "0.42.0",
+    "emojibase-data": "^17.0.0",
     "fflate": "0.8.3",
     "idb": "8.0.3",
     "react": "19.3.0",
@@ -38,6 +40,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.1",
+    "emojibase": "^17.0.0",
     "eslint": "10.10.0",
     "eslint-plugin-react-hooks": "7.1.1",
     "fake-indexeddb": "6.2.5",

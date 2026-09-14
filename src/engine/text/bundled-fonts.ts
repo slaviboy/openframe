@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { BUNDLED_FONT_FILES } from './font-files';
+import { BUNDLED_FONT_FILES, EMOJI_FAMILY } from './font-files';
 import type { FontSource } from './text-shaper';
 
 /** Decodes a base64 `data:` URL into its bytes (no request is made). */
@@ -44,4 +44,17 @@ export function loadBundledFonts(): Promise<FontSource[]> {
       throw error;
     });
   return pending;
+}
+
+let pendingEmoji: Promise<FontSource> | null = null;
+
+/** Loads the bundled color emoji font once, from its own lazily imported module. */
+export function loadEmojiFont(): Promise<FontSource> {
+  pendingEmoji ??= import('./emoji-font-data')
+    .then(({ EMOJI_FONT_DATA }) => ({ family: EMOJI_FAMILY, bytes: decodeDataUrl(EMOJI_FONT_DATA) }))
+    .catch((error: unknown) => {
+      pendingEmoji = null;
+      throw error;
+    });
+  return pendingEmoji;
 }

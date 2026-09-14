@@ -35,5 +35,9 @@ export const BUNDLED_FONT_FILES: readonly { readonly family: string; readonly fi
   { family: `${BUNDLED_FAMILY} (noto-hebrew)`, file: 'noto-sans-hebrew-hebrew-wght-normal.woff2', package: '@fontsource-variable/noto-sans-hebrew' },
 ];
 
+/** The bundled color emoji fallback (Noto Color Emoji), registered once text contains emoji. */
+export const EMOJI_FAMILY = `${BUNDLED_FAMILY} (noto-color-emoji)`;
+export const EMOJI_FONT_FILE = { file: 'noto-color-emoji-emoji-400-normal.woff2', package: '@fontsource/noto-color-emoji' } as const;
+
 /** Whether a registered family is an internal fallback subset rather than a font users pick. */
 export const isFallbackFamily = (family: string): boolean => family.startsWith(`${BUNDLED_FAMILY} (`);

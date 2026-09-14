@@ -21,7 +21,7 @@ import type { CanvasKit } from 'canvaskit-wasm';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { makeText } from '@/core/document/factory';
 import type { TextNode } from '@/core/schema/document';
-import { BUNDLED_FONT_FILES } from './font-files';
+import { BUNDLED_FONT_FILES, EMOJI_FAMILY, EMOJI_FONT_FILE } from './font-files';
 import { TextShaper } from './text-shaper';
 
 const require = createRequire(import.meta.url);
@@ -143,6 +143,19 @@ describe('text shaping', () => {
     const item = text({ characters: 'שלום', listType: 'UNORDERED' });
     const itemLaid = { ...item, size: shaper.measure(item, null) };
     expect(shaper.caretAt(itemLaid, 0).x).toBeLessThan(itemLaid.size.width - 20);
+  });
+
+  test('emoji shape with the color emoji fallback once it is registered, flags and sequences included', () => {
+    const emoji = text({ characters: '😀👍🏽🇺🇸' });
+    const before = shaper.measure(emoji, null).width;
+    shaper.registerFallbackFonts([{ family: EMOJI_FAMILY, bytes: new Uint8Array(readFileSync(require.resolve(`${EMOJI_FONT_FILE.package}/files/${EMOJI_FONT_FILE.file}`))) }]);
+    expect(shaper.registeredFamilies).toContain(EMOJI_FAMILY);
+    expect(shaper.availableFonts().map((f) => f.family)).not.toContain(EMOJI_FAMILY);
+    const laid = { ...emoji, size: shaper.measure(emoji, null) };
+    expect(laid.size.width).not.toBeCloseTo(before, 0);
+    // Three glyph clusters: the skin tone and the flag letters join their sequences.
+    expect(shaper.caretAt(laid, 2).x).toBeGreaterThan(10);
+    expect(shaper.offsetAt(laid, { x: laid.size.width + 5, y: 5 })).toBe(emoji.characters.length);
   });
 
   test('letter case changes the shaped text and max lines limits the height', () => {

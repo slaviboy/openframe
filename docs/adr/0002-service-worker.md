@@ -23,8 +23,12 @@ The service worker must never swap the running build out from under an editing s
 
 **Precache manifest injected at build time.** A small Vite plugin does three things:
 1. Emits the worker as `/sw.js`.
-2. In `generateBundle`, replaces the placeholders with every emitted file plus the app shell, manifest and icons.
-3. Stamps a version derived from the content hash.
+2. In `generateBundle`, replaces the placeholders with two lists:
+   - the install precache: every emitted file plus the app shell, manifest and icons, except deferred assets;
+   - the deferred list: large lazily loaded assets (currently the color emoji font chunk, `emoji-font-data-*.js`).
+3. Stamps a version derived from the content hash of both lists and the code.
+
+Deferred assets are cached after the app has started. Once the canvas is ready, the page calls `precacheDeferredAssets()`, which posts `PRECACHE_DEFERRED`. The worker then adds each missing deferred file to the current cache, one at a time; a failure is retried on the next start, and the normal cache-first fetch also caches the file when first used. This keeps the first install from downloading the 7.6 MB emoji chunk alongside the 8.2 MB CanvasKit wasm, while the app still works offline after one online start.
 
 The plugin fails the build if the placeholders are missing, so a misconfigured worker can never ship silently.
 
