@@ -32,12 +32,17 @@ import {
   makeEasing,
   makeTransition,
   makeTrigger,
+  MEDIA_ACTION_LABELS,
+  MEDIA_ACTIONS,
+  MEDIA_ACTIONS_WITH_AMOUNT,
+  MEDIA_TRIGGERS,
   reactionSummary,
   TRANSITION_LABELS,
   TRANSITION_TYPES,
   TRIGGER_LABELS,
   TRIGGER_TYPES,
   triggerAllowed,
+  videoLayerCandidates,
   type ActionKind,
   type EasingType,
   type TransitionDirection,
@@ -46,7 +51,7 @@ import {
 } from '@/core/prototype/reactions';
 import { DEFAULT_OVERLAY_BACKGROUND, flowsOf, isOverlayDestination, OVERLAY_POSITION_LABELS, overlaySettings } from '@/core/prototype/flows';
 import { topLevelFrame } from '@/core/prototype/reactions';
-import type { Color, OverlaySettings, PrototypeAction, PrototypeEasing, PrototypeTransition, Reaction, SceneNode } from '@/core/schema/document';
+import type { Color, MediaAction, OverlaySettings, PrototypeAction, PrototypeEasing, PrototypeTransition, Reaction, SceneNode } from '@/core/schema/document';
 import { addFlowStartingPoint, addInteraction, removeFlowStartingPoint, removeInteraction, setOverflowDirection, setOverlaySettings, setPrototypeBackground, setPrototypeDevice, setScrollBehavior, updateFlowStartingPoint, updateInteraction } from '@/editor/commands/prototype';
 import { DEVICE_CATEGORIES, presetsIn } from '@/core/document/frame-presets';
 import { effectiveDevice } from '@/core/prototype/device';
@@ -191,7 +196,14 @@ function ActionFields({ editor, hotspotId, action, suffix, onChange, onRemove }:
     <div className={styles.action} role="group" aria-label={`Action${suffix} settings`}>
       <div className={styles.row}>
         <select className={primitives.select} aria-label={`Action${suffix}`} value={kind} onKeyDown={stopKeys} onChange={(e) => changeKind(e.target.value as ActionKind)}>
-          {ACTION_KINDS.filter((option) => option !== 'CHANGE_TO' || kind === 'CHANGE_TO' || destinationCandidates(editor.doc, hotspotId, 'CHANGE_TO').length > 0).map((option) => (
+          {ACTION_KINDS.filter(
+            (option) =>
+              option === kind ||
+              (option !== 'CHANGE_TO' && option !== 'UPDATE_MEDIA_RUNTIME') ||
+              (option === 'CHANGE_TO' && destinationCandidates(editor.doc, hotspotId, 'CHANGE_TO').length > 0) ||
+              // Video actions control the videos in the layer's frame.
+              (option === 'UPDATE_MEDIA_RUNTIME' && videoLayerCandidates(editor.doc, hotspotId).length > 0),
+          ).map((option) => (
             <option key={option} value={option}>
               {ACTION_LABELS[option]}
             </option>
@@ -220,6 +232,7 @@ function ActionFields({ editor, hotspotId, action, suffix, onChange, onRemove }:
       {action.type === 'SET_VARIABLE' && <SetVariableFields editor={editor} action={action} suffix={suffix} onChange={onChange} />}
       {action.type === 'SET_VARIABLE_MODE' && <SetVariableModeFields editor={editor} action={action} suffix={suffix} onChange={onChange} />}
       {action.type === 'CONDITIONAL' && <ConditionalFields editor={editor} hotspotId={hotspotId} action={action} suffix={suffix} onChange={onChange} />}
+      {action.type === 'UPDATE_MEDIA_RUNTIME' && <MediaActionFields editor={editor} hotspotId={hotspotId} action={action} suffix={suffix} onChange={onChange} />}
       {action.type === 'NODE' && (
         <>
           <select className={primitives.select} aria-label={`Destination${suffix}`} value={action.destinationId ?? ''} onKeyDown={stopKeys} onChange={(e) => onChange({ ...action, destinationId: e.target.value || null })}>
@@ -247,9 +260,78 @@ function ActionFields({ editor, hotspotId, action, suffix, onChange, onRemove }:
               Reset scroll position
             </label>
           )}
+          {action.navigation !== 'SCROLL_TO' && action.navigation !== 'CHANGE_TO' && (
+            <label className={inspector.checkbox}>
+              <input
+                type="checkbox"
+                checked={action.resetVideoPosition ?? false}
+                onChange={(e) => {
+                  const { resetVideoPosition: _reset, ...rest } = action;
+                  onChange(e.target.checked ? { ...rest, resetVideoPosition: true } : rest);
+                }}
+              />
+              Reset video state
+            </label>
+          )}
         </>
       )}
     </div>
+  );
+}
+
+/** A video action: the layer whose video it controls, what it does, and the seconds it jumps by or the time it sets. */
+function MediaActionFields({
+  editor,
+  hotspotId,
+  action,
+  suffix,
+  onChange,
+}: {
+  editor: Editor;
+  hotspotId: Id;
+  action: Extract<PrototypeAction, { type: 'UPDATE_MEDIA_RUNTIME' }>;
+  suffix: string;
+  onChange: (action: PrototypeAction) => void;
+}) {
+  const candidates = videoLayerCandidates(editor.doc, hotspotId);
+  return (
+    <>
+      <select className={primitives.select} aria-label={`Video${suffix}`} value={action.destinationId ?? ''} onKeyDown={stopKeys} onChange={(e) => onChange({ ...action, destinationId: e.target.value || null })}>
+        <option value="">None</option>
+        {candidates.map((id) => (
+          <option key={id} value={id}>
+            {editor.doc.get(id)?.name}
+          </option>
+        ))}
+      </select>
+      <select
+        className={primitives.select}
+        aria-label={`Video action${suffix}`}
+        value={action.mediaAction}
+        onKeyDown={stopKeys}
+        onChange={(e) => {
+          const mediaAction = e.target.value as MediaAction;
+          const { amount, ...rest } = action;
+          onChange(MEDIA_ACTIONS_WITH_AMOUNT.has(mediaAction) ? { ...rest, mediaAction, amount: amount ?? (mediaAction === 'SKIP_TO' ? 0 : 5) } : { ...rest, mediaAction });
+        }}
+      >
+        {MEDIA_ACTIONS.map((option) => (
+          <option key={option} value={option}>
+            {MEDIA_ACTION_LABELS[option]}
+          </option>
+        ))}
+      </select>
+      {MEDIA_ACTIONS_WITH_AMOUNT.has(action.mediaAction) && (
+        <CommitNumber
+          label={action.mediaAction === 'SKIP_TO' ? `Time (s)${suffix}` : `Seconds${suffix}`}
+          value={action.amount ?? 0}
+          min={0}
+          max={86_400}
+          step={0.1}
+          onCommit={(amount) => onChange({ ...action, amount })}
+        />
+      )}
+    </>
   );
 }
 
@@ -386,13 +468,17 @@ function InteractionDetails({ ids, hotspotId, reactions, index }: { ids: readonl
   return (
     <div className={styles.details} role="group" aria-label="Interaction details">
       <select className={primitives.select} aria-label="Trigger" value={trigger.type} onKeyDown={stopKeys} onChange={(e) => change({ ...reaction, trigger: makeTrigger(e.target.value as TriggerType) })}>
-        {TRIGGER_TYPES.map((type) => (
+        {/* Video triggers are for layers with a video fill. */}
+        {TRIGGER_TYPES.filter((type) => !MEDIA_TRIGGERS.has(type) || type === trigger.type || videoFillsOf(editor.doc.get(hotspotId) as SceneNode | undefined).length > 0).map((type) => (
           <option key={type} value={type} disabled={!triggerAllowed(reactions, type, index)}>
             {TRIGGER_LABELS[type]}
           </option>
         ))}
       </select>
       {trigger.type === 'AFTER_TIMEOUT' && <CommitNumber label="Delay (ms)" value={trigger.timeout} min={0} max={600_000} onCommit={(timeout) => change({ ...reaction, trigger: { ...trigger, timeout } })} />}
+      {trigger.type === 'ON_MEDIA_HIT' && (
+        <CommitNumber label="Video time (s)" value={trigger.mediaHitTime} min={0} max={86_400} step={0.1} onCommit={(mediaHitTime) => change({ ...reaction, trigger: { ...trigger, mediaHitTime } })} />
+      )}
       {trigger.type === 'ON_KEY_DOWN' && (
         <input
           className={primitives.textInput}

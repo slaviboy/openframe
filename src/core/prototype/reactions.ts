@@ -19,7 +19,8 @@ import { bezierPreset, springDurationMs, springPreset, type Easing } from '../an
 import type { DocumentStore } from '../document/store';
 import { isComponentSet, variantsOf } from '../document/variants';
 import type { Id } from '../ids/ids';
-import type { PrototypeAction, PrototypeEasing, PrototypeTransition, PrototypeTrigger, Reaction } from '../schema/document';
+import type { MediaAction, PrototypeAction, PrototypeEasing, PrototypeTransition, PrototypeTrigger, Reaction } from '../schema/document';
+import { videoFillsIn } from './video';
 
 export type TriggerType = PrototypeTrigger['type'];
 export type ActionKind = Extract<PrototypeAction, { type: 'NODE' }>['navigation'] | Exclude<PrototypeAction['type'], 'NODE'>;
@@ -28,7 +29,7 @@ export type EasingType = PrototypeEasing['type'];
 export type TransitionDirection = Extract<PrototypeTransition, { direction: string }>['direction'];
 
 /** Triggers in the order the interaction details list them. */
-export const TRIGGER_TYPES: readonly TriggerType[] = ['ON_CLICK', 'ON_DRAG', 'ON_HOVER', 'ON_PRESS', 'ON_KEY_DOWN', 'MOUSE_ENTER', 'MOUSE_LEAVE', 'MOUSE_DOWN', 'MOUSE_UP', 'AFTER_TIMEOUT'];
+export const TRIGGER_TYPES: readonly TriggerType[] = ['ON_CLICK', 'ON_DRAG', 'ON_HOVER', 'ON_PRESS', 'ON_KEY_DOWN', 'MOUSE_ENTER', 'MOUSE_LEAVE', 'MOUSE_DOWN', 'MOUSE_UP', 'AFTER_TIMEOUT', 'ON_MEDIA_HIT', 'ON_MEDIA_END'];
 
 export const TRIGGER_LABELS: Readonly<Record<TriggerType, string>> = {
   ON_CLICK: 'On click',
@@ -41,12 +42,17 @@ export const TRIGGER_LABELS: Readonly<Record<TriggerType, string>> = {
   MOUSE_DOWN: 'Mouse down',
   MOUSE_UP: 'Mouse up',
   AFTER_TIMEOUT: 'After delay',
+  ON_MEDIA_HIT: 'When video hits',
+  ON_MEDIA_END: 'When video ends',
 };
 
-/** Triggers a layer can have any number of; it can have each other trigger once. */
-export const REPEATABLE_TRIGGERS: ReadonlySet<TriggerType> = new Set(['ON_KEY_DOWN', 'ON_DRAG']);
+/** Triggers a layer can have any number of (a video can hit several times); it can have each other trigger once. */
+export const REPEATABLE_TRIGGERS: ReadonlySet<TriggerType> = new Set(['ON_KEY_DOWN', 'ON_DRAG', 'ON_MEDIA_HIT']);
 
-export const ACTION_KINDS: readonly ActionKind[] = ['NAVIGATE', 'BACK', 'SCROLL_TO', 'URL', 'OVERLAY', 'SWAP', 'CLOSE', 'CHANGE_TO', 'SET_VARIABLE', 'SET_VARIABLE_MODE', 'CONDITIONAL'];
+/** Video triggers, which layers with a video fill have. */
+export const MEDIA_TRIGGERS: ReadonlySet<TriggerType> = new Set(['ON_MEDIA_HIT', 'ON_MEDIA_END']);
+
+export const ACTION_KINDS: readonly ActionKind[] = ['NAVIGATE', 'BACK', 'SCROLL_TO', 'URL', 'OVERLAY', 'SWAP', 'CLOSE', 'CHANGE_TO', 'SET_VARIABLE', 'SET_VARIABLE_MODE', 'CONDITIONAL', 'UPDATE_MEDIA_RUNTIME'];
 
 export const ACTION_LABELS: Readonly<Record<ActionKind, string>> = {
   NAVIGATE: 'Navigate to',
@@ -60,7 +66,32 @@ export const ACTION_LABELS: Readonly<Record<ActionKind, string>> = {
   SET_VARIABLE: 'Set variable',
   SET_VARIABLE_MODE: 'Set variable mode',
   CONDITIONAL: 'Conditional',
+  UPDATE_MEDIA_RUNTIME: 'Video',
 };
+
+/** Video actions in the order the interaction details list them. */
+export const MEDIA_ACTIONS: readonly MediaAction[] = ['PLAY', 'PAUSE', 'TOGGLE_PLAY_PAUSE', 'MUTE', 'UNMUTE', 'TOGGLE_MUTE_UNMUTE', 'SKIP_FORWARD', 'SKIP_BACKWARD', 'SKIP_TO'];
+
+export const MEDIA_ACTION_LABELS: Readonly<Record<MediaAction, string>> = {
+  PLAY: 'Play video',
+  PAUSE: 'Pause video',
+  TOGGLE_PLAY_PAUSE: 'Toggle play/pause',
+  MUTE: 'Mute video',
+  UNMUTE: 'Unmute video',
+  TOGGLE_MUTE_UNMUTE: 'Toggle mute/unmute',
+  SKIP_FORWARD: 'Jump forward',
+  SKIP_BACKWARD: 'Jump backward',
+  SKIP_TO: 'Set to time',
+};
+
+/** Video actions that take seconds: to jump by, or the time to set the video to. */
+export const MEDIA_ACTIONS_WITH_AMOUNT: ReadonlySet<MediaAction> = new Set(['SKIP_FORWARD', 'SKIP_BACKWARD', 'SKIP_TO']);
+
+/** The layers with a video fill a video action on a layer can control: those in the layer's top-level frame. */
+export function videoLayerCandidates(store: DocumentStore, hotspotId: Id): Id[] {
+  const frame = topLevelFrame(store, hotspotId);
+  return frame ? [...new Set(videoFillsIn(store, frame).map((fill) => fill.nodeId))] : [];
+}
 
 /**
  * The component set whose variants a Change to from a layer switches between: the set of the variant the layer is in,
@@ -138,6 +169,7 @@ export function triggerAllowed(reactions: readonly Reaction[], type: TriggerType
 export function makeTrigger(type: TriggerType): PrototypeTrigger {
   if (type === 'AFTER_TIMEOUT') return { type, timeout: DEFAULT_DELAY_MS };
   if (type === 'ON_KEY_DOWN') return { type, keys: ['Enter'] };
+  if (type === 'ON_MEDIA_HIT') return { type, mediaHitTime: 0 };
   return { type };
 }
 
@@ -159,6 +191,7 @@ export function makeAction(kind: ActionKind, previous?: PrototypeAction): Protot
   if (kind === 'URL') return { type: 'URL', url: previous?.type === 'URL' ? previous.url : '' };
   if (kind === 'SET_VARIABLE') return { type: kind, variableId: null, expression: '' };
   if (kind === 'SET_VARIABLE_MODE') return { type: kind, collectionId: null, modeId: null };
+  if (kind === 'UPDATE_MEDIA_RUNTIME') return { type: kind, destinationId: previous?.type === 'UPDATE_MEDIA_RUNTIME' ? previous.destinationId : null, mediaAction: 'TOGGLE_PLAY_PAUSE' };
   // A Conditional starts with an empty `if` and an empty `else`.
   if (kind === 'CONDITIONAL') return { type: kind, blocks: [{ condition: '', actions: [] }, { condition: null, actions: [] }] };
   const node = previous?.type === 'NODE' ? previous : null;
@@ -318,6 +351,9 @@ export function reactionSummary(store: DocumentStore, reaction: Reaction): strin
   if (first?.type === 'NODE') target = first.destinationId ? (store.get(first.destinationId)?.name ?? 'None') : 'None';
   if (first?.type === 'URL') target = first.url || 'No link';
   if (first?.type === 'SET_VARIABLE') target = first.variableId ? (store.get(first.variableId)?.name ?? 'None') : 'None';
+  if (first?.type === 'UPDATE_MEDIA_RUNTIME') target = first.destinationId ? (store.get(first.destinationId)?.name ?? 'None') : 'None';
   const more = reaction.actions.length > 1 ? ` +${reaction.actions.length - 1}` : '';
-  return `${TRIGGER_LABELS[reaction.trigger.type]}: ${action ? ACTION_LABELS[action] : ''}${target ? ` ${target}` : ''}${more}`;
+  // A video action is summarized by what it does (e.g. "Toggle play/pause Intro").
+  const label = first?.type === 'UPDATE_MEDIA_RUNTIME' ? MEDIA_ACTION_LABELS[first.mediaAction] : action ? ACTION_LABELS[action] : '';
+  return `${TRIGGER_LABELS[reaction.trigger.type]}: ${label}${target ? ` ${target}` : ''}${more}`;
 }

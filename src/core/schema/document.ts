@@ -114,11 +114,14 @@ export type PrototypeTransition = z.infer<typeof PrototypeTransitionSchema>;
 
 /** What starts an interaction. */
 export const PrototypeTriggerSchema = z.union([
-  z.object({ type: z.enum(['ON_CLICK', 'ON_DRAG', 'ON_HOVER', 'ON_PRESS', 'MOUSE_ENTER', 'MOUSE_LEAVE', 'MOUSE_DOWN', 'MOUSE_UP']) }),
+  /** ON_MEDIA_END: when the video of the layer's video fill ends. */
+  z.object({ type: z.enum(['ON_CLICK', 'ON_DRAG', 'ON_HOVER', 'ON_PRESS', 'MOUSE_ENTER', 'MOUSE_LEAVE', 'MOUSE_DOWN', 'MOUSE_UP', 'ON_MEDIA_END']) }),
   /** After delay, in milliseconds. */
   z.object({ type: z.literal('AFTER_TIMEOUT'), timeout: z.number().int().min(0).max(600_000) }),
   /** A key or a combination of keys (KeyboardEvent codes, modifiers first). */
   z.object({ type: z.literal('ON_KEY_DOWN'), keys: z.array(z.string().min(1).max(32)).min(1).max(6) }),
+  /** When video hits: the time in the layer's video (in seconds) at which the interaction starts. */
+  z.object({ type: z.literal('ON_MEDIA_HIT'), mediaHitTime: z.number().min(0).max(86_400) }),
 ]);
 export type PrototypeTrigger = z.infer<typeof PrototypeTriggerSchema>;
 
@@ -140,11 +143,22 @@ const ConditionalActionSchema = z.object({
     .max(16),
 });
 
+/** A video action: plays, pauses, mutes or unmutes the video of a layer's video fill, jumps in it or sets its time. */
+const MediaActionSchema = z.object({
+  type: z.literal('UPDATE_MEDIA_RUNTIME'),
+  /** The layer with the video fill; null until one is chosen. */
+  destinationId: IdSchema.nullable(),
+  mediaAction: z.enum(['PLAY', 'PAUSE', 'TOGGLE_PLAY_PAUSE', 'MUTE', 'UNMUTE', 'TOGGLE_MUTE_UNMUTE', 'SKIP_FORWARD', 'SKIP_BACKWARD', 'SKIP_TO']),
+  /** Seconds to jump forward or backward by, or the time to set the video to. */
+  amount: z.number().min(0).max(86_400).optional(),
+});
+
 /** What an interaction does. */
 export const PrototypeActionSchema: z.ZodType<PrototypeAction> = z.union([
   SetVariableActionSchema,
   SetVariableModeActionSchema,
   ConditionalActionSchema,
+  MediaActionSchema,
   z.object({
     type: z.literal('NODE'),
     /** CHANGE_TO (interactive components) switches the instance the hotspot is in to the destination variant. */
@@ -154,6 +168,8 @@ export const PrototypeActionSchema: z.ZodType<PrototypeAction> = z.union([
     transition: PrototypeTransitionSchema,
     /** State management: reset the destination's scroll position. */
     resetScrollPosition: z.boolean().optional(),
+    /** State management: restart the destination's videos from the beginning, in their original play state. */
+    resetVideoPosition: z.boolean().optional(),
   }),
   z.object({ type: z.enum(['BACK', 'CLOSE']) }),
   z.object({ type: z.literal('URL'), url: z.string().max(4096) }),
@@ -165,12 +181,15 @@ export type PrototypeAction =
       destinationId: string | null;
       transition: PrototypeTransition;
       resetScrollPosition?: boolean | undefined;
+      resetVideoPosition?: boolean | undefined;
     }
   | { type: 'BACK' | 'CLOSE' }
   | { type: 'URL'; url: string }
   | z.infer<typeof SetVariableActionSchema>
   | z.infer<typeof SetVariableModeActionSchema>
+  | z.infer<typeof MediaActionSchema>
   | ConditionalAction;
+export type MediaAction = z.infer<typeof MediaActionSchema>['mediaAction'];
 
 /** A prototype interaction: a trigger and the actions it runs, in order. */
 export const ReactionSchema = z.object({

@@ -29,6 +29,8 @@ import {
   hitTest,
   hotspots,
   keyReaction,
+  mediaHitReached,
+  mediaReactions,
   presentableFrames,
   runReaction,
   shownFrames,
@@ -213,6 +215,9 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
             // State sharing: a matching destination takes the scroll positions of the frame left.
             for (const [id, offset] of sharedScrollOffsets(doc, sceneIndex, effect.from, effect.to, state.frameScroll)) state.frameScroll.set(id, offset);
           }
+          if (effect.resetVideo) state.renderer?.resetVideos(effect.to);
+        } else if (effect.type === 'media') {
+          state.renderer?.controlVideo(effect.nodeId, effect.action, effect.amount);
         } else if (effect.type === 'changeTo') {
           // Interactive components: the instance switches variant in the prototype's copy of the document (the file isn't changed).
           state.variantChanges.set(effect.instanceId, effect.variantId);
@@ -444,6 +449,27 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
       renderer.dispose();
     };
   }, [editor, schedule, inlineMode]);
+
+  // When video hits and When video ends interactions of the frames shown run as their videos play.
+  useEffect(() => {
+    const renderer = live.current.renderer;
+    if (!renderer) return;
+    const times = new Map<string, number>();
+    renderer.onVideoTime = (hash, time, ended) => {
+      const current = live.current.player;
+      if (!current) return;
+      const previous = times.get(hash) ?? -1;
+      times.set(hash, ended ? -1 : time);
+      for (const found of mediaReactions(doc, current)) {
+        if (found.videoHash !== hash) continue;
+        const { trigger } = found.reaction;
+        if (trigger.type === 'ON_MEDIA_END' ? ended : trigger.type === 'ON_MEDIA_HIT' && !ended && mediaHitReached(previous, time, trigger.mediaHitTime)) run(found.reaction, found.nodeId);
+      }
+    };
+    return () => {
+      renderer.onVideoTime = null;
+    };
+  }, [doc, run, ready]);
 
   // After delay interactions of the frames shown run once their delay passes.
   const shownKey = player ? shownFrames(player).join('|') : '';

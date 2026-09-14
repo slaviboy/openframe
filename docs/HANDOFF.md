@@ -115,13 +115,15 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - the Prototype tab's Video section (`setVideoOptions` in `src/editor/commands/video.ts`)
     - the stage shows `data-videos` for tests
 
+  - Video triggers and actions (the commit after video playback):
+    - `ON_MEDIA_HIT` / `ON_MEDIA_END` triggers and `UPDATE_MEDIA_RUNTIME` actions
+    - `resetVideoPosition` on navigation actions
+    - `mediaReactions` in player.ts
+    - `controlVideo` / `resetVideos` / `onVideoTime` in presentation-renderer.ts
+
 ## In progress (uncommitted)
 
-1. **Video triggers and actions.**
-   - Triggers: When video hits (a time), When video ends.
-   - Actions: play, pause or toggle; mute, unmute or toggle; set to a time; jump forward or backward.
-   - Reset video state.
-   - Then animated GIFs.
+1. **Animated GIFs play in presentation view.** GIF fills are image fills. The canvas shows the first frame, as now.
 
 ## Next (M10, in order)
 

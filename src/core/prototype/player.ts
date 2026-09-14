@@ -46,7 +46,9 @@ export interface PlayerState {
 
 export type PlayerEffect =
   /** Show `to` (a screen, or an overlay above the screen) coming from `from`, with the transition. */
-  | { readonly type: 'transition'; readonly from: Id | null; readonly to: Id; readonly overlay: boolean; readonly transition: PrototypeTransition; readonly resetScroll?: boolean }
+  | { readonly type: 'transition'; readonly from: Id | null; readonly to: Id; readonly overlay: boolean; readonly transition: PrototypeTransition; readonly resetScroll?: boolean; readonly resetVideo?: boolean }
+  /** A video action on the video of a layer's video fill (`amount`: seconds to jump by, or the time to set). */
+  | { readonly type: 'media'; readonly nodeId: Id; readonly action: Extract<PrototypeAction, { type: 'UPDATE_MEDIA_RUNTIME' }>['mediaAction']; readonly amount: number }
   | { readonly type: 'closeOverlay'; readonly id: Id }
   | { readonly type: 'scrollTo'; readonly nodeId: Id; readonly transition: PrototypeTransition }
   /** Interactive components: switch an instance to another variant of its component set. */
@@ -223,6 +225,13 @@ function runAction(store: DocumentStore, state: PlayerState, action: PrototypeAc
       }
       return state;
     }
+    case 'UPDATE_MEDIA_RUNTIME': {
+      const node = action.destinationId ? sceneNode(store, action.destinationId) : undefined;
+      if (node && 'fills' in node && node.fills.some((paint) => paint.type === 'VIDEO' && paint.visible)) {
+        effects.push({ type: 'media', nodeId: node.id, action: action.mediaAction, amount: action.amount ?? 0 });
+      }
+      return state;
+    }
     case 'URL':
       if (SAFE_LINK.test(action.url.trim())) effects.push({ type: 'openUrl', url: action.url.trim() });
       return state;
@@ -252,8 +261,8 @@ function runAction(store: DocumentStore, state: PlayerState, action: PrototypeAc
       }
       const frame = screenFor(store, state, destination);
       if (!frame) return state;
-      // State management: the destination's scroll position starts over.
-      const reset = action.resetScrollPosition ? { resetScroll: true } : {};
+      // State management: the destination's scroll position, and its videos, start over.
+      const reset = { ...(action.resetScrollPosition ? { resetScroll: true } : {}), ...(action.resetVideoPosition ? { resetVideo: true } : {}) };
       if (action.navigation === 'OVERLAY') {
         if (state.overlays.includes(frame) || frame === state.frameId) return state;
         effects.push({ type: 'transition', from: null, to: frame, overlay: true, transition: action.transition, ...reset });
@@ -314,6 +323,27 @@ export function delayedReactions(store: DocumentStore, state: PlayerState): { re
   shownFrames(state).forEach(visit);
   return out;
 }
+
+/** When video hits and When video ends interactions of the shown frames' layers with a video fill, with the video each follows. */
+export function mediaReactions(store: DocumentStore, state: PlayerState): { readonly nodeId: Id; readonly reaction: Reaction; readonly videoHash: string }[] {
+  const out: { nodeId: Id; reaction: Reaction; videoHash: string }[] = [];
+  const visit = (id: Id) => {
+    const node = sceneNode(store, id);
+    if (!node || !node.visible) return;
+    const video = 'fills' in node ? node.fills.find((paint) => paint.type === 'VIDEO' && paint.visible) : undefined;
+    if (video?.type === 'VIDEO') {
+      for (const reaction of node.reactions ?? []) {
+        if (reaction.trigger.type === 'ON_MEDIA_HIT' || reaction.trigger.type === 'ON_MEDIA_END') out.push({ nodeId: id, reaction, videoHash: video.videoHash });
+      }
+    }
+    store.children(id).forEach(visit);
+  };
+  shownFrames(state).forEach(visit);
+  return out;
+}
+
+/** Whether a video playing on from `from` to `to` seconds reached `time` (jumping back doesn't). */
+export const mediaHitReached = (from: number, to: number, time: number): boolean => from < time && time <= to;
 
 /** Keyboard interactions matching pressed keys on the shown frames (the top overlay first). */
 export function keyReaction(store: DocumentStore, state: PlayerState, keys: readonly string[]): { readonly nodeId: Id; readonly reaction: Reaction } | null {

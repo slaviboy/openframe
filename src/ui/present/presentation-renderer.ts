@@ -25,10 +25,10 @@ import { matchedLayersStore, smartAnimateStore, withoutMatchingLayersStore } fro
 import type { RuntimeDocument } from '@/editor/prototype-runtime';
 import { topLevelFrame } from '@/core/prototype/reactions';
 import { scrolledFrameStore } from '@/core/prototype/scroll';
-import { videoFillsIn, videoOptionsOf, type VideoOptions } from '@/core/prototype/video';
+import { videoFillsIn, videoFillsOf, videoOptionsOf, type VideoOptions } from '@/core/prototype/video';
 import type { Vec2 } from '@/core/math/vec';
 import { SceneIndex } from '@/core/scene/scene-index';
-import type { Color, SceneNode } from '@/core/schema/document';
+import type { Color, MediaAction, SceneNode } from '@/core/schema/document';
 import { cjkScriptFor, containsCjk } from '@/core/text/cjk';
 import { containsEmoji } from '@/core/text/emoji';
 import type { Editor } from '@/editor/editor';
@@ -69,6 +69,8 @@ export class PresentationRenderer {
   private readonly videoFrames = new Map<Id, boolean>();
   /** Video frames made for the frame being rendered, deleted once it is. */
   private readonly videoImages: CkImage[] = [];
+  /** Called as a video plays (with its time) and when it ends: video triggers listen. */
+  onVideoTime: ((videoHash: string, time: number, ended: boolean) => void) | null = null;
 
   private get doc(): DocumentStore {
     return this.runtime?.doc ?? this.editor.doc;
@@ -300,11 +302,65 @@ export class PresentationRenderer {
     element.style.cssText = 'position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
     const url = URL.createObjectURL(new Blob([asset.bytes as Uint8Array<ArrayBuffer>], { type: asset.mime }));
     for (const type of ['loadeddata', 'play', 'pause', 'ended', 'seeked']) element.addEventListener(type, () => this.onInvalidate());
+    element.addEventListener('timeupdate', () => this.onVideoTime?.(hash, element.currentTime, false));
+    element.addEventListener('ended', () => this.onVideoTime?.(hash, element.currentTime, true));
     element.src = url;
     document.body.append(element);
     const video = { element, url };
     this.videos.set(hash, video);
     return video;
+  }
+
+  /** Runs a video action on the video of a layer's video fill: play, pause, sound, or its time. */
+  controlVideo(nodeId: Id, action: MediaAction, amount: number): void {
+    const fill = videoFillsOf(this.doc.get(nodeId) as SceneNode | undefined)[0];
+    const video = fill ? this.videoFor(fill.paint.videoHash) : null;
+    if (!video) return;
+    const { element } = video;
+    const end = Number.isFinite(element.duration) ? element.duration : Number.MAX_SAFE_INTEGER;
+    switch (action) {
+      case 'PLAY':
+        this.play(element, element.muted);
+        break;
+      case 'PAUSE':
+        element.pause();
+        break;
+      case 'TOGGLE_PLAY_PAUSE':
+        if (element.paused || element.ended) this.play(element, element.muted);
+        else element.pause();
+        break;
+      case 'MUTE':
+        element.muted = true;
+        break;
+      case 'UNMUTE':
+        element.muted = false;
+        break;
+      case 'TOGGLE_MUTE_UNMUTE':
+        element.muted = !element.muted;
+        break;
+      case 'SKIP_FORWARD':
+        element.currentTime = Math.min(end, element.currentTime + amount);
+        break;
+      case 'SKIP_BACKWARD':
+        element.currentTime = Math.max(0, element.currentTime - amount);
+        break;
+      case 'SKIP_TO':
+        element.currentTime = Math.min(end, amount);
+        break;
+    }
+    this.onInvalidate();
+  }
+
+  /** Reset video state: a frame's videos go back to the beginning, and play again only if they autoplay. */
+  resetVideos(frameId: Id): void {
+    for (const fill of videoFillsIn(this.doc, frameId)) {
+      const video = this.videos.get(fill.paint.videoHash);
+      if (!video) continue;
+      video.element.pause();
+      video.element.currentTime = 0;
+      // The next sync starts it again when it autoplays.
+      this.shownVideos.delete(fill.paint.videoHash);
+    }
   }
 
   private play(element: HTMLVideoElement, muted: boolean): void {
