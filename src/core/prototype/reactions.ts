@@ -36,7 +36,7 @@ export const TRIGGER_LABELS: Readonly<Record<TriggerType, string>> = {
   ON_DRAG: 'On drag',
   ON_HOVER: 'While hovering',
   ON_PRESS: 'While pressing',
-  ON_KEY_DOWN: 'Keyboard',
+  ON_KEY_DOWN: 'Key/Gamepad',
   MOUSE_ENTER: 'Mouse enter',
   MOUSE_LEAVE: 'Mouse leave',
   MOUSE_DOWN: 'Mouse down',

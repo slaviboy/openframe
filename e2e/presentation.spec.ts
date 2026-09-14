@@ -43,7 +43,7 @@ test('Present opens presentation view in a new tab that plays the prototype', as
   await panel.getByRole('combobox', { name: 'Animation', exact: true }).selectOption({ label: 'Push' });
   await page.getByRole('treeitem', { name: 'Frame 2' }).click();
   await panel.getByRole('button', { name: 'Add interaction' }).click();
-  await panel.getByRole('combobox', { name: 'Trigger' }).selectOption({ label: 'Keyboard' });
+  await panel.getByRole('combobox', { name: 'Trigger' }).selectOption({ label: 'Key/Gamepad' });
   await panel.getByRole('combobox', { name: 'Action', exact: true }).selectOption({ label: 'Back' });
   await page.getByRole('treeitem', { name: 'Frame 1' }).click();
 

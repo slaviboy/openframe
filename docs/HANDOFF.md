@@ -137,9 +137,14 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - `positionInFrame` / `manualOverlayOrigin` in presentation.ts
     - the stage shows `data-overlay-origins`
 
+  - Gamepad triggers (the commit after manual overlay positions):
+    - buttons are stored as `Gamepad<index>` in Key/Gamepad trigger keys (`src/core/prototype/gamepad.ts`)
+    - `useGamepadButtons` polls connected gamepads in presentation view and while the Key field has focus
+    - the E2E spec stubs `navigator.getGamepads`
+
 ## In progress (uncommitted)
 
-1. **Accessible prototypes, gamepad triggers.**
+1. **Accessible prototypes.**
 
 ## Next (M10, in order)
 

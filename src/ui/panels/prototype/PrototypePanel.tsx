@@ -17,6 +17,7 @@
 
 import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { formatDescription, type DescriptionFormat } from '@/core/prototype/description';
+import { gamepadCode, gamepadLabel } from '@/core/prototype/gamepad';
 import { FlowDescription } from '../../present/FlowDescription';
 import type { Id } from '@/core/ids/ids';
 import {
@@ -65,6 +66,7 @@ import { videoFillsOf, videoOptionsOf, type VideoOptions } from '@/core/prototyp
 import { setVideoOptions } from '@/editor/commands/video';
 import type { Editor } from '@/editor/editor';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
+import { useGamepadButtons } from '../../hooks/useGamepadButtons';
 import { IconButton } from '../../primitives/IconButton';
 import primitives from '../../primitives/primitives.module.css';
 import inspector from '../inspector/Inspector.module.css';
@@ -73,8 +75,8 @@ import styles from './PrototypePanel.module.css';
 const SPRING_TYPES: ReadonlySet<EasingType> = new Set(['GENTLE', 'QUICK', 'BOUNCY', 'SLOW', 'CUSTOM_SPRING']);
 const MODIFIER_CODES: ReadonlySet<string> = new Set(['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight']);
 
-/** A key as the Key field shows it: KeyK as K, Digit1 as 1. */
-const keyLabel = (code: string) => code.replace(/^Key(?=[A-Z]$)/, '').replace(/^Digit(?=\d$)/, '');
+/** A key or gamepad button as the Key field shows it: KeyK as K, Digit1 as 1, Gamepad0 as Gamepad A / ✕. */
+const keyLabel = (code: string) => gamepadLabel(code) ?? code.replace(/^Key(?=[A-Z]$)/, '').replace(/^Digit(?=\d$)/, '');
 
 const stopKeys = (e: KeyboardEvent) => e.stopPropagation();
 
@@ -488,6 +490,9 @@ function InteractionDetails({ ids, hotspotId, reactions, index }: { ids: readonl
   const reaction = reactions[index]!;
   const change = (next: Reaction) => updateInteraction(editor, ids, index, next);
   const { trigger } = reaction;
+  // While the Key field has focus, a gamepad button pressed becomes the trigger.
+  const [keyFocused, setKeyFocused] = useState(false);
+  useGamepadButtons(trigger.type === 'ON_KEY_DOWN' && keyFocused, (button) => change({ ...reaction, trigger: { type: 'ON_KEY_DOWN', keys: [gamepadCode(button)] } }));
   return (
     <div className={styles.details} role="group" aria-label="Interaction details">
       <select className={primitives.select} aria-label="Trigger" value={trigger.type} onKeyDown={stopKeys} onChange={(e) => change({ ...reaction, trigger: makeTrigger(e.target.value as TriggerType) })}>
@@ -507,6 +512,8 @@ function InteractionDetails({ ids, hotspotId, reactions, index }: { ids: readonl
           className={primitives.textInput}
           aria-label="Key"
           readOnly
+          onFocus={() => setKeyFocused(true)}
+          onBlur={() => setKeyFocused(false)}
           value={trigger.keys.map(keyLabel).join(' + ')}
           onKeyDown={(e) => {
             if (e.key === 'Tab' && !e.shiftKey && !e.altKey && !e.ctrlKey && !e.metaKey) return;

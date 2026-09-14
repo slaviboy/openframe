@@ -64,6 +64,8 @@ import { NO_VARIABLES } from '@/core/prototype/variables-runtime';
 import type { Reaction, SceneNode } from '@/core/schema/document';
 import { Menu, type MenuEntry } from '../primitives/Menu';
 import type { Box } from '../primitives/position';
+import { gamepadCode } from '@/core/prototype/gamepad';
+import { useGamepadButtons } from '../hooks/useGamepadButtons';
 import { FlowDescription } from './FlowDescription';
 import { PresentationRenderer } from './presentation-renderer';
 import styles from './PresentationView.module.css';
@@ -534,6 +536,13 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     target?.addEventListener('keydown', onKeyDown as EventListener);
     return () => target?.removeEventListener('keydown', onKeyDown as EventListener);
   }, [doc, restartAt, run, start, step, toggleFullscreen, inlineMode]);
+
+  // Key/Gamepad interactions from a connected gamepad's buttons (in presentation view; the inline preview takes keys only).
+  useGamepadButtons(!inlineMode, (button) => {
+    const current = live.current.player;
+    const found = current ? keyReaction(doc, current, [gamepadCode(button)]) : null;
+    if (found) run(found.reaction, found.nodeId);
+  });
 
   /** The shown frame and the layers under a pointer, hit tested where scrolled content is. */
   const locate = (e: { readonly currentTarget: Element; readonly clientX: number; readonly clientY: number }) => {
