@@ -48,6 +48,7 @@ export function LayersPanel() {
   const selection = useEditorState((s) => s.selection);
   const renamingId = useEditorState((s) => s.renamingId);
   const hoverId = useEditorState((s) => s.hoverId);
+  const suggested = useEditorState((s) => s.suggested);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [scroll, setScroll] = useState({ top: 0, height: 400 });
   const anchorRef = useRef<Id | null>(null);
@@ -234,6 +235,7 @@ export function LayersPanel() {
                 data-child-selected={parentSelected || undefined}
                 data-hover={hoverId === row.id || undefined}
                 data-hidden={!node.visible || undefined}
+                data-suggested={suggested.has(row.id) || undefined}
                 data-drop={drop}
                 style={{ top: (first + i) * LAYER_ROW_HEIGHT, paddingLeft: 8 + row.depth * LAYER_INDENT }}
                 onPointerEnter={() => editor.state.setHover(row.id)}
@@ -280,6 +282,8 @@ export function LayersPanel() {
                     {node.name}
                   </span>
                 )}
+                {/* Kept out of the row's accessible name, which is the layer name. */}
+                {suggested.has(row.id) && <span className={styles.suggested} aria-hidden="true" title="Suggested auto layout" />}
                 <span className={styles.actions} data-persist={node.locked || !node.visible || undefined}>
                   <button
                     type="button"

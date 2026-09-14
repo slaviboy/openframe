@@ -71,6 +71,8 @@ export interface EditorState {
   readonly linkEditing: boolean;
   /** The text engine is installed, so fonts can be checked against what it has. */
   readonly textLayoutReady: boolean;
+  /** Frames that Suggest auto layout gave auto layout, marked with a blue dot in the layers panel until selected. */
+  readonly suggested: ReadonlySet<Id>;
 }
 
 /** Text editing: the layer and its text selection (`anchor` stays, `focus` moves). */
@@ -120,6 +122,7 @@ export class EditorStore extends Observable<EditorState> {
       textEdit: null,
       linkEditing: false,
       textLayoutReady: false,
+      suggested: new Set(),
     });
   }
 
@@ -238,6 +241,12 @@ export class EditorStore extends Observable<EditorState> {
     this.setState({ rightTab });
   }
 
+  /** Marks frames created or converted by Suggest auto layout. */
+  markSuggested(ids: readonly Id[]): void {
+    if (ids.length === 0) return;
+    this.setState({ suggested: new Set([...this.state.suggested, ...ids]) });
+  }
+
   setHover(hoverId: Id | null): void {
     this.setState({ hoverId });
   }
@@ -248,6 +257,11 @@ export class EditorStore extends Observable<EditorState> {
 
   select(ids: readonly Id[]): void {
     const normalized = this.normalizeSelection(ids);
+    if (normalized.some((id) => this.state.suggested.has(id))) {
+      const suggested = new Set(this.state.suggested);
+      for (const id of normalized) suggested.delete(id);
+      this.setState({ suggested });
+    }
     const unchanged = normalized.length === this.state.selection.length && normalized.every((id, i) => id === this.state.selection[i]);
     if (unchanged && this.state.selectedGuide === null) return;
     // Selecting anything other than the layer being cropped leaves crop mode.

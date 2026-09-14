@@ -50,6 +50,9 @@ test('Suggest auto layout turns two rows of layers into nested auto layout frame
   await expect(page.getByRole('treeitem', { name: /Frame 1/ })).toBeVisible();
   const rows = page.getByRole('treeitem', { name: /^(Expand |Collapse )?Frame$/ });
   await expect(rows).toHaveCount(2);
+  // The new frames are marked with a blue dot until they are selected.
+  await expect(page.locator('[role="treeitem"][data-suggested]')).toHaveCount(2);
   await rows.first().click();
   await expect(page.getByRole('button', { name: 'Horizontal layout' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('[role="treeitem"][data-suggested]')).toHaveCount(1);
 });

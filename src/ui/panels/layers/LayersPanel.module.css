@@ -187,3 +187,13 @@
 .row:hover .actions[data-persist] .action {
   visibility: visible;
 }
+
+/* Blue dot on frames created or converted by Suggest auto layout, until they are selected. */
+.suggested {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: var(--color-accent, #0d99ff);
+}

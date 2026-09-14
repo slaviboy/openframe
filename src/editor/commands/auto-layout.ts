@@ -19,6 +19,7 @@ import type { Transaction } from '@/core/history/history';
 import { applyAutoLayout, clearAutoLayout, isAutoLayoutFrame } from '@/core/layout/auto-layout';
 import { suggestAutoLayout } from '@/core/layout/suggest-auto-layout';
 import type { Sizing } from '@/core/layout/flow-layout';
+import type { Id } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 import { selectedSceneNodes } from './selection-helpers';
@@ -120,15 +121,19 @@ export function setIgnoreAutoLayout(tx: Transaction, node: SceneNode, on: boolea
 export function suggestAutoLayoutForSelection(editor: Editor): void {
   const nodes = selectedNodes(editor);
   if (nodes.length === 0 || !canAddAutoLayout(editor)) return;
+  // The frames it creates or converts inside the selection get a blue dot in the layers panel.
+  const changed: Id[] = [];
   if (nodes.every((n) => n.type === 'FRAME' && !isAutoLayoutFrame(n))) {
-    editor.history.run('Suggest auto layout', (tx) => nodes.forEach((n) => suggestAutoLayout(tx, n.id, () => editor.ids.next())));
+    editor.history.run('Suggest auto layout', (tx) => nodes.forEach((n) => changed.push(...suggestAutoLayout(tx, n.id, () => editor.ids.next()))));
+    editor.state.markSuggested(changed.filter((id) => !nodes.some((n) => n.id === id)));
     return;
   }
-  wrapSelection(editor, 'FRAME', {
+  const container = wrapSelection(editor, 'FRAME', {
     label: 'Suggest auto layout',
     after: (tx, frameId) => {
       tx.set(frameId, 'fills', []);
-      suggestAutoLayout(tx, frameId, () => editor.ids.next());
+      changed.push(...suggestAutoLayout(tx, frameId, () => editor.ids.next()));
     },
   });
+  editor.state.markSuggested(changed.filter((id) => id !== container));
 }
