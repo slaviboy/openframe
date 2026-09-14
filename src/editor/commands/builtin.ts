@@ -29,6 +29,7 @@ import type { CommandDefinition } from './registry';
 import { layersWithSame, matchingLayers } from './select-similar';
 import { canTidyUp, tidyUpSelection } from './tidy';
 import { canToggleMask, toggleMask } from './masks';
+import { isInFlow, moveInFlow } from '@/core/layout/flow-order';
 import { addAutoLayout, canAddAutoLayout, canRemoveAutoLayout, removeAutoLayout } from './auto-layout';
 import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/core/color/color-profile';
 import { beginCrop, cropTarget, endCrop } from '../interactions/crop';
@@ -99,6 +100,18 @@ function nudge(e: Editor, dx: number, dy: number): void {
     const n = e.doc.get(id);
     return n !== undefined && isSceneNode(n) && !n.locked;
   });
+  if (ids.length > 0 && ids.every((id) => isInFlow(e.doc, id))) {
+    // Children of auto layout frames move one position along the flow instead; arrows across it do nothing.
+    e.history.run('Reorder', (tx) => {
+      for (const id of dx > 0 || dy > 0 ? [...ids].reverse() : ids) {
+        const frame = tx.store.get(tx.store.parentOf(id)!);
+        const horizontal = frame?.type === 'FRAME' && frame.layoutMode === 'HORIZONTAL';
+        const delta = Math.sign(horizontal ? dx : dy);
+        if (delta !== 0) moveInFlow(tx, id, delta);
+      }
+    });
+    return;
+  }
   e.history.run('Nudge', (tx) => translateNodes(tx, ids.map((id) => captureStart(tx, e.scene, id)), { x: dx, y: dy }));
 }
 

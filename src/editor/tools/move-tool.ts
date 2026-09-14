@@ -31,7 +31,9 @@ import { hitTestDeepest, isArtboardWithChildren, isInteractive, marqueeSelect, s
 import { snapEqualGaps, type GapIndicator } from '@/core/scene/equal-gaps';
 import { measureBetween, type MeasureLine } from '@/core/scene/measure';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
-import { isSceneNode } from '@/core/schema/document';
+import { isSceneNode, type SceneNode } from '@/core/schema/document';
+import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
+import { flowInsertionIndex, flowInsertionLine, moveToFlowIndex } from '@/core/layout/flow-order';
 import { beginCrop } from '../interactions/crop';
 import { beginTextEditAt } from '../interactions/text-edit';
 import { resizedTextMode } from '../commands/text';
@@ -87,6 +89,8 @@ type Gesture =
       gaps: readonly GapIndicator[];
       /** Set when ⌥-drag duplicated the layers being moved. */
       duplicated: DuplicateMemory | null;
+      /** Where the moved children of an auto layout frame will land in its flow on release. */
+      insertion: { readonly frameId: Id; readonly index: number } | null;
     }
   | { kind: 'marquee'; down: PointerInfo; base: readonly Id[]; scope: Id; current: Vec2 }
   /** Dragging a smart selection's spacing handle: every gap follows the pointer. */
@@ -154,6 +158,17 @@ export class MoveTool implements Tool {
   /** Equal-spacing indicators of the move in progress (world coordinates). */
   get gapIndicators(): readonly GapIndicator[] {
     return this.gesture.kind === 'move' ? this.gesture.gaps : [];
+  }
+
+  /** The auto layout insertion indicator while moving children of an auto layout frame, in world space. */
+  get flowInsertion(): readonly [Vec2, Vec2] | null {
+    const g = this.gesture;
+    if (g.kind !== 'move' || !g.insertion) return null;
+    const { editor } = this.env;
+    const line = flowInsertionLine(editor.doc, g.insertion.frameId, g.insertion.index, new Set(g.starts.map((s) => s.id)));
+    if (!line) return null;
+    const world = editor.scene.worldTransform(g.insertion.frameId);
+    return [apply(world, line[0]), apply(world, line[1])];
   }
 
   /** ⌥-hover distances between the selection and the hovered layer (or the selection's parent), in world space. */
@@ -366,7 +381,7 @@ export class MoveTool implements Tool {
         const starts = targets.map((id) => captureStart(tx, editor.scene, id));
         const startBounds = unionAll(starts.map((s) => transformRect(s.world, { x: 0, y: 0, width: s.width, height: s.height })));
         const candidates = snapCandidatesFor(editor, targets);
-        this.gesture = { kind: 'move', down: g.down, tx, starts, last: p, startBounds, candidates, guides: [], gaps: [], duplicated };
+        this.gesture = { kind: 'move', down: g.down, tx, starts, last: p, startBounds, candidates, guides: [], gaps: [], duplicated, insertion: null };
         this.applyMove(p);
         return;
       }
@@ -441,6 +456,10 @@ export class MoveTool implements Tool {
       }
       case 'move':
         this.adoptIntoSections(g.tx, g.starts);
+        if (g.insertion) {
+          const { frameId, index } = g.insertion;
+          moveToFlowIndex(g.tx, frameId, g.starts.map((s) => s.id).filter((id) => g.tx.store.parentOf(id) === frameId), index);
+        }
         editor.history.commit(g.tx);
         if (g.duplicated) editor.duplicateMemory = g.duplicated;
         break;
@@ -540,6 +559,15 @@ export class MoveTool implements Tool {
     }
     translateNodes(g.tx, g.starts, { x: dx, y: dy });
     this.reparentUnderPointer(g.tx, g.starts, p);
+    // Children of one auto layout frame show where they will land in its flow.
+    const store = g.tx.store;
+    const parents = new Set(g.starts.map((s) => store.parentOf(s.id)));
+    const [parent] = parents;
+    g.insertion = null;
+    if (parents.size === 1 && parent && isAutoLayoutFrame(store.get(parent)) && g.starts.every((s) => (store.get(s.id) as SceneNode | undefined)?.layoutPositioning !== 'ABSOLUTE')) {
+      const local = editor.scene.toLocal(parent, p.world);
+      if (local) g.insertion = { frameId: parent, index: flowInsertionIndex(store, parent, local, new Set(g.starts.map((s) => s.id))) };
+    }
     g.tx.flushPreview();
     editor.requestRender();
   }

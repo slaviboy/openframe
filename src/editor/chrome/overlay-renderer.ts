@@ -62,6 +62,8 @@ export interface OverlayInput {
   readonly guides?: readonly SnapGuide[];
   /** ⌥ distance measurements, in world coordinates. */
   readonly measurements?: readonly MeasureLine[];
+  /** Auto layout insertion indicator while moving children of an auto layout frame, in world coordinates. */
+  readonly insertion?: readonly [Vec2, Vec2] | null;
   /** Equal-spacing indicators while moving, in world coordinates. */
   readonly gaps?: readonly GapIndicator[];
   /** Draw rulers and ruler guides. */
@@ -127,6 +129,16 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
     ctx.setLineDash([]);
     drawHandles(ctx, editor, frame, theme);
     drawSizeLabel(ctx, quad, frame, theme, isLineFrame(editor, frame));
+  }
+
+  if (input.insertion) {
+    const [from, to] = input.insertion.map((point) => worldToScreen(editor.state.viewport, point));
+    ctx.beginPath();
+    ctx.moveTo(from!.x, from!.y);
+    ctx.lineTo(to!.x, to!.y);
+    ctx.strokeStyle = theme.selection;
+    ctx.lineWidth = 2;
+    ctx.stroke();
   }
 
   if (input.guides && input.guides.length > 0) {
