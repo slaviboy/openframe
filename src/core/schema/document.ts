@@ -270,6 +270,12 @@ export const CornerRadiiSchema = z.object({
 
 const ParentRefSchema = z.object({ id: IdSchema, key: FractionalKeySchema });
 
+/**
+ * A layer's constraint on one axis: MIN keeps its distance to the left/top edge, MAX to the right/bottom,
+ * STRETCH to both (resizing it), CENTER to the center, and SCALE keeps its position and size proportional.
+ */
+export const ConstraintSchema = z.enum(['MIN', 'MAX', 'CENTER', 'STRETCH', 'SCALE']);
+
 const BaseNodeFields = {
   id: IdSchema,
   name: z.string().max(10_000),
@@ -288,6 +294,8 @@ const SceneFields = {
   effects: z.array(EffectSchema).max(64).optional(),
   /** Constrain proportions: width and height edits keep the aspect ratio. Absent means off. */
   constrainProportions: z.boolean().optional(),
+  /** How the layer responds when its parent frame is resized. Absent means left and top. */
+  constraints: z.object({ horizontal: ConstraintSchema, vertical: ConstraintSchema }).optional(),
   /** Used as a mask: masks the siblings above it, up to the next mask. Absent means not a mask. */
   isMask: z.boolean().optional(),
   /** How a mask reveals content; absent means ALPHA. */
@@ -641,6 +649,7 @@ export type OpenTypeFeatures = Readonly<z.infer<typeof OpenTypeFeaturesSchema>>;
 export type FontVariations = Readonly<z.infer<typeof FontVariationsSchema>>;
 export type TextDirection = z.infer<typeof TextDirectionSchema>;
 export type WrapStyle = z.infer<typeof WrapStyleSchema>;
+export type Constraint = z.infer<typeof ConstraintSchema>;
 export type DecorationStyle = z.infer<typeof DecorationStyleSchema>;
 export type TextNode = z.infer<typeof TextNodeSchema>;
 export type SceneNode = FrameNode | GroupNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | SectionNode | SliceNode | TextNode;

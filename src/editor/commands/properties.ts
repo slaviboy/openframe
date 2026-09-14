@@ -20,6 +20,7 @@ import type { Transaction } from '@/core/history/history';
 import type { Id } from '@/core/ids/ids';
 import { apply, determinant, multiply, rotation, scaling, type Matrix } from '@/core/math/matrix';
 import { matrixOf } from '@/core/scene/scene-index';
+import type { Constraint } from '@/core/schema/document';
 import {
   DEFAULT_MITER_ANGLE,
   hasGeometry,
@@ -78,6 +79,13 @@ export function setSize(tx: Transaction, node: SceneNode, axis: 'width' | 'heigh
     return;
   }
   tx.set(node.id, 'size', { ...current.size, [axis]: next });
+}
+
+/** Sets a layer's constraint on one axis (stored only when not the default, left and top). */
+export function setConstraint(tx: Transaction, node: SceneNode, axis: 'horizontal' | 'vertical', value: Constraint): void {
+  const current = (tx.store.getOrThrow(node.id) as SceneNode).constraints ?? { horizontal: 'MIN', vertical: 'MIN' };
+  const next = { ...current, [axis]: value };
+  tx.set(node.id, 'constraints', next.horizontal === 'MIN' && next.vertical === 'MIN' ? undefined : next);
 }
 
 /** Turns constrain proportions on or off (stored only while on). */

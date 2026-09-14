@@ -63,6 +63,7 @@ import {
   type ShadowEffect,
   type StrokeJoin,
   type BlendMode,
+  type Constraint,
   type CornerRadii,
   type GradientPaint,
   type LineNode,
@@ -73,6 +74,20 @@ import {
 } from '@/core/schema/document';
 
 const PAINT_TYPES: readonly PaintType[] = ['SOLID', 'GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND', 'IMAGE', 'PATTERN'];
+const HORIZONTAL_CONSTRAINTS: readonly (readonly [Constraint, string])[] = [
+  ['MIN', 'Left'],
+  ['MAX', 'Right'],
+  ['STRETCH', 'Left & right'],
+  ['CENTER', 'Center'],
+  ['SCALE', 'Scale'],
+];
+const VERTICAL_CONSTRAINTS: readonly (readonly [Constraint, string])[] = [
+  ['MIN', 'Top'],
+  ['MAX', 'Bottom'],
+  ['STRETCH', 'Top & bottom'],
+  ['CENTER', 'Center'],
+  ['SCALE', 'Scale'],
+];
 import { ImageSettings, ImageSwatch } from './ImageSettings';
 import { PatternSettings } from './PatternSettings';
 import { PAINT_BLEND_OPTIONS } from './blend-modes';
@@ -88,6 +103,7 @@ import {
   sceneNodes,
   setBlendMode,
   setConstrainProportions,
+  setConstraint,
   setCornerRadii,
   setCornerRadius,
   setCornerSmoothing,
@@ -517,6 +533,12 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
   const texts = nodes.filter((n): n is TextNode => n.type === 'TEXT');
   // Sections never rotate; slices are invisible, so they have no appearance.
   const hasSection = nodes.some((n) => n.type === 'SECTION');
+  // Constraints apply to layers inside frames.
+  const constrainable = nodes.length > 0 && nodes.every((n) => editor.doc.get(n.parent.id)?.type === 'FRAME');
+  const horizontalConstraint = val(shared(nodes, (n) => n.constraints?.horizontal ?? 'MIN'));
+  const verticalConstraint = val(shared(nodes, (n) => n.constraints?.vertical ?? 'MIN'));
+  const changeConstraint = (axis: 'horizontal' | 'vertical', value: Constraint) =>
+    editor.history.run('Change constraints', (tx) => nodes.forEach((n) => setConstraint(tx, tx.store.getOrThrow(n.id) as SceneNode, axis, value)));
   const allSlices = nodes.every((n) => n.type === 'SLICE');
 
   return (
@@ -543,6 +565,26 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
           />
           )}
         </div>
+        {constrainable && (
+          <div className={styles.grid2}>
+            <select className={primitives.select} aria-label="Horizontal constraint" value={horizontalConstraint ?? ''} onChange={(e) => changeConstraint('horizontal', e.target.value as Constraint)}>
+              {horizontalConstraint === undefined && <option value="">Mixed</option>}
+              {HORIZONTAL_CONSTRAINTS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <select className={primitives.select} aria-label="Vertical constraint" value={verticalConstraint ?? ''} onChange={(e) => changeConstraint('vertical', e.target.value as Constraint)}>
+              {verticalConstraint === undefined && <option value="">Mixed</option>}
+              {VERTICAL_CONSTRAINTS.map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </Section>
       <Section title="Layout">
         <div className={styles.grid2}>

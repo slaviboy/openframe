@@ -692,6 +692,8 @@ export class MoveTool implements Tool {
         g.guides = guidesFor(fromPoints(corner0, corner1), g.candidates, { x: dx !== null, y: dy !== null });
       }
     }
+    // Holding ⌘ resizes frames without applying their children's constraints; the Scale tool scales children itself.
+    g.tx.ignoreConstraints = g.scale !== null || p.mod;
     if (g.scale) {
       // Scale tool: one proportional factor for everything, anchored opposite the handle (center with Alt).
       const width = Math.abs(result.x1 - result.x0);

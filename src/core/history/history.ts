@@ -97,6 +97,8 @@ export class Transaction {
   /** Ops were applied since the last preview (including coalesced sets, which don't add ops). */
   private dirty = true;
   private closed = false;
+  /** Resizing frames in this transaction leaves their children alone (⌘ while resizing, the Scale tool). */
+  ignoreConstraints = false;
 
   constructor(
     readonly store: DocumentStore,

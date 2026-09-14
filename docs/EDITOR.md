@@ -457,7 +457,7 @@ The overlay never touches the CanvasKit scene, so pointer feedback costs no scen
 - **Nothing selected:** Page (canvas background color and opacity).
 - **With a selection:**
   - Scale (only while the Scale tool is active): multiplier, presets, proportional W/H, anchor box
-  - Position: X, Y, rotation (not for sections)
+  - Position: X, Y, rotation (not for sections), and — for layers inside frames — Horizontal and Vertical constraint selects (`setConstraint`). Resizing a frame applies them through `constraintsFinalizer` ([`core/document/constraints.ts`](../src/core/document/constraints.ts)), which the move tool skips (`tx.ignoreConstraints`) while ⌘ is held or the Scale tool is active.
   - Layout: W, H (H disabled for lines), Constrain proportions, "space between" for smart selections, and Clip content for frames
   - Appearance: opacity, layer blend mode, corner radius, polygon/star Count and star Ratio, and corner smoothing (0–100% slider with an **iOS** 60% preset button) (hidden for slices)
   - Typography (text layers only, [`TypographyFields.tsx`](../src/ui/panels/inspector/TypographyFields.tsx)): font family (a button that opens the [font picker](../src/ui/panels/inspector/FontPicker.tsx); hover previews run in one gesture that picking commits and Esc cancels, installed families load when picked, and uploads go through [`import-fonts.ts`](../src/ui/fonts/import-fonts.ts) into `editor.fonts`) and style, size, line height and letter spacing (typed values such as `Auto`, `24`, `150%`, `2px`, parsed by [`core/text/text-values.ts`](../src/core/text/text-values.ts)), and horizontal and vertical alignment buttons. Text layers also get resizing buttons in Layout (Auto width, Auto height, Fixed size, Truncate text) and no Stroke section yet.

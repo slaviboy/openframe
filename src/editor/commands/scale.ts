@@ -65,6 +65,8 @@ export function scaleLayersInTx(tx: Transaction, editor: Editor, ids: readonly I
   editor.scene.ensure(editor.pageId);
   const bounds = editor.selectionBounds(ids);
   if (!bounds) return;
+  // Scaling already scales the contents; constraints would move them a second time.
+  tx.ignoreConstraints = true;
   applyScale(tx, captureScale(tx.store, editor.scene, ids), factor, anchorPoint(bounds, anchor));
 }
 

@@ -16,6 +16,7 @@
  */
 
 import { groupFinalizer } from '@/core/document/groups';
+import { constraintsFinalizer } from '@/core/document/constraints';
 import { assertDocumentInvariants } from '@/core/document/invariants';
 import type { DocumentStore } from '@/core/document/store';
 import { History, type ChangeSet } from '@/core/history/history';
@@ -151,7 +152,8 @@ export class Editor {
         this.state.select(meta.selection.filter((id) => this.doc.has(id)));
       },
       // Text boxes fit their content before groups measure their children.
-      finalizers: [createTextFinalizer(() => this.textLayout), groupFinalizer],
+      // Constraints move children of resized frames before text boxes fit and groups measure them.
+      finalizers: [constraintsFinalizer, createTextFinalizer(() => this.textLayout), groupFinalizer],
       ...(options.validate ? { validate: assertDocumentInvariants } : {}),
     });
     // The scene index must learn about every change before anything renders or hit-tests.
