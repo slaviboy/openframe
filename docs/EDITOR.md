@@ -209,6 +209,7 @@ A mask applies to the siblings above it, up to the next mask (`maskOf`, `maskRun
 
 ## Structure commands
 
+- **Boolean operations** (`object.booleanUnion` / `Subtract` / `Intersect` / `Exclude`, ⌥⇧U/S/I/E, registered before the align commands): [`booleanSelection`](../src/editor/commands/boolean.ts) calls `wrapSelection(…, 'GROUP', { booleanOperation })`, which creates a `BOOLEAN_OPERATION` node, and copies fills, strokes and effects from the top layer (the bottom one for subtract). `groupFinalizer` fits boolean groups to their children like groups. The renderer skips their children and draws `booleanPath` — each visible child's `backdropOutline`, placed by its transform and combined with `Path.MakeFromOp` — with the group's own fills and strokes. Hit testing checks [`shapeContainsLocal`](../src/core/scene/boolean-hit.ts) before descending, so only the combined shape is clickable. Ungroup releases boolean groups.
 - **Flatten** (`object.flatten`, ⌥⇧F): [`flattenLayers`](../src/core/vector/flatten.ts) collects the visible layers with an outline (through containers, skipping containers with text), converts each with `shapeNetwork` ([`shape-networks.ts`](../src/core/vector/shape-networks.ts)), transforms it into the topmost layer's parent space (`transformNetworkBy`), merges them (`mergeNetworks`) into a `VECTOR` created at the topmost layer's key, and deletes the flattened layers.
 
 [`src/editor/commands/structure.ts`](../src/editor/commands/structure.ts):

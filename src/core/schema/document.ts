@@ -524,6 +524,18 @@ export const VectorNodeSchema = z.object({
 });
 
 /**
+ * Boolean group: its children's outlines combined by `booleanOperation` — union, subtract (the bottom
+ * layer minus the ones above), intersect or exclude — painted with the group's own fills, strokes and
+ * effects. The children stay editable.
+ */
+export const BooleanOperationNodeSchema = z.object({
+  ...SceneFields,
+  ...GeometryFields,
+  type: z.literal('BOOLEAN_OPERATION'),
+  booleanOperation: z.enum(['UNION', 'SUBTRACT', 'INTERSECT', 'EXCLUDE']),
+});
+
+/**
  * Canvas region that organizes layers. Sections live on the page or inside other sections
  * (never in frames or groups), do not clip, and are never rotated or flipped.
  */
@@ -685,6 +697,7 @@ export const NodeSchema = z.discriminatedUnion('type', [
   StarNodeSchema,
   LineNodeSchema,
   VectorNodeSchema,
+  BooleanOperationNodeSchema,
   SectionNodeSchema,
   SliceNodeSchema,
   TextNodeSchema,
@@ -741,6 +754,8 @@ export type StarNode = z.infer<typeof StarNodeSchema>;
 export type LineNode = z.infer<typeof LineNodeSchema>;
 export type VectorNode = z.infer<typeof VectorNodeSchema>;
 export type VectorNetworkData = z.infer<typeof VectorNetworkSchema>;
+export type BooleanOperationNode = z.infer<typeof BooleanOperationNodeSchema>;
+export type BooleanOperation = BooleanOperationNode['booleanOperation'];
 export type StrokeCap = z.infer<typeof StrokeCapSchema>;
 export type SectionNode = z.infer<typeof SectionNodeSchema>;
 export type SliceNode = z.infer<typeof SliceNodeSchema>;
@@ -761,22 +776,23 @@ export type WrapStyle = z.infer<typeof WrapStyleSchema>;
 export type Constraint = z.infer<typeof ConstraintSchema>;
 export type DecorationStyle = z.infer<typeof DecorationStyleSchema>;
 export type TextNode = z.infer<typeof TextNodeSchema>;
-export type SceneNode = FrameNode | GroupNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | VectorNode | SectionNode | SliceNode | TextNode;
+export type SceneNode = FrameNode | GroupNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | VectorNode | BooleanOperationNode | SectionNode | SliceNode | TextNode;
 export type Node = z.infer<typeof NodeSchema>;
 export type NodeType = Node['type'];
 export type DocumentMeta = z.infer<typeof DocumentMetaSchema>;
 export type SerializedDocument = z.infer<typeof DocumentSchema>;
 
 export const isSceneNode = (n: Node): n is SceneNode => n.type !== 'DOCUMENT' && n.type !== 'PAGE';
-export const hasGeometry = (n: Node): n is FrameNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | VectorNode | SectionNode | TextNode =>
+export const hasGeometry = (n: Node): n is FrameNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | VectorNode | BooleanOperationNode | SectionNode | TextNode =>
   n.type === 'FRAME' ||
   n.type === 'RECTANGLE' ||
   n.type === 'ELLIPSE' ||
   n.type === 'VECTOR' ||
+  n.type === 'BOOLEAN_OPERATION' ||
   n.type === 'POLYGON' ||
   n.type === 'STAR' ||
   n.type === 'LINE' ||
   n.type === 'SECTION' ||
   n.type === 'TEXT';
 export const isContainer = (n: Node): boolean =>
-  n.type === 'DOCUMENT' || n.type === 'PAGE' || n.type === 'FRAME' || n.type === 'GROUP' || n.type === 'SECTION';
+  n.type === 'DOCUMENT' || n.type === 'PAGE' || n.type === 'FRAME' || n.type === 'GROUP' || n.type === 'BOOLEAN_OPERATION' || n.type === 'SECTION';

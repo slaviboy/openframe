@@ -34,6 +34,7 @@ export const FIND_CATEGORY: Record<SceneNode['type'], FindCategory> = {
   STAR: 'shape',
   LINE: 'shape',
   VECTOR: 'shape',
+  BOOLEAN_OPERATION: 'shape',
 };
 
 export interface FindResult {

@@ -157,6 +157,7 @@ const TYPE_LABELS: Record<SceneNode['type'], string> = {
   STAR: 'Star',
   LINE: 'Line',
   VECTOR: 'Vector',
+  BOOLEAN_OPERATION: 'Boolean group',
   SECTION: 'Section',
   SLICE: 'Slice',
   TEXT: 'Text',

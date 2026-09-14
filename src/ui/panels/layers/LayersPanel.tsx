@@ -113,7 +113,7 @@ export function LayersPanel() {
     const hit = rowFromClientY(e.clientY);
     if (!hit) return;
     const node = editor.doc.get(hit.row.id);
-    const container = node?.type === 'FRAME' || node?.type === 'GROUP' || node?.type === 'SECTION';
+    const container = node?.type === 'FRAME' || node?.type === 'GROUP' || node?.type === 'BOOLEAN_OPERATION' || node?.type === 'SECTION';
     const position: DropPosition = container
       ? hit.offset < 0.25
         ? 'above'

@@ -30,7 +30,7 @@ export type DropPosition = 'above' | 'below' | 'inside';
 /** Whether `id` can contain children in the layers panel. */
 export function canContain(tx: Transaction | { store: Transaction['store'] }, id: Id): boolean {
   const node = tx.store.get(id);
-  return node?.type === 'FRAME' || node?.type === 'GROUP' || node?.type === 'PAGE' || node?.type === 'SECTION';
+  return node?.type === 'FRAME' || node?.type === 'GROUP' || node?.type === 'BOOLEAN_OPERATION' || node?.type === 'PAGE' || node?.type === 'SECTION';
 }
 
 /**

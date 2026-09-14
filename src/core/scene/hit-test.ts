@@ -16,6 +16,7 @@
  */
 
 import { stackingOrder } from '../layout/auto-layout';
+import { shapeContainsLocal } from './boolean-hit';
 import type { DocumentStore } from '../document/store';
 import type { Id } from '../ids/ids';
 import { intersects, contains as rectContains, type Rect } from '../math/rect';
@@ -74,6 +75,11 @@ export function hitTestDeepest(store: DocumentStore, index: SceneIndex, pageId: 
     const node = store.get(id);
     if (!node) return null;
     if (isSceneNode(node) && (!node.visible || node.locked)) return null;
+    // Boolean groups are hit only inside their combined shape, whichever child lies under the point.
+    if (node.type === 'BOOLEAN_OPERATION') {
+      const local = candidates.has(id) ? index.toLocal(id, world) : null;
+      if (!local || !shapeContainsLocal(store, node, local, t / scaleOfWorld(index, id)) || clippedOut(store, index, id, world)) return null;
+    }
     const children = stackingOrder(node, store.children(id));
     for (let i = children.length - 1; i >= 0; i--) {
       const hit = visit(children[i]!);

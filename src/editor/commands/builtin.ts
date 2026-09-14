@@ -35,6 +35,7 @@ import { isInFlow, moveInFlow } from '@/core/layout/flow-order';
 import { addAutoLayout, canAddAutoLayout, canRemoveAutoLayout, removeAutoLayout, suggestAutoLayoutForSelection } from './auto-layout';
 import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/core/color/color-profile';
 import { beginCrop, cropTarget, endCrop } from '../interactions/crop';
+import { BOOLEAN_NAMES, booleanSelection, canBooleanSelection } from './boolean';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
 
 const hasSelection = (e: Editor) => e.selection.length > 0;
@@ -200,7 +201,7 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     enabled: (e) =>
       e.selection.some((id) => {
         const type = e.doc.get(id)?.type;
-        return (type === 'GROUP' || type === 'FRAME' || type === 'SECTION') && e.doc.children(id).length > 0;
+        return (type === 'GROUP' || type === 'BOOLEAN_OPERATION' || type === 'FRAME' || type === 'SECTION') && e.doc.children(id).length > 0;
       }),
     run: (e) => ungroupSelection(e),
   },
@@ -500,6 +501,24 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     enabled: canRemoveAutoLayout,
     run: (e) => removeAutoLayout(e),
   },
+  // Boolean operations, registered before the align commands: ⌥⇧S subtracts when it can, and aligns bottom to the parent otherwise.
+  ...(
+    [
+      ['object.booleanUnion', 'UNION', 'U'],
+      ['object.booleanSubtract', 'SUBTRACT', 'S'],
+      ['object.booleanIntersect', 'INTERSECT', 'I'],
+      ['object.booleanExclude', 'EXCLUDE', 'E'],
+    ] as const
+  ).map(
+    ([id, operation, key]): CommandDefinition => ({
+      id,
+      label: `${BOOLEAN_NAMES[operation]} selection`,
+      category: 'Object',
+      shortcuts: [`Shift+Alt+${key}`],
+      enabled: canBooleanSelection,
+      run: (e) => booleanSelection(e, operation),
+    }),
+  ),
   // Listed first so Return applies a crop before it selects children.
   {
     id: 'image.applyCrop',

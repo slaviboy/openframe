@@ -57,7 +57,7 @@ const unlockedSelection = (editor: Editor): Id[] => selectedSceneNodes(editor).f
 function parentBounds(editor: Editor, id: Id): Rect | null {
   const parent = editor.doc.parentOf(id);
   const type = parent ? editor.doc.get(parent)?.type : undefined;
-  return parent && (type === 'FRAME' || type === 'GROUP' || type === 'SECTION') ? editor.scene.worldBounds(parent) : null;
+  return parent && (type === 'FRAME' || type === 'GROUP' || type === 'BOOLEAN_OPERATION' || type === 'SECTION') ? editor.scene.worldBounds(parent) : null;
 }
 
 /**

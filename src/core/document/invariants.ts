@@ -48,13 +48,13 @@ export function assertDocumentInvariants(store: DocumentStore): void {
       continue;
     }
     if (parent.type === 'DOCUMENT') throw new InvariantError(`${node.id}: scene nodes cannot be children of the root`);
-    if (parent.type !== 'PAGE' && parent.type !== 'FRAME' && parent.type !== 'GROUP' && parent.type !== 'SECTION') {
+    if (parent.type !== 'PAGE' && parent.type !== 'FRAME' && parent.type !== 'GROUP' && parent.type !== 'BOOLEAN_OPERATION' && parent.type !== 'SECTION') {
       throw new InvariantError(`${node.id}: parent ${parent.id} (${parent.type}) cannot have children`);
     }
     if (!canParent(parent.type, node.type)) {
       throw new InvariantError(`${node.id}: a ${node.type} cannot be inside a ${parent.type} (${parent.id})`);
     }
-    if (node.type === 'GROUP' && store.children(node.id).length === 0) {
+    if ((node.type === 'GROUP' || node.type === 'BOOLEAN_OPERATION') && store.children(node.id).length === 0) {
       throw new InvariantError(`group ${node.id} is empty`);
     }
     // Cycle check: walking up must reach the root within `size` steps.

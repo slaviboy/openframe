@@ -21,7 +21,7 @@ import type { Effect } from '@/core/schema/document';
 const isNormalBlend = (mode: string): boolean => mode === 'NORMAL' || mode === 'PASS_THROUGH';
 import { maskRuns } from '@/core/scene/masks';
 import { networkStrokePath, regionFillPath } from '@/core/vector/vector-network';
-import type { VectorNode } from '@/core/schema/document';
+import type { BooleanOperationNode, VectorNode } from '@/core/schema/document';
 import { stackingOrder } from '@/core/layout/auto-layout';
 import {
   blurOffsets,
@@ -206,9 +206,13 @@ export class SceneRenderer {
     this.glassEffect = undefined;
   }
 
+  /** The document being drawn; boolean groups combine their children's outlines from it. */
+  private drawStore: DocumentStore | null = null;
+
   render(canvas: Canvas, store: DocumentStore, index: SceneIndex, pageId: Id, view: RenderView, options: RenderOptions = {}): RenderStats {
     const start = performance.now();
     this.profile = options.colorProfile ?? 'SRGB';
+    this.drawStore = store;
     const stats: RenderStats = { drawn: 0, culled: 0, ms: 0 };
     const page = store.get(pageId);
     if (options.outlines) {
@@ -323,7 +327,8 @@ export class SceneRenderer {
       ctx.stats.drawn++;
     }
 
-    if (children.length > 0) {
+    // A boolean group paints its combined shape instead of its children.
+    if (children.length > 0 && node.type !== 'BOOLEAN_OPERATION') {
       if (clips) {
         canvas.save();
         if (node.type === 'FRAME') this.clipToFrame(canvas, node);
@@ -430,6 +435,10 @@ export class SceneRenderer {
     }
     if (node.type === 'VECTOR') {
       this.drawVector(canvas, node);
+      return;
+    }
+    if (node.type === 'BOOLEAN_OPERATION') {
+      this.drawBoolean(canvas, node);
       return;
     }
     const path = this.shapePath(node);
@@ -816,6 +825,8 @@ export class SceneRenderer {
         line.delete();
         return stroked;
       }
+      case 'BOOLEAN_OPERATION':
+        return depth > 64 ? null : this.booleanPath(node, store, depth + 1);
       case 'GROUP': {
         if (depth > 64) return null;
         let union: Path | null = null;
@@ -1012,6 +1023,46 @@ export class SceneRenderer {
       default:
         return null;
     }
+  }
+
+  /** A boolean group's shape: its visible children's outlines, placed by their transforms and combined by its operation. */
+  private booleanPath(node: BooleanOperationNode, store: DocumentStore, depth = 0): Path | null {
+    const ck = this.ck;
+    const op = { UNION: ck.PathOp.Union, SUBTRACT: ck.PathOp.Difference, INTERSECT: ck.PathOp.Intersect, EXCLUDE: ck.PathOp.XOR }[node.booleanOperation];
+    let result: Path | null = null;
+    for (const childId of store.children(node.id)) {
+      const child = store.get(childId);
+      if (!child || !isSceneNode(child) || !child.visible) continue;
+      const outline = this.backdropOutline(child, store, depth + 1);
+      if (!outline) continue;
+      const m = matrixOf(child.transform);
+      const placed = new ck.PathBuilder().addPath(outline, [m.a, m.c, m.e, m.b, m.d, m.f, 0, 0, 1])?.detachAndDelete() ?? null;
+      outline.delete();
+      if (!placed) continue;
+      if (!result) {
+        result = placed;
+        continue;
+      }
+      // Subtract removes each later (higher) layer from the bottom one; the others combine in order.
+      const merged: Path | null = ck.Path.MakeFromOp(result, placed, op);
+      result.delete();
+      placed.delete();
+      result = merged;
+    }
+    return result;
+  }
+
+  /** A boolean group: its combined shape painted with its own fills and strokes. */
+  private drawBoolean(canvas: Canvas, node: BooleanOperationNode): void {
+    const path = this.drawStore ? this.booleanPath(node, this.drawStore) : null;
+    if (!path) return;
+    for (const paint of node.fills) {
+      if (!paint.visible || paint.opacity <= 0) continue;
+      this.configurePaint(this.fillPaint, paint, node.size);
+      canvas.drawPath(path, this.fillPaint);
+    }
+    this.drawStrokes(canvas, node, path);
+    path.delete();
   }
 
   /** The closed regions of a vector layer as one path, each region filled by its own winding rule; null without regions. */

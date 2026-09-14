@@ -193,6 +193,7 @@ export function nodeContainsLocal(node: SceneNode, p: Vec2, tolerance: number): 
   const { width: w, height: h } = node.size;
   switch (node.type) {
     case 'GROUP':
+    case 'BOOLEAN_OPERATION':
       return false;
     // Sections, slices and text layers are picked anywhere in their box, like the reference editor.
     case 'SECTION':

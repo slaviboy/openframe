@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { makeFrame, makeGroup, makeSection } from '@/core/document/factory';
+import { makeBooleanOperation, makeFrame, makeGroup, makeSection } from '@/core/document/factory';
 import { sortByPaintOrder } from '@/core/document/order';
 import type { DocumentStore } from '@/core/document/store';
 import type { Transaction } from '@/core/history/history';
@@ -24,7 +24,7 @@ import type { Id } from '@/core/ids/ids';
 import { IDENTITY, invert, multiply, scaling, translation, type Matrix } from '@/core/math/matrix';
 import { contains as containsRect, transformRect, unionAll } from '@/core/math/rect';
 import { matrixOf } from '@/core/scene/scene-index';
-import { isSceneNode, type Node, type SceneNode, type Transform } from '@/core/schema/document';
+import { isSceneNode, type BooleanOperation, type Node, type SceneNode, type Transform } from '@/core/schema/document';
 import type { DuplicateMemory, Editor } from '../editor';
 import { roundTransform, toTransform } from '../interactions/transform';
 import { keyOf, nextKeyAbove, selectedSceneNodes, topChildKey } from './selection-helpers';
@@ -57,6 +57,8 @@ export interface WrapOptions {
   readonly name?: string;
   /** Extra edits in the same transaction, with the wrapped ids in paint order (bottom first). */
   readonly after?: (tx: Transaction, containerId: Id, ids: readonly Id[]) => void;
+  /** With kind GROUP: create a boolean group combining the layers by this operation. */
+  readonly booleanOperation?: BooleanOperation;
 }
 
 export function wrapSelection(editor: Editor, kind: 'GROUP' | 'FRAME', options: WrapOptions = {}): Id | null {
@@ -76,7 +78,8 @@ export function wrapSelection(editor: Editor, kind: 'GROUP' | 'FRAME', options: 
     const name = nextName(store, editor.pageId, options.name ?? (kind === 'GROUP' ? 'Group' : 'Frame'));
     let containerWorld = parentWorld;
     if (kind === 'GROUP') {
-      tx.create(makeGroup({ id: containerId, parent: { id: parent, key }, name, x: 0, y: 0, width: 0, height: 0 }));
+      const init = { id: containerId, parent: { id: parent, key }, name, x: 0, y: 0, width: 0, height: 0 };
+      tx.create(options.booleanOperation ? makeBooleanOperation(init, options.booleanOperation) : makeGroup(init));
     } else {
       const bounds = unionAll(
         ids.map((id) => {
@@ -201,7 +204,7 @@ export interface UngroupOptions {
  */
 export function ungroupSelection(editor: Editor, options: UngroupOptions = {}): Id[] {
   const store = editor.doc;
-  const types: readonly string[] = options.types ?? ['GROUP', 'FRAME', 'SECTION'];
+  const types: readonly string[] = options.types ?? ['GROUP', 'BOOLEAN_OPERATION', 'FRAME', 'SECTION'];
   const containers = selectedSceneNodes(editor).filter((id) => {
     const type = store.get(id)?.type;
     return type !== undefined && types.includes(type) && (options.allowEmpty || store.children(id).length > 0);

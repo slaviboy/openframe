@@ -25,6 +25,8 @@ import type { SceneNode, Transform } from '../schema/document';
 /** Fields of a child whose change can alter its parent group's bounds. */
 const CHILD_GEOMETRY_FIELDS: ReadonlySet<string> = new Set(['transform', 'size', 'parent']);
 const EPSILON = 1e-6;
+/** Containers that always fit their children (and disappear when empty): groups and boolean groups. */
+const HUGGING: ReadonlySet<string> = new Set(['GROUP', 'BOOLEAN_OPERATION']);
 
 /**
  * Commit finalizer enforcing group semantics:
@@ -40,13 +42,13 @@ export function groupFinalizer(tx: Transaction): void {
   const candidates = new Set<Id>();
   const addGroupAncestors = (start: Id | null | undefined) => {
     for (let cur = start ?? null; cur !== null && store.has(cur); cur = store.parentOf(cur)) {
-      if (store.get(cur)?.type === 'GROUP') candidates.add(cur);
+      if (HUGGING.has(store.get(cur)?.type ?? '')) candidates.add(cur);
     }
   };
 
   for (const op of tx.ops) {
     if (op.kind === 'create') {
-      if (op.node.type === 'GROUP') candidates.add(op.node.id);
+      if (HUGGING.has(op.node.type)) candidates.add(op.node.id);
       if (op.node.type !== 'DOCUMENT') addGroupAncestors(op.node.parent.id);
     } else if (op.kind === 'delete') {
       if (op.node.type !== 'DOCUMENT') addGroupAncestors(op.node.parent.id);

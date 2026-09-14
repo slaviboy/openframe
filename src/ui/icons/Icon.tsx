@@ -60,6 +60,7 @@ const PATHS = {
   vector: <path d="M6.5 17.5C8 10 16 14 17.5 6.5M5.5 16.5h2v2h-2zM16.5 5.5h2v2h-2z" />,
   pen: <path d="M12 5.5 17 12.5l-5 6-5-6zM12 5.5v6M11 12.5h2" />,
   pencil: <path d="m6.5 17.5 1-3.5 8-8 2.5 2.5-8 8zM14 7.5l2.5 2.5" />,
+  boolean: <path d="M5.5 5.5h9v9h-9zM9.5 9.5h9v9h-9z" />,
   layoutGrid: <path d="M6.5 6.5h4v4h-4zM13.5 6.5h4v4h-4zM6.5 13.5h4v4h-4zM13.5 13.5h4v4h-4z" />,
   ignoreLayout: <path d="M6.5 9.5v-3h3M14.5 6.5h3v3M17.5 14.5v3h-3M9.5 17.5h-3v-3M10.5 10.5h3v3h-3z" />,
   autoHeight: <path d="M12 5.5v13M9.5 8 12 5.5 14.5 8M9.5 16l2.5 2.5 2.5-2.5" />,

@@ -31,7 +31,11 @@ import type {
   SectionNode,
   SliceNode,
   StarNode,
-  StrokeCap, VectorNode } from '../schema/document';
+  StrokeCap,
+  VectorNode,
+  BooleanOperation,
+  BooleanOperationNode,
+} from '../schema/document';
 import { DocumentStore } from './store';
 
 export const WHITE: Color = { r: 1, g: 1, b: 1, a: 1 };
@@ -151,6 +155,17 @@ export const makeStar = (init: ShapeInit): StarNode => ({
   strokeAlign: 'INSIDE',
   pointCount: 5,
   innerRadius: 0.38,
+});
+
+/** A boolean group combining its children by `operation`, with the default shape fill. */
+export const makeBooleanOperation = (init: ShapeInit, operation: BooleanOperation): BooleanOperationNode => ({
+  ...sceneDefaults(init),
+  type: 'BOOLEAN_OPERATION',
+  booleanOperation: operation,
+  fills: [solid(DEFAULT_SHAPE_FILL)],
+  strokes: [],
+  strokeWeight: 1,
+  strokeAlign: 'INSIDE',
 });
 
 /** A vector layer (Pen, Pencil) with a 1px black center stroke and no fill; `network` is in the layer's local space. */

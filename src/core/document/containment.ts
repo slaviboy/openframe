@@ -32,6 +32,9 @@ export function canParent(parent: NodeType, child: NodeType): boolean {
     case 'FRAME':
     case 'GROUP':
       return child !== 'DOCUMENT' && child !== 'PAGE' && child !== 'SECTION';
+    // Boolean groups combine shapes, vectors, text and other groups — not frames, sections or slices.
+    case 'BOOLEAN_OPERATION':
+      return child !== 'DOCUMENT' && child !== 'PAGE' && child !== 'SECTION' && child !== 'FRAME' && child !== 'SLICE';
     default:
       return false;
   }
