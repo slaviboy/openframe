@@ -39,6 +39,8 @@ export interface NumberFieldProps {
   onGestureEnd?: () => void;
   disabled?: boolean;
   testId?: string;
+  /** Offered the typed text before it is evaluated; return true when handled (e.g. padding shorthand). */
+  onText?: (text: string) => boolean;
 }
 
 const clamp = (v: number, min?: number, max?: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, v));
@@ -62,6 +64,10 @@ export function NumberField(props: NumberFieldProps) {
 
   const commitText = () => {
     if (draft === null) return;
+    if (props.onText?.(draft)) {
+      setDraft(null);
+      return;
+    }
     const parsed = evaluateMath(draft, value);
     if (parsed !== null) {
       const next = clamp(parsed, min, max);

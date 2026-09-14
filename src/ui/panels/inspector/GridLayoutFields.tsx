@@ -26,6 +26,7 @@ import { IconButton } from '../../primitives/IconButton';
 import { NumberField } from '../../primitives/NumberField';
 import primitives from '../../primitives/primitives.module.css';
 import styles from './Inspector.module.css';
+import { parsePaddingShorthand } from './padding-shorthand';
 
 const FLEX: GridTrack = { type: 'FLEX', value: 1 };
 const valueOf = <T,>(v: T | typeof MIXED | undefined): T | undefined => (v === MIXED ? undefined : v);
@@ -88,6 +89,17 @@ export function GridLayoutFields({ frames }: { frames: FrameNode[] }) {
   const setPadding = (fields: readonly PaddingField[], value: number) =>
     gesture.change((tx) => frames.forEach((f) => fields.forEach((field) => tx.set(f.id, field, value > 0 ? value : undefined))));
   const [top, right, bottom, left] = [padding('paddingTop'), padding('paddingRight'), padding('paddingBottom'), padding('paddingLeft')];
+  const applyShorthand = (text: string) => {
+    const values = parsePaddingShorthand(text);
+    if (!values) return false;
+    run('Change padding', (tx, f) => {
+      tx.set(f.id, 'paddingTop', values.top || undefined);
+      tx.set(f.id, 'paddingRight', values.right || undefined);
+      tx.set(f.id, 'paddingBottom', values.bottom || undefined);
+      tx.set(f.id, 'paddingLeft', values.left || undefined);
+    });
+    return true;
+  };
 
   return (
     <>
@@ -145,8 +157,8 @@ export function GridLayoutFields({ frames }: { frames: FrameNode[] }) {
           onGestureEnd={gesture.end}
           onChange={(v) => gesture.change((tx) => frames.forEach((f) => tx.set(f.id, 'gridRowGap', v > 0 ? v : undefined)))}
         />
-        <NumberField label="⇹" ariaLabel="Horizontal padding" min={0} value={left === right ? left : undefined} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => setPadding(['paddingLeft', 'paddingRight'], Math.max(0, v))} />
-        <NumberField label="⇕" ariaLabel="Vertical padding" min={0} value={top === bottom ? top : undefined} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => setPadding(['paddingTop', 'paddingBottom'], Math.max(0, v))} />
+        <NumberField label="⇹" ariaLabel="Horizontal padding" min={0} value={left === right ? left : undefined} onGestureStart={gesture.start} onGestureEnd={gesture.end} onText={applyShorthand} onChange={(v) => setPadding(['paddingLeft', 'paddingRight'], Math.max(0, v))} />
+        <NumberField label="⇕" ariaLabel="Vertical padding" min={0} value={top === bottom ? top : undefined} onGestureStart={gesture.start} onGestureEnd={gesture.end} onText={applyShorthand} onChange={(v) => setPadding(['paddingTop', 'paddingBottom'], Math.max(0, v))} />
       </div>
       <div role="group" aria-label="Columns">
         {trackFields('column', columns)}

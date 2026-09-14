@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { useState } from 'react';
+import { useState, type KeyboardEvent } from 'react';
+import { parsePaddingShorthand } from './padding-shorthand';
 import type { Transaction } from '@/core/history/history';
 import { applyAutoLayout, applyGridLayout, clearAutoLayout, clearGridLayout, horizontalSizing, isAutoLayoutFrame, verticalSizing } from '@/core/layout/auto-layout';
 import { GridLayoutFields } from './GridLayoutFields';
@@ -138,6 +139,8 @@ export function AutoLayoutFields({ frames }: { frames: FrameNode[] }) {
   const paddingGesture = useGesture('Change padding');
   const [individualPadding, setIndividualPadding] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // ⌘-click (Ctrl-click) on a padding field: the next value applies to every side.
+  const [uniformPadding, setUniformPadding] = useState(false);
 
   const run = (label: string, apply: (tx: Transaction, frame: FrameNode) => void) =>
     editor.history.run(label, (tx) => frames.forEach((f) => apply(tx, tx.store.getOrThrow(f.id) as FrameNode)));
@@ -207,8 +210,30 @@ export function AutoLayoutFields({ frames }: { frames: FrameNode[] }) {
     });
   const setPadding = (fields: readonly PaddingField[], value: number) =>
     paddingGesture.change((tx) => frames.forEach((f) => fields.forEach((field) => tx.set(f.id, field, value > 0 ? value : undefined))));
+  const allSides: readonly PaddingField[] = ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'];
+  const applyShorthand = (text: string) => {
+    const values = parsePaddingShorthand(text);
+    if (!values) return false;
+    run('Change padding', (tx, f) => {
+      tx.set(f.id, 'paddingTop', values.top || undefined);
+      tx.set(f.id, 'paddingRight', values.right || undefined);
+      tx.set(f.id, 'paddingBottom', values.bottom || undefined);
+      tx.set(f.id, 'paddingLeft', values.left || undefined);
+    });
+    return true;
+  };
   const paddingField = (label: string, ariaLabel: string, fields: readonly PaddingField[], value: number | undefined) => (
-    <NumberField key={ariaLabel} label={label} ariaLabel={ariaLabel} min={0} value={value} onGestureStart={paddingGesture.start} onGestureEnd={paddingGesture.end} onChange={(v) => setPadding(fields, Math.max(0, v))} />
+    <NumberField
+      key={ariaLabel}
+      label={label}
+      ariaLabel={ariaLabel}
+      min={0}
+      value={value}
+      onGestureStart={paddingGesture.start}
+      onGestureEnd={paddingGesture.end}
+      onText={applyShorthand}
+      onChange={(v) => setPadding(uniformPadding ? allSides : fields, Math.max(0, v))}
+    />
   );
 
   // With a fixed gap every cell sets both axes; with an Auto gap only the position across the flow applies.
@@ -226,13 +251,68 @@ export function AutoLayoutFields({ frames }: { frames: FrameNode[] }) {
         }),
       );
 
+  // Alignment box keys: arrows move one step, W/A/S/D go to an edge, X toggles the Auto gap.
+  const onAlignmentKey = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    if (key === 'x') {
+      e.preventDefault();
+      e.stopPropagation();
+      run(autoGap ? 'Fixed gap' : 'Auto gap', (tx, f) => tx.set(f.id, 'primaryAxisAlignItems', autoGap ? undefined : 'SPACE_BETWEEN'));
+      return;
+    }
+    const index = (value: string | undefined) => Math.max(0, (STEPS as readonly string[]).indexOf(value ?? 'MIN'));
+    const primaryIndex = autoGap ? 0 : index(primary);
+    const counterIndex = index(counter);
+    let [row, column] = horizontal ? [counterIndex, primaryIndex] : [primaryIndex, counterIndex];
+    const step = (v: number) => Math.min(2, Math.max(0, v));
+    switch (key) {
+      case 'ArrowUp':
+        row = step(row - 1);
+        break;
+      case 'ArrowDown':
+        row = step(row + 1);
+        break;
+      case 'ArrowLeft':
+        column = step(column - 1);
+        break;
+      case 'ArrowRight':
+        column = step(column + 1);
+        break;
+      case 'w':
+        row = 0;
+        break;
+      case 's':
+        row = 2;
+        break;
+      case 'a':
+        column = 0;
+        break;
+      case 'd':
+        column = 2;
+        break;
+      default:
+        return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    const [p, c] = horizontal ? [column, row] : [row, column];
+    align(autoGap ? primary! : STEPS[p]!, STEPS[c]!);
+  };
+
   return (
     <>
       {flowButtons}
       <div className={styles.grid2}>
-        <div className={styles.alignBox} role="group" aria-label="Alignment">
+        <div className={styles.alignBox} role="group" aria-label="Alignment" onKeyDown={onAlignmentKey}>
           {cells.map((cell) => (
-            <button key={cell.label} type="button" className={styles.alignCell} aria-label={cell.label} aria-pressed={cell.pressed} onClick={cell.onClick} />
+            <button key={cell.label} type="button" className={styles.alignCell} aria-label={cell.label} aria-pressed={cell.pressed}
+              onClick={(e) => {
+                // WebKit doesn't focus buttons on click; the box needs focus for its keys.
+                e.currentTarget.focus();
+                cell.onClick();
+              }}
+            />
           ))}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -272,7 +352,13 @@ export function AutoLayoutFields({ frames }: { frames: FrameNode[] }) {
           )}
         </div>
       </div>
-      <div className={styles.grid2}>
+      <div
+        className={styles.grid2}
+        onPointerDownCapture={(e) => {
+          if (e.metaKey || e.ctrlKey) setUniformPadding(true);
+        }}
+        onBlurCapture={() => setUniformPadding(false)}
+      >
         {individualPadding ? (
           <>
             {paddingField('T', 'Top padding', ['paddingTop'], top)}
