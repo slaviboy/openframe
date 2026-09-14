@@ -1525,8 +1525,9 @@ export class SceneRenderer {
       const shader = this.patternShaders.get(paint);
       target.setShader(shader ?? (null as never));
       target.setColor(shader ? this.ck.Color4f(1, 1, 1, paint.opacity) : this.ck.TRANSPARENT);
-    } else if (paint.type === 'IMAGE') {
-      const shader = this.imageShader(paint, size);
+    } else if (paint.type === 'IMAGE' || paint.type === 'VIDEO') {
+      // A video fill shows its poster on the canvas (presentation view plays the video).
+      const shader = this.imageShader(paint.type === 'VIDEO' ? { ...paint, type: 'IMAGE' } : paint, size);
       target.setShader(shader);
       shader.delete();
       target.setColor(this.ck.Color4f(1, 1, 1, paint.opacity));

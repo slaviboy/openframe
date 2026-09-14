@@ -18,6 +18,7 @@
 import type { PlaceableImage } from '@/editor/commands/images';
 import type { Editor } from '@/editor/editor';
 import { imageLayerName, readImageFile } from './import-image';
+import { isVideoFile, readVideoFile } from './import-video';
 
 export interface ImportResult {
   readonly images: PlaceableImage[];
@@ -25,12 +26,22 @@ export interface ImportResult {
   readonly errors: string[];
 }
 
-/** Reads, stores and registers image files; files that fail are reported, the rest still import. */
+/**
+ * Reads, stores and registers image and video files (a video with its poster, placed at the video's size); files that
+ * fail are reported, the rest still import.
+ */
 export async function importImageFiles(editor: Editor, files: readonly File[]): Promise<ImportResult> {
   const images: PlaceableImage[] = [];
   const errors: string[] = [];
   for (const file of files) {
     try {
+      if (isVideoFile(file)) {
+        const { video, poster } = await readVideoFile(file);
+        await editor.images.add(poster);
+        await editor.images.add(video);
+        images.push({ hash: poster.hash, width: video.width, height: video.height, name: imageLayerName(file.name), videoHash: video.hash });
+        continue;
+      }
       const asset = await readImageFile(file);
       await editor.images.add(asset);
       images.push({ hash: asset.hash, width: asset.width, height: asset.height, name: imageLayerName(file.name) });

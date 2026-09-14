@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ImagePaint, ImageScaleMode } from '../schema/document';
+import type { ImagePaint, ImageScaleMode, VideoPaint } from '../schema/document';
 import type { ImageAdjustment } from './adjustments';
 
 export interface ImageRef {
@@ -35,6 +35,26 @@ export const imagePaintFor = (image: ImageRef): ImagePaint => ({
   opacity: 1,
   visible: true,
   blendMode: 'NORMAL',
+});
+
+/** A new video fill in FILL mode: the video (`videoHash`) and its poster image. */
+export const videoPaintFor = (poster: ImageRef, videoHash: string): VideoPaint => ({
+  type: 'VIDEO',
+  videoHash,
+  imageHash: poster.hash,
+  imageSize: { width: poster.width, height: poster.height },
+  scaleMode: 'FILL',
+  opacity: 1,
+  visible: true,
+  blendMode: 'NORMAL',
+});
+
+/** Replaces the video of a video fill, keeping its mode, rotation and other settings. */
+export const withVideo = (paint: VideoPaint, poster: ImageRef, videoHash: string): VideoPaint => ({
+  ...paint,
+  videoHash,
+  imageHash: poster.hash,
+  imageSize: { width: poster.width, height: poster.height },
 });
 
 /** Replaces the image of a paint, keeping its mode, rotation and other settings. */

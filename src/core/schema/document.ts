@@ -275,6 +275,25 @@ export const ImagePaintSchema = z.object({
 });
 
 /**
+ * Video fill. Placed like an image fill; `videoHash` keys the video's bytes in the same content-addressed store, and
+ * `imageHash` its poster (the first frame as a PNG), which the canvas draws while the video isn't playing.
+ */
+export const VideoPaintSchema = z.object({
+  type: z.literal('VIDEO'),
+  videoHash: z.string().regex(IMAGE_HASH_PATTERN),
+  imageHash: z.string().regex(IMAGE_HASH_PATTERN).optional(),
+  /** Pixel size of the video. */
+  imageSize: z.object({ width: z.number().int().positive(), height: z.number().int().positive() }).optional(),
+  scaleMode: ImageScaleModeSchema,
+  imageTransform: TransformSchema.optional(),
+  scalingFactor: z.number().positive().optional(),
+  rotation: z.union([z.literal(90), z.literal(180), z.literal(270)]).optional(),
+  opacity: unit,
+  visible: z.boolean(),
+  blendMode: BlendModeSchema,
+});
+
+/**
  * Pattern fill: tiles the content of another layer (`sourceNodeId`, absent until chosen). Tiles are
  * the source's size × `scalingFactor` plus `spacing`; hexagonal tiles offset every other row
  * (horizontal) or column (vertical) by half a tile. `horizontalAlignment` anchors the tile grid to the
@@ -295,6 +314,7 @@ export const PatternPaintSchema = z.object({
 export const PaintSchema = z.discriminatedUnion('type', [
   SolidPaintSchema,
   ImagePaintSchema,
+  VideoPaintSchema,
   PatternPaintSchema,
   LinearGradientPaintSchema,
   RadialGradientPaintSchema,
@@ -1063,6 +1083,7 @@ export type GradientPaint = Extract<Paint, { gradientStops: readonly GradientSto
 export type GradientType = GradientPaint['type'];
 export const isGradientPaint = (paint: Paint): paint is GradientPaint => paint.type.startsWith('GRADIENT_');
 export type ImagePaint = z.infer<typeof ImagePaintSchema>;
+export type VideoPaint = z.infer<typeof VideoPaintSchema>;
 export type ImageScaleMode = z.infer<typeof ImageScaleModeSchema>;
 export type ImageFilters = z.infer<typeof ImageFiltersSchema>;
 export type PatternPaint = z.infer<typeof PatternPaintSchema>;

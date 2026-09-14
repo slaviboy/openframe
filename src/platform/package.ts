@@ -65,7 +65,7 @@ function isManifest(value: unknown): value is Manifest {
         image !== null &&
         IMAGE_HASH_PATTERN.test(image.hash) &&
         typeof image.mime === 'string' &&
-        image.mime.startsWith('image/') &&
+        (image.mime.startsWith('image/') || image.mime.startsWith('video/')) &&
         image.mime.length <= 100 &&
         Number.isInteger(image.width) &&
         image.width > 0 &&

@@ -20,12 +20,16 @@ import type { DocumentStore } from './store';
 
 /**
  * The content hashes of the images a document uses, sorted and without repeats: image paints in layers' fills and
- * strokes, in vector regions' fills, in text ranges' fills, and in color styles.
+ * strokes, in vector regions' fills, in text ranges' fills, and in color styles. Video paints use their video and its
+ * poster image.
  */
 export function usedImageHashes(store: DocumentStore): string[] {
   const hashes = new Set<string>();
   const add = (paints: readonly Paint[] | undefined) => {
-    for (const paint of paints ?? []) if (paint.type === 'IMAGE' && paint.imageHash) hashes.add(paint.imageHash);
+    for (const paint of paints ?? []) {
+      if ((paint.type === 'IMAGE' || paint.type === 'VIDEO') && paint.imageHash) hashes.add(paint.imageHash);
+      if (paint.type === 'VIDEO') hashes.add(paint.videoHash);
+    }
   };
   for (const node of store.nodes()) {
     const fields = node as unknown as Record<string, readonly Paint[] | undefined>;

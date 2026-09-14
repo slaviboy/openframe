@@ -104,9 +104,14 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - matching frames share scroll position (`sharedScrollOffsets` in scroll.ts)
     - matching layers animate on moving transitions (`matchedLayersStore` / `withoutMatchingLayersStore` in smart-animate.ts, and `without` / `matched` frame items)
 
+  - Video fills (the commit after shared scroll):
+    - `VIDEO` paints hold `videoHash` and a poster `imageHash` in the image store (`src/ui/images/import-video.ts`)
+    - the canvas draws the poster; `VideoSettings` previews the video in the Fill section
+    - the E2E fixtures are `e2e/media/clip.webm` and `clip.mp4`, made with ffmpeg; all three browsers decode both
+
 ## In progress (uncommitted)
 
-1. **Video fills with video triggers and actions (M10 video row).**
+1. **Video playback in presentation view and the Video section (autoplay, loop, sound).** Then video triggers and actions, and animated GIFs.
 
 ## Next (M10, in order)
 

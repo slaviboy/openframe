@@ -160,6 +160,12 @@ const PATHS = {
       <path d="m18.5 14.5-3.5-3.5-9 7.5" />
     </>
   ),
+  video: (
+    <>
+      <rect x="5.5" y="6.5" width="13" height="11" rx="1.5" />
+      <path d="m10.5 9.5 4 2.5-4 2.5z" />
+    </>
+  ),
   sidebar: (
     <>
       <rect x="4.5" y="6" width="15" height="12" rx="1.5" />

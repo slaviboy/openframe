@@ -44,4 +44,16 @@ describe('usedImageHashes', () => {
     createStyle(editor, 'FILL', 'Texture', { paints: [image('b')] });
     expect(usedImageHashes(editor.doc)).toEqual(['a', 'b', 'c', 'd'].map((c) => c.repeat(64)));
   });
+
+  test('a video paint uses its video and its poster image', () => {
+    const ids = new IdGenerator('v');
+    const editor = new Editor({ doc: createEmptyDocument({ name: 'D', now: 'n', appVersion: 't', ids }), ids, validate: true });
+    editor.history.run('create', (tx) => {
+      const page = editor.pageId;
+      const rect = editor.ids.next();
+      tx.create(makeRectangle({ id: rect, parent: { id: page, key: keyOnTop(tx.store, page) }, name: 'Clip', x: 0, y: 0, width: 16, height: 9 }));
+      tx.set(rect, 'fills', [{ type: 'VIDEO', videoHash: 'f'.repeat(64), imageHash: 'e'.repeat(64), scaleMode: 'FILL', opacity: 1, visible: true, blendMode: 'NORMAL' }]);
+    });
+    expect(usedImageHashes(editor.doc)).toEqual(['e'.repeat(64), 'f'.repeat(64)]);
+  });
 });

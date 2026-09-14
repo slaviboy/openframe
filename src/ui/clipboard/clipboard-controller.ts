@@ -36,6 +36,7 @@ import {
   type PropertiesPayload,
 } from '@/editor/clipboard/properties';
 import { imageFilesOf } from '../images/import-image';
+import { videoFilesOf } from '../images/import-video';
 import { isSvgMarkup, svgFilesOf, svgMarkupFile } from '../import/svg-files';
 import { IS_MAC } from '../keyboard/keyboard-controller';
 
@@ -131,7 +132,7 @@ export class ClipboardController {
       }
       const payload = decodeClipboardHtml(html);
       if (!payload) {
-        const files = [...imageFilesOf(e.clipboardData), ...svgFilesOf(e.clipboardData)];
+        const files = [...imageFilesOf(e.clipboardData), ...videoFilesOf(e.clipboardData), ...svgFilesOf(e.clipboardData)];
         // SVG markup copied from another tool imports as vectors.
         const text = files.length === 0 ? (e.clipboardData?.getData('text/plain') ?? '') : '';
         if (isSvgMarkup(text)) files.push(svgMarkupFile(text));

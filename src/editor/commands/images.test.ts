@@ -18,7 +18,7 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import { createEmptyDocument, keyOnTop, makeEllipse, makeFrame } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
-import type { ImagePaint, RectangleNode, SceneNode } from '@/core/schema/document';
+import type { ImagePaint, RectangleNode, SceneNode, VideoPaint } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { ToolManager } from '../tools/tool-manager';
 import type { PointerInfo } from '../tools/types';
@@ -58,6 +58,30 @@ describe('placing images', () => {
     expect(editor.selection).toEqual(ids);
     editor.history.undo();
     expect(ids.some((id) => editor.doc.has(id))).toBe(false);
+  });
+
+  test('a video places as a rectangle at its size with a video fill (the video and its poster), and fills a clicked shape', () => {
+    const videoHash = 'd'.repeat(64);
+    const clip: PlaceableImage = { hash: 'c'.repeat(64), width: 160, height: 90, name: 'clip', videoHash };
+    const [id] = placeImages(editor, [clip], { x: 0, y: 0 });
+    const rect = editor.doc.getOrThrow(id!) as RectangleNode;
+    expect(rect).toMatchObject({ name: 'clip', size: { width: 160, height: 90 } });
+    expect(rect.fills).toEqual([{ type: 'VIDEO', videoHash, imageHash: clip.hash, imageSize: { width: 160, height: 90 }, scaleMode: 'FILL', opacity: 1, visible: true, blendMode: 'NORMAL' } satisfies VideoPaint]);
+
+    const tools = new ToolManager(editor);
+    const ellipse = editor.history.run('ellipse', (tx) => {
+      const ellipseId = editor.ids.next();
+      tx.create(makeEllipse({ id: ellipseId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'E', x: 500, y: 0, width: 100, height: 100 }));
+      return ellipseId;
+    });
+    tools.imageTool.load([red, clip]);
+    editor.state.setTool('image');
+    tools.tool.pointerDown(click(550, 50));
+    tools.tool.pointerDown(click(550, 50));
+    // The video replaces the image placed first.
+    const fills = (editor.doc.getOrThrow(ellipse) as Extract<SceneNode, { type: 'ELLIPSE' }>).fills;
+    expect(fills).toHaveLength(1);
+    expect(fills[0]).toMatchObject({ type: 'VIDEO', videoHash: clip.videoHash, imageHash: clip.hash });
   });
 
   test('images land inside the frame under them', () => {

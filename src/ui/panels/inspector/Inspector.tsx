@@ -18,6 +18,7 @@
 import { Fragment, useRef, useState, type ReactNode } from 'react';
 import { selectionColors, showsSelectionColors, updateSelectionColor, type ColorPaint, type PaintUsage, type SelectionColor } from '@/core/color/selection-colors';
 import { addStop, convertPaint, PAINT_TYPE_LABELS, removeStop, reverseStops, updateStop, type PaintType } from '@/core/color/paints';
+import { VideoSettings } from './VideoSettings';
 import {
   blurOffsets,
   canAddEffect,
@@ -2033,7 +2034,8 @@ function PaintSection({
                     )
                   }
                 >
-                  {PAINT_TYPES.map((type) => (
+                  {/* Video is shown for a video fill; other fills become videos by importing one. */}
+                  {(paint.type === 'VIDEO' ? [...PAINT_TYPES, 'VIDEO' as const] : PAINT_TYPES).map((type) => (
                     <option key={type} value={type}>
                       {PAINT_TYPE_LABELS[type]}
                     </option>
@@ -2064,8 +2066,8 @@ function PaintSection({
                         aria-label={`${title} ${list.length - index} pattern`}
                         style={{ background: 'repeating-linear-gradient(45deg, #b3b3b3 0 3px, #eeeeee 3px 6px)' }}
                       />
-                    ) : paint.type === 'IMAGE' ? (
-                      <ImageSwatch hash={paint.imageHash} label={`${title} ${list.length - index} image`} />
+                    ) : paint.type === 'IMAGE' || paint.type === 'VIDEO' ? (
+                      <ImageSwatch hash={paint.imageHash} label={`${title} ${list.length - index} ${paint.type === 'VIDEO' ? 'video' : 'image'}`} />
                     ) : (
                       nodes.length === 1 ? (
                         <button
@@ -2131,6 +2133,19 @@ function PaintSection({
                   cropLayer={field === 'fills' && nodes.length === 1 ? { id: nodes[0]!.id, size: nodes[0]!.size } : undefined}
                   onGestureStart={gesture.start}
                   onGestureEnd={gesture.end}
+                />
+              )}
+              {paint.type === 'VIDEO' && (
+                <VideoSettings
+                  label={`${title} ${list.length - index}`}
+                  paint={paint}
+                  onEdit={(label, edit) =>
+                    editor.history.run(label, (tx) =>
+                      nodes.forEach((n) =>
+                        write(tx, n, read(tx, n).map((p, i) => (i === index && p.type === 'VIDEO' ? edit(p) : p))),
+                      ),
+                    )
+                  }
                 />
               )}
               {paint.type === 'PATTERN' && (

@@ -67,6 +67,7 @@ import { autoLineHeight } from '@/editor/commands/builtin';
 import type { Transaction } from '@/core/history/history';
 import { addFontFaces } from '../fonts/font-faces';
 import { imageFilesOf } from '../images/import-image';
+import { videoFilesOf } from '../images/import-video';
 import { svgFilesOf } from '../import/svg-files';
 import { IS_MAC } from '../keyboard/keyboard-controller';
 import { ClickCounter } from './click-counter';
@@ -154,7 +155,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
         else insertInstance(editor, componentId, world);
         return;
       }
-      const files = [...imageFilesOf(e.dataTransfer), ...svgFilesOf(e.dataTransfer)];
+      const files = [...imageFilesOf(e.dataTransfer), ...videoFilesOf(e.dataTransfer), ...svgFilesOf(e.dataTransfer)];
       if (files.length === 0) return;
       e.preventDefault();
       const rect = container.getBoundingClientRect();

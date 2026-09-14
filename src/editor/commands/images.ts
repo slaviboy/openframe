@@ -18,7 +18,7 @@
 import { keyOnTop, makeRectangle } from '@/core/document/factory';
 import type { Transaction } from '@/core/history/history';
 import type { Id } from '@/core/ids/ids';
-import { imagePaintFor, withImage, type ImageRef } from '@/core/image/image-paint';
+import { imagePaintFor, videoPaintFor, withImage, type ImageRef } from '@/core/image/image-paint';
 import type { Vec2 } from '@/core/math/vec';
 import type { SceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
@@ -27,7 +27,12 @@ import { containerAt, parentToLocal, roundPoint } from '../tools/draw-helpers';
 /** An imported image ready to become a layer, named after its file. */
 export interface PlaceableImage extends ImageRef {
   readonly name: string;
+  /** A video: the hash of its bytes (`hash` is then its poster image). */
+  readonly videoHash?: string | undefined;
 }
+
+/** The fill for an imported image or video. */
+const mediaPaintFor = (image: ImageRef & { readonly videoHash?: string | undefined }) => (image.videoHash ? videoPaintFor(image, image.videoHash) : imagePaintFor(image));
 
 /** Gap between images placed together. */
 export const PLACE_ALL_GAP = 20;
@@ -60,7 +65,7 @@ export function placeImages(editor: Editor, images: readonly PlaceableImage[], w
         width: image.width,
         height: image.height,
       });
-      tx.create({ ...rect, fills: [imagePaintFor(image)] });
+      tx.create({ ...rect, fills: [mediaPaintFor(image)] });
       ids.push(id);
       x += image.width + PLACE_ALL_GAP;
     }
@@ -69,11 +74,14 @@ export function placeImages(editor: Editor, images: readonly PlaceableImage[], w
   return ids;
 }
 
-/** Puts an image into a shape's top fill (replacing the image of an image fill, or the fill itself); adds a fill when there is none. */
-export function fillWithImage(tx: Transaction, node: SceneNode, image: ImageRef): void {
+/**
+ * Puts an image (or video) into a shape's top fill (replacing the image of an image fill, or the fill itself); adds a
+ * fill when there is none.
+ */
+export function fillWithImage(tx: Transaction, node: SceneNode, image: ImageRef & { readonly videoHash?: string | undefined }): void {
   if (!IMAGE_FILLABLE.has(node.type)) return;
   const current = tx.store.getOrThrow(node.id) as Extract<SceneNode, { type: 'RECTANGLE' | 'ELLIPSE' | 'POLYGON' | 'STAR' }>;
   const top = current.fills.at(-1);
-  const paint = top?.type === 'IMAGE' ? withImage(top, image) : imagePaintFor(image);
+  const paint = !image.videoHash && top?.type === 'IMAGE' ? withImage(top, image) : mediaPaintFor(image);
   tx.set(node.id, 'fills', top ? [...current.fills.slice(0, -1), paint] : [paint]);
 }

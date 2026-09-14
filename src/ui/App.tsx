@@ -27,6 +27,7 @@ import { placeImages } from '@/editor/commands/images';
 import { screenToWorld } from '@/editor/viewport/viewport';
 import { importImageFiles, pickImageFiles } from './images/image-actions';
 import { IMAGE_ACCEPT } from './images/import-image';
+import { VIDEO_ACCEPT } from './images/import-video';
 import { isSvgFile, readSvgFile } from './import/svg-files';
 import { placeSvgs, type PlaceableSvg } from '@/editor/commands/import-svg';
 import { Notice, PlaceImageHint, ToolHint } from './shell/Notice';
@@ -357,7 +358,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
         shortcuts: ['Mod+Shift+K'],
         checked: () => editor.state.getSnapshot().tool === 'image',
         run: () => {
-          void pickImageFiles(IMAGE_ACCEPT).then(async (files) => {
+          void pickImageFiles(`${IMAGE_ACCEPT},${VIDEO_ACCEPT}`).then(async (files) => {
             if (files.length === 0) return;
             const { images, errors } = await importImageFiles(editor, files);
             if (errors.length > 0) setNotice(errors.join(' '));
