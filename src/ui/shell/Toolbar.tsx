@@ -62,6 +62,7 @@ const VECTOR_TOOLS: readonly { readonly tool: VectorEditTool; readonly label: st
   { tool: 'move', label: 'Move', icon: 'move', command: 'vector.toolMove' },
   { tool: 'lasso', label: 'Lasso', icon: 'lasso', command: 'vector.toolLasso' },
   { tool: 'cut', label: 'Cut', icon: 'cut', command: 'vector.toolCut' },
+  { tool: 'bend', label: 'Bend', icon: 'bend', command: 'vector.toolBend' },
 ];
 
 /** Floating bottom toolbar. Each group remembers the last tool picked from its dropdown; vector edit mode shows its secondary toolbar instead. */
@@ -103,8 +104,8 @@ export function Toolbar() {
                 className={styles.tool}
                 aria-pressed={vectorTool === item.tool}
                 data-active={vectorTool === item.tool || undefined}
-                aria-label={`${item.label} (${shortcut(item.command)})`}
-                title={`${item.label}  ${shortcut(item.command)}`}
+                aria-label={shortcut(item.command) ? `${item.label} (${shortcut(item.command)})` : item.label}
+                title={`${item.label}  ${shortcut(item.command)}`.trim()}
                 data-tool-button=""
                 onClick={() => editor.commands.run(item.command)}
               >

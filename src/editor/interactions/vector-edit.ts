@@ -17,17 +17,19 @@
 
 import type { Transaction } from '@/core/history/history';
 import type { Id } from '@/core/ids/ids';
-import { apply, applyLinear, invert } from '@/core/math/matrix';
+import { apply, applyLinear, invert, type Matrix } from '@/core/math/matrix';
 import type { Vec2 } from '@/core/math/vec';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
 import type { Transform, VectorNode } from '@/core/schema/document';
 import { cutVertex, deleteVertices, healVertices, moveVertices, nearestOnSegments, splitSegment } from '@/core/vector/vector-edit';
+import { bendVertex, oppositeEnd, setTangent, tangentAt, type SegmentEnd } from '@/core/vector/vector-bend';
 import type { VectorNetwork } from '@/core/vector/vector-network';
 import type { Editor } from '../editor';
 import { refitVector } from '../tools/vector-draw';
 import type { CursorKind, PointerInfo, Tool } from '../tools/types';
 import type { VectorEditTool } from '../stores/editor-store';
 import { worldToScreen } from '../viewport/viewport';
+import { hitHandle } from './vector-handles';
 
 /** Vector edit mode can start on a single selected, unlocked vector layer. */
 export function canBeginVectorEdit(editor: Editor): boolean {
@@ -103,6 +105,20 @@ interface LassoDrag {
   readonly shift: boolean;
 }
 
+/** Dragging Bézier handles: out of a point with Bend, or one handle of a selected point. */
+type HandleGesture = {
+  readonly tx: Transaction;
+  /** The network the drag works from, in the space of `startTransform` (`startInverse` maps world points into it). */
+  readonly start: VectorNetwork;
+  readonly startTransform: Transform;
+  readonly startInverse: Matrix;
+  readonly down: PointerInfo;
+  moved: boolean;
+} & (
+  | { readonly kind: 'bend'; readonly vertex: number; /** A point was added on the path first. */ readonly added: boolean }
+  | { readonly kind: 'handle'; readonly end: SegmentEnd; readonly origin: { readonly x: number; readonly y: number }; readonly mirror: SegmentEnd | null }
+);
+
 interface PointDrag {
   tx: Transaction;
   start: VectorNetwork;
@@ -118,11 +134,14 @@ interface PointDrag {
  * to add a point, click inside the layer to clear the point selection, and click elsewhere to leave.
  * With the Lasso (Q), a drag draws an outline that selects the points inside it (Shift adds); a click clears.
  * With Cut (X), clicking a point or a path breaks the path there, leaving its ends selected.
+ * With Bend, pressing on a point (or a path, adding a point) and dragging pulls out mirrored handles.
+ * The handles of selected points can be dragged; handles that mirrored each other keep mirroring.
  */
 export class VectorEditController implements Tool {
   readonly id = 'move' as const;
   private drag: PointDrag | null = null;
   private lasso: LassoDrag | null = null;
+  private handle: HandleGesture | null = null;
 
   constructor(
     private readonly editor: Editor,
@@ -130,7 +149,7 @@ export class VectorEditController implements Tool {
   ) {}
 
   get active(): boolean {
-    return this.drag !== null || this.lasso !== null;
+    return this.drag !== null || this.lasso !== null || this.handle !== null;
   }
 
   /** Screen outline of the lasso being drawn, for the overlay. */
@@ -157,10 +176,40 @@ export class VectorEditController implements Tool {
     editor.scene.ensure(editor.pageId);
     const toWorld = editor.scene.worldTransform(node.id);
     const v = editor.state.viewport;
+    const startInverse = invert(toWorld);
+    const handle = state.tool === 'cut' || !startInverse ? null : hitHandle(editor, p.screen, this.tolerancePx);
+    if (handle && startInverse) {
+      const network = node.vectorNetwork;
+      const opposite = oppositeEnd(network, handle.end);
+      const t = tangentAt(network, handle.end);
+      const o = opposite ? tangentAt(network, opposite) : null;
+      const mirrored = o !== null && Math.abs(t.x + o.x) < 1e-6 && Math.abs(t.y + o.y) < 1e-6;
+      const tx = editor.history.begin('Move handle');
+      this.handle = { kind: 'handle', tx, start: network, startTransform: node.transform, startInverse, down: p, moved: false, end: handle.end, origin: network.vertices[handle.vertex]!, mirror: mirrored ? opposite : null };
+      return;
+    }
     const hit = node.vectorNetwork.vertices.findIndex((vertex) => {
       const s = worldToScreen(v, apply(toWorld, vertex));
       return Math.abs(s.x - p.screen.x) <= this.tolerancePx && Math.abs(s.y - p.screen.y) <= this.tolerancePx;
     });
+    if (state.tool === 'bend') {
+      const bendLocal = startInverse ? apply(startInverse, p.world) : null;
+      const nearest = hit === -1 && bendLocal ? nearestOnSegments(node.vectorNetwork, bendLocal) : null;
+      const onPath = nearest && nearest.distance * Math.hypot(toWorld.a, toWorld.b) * v.zoom <= this.tolerancePx ? nearest : null;
+      if (!startInverse || (hit === -1 && !onPath)) {
+        editor.state.setVectorEdit({ ...state, vertices: [] });
+        return;
+      }
+      const tx = editor.history.begin('Bend');
+      // On a path, the bend pulls out of a point added there.
+      const split = onPath ? splitSegment(node.vectorNetwork, onPath.segment, onPath.t) : null;
+      const start = split ? split.network : node.vectorNetwork;
+      if (split) refitVector(tx, node.id, start, node.transform);
+      const vertex = split ? split.vertex : hit;
+      editor.state.setVectorEdit({ ...state, vertices: [vertex] });
+      this.handle = { kind: 'bend', tx, start, startTransform: node.transform, startInverse, down: p, moved: false, vertex, added: split !== null };
+      return;
+    }
     if (state.tool === 'cut') {
       const inverseCut = invert(toWorld);
       const localCut = inverseCut ? apply(inverseCut, p.world) : null;
@@ -202,6 +251,10 @@ export class VectorEditController implements Tool {
   }
 
   pointerMove(p: PointerInfo): void {
+    if (this.handle) {
+      this.dragHandle(this.handle, p);
+      return;
+    }
     if (this.lasso) {
       this.lasso.points.push({ ...p.screen });
       this.editor.requestRender();
@@ -222,6 +275,13 @@ export class VectorEditController implements Tool {
   }
 
   pointerUp(): void {
+    const g = this.handle;
+    if (g) {
+      this.handle = null;
+      if (g.moved || (g.kind === 'bend' && g.added)) this.editor.history.commit(g.tx);
+      else this.editor.history.cancel(g.tx);
+      return;
+    }
     const lasso = this.lasso;
     if (lasso) {
       this.lasso = null;
@@ -233,6 +293,26 @@ export class VectorEditController implements Tool {
     this.drag = null;
     if (d.moved) this.editor.history.commit(d.tx);
     else this.editor.history.cancel(d.tx);
+  }
+
+  private dragHandle(g: HandleGesture, p: PointerInfo): void {
+    const state = this.editor.state.getSnapshot().vectorEdit;
+    if (!state) return;
+    if (!g.moved && Math.hypot(p.screen.x - g.down.screen.x, p.screen.y - g.down.screen.y) < 3) return;
+    g.moved = true;
+    const local = apply(g.startInverse, p.world);
+    let network: VectorNetwork;
+    if (g.kind === 'bend') {
+      const origin = g.start.vertices[g.vertex]!;
+      network = bendVertex(g.start, g.vertex, { x: local.x - origin.x, y: local.y - origin.y });
+    } else {
+      const tangent = { x: local.x - g.origin.x, y: local.y - g.origin.y };
+      network = setTangent(g.start, g.end, tangent);
+      if (g.mirror) network = setTangent(network, g.mirror, { x: 0 - tangent.x, y: 0 - tangent.y });
+    }
+    refitVector(g.tx, state.nodeId, network, g.startTransform);
+    g.tx.flushPreview();
+    this.editor.requestRender();
   }
 
   private finishLasso(lasso: LassoDrag): void {
@@ -250,6 +330,11 @@ export class VectorEditController implements Tool {
   }
 
   cancel(): boolean {
+    if (this.handle) {
+      this.editor.history.cancel(this.handle.tx);
+      this.handle = null;
+      return true;
+    }
     if (this.lasso) {
       this.lasso = null;
       this.editor.requestRender();

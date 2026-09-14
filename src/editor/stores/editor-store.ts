@@ -79,8 +79,8 @@ export interface EditorState {
   readonly vectorEdit: VectorEditRef | null;
 }
 
-/** Tool of vector edit mode's secondary toolbar: Move (V) drags points; Lasso (Q) selects the points inside a drawn outline; Cut (X) breaks the path where it is clicked. */
-export type VectorEditTool = 'move' | 'lasso' | 'cut';
+/** Tool of vector edit mode's secondary toolbar: Move (V) drags points; Lasso (Q) selects the points inside a drawn outline; Cut (X) breaks the path where it is clicked; Bend pulls Bézier handles out of a point. */
+export type VectorEditTool = 'move' | 'lasso' | 'cut' | 'bend';
 
 /** Vector edit mode on a vector layer: the indices of its selected points, and the secondary toolbar's tool (absent: Move). */
 export interface VectorEditRef {

@@ -496,6 +496,15 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     enabled: (e) => e.state.getSnapshot().vectorEdit !== null,
     run: (e) => setVectorEditTool(e, 'cut'),
   },
+  // Bend has no shortcut: it is picked from the secondary toolbar.
+  {
+    id: 'vector.toolBend',
+    label: 'Bend',
+    category: 'Edit',
+    palette: false,
+    enabled: (e) => e.state.getSnapshot().vectorEdit !== null,
+    run: (e) => setVectorEditTool(e, 'bend'),
+  },
   {
     id: 'vector.edit',
     label: 'Edit vector',

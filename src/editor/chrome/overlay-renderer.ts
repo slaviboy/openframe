@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { selectedHandles } from '../interactions/vector-handles';
 import { arcCommands } from '@/core/geometry/arc';
 import type { Id } from '@/core/ids/ids';
 import { apply, type Matrix } from '@/core/math/matrix';
@@ -599,6 +600,20 @@ function drawVectorEdit(ctx: CanvasRenderingContext2D, input: OverlayInput): voi
   ctx.strokeStyle = theme.selection;
   ctx.lineWidth = 1;
   ctx.stroke();
+  // Bézier handles of the selected points: a line from the point to a round knob.
+  for (const h of selectedHandles(editor)) {
+    ctx.beginPath();
+    ctx.moveTo(h.vertexScreen.x, h.vertexScreen.y);
+    ctx.lineTo(h.screen.x, h.screen.y);
+    ctx.strokeStyle = theme.selection;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(h.screen.x, h.screen.y, 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = theme.handleFill;
+    ctx.fill();
+    ctx.stroke();
+  }
   const selected = new Set(state.vertices);
   const size = 7;
   node.vectorNetwork.vertices.forEach((vertex, i) => {
