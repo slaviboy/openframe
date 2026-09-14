@@ -248,6 +248,9 @@ export function bindingWrites(store: DocumentStore, lookup: VariableLookup, node
     working[info.layerField] = next;
     writes.set(info.layerField, next);
   }
+  // Replacing the text drops the style runs of the old text, as replacing a layer's text in the editor does.
+  const characters = writes.get('characters');
+  if (characters !== undefined && characters !== rec(node).characters && rec(node).styleRuns !== undefined) writes.set('styleRuns', undefined);
   if (hasGeometry(node)) {
     for (const field of ['fills', 'strokes'] as const) {
       let changed = false;
