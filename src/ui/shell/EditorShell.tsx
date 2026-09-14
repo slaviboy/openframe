@@ -23,6 +23,7 @@ import { SessionContext, useEditor, useEditorState, useSession } from '../hooks/
 import { commandSections, mainMenuEntries } from '../menus/menu-model';
 import { FindPanel } from '../panels/find/FindPanel';
 import { Inspector } from '../panels/inspector/Inspector';
+import { AssetsPanel } from '../panels/assets/AssetsPanel';
 import { LayersPanel } from '../panels/layers/LayersPanel';
 import { PagesPanel } from '../panels/pages/PagesPanel';
 import { Menu } from '../primitives/Menu';
@@ -55,6 +56,7 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
   const editorState = session.editor.state;
   const hasSelection = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().selection.length > 0);
   const findOpen = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().findOpen);
+  const assetsOpen = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().assetsOpen);
   const propertyLabels = useSyncExternalStore(viewPrefs.subscribe, () => viewPrefs.getSnapshot().propertyLabels);
 
   const showLeft = uiMode === 'full';
@@ -94,17 +96,27 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
               {mainMenuAnchor && (
                 <Menu label="Main menu" entries={mainMenuEntries(session.editor)} anchor={mainMenuAnchor} placement="bottom-start" onClose={closeMainMenu} />
               )}
-              <span className={styles.railTab} aria-current="page" title="File">
+              <button type="button" className={styles.railTab} aria-current={!assetsOpen ? 'page' : undefined} title="File" onClick={() => editorState.setAssetsOpen(false)}>
                 <Icon name="file" />
                 <span className={styles.railLabel}>File</span>
-              </span>
+              </button>
+              <button type="button" className={styles.railTab} aria-current={assetsOpen ? 'page' : undefined} title="Assets" onClick={() => editorState.setAssetsOpen(true)}>
+                <Icon name="component" />
+                <span className={styles.railLabel}>Assets</span>
+              </button>
               {/* File notifications sit at the bottom of the navigation bar. */}
               <MissingFontsNotice className={styles.railNotice} />
             </nav>
             <div className={styles.sidebar}>
               <FileHeader />
-              <PagesPanel />
-              {findOpen ? <FindPanel /> : <LayersPanel />}
+              {assetsOpen ? (
+                <AssetsPanel />
+              ) : (
+                <>
+                  <PagesPanel />
+                  {findOpen ? <FindPanel /> : <LayersPanel />}
+                </>
+              )}
             </div>
             <ResizeHandle width={leftWidth} onWidth={setLeftWidth} />
           </aside>

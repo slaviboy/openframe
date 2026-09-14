@@ -151,6 +151,14 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
         run: () => setPaletteOpen(true),
       },
       {
+        id: 'view.assetsTab',
+        label: 'Assets',
+        category: 'View',
+        shortcuts: ['Alt+2'],
+        checked: () => editor.state.getSnapshot().assetsOpen,
+        run: () => editor.state.setAssetsOpen(!editor.state.getSnapshot().assetsOpen),
+      },
+      {
         id: 'view.toggleHideUi',
         label: 'Show/hide UI',
         category: 'View',

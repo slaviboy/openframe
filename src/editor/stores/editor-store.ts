@@ -57,6 +57,8 @@ export interface EditorState {
   readonly dialog: EditorDialog | null;
   /** The left sidebar shows Find (⌘F) instead of the layers panel. */
   readonly findOpen: boolean;
+  /** The navigation bar's Assets tab is showing (⌥2) instead of the file's pages and layers. */
+  readonly assetsOpen: boolean;
   /** Anchor used by the Scale panel's multiplier and dimension fields. */
   readonly scaleAnchor: ScaleAnchor;
   /** Layer whose image fill is being cropped (crop mode), or null. */
@@ -145,6 +147,7 @@ export class EditorStore extends Observable<EditorState> {
       renamingId: null,
       dialog: null,
       findOpen: false,
+      assetsOpen: false,
       scaleAnchor: 'nw',
       croppingId: null,
       cropAspect: 'FREE',
@@ -223,6 +226,10 @@ export class EditorStore extends Observable<EditorState> {
 
   setFindOpen(findOpen: boolean): void {
     this.setState({ findOpen });
+  }
+
+  setAssetsOpen(assetsOpen: boolean): void {
+    this.setState({ assetsOpen });
   }
 
   openDialog(dialog: EditorDialog | null): void {
