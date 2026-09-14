@@ -32,7 +32,7 @@ import { cropImageWorldQuad } from '../interactions/crop';
 import { isUprightHandle, selectedLayoutHandles } from '../interactions/layout-handles';
 import { GRID_EDGE_BAND_PX, selectedGridTracks } from '../interactions/grid-tracks';
 import { trackLabel } from '@/core/layout/grid-track-handles';
-import { networkStrokePath } from '@/core/vector/vector-network';
+import { networkStrokePath, regionFillPath } from '@/core/vector/vector-network';
 import { textEditTarget } from '../interactions/text-edit';
 import { misspelledRanges } from '@/core/text/spelling';
 import { selectionEnd, selectionStart } from '@/core/text/text-editing';
@@ -68,6 +68,8 @@ export interface OverlayInput {
   readonly arcLabel?: { readonly text: string; readonly screen: Vec2 } | null;
   /** Outline of the lasso being drawn in vector edit mode (screen points). */
   readonly vectorLasso?: readonly Vec2[] | null;
+  /** The region the Paint tool would change, and whether it would remove the region's fill. */
+  readonly vectorPaintHover?: { readonly region: number; readonly remove: boolean } | null;
   /** Text editing chrome; `caretVisible` is the blink phase. */
   readonly textEdit?: { readonly caretVisible: boolean } | null;
   /** Snapping guides of the current move, in world coordinates. */
@@ -600,6 +602,34 @@ function drawVectorEdit(ctx: CanvasRenderingContext2D, input: OverlayInput): voi
   ctx.strokeStyle = theme.selection;
   ctx.lineWidth = 1;
   ctx.stroke();
+  const hover = input.vectorPaintHover;
+  const hoverRegion = hover ? node.vectorNetwork.regions[hover.region] : undefined;
+  if (hover && hoverRegion) {
+    // Diagonal stripes over the region the Paint tool would change: blue to fill it, red to remove its fill.
+    ctx.save();
+    ctx.beginPath();
+    for (const command of regionFillPath(node.vectorNetwork, hoverRegion)) {
+      if (command.op === 'Z') ctx.closePath();
+      else if (command.op === 'C') {
+        const [c1, c2, to] = [toScreen({ x: command.x1, y: command.y1 }), toScreen({ x: command.x2, y: command.y2 }), toScreen(command)];
+        ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, to.x, to.y);
+      } else {
+        const to = toScreen(command);
+        if (command.op === 'M') ctx.moveTo(to.x, to.y);
+        else ctx.lineTo(to.x, to.y);
+      }
+    }
+    ctx.clip(hoverRegion.windingRule === 'EVENODD' ? 'evenodd' : 'nonzero');
+    ctx.beginPath();
+    for (let d = -input.height; d < input.width + input.height; d += 8) {
+      ctx.moveTo(d, 0);
+      ctx.lineTo(d + input.height, input.height);
+    }
+    ctx.strokeStyle = hover.remove ? '#f24822' : theme.selection;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
   // Bézier handles of the selected points: a line from the point to a round knob.
   for (const h of selectedHandles(editor)) {
     ctx.beginPath();

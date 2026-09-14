@@ -63,6 +63,7 @@ const VECTOR_TOOLS: readonly { readonly tool: VectorEditTool; readonly label: st
   { tool: 'lasso', label: 'Lasso', icon: 'lasso', command: 'vector.toolLasso' },
   { tool: 'cut', label: 'Cut', icon: 'cut', command: 'vector.toolCut' },
   { tool: 'bend', label: 'Bend', icon: 'bend', command: 'vector.toolBend' },
+  { tool: 'paint', label: 'Paint', icon: 'paint', command: 'vector.toolPaint' },
 ];
 
 /** Floating bottom toolbar. Each group remembers the last tool picked from its dropdown; vector edit mode shows its secondary toolbar instead. */

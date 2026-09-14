@@ -59,6 +59,7 @@ import { canonicalStringify } from '@/core/serialize/serialize';
 import gradientStyles from './Gradient.module.css';
 import { gradientCss } from './gradient-css';
 import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
+import { vectorEditPaint } from '@/editor/interactions/vector-edit';
 import { invert, applyLinear } from '@/core/math/matrix';
 import {
   DEFAULT_MITER_ANGLE,
@@ -829,6 +830,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
           {nodes.every((n) => n.type !== 'TEXT') && <PaintSection title="Stroke" field="strokes" nodes={geometryNodes} defaultPaint={() => solid(BLACK)} />}
         </>
       )}
+      <VectorPaintSection />
       <SelectionColorsSection nodes={nodes} />
       {!allSlices && <EffectsSection nodes={nodes} />}
       {frames.length === nodes.length && <LayoutGuideSection nodes={frames} />}
@@ -837,6 +839,29 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
 }
 
 type GeometryNode = Extract<SceneNode, { fills: readonly Paint[] }>;
+
+/** The Paint tool's paint, a solid color, while Paint is picked in vector edit mode. */
+function VectorPaintSection() {
+  const editor = useEditor();
+  const state = useEditorState((s) => s.vectorEdit);
+  if (state?.tool !== 'paint') return null;
+  const paint = vectorEditPaint(editor);
+  if (paint.type !== 'SOLID') return null;
+  const setPaint = (next: Paint) => editor.state.setVectorEdit({ ...state, paint: next });
+  return (
+    <Section title="Paint">
+      <ColorControl
+        label="Paint"
+        color={paint.color}
+        opacity={paint.opacity}
+        onGestureStart={() => undefined}
+        onGestureEnd={() => undefined}
+        onColor={(c) => setPaint({ ...paint, color: { ...c, a: 1 } })}
+        onOpacity={(o) => setPaint({ ...paint, opacity: o })}
+      />
+    </Section>
+  );
+}
 
 function PaintSection({
   title,

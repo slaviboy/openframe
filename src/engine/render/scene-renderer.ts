@@ -1185,7 +1185,19 @@ export class SceneRenderer {
   /** A vector layer: fills over its closed regions, strokes along every segment with the endpoint cap. */
   private drawVector(canvas: Canvas, node: VectorNode): void {
     const fillPath = this.vectorFillPath(node);
-    if (fillPath) {
+    const network = node.vectorNetwork;
+    if (fillPath && network.regions.some((r) => r.fills)) {
+      // Regions painted with the Paint tool use their own fills; the others use the layer's.
+      for (const region of network.regions) {
+        const path = this.pathFrom(regionFillPath(network, region), region.windingRule === 'EVENODD');
+        for (const paint of region.fills ?? node.fills) {
+          if (!paint.visible || paint.opacity <= 0) continue;
+          this.configurePaint(this.fillPaint, paint, node.size);
+          canvas.drawPath(path, this.fillPaint);
+        }
+        path.delete();
+      }
+    } else if (fillPath) {
       for (const paint of node.fills) {
         if (!paint.visible || paint.opacity <= 0) continue;
         this.configurePaint(this.fillPaint, paint, node.size);

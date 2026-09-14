@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { Paint } from '../schema/document';
 import { flattenPath, type PathCommand } from '../geometry/corners';
 import { apply, applyLinear, type Matrix } from '../math/matrix';
 import type { Rect } from '../math/rect';
@@ -42,6 +43,8 @@ export interface VectorRegion {
   /** Closed loops, each a list of segment indices in order around the loop. */
   readonly loops: readonly (readonly number[])[];
   readonly windingRule: 'NONZERO' | 'EVENODD';
+  /** The region's own fills (Paint tool), replacing the layer's fills inside it; absent means the layer's. */
+  readonly fills?: readonly Paint[] | undefined;
 }
 
 export interface VectorNetwork {
@@ -182,9 +185,14 @@ function subpaths(commands: readonly PathCommand[]): PathCommand[][] {
   return out;
 }
 
+/** Each region's loops flattened into polygons, in region order. */
+export function regionOutlines(network: VectorNetwork, segmentsPerCurve = 8): Vec2[][][] {
+  return network.regions.map((region) => subpaths(regionFillPath(network, region)).map((sub) => flattenPath(sub, segmentsPerCurve)));
+}
+
 /** Flattened outlines for hit testing: each region loop as a polygon, and each stroke subpath as a polyline. */
 export function networkOutlines(network: VectorNetwork, segmentsPerCurve = 8): { fills: Vec2[][]; strokes: { points: Vec2[]; closed: boolean }[] } {
-  const fills = network.regions.flatMap((region) => subpaths(regionFillPath(network, region)).map((sub) => flattenPath(sub, segmentsPerCurve)));
+  const fills = regionOutlines(network, segmentsPerCurve).flat();
   const strokes = subpaths(networkStrokePath(network)).map((sub) => ({ points: flattenPath(sub, segmentsPerCurve), closed: sub.at(-1)?.op === 'Z' }));
   return { fills, strokes };
 }

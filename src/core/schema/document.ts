@@ -527,7 +527,16 @@ export const VectorNetworkSchema = z.object({
   segments: z
     .array(z.object({ start: z.number().int().min(0), end: z.number().int().min(0), tangentStart: VectorPointSchema, tangentEnd: VectorPointSchema }))
     .max(100_000),
-  regions: z.array(z.object({ loops: z.array(z.array(z.number().int().min(0)).min(1)).min(1), windingRule: z.enum(['NONZERO', 'EVENODD']) })).max(10_000),
+  /** Closed regions that can be filled; a region's own `fills` (Paint tool) replace the layer's fills inside it. */
+  regions: z
+    .array(
+      z.object({
+        loops: z.array(z.array(z.number().int().min(0)).min(1)).min(1),
+        windingRule: z.enum(['NONZERO', 'EVENODD']),
+        fills: z.array(PaintSchema).max(256).optional(),
+      }),
+    )
+    .max(10_000),
 });
 
 /** A vector layer (Pen, Pencil): a vector network whose geometry fills the layer box; resizing scales the network. */

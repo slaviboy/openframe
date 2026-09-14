@@ -20,10 +20,13 @@ import type { Id } from '@/core/ids/ids';
 import { apply, applyLinear, invert, type Matrix } from '@/core/math/matrix';
 import type { Vec2 } from '@/core/math/vec';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
-import type { Transform, VectorNode } from '@/core/schema/document';
+import { DEFAULT_SHAPE_FILL, solid } from '@/core/document/factory';
+import type { Paint, Transform, VectorNode } from '@/core/schema/document';
 import { cutVertex, deleteVertices, healVertices, moveVertices, nearestOnSegments, splitSegment } from '@/core/vector/vector-edit';
 import { bendVertex, oppositeEnd, setTangent, tangentAt, type SegmentEnd } from '@/core/vector/vector-bend';
+import { regionAt, setRegionFills } from '@/core/vector/vector-paint';
 import type { VectorNetwork } from '@/core/vector/vector-network';
+import { paintsEqual } from '../commands/properties';
 import type { Editor } from '../editor';
 import { refitVector } from '../tools/vector-draw';
 import type { CursorKind, PointerInfo, Tool } from '../tools/types';
@@ -67,6 +70,12 @@ const editedVector = (editor: Editor): VectorNode | null => {
   const node = state ? editor.doc.get(state.nodeId) : undefined;
   return node?.type === 'VECTOR' ? node : null;
 };
+
+/** The Paint tool's paint: the one picked for it, else the layer's first solid fill, else the default shape fill. */
+export function vectorEditPaint(editor: Editor): Paint {
+  const state = editor.state.getSnapshot().vectorEdit;
+  return state?.paint ?? editedVector(editor)?.fills.find((p) => p.type === 'SOLID') ?? solid(DEFAULT_SHAPE_FILL);
+}
 
 /** Deletes the selected points of the vector being edited (with their segments), as one undo step. */
 export function deleteSelectedPoints(editor: Editor): boolean {
@@ -119,6 +128,14 @@ type HandleGesture = {
   | { readonly kind: 'handle'; readonly end: SegmentEnd; readonly origin: { readonly x: number; readonly y: number }; readonly mirror: SegmentEnd | null }
 );
 
+/** Painting regions: the paint set on (or, when the first region already showed it, removed from) each region the drag crosses. */
+interface PaintDrag {
+  readonly tx: Transaction;
+  readonly paint: Paint;
+  readonly remove: boolean;
+  readonly painted: Set<number>;
+}
+
 interface PointDrag {
   tx: Transaction;
   start: VectorNetwork;
@@ -136,12 +153,15 @@ interface PointDrag {
  * With Cut (X), clicking a point or a path breaks the path there, leaving its ends selected.
  * With Bend, pressing on a point (or a path, adding a point) and dragging pulls out mirrored handles.
  * The handles of selected points can be dragged; handles that mirrored each other keep mirroring.
+ * With Paint (⇧B), clicking a closed region fills it with the paint, or removes a fill that already matches it; a drag paints every region it crosses.
  */
 export class VectorEditController implements Tool {
   readonly id = 'move' as const;
   private drag: PointDrag | null = null;
   private lasso: LassoDrag | null = null;
   private handle: HandleGesture | null = null;
+  private painting: PaintDrag | null = null;
+  private hover: { readonly region: number; readonly remove: boolean } | null = null;
 
   constructor(
     private readonly editor: Editor,
@@ -149,12 +169,17 @@ export class VectorEditController implements Tool {
   ) {}
 
   get active(): boolean {
-    return this.drag !== null || this.lasso !== null || this.handle !== null;
+    return this.drag !== null || this.lasso !== null || this.handle !== null || this.painting !== null;
   }
 
   /** Screen outline of the lasso being drawn, for the overlay. */
   get lassoPath(): readonly Vec2[] | null {
     return this.lasso?.points ?? null;
+  }
+
+  /** The region under the pointer with the Paint tool, and whether a click there removes its fill. */
+  get paintHover(): { readonly region: number; readonly remove: boolean } | null {
+    return this.editor.state.getSnapshot().vectorEdit?.tool === 'paint' ? this.hover : null;
   }
 
   cursor(): CursorKind {
@@ -176,6 +201,15 @@ export class VectorEditController implements Tool {
     editor.scene.ensure(editor.pageId);
     const toWorld = editor.scene.worldTransform(node.id);
     const v = editor.state.viewport;
+    if (state.tool === 'paint') {
+      const region = this.regionUnder(node, p.world);
+      if (region === null) return;
+      const paint = vectorEditPaint(editor);
+      const remove = paintsEqual(node.vectorNetwork.regions[region]!.fills ?? node.fills, [paint]);
+      this.painting = { tx: editor.history.begin(remove ? 'Remove region fill' : 'Paint region'), paint, remove, painted: new Set() };
+      this.paintRegion(region);
+      return;
+    }
     const startInverse = invert(toWorld);
     const handle = state.tool === 'cut' || !startInverse ? null : hitHandle(editor, p.screen, this.tolerancePx);
     if (handle && startInverse) {
@@ -251,6 +285,20 @@ export class VectorEditController implements Tool {
   }
 
   pointerMove(p: PointerInfo): void {
+    if (this.editor.state.getSnapshot().vectorEdit?.tool === 'paint') {
+      const node = editedVector(this.editor);
+      const region = node ? this.regionUnder(node, p.world) : null;
+      if (this.painting) {
+        if (region !== null) this.paintRegion(region);
+        return;
+      }
+      const hover = node && region !== null ? { region, remove: paintsEqual(node.vectorNetwork.regions[region]!.fills ?? node.fills, [vectorEditPaint(this.editor)]) } : null;
+      if (hover?.region !== this.hover?.region || hover?.remove !== this.hover?.remove) {
+        this.hover = hover;
+        this.editor.requestRender();
+      }
+      return;
+    }
     if (this.handle) {
       this.dragHandle(this.handle, p);
       return;
@@ -275,6 +323,12 @@ export class VectorEditController implements Tool {
   }
 
   pointerUp(): void {
+    const painting = this.painting;
+    if (painting) {
+      this.painting = null;
+      this.editor.history.commit(painting.tx);
+      return;
+    }
     const g = this.handle;
     if (g) {
       this.handle = null;
@@ -293,6 +347,24 @@ export class VectorEditController implements Tool {
     this.drag = null;
     if (d.moved) this.editor.history.commit(d.tx);
     else this.editor.history.cancel(d.tx);
+  }
+
+  /** The region of the edited vector under a world point. */
+  private regionUnder(node: VectorNode, world: Vec2): number | null {
+    const inverse = invert(this.editor.scene.worldTransform(node.id));
+    return inverse ? regionAt(node.vectorNetwork, apply(inverse, world)) : null;
+  }
+
+  private paintRegion(region: number): void {
+    const g = this.painting;
+    const state = this.editor.state.getSnapshot().vectorEdit;
+    if (!g || !state || g.painted.has(region)) return;
+    const node = g.tx.store.get(state.nodeId);
+    if (node?.type !== 'VECTOR') return;
+    g.painted.add(region);
+    g.tx.set(node.id, 'vectorNetwork', setRegionFills(node.vectorNetwork, region, g.remove ? [] : [g.paint]));
+    g.tx.flushPreview();
+    this.editor.requestRender();
   }
 
   private dragHandle(g: HandleGesture, p: PointerInfo): void {
@@ -330,6 +402,11 @@ export class VectorEditController implements Tool {
   }
 
   cancel(): boolean {
+    if (this.painting) {
+      this.editor.history.cancel(this.painting.tx);
+      this.painting = null;
+      return true;
+    }
     if (this.handle) {
       this.editor.history.cancel(this.handle.tx);
       this.handle = null;

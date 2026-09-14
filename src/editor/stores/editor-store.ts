@@ -18,6 +18,7 @@
 import type { DocumentStore } from '@/core/document/store';
 import type { Id } from '@/core/ids/ids';
 import type { CropAspect } from '@/core/image/crop';
+import type { Paint } from '@/core/schema/document';
 import { DEFAULT_VIEWPORT, type Viewport } from '../viewport/viewport';
 import { Observable } from './observable';
 
@@ -79,14 +80,16 @@ export interface EditorState {
   readonly vectorEdit: VectorEditRef | null;
 }
 
-/** Tool of vector edit mode's secondary toolbar: Move (V) drags points; Lasso (Q) selects the points inside a drawn outline; Cut (X) breaks the path where it is clicked; Bend pulls Bézier handles out of a point. */
-export type VectorEditTool = 'move' | 'lasso' | 'cut' | 'bend';
+/** Tool of vector edit mode's secondary toolbar: Move (V) drags points; Lasso (Q) selects the points inside a drawn outline; Cut (X) breaks the path where it is clicked; Bend pulls Bézier handles out of a point; Paint (⇧B) fills closed regions. */
+export type VectorEditTool = 'move' | 'lasso' | 'cut' | 'bend' | 'paint';
 
 /** Vector edit mode on a vector layer: the indices of its selected points, and the secondary toolbar's tool (absent: Move). */
 export interface VectorEditRef {
   readonly nodeId: Id;
   readonly vertices: readonly number[];
   readonly tool?: VectorEditTool;
+  /** The Paint tool's paint; absent means the layer's first solid fill, or the default shape fill. */
+  readonly paint?: Paint;
 }
 
 /** A value field open on an auto layout frame's padding or gap handle; `mode` is which sides a padding value applies to. */
