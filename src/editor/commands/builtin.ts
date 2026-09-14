@@ -37,6 +37,7 @@ import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/c
 import { beginCrop, cropTarget, endCrop } from '../interactions/crop';
 import { BOOLEAN_NAMES, booleanSelection, canBooleanSelection } from './boolean';
 import { canCreateComponent, createComponent } from './components';
+import { canDetachInstance, detachInstances } from './detach';
 import { canOutlineStroke, outlineStrokeSelection } from './outline-stroke';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
 
@@ -179,6 +180,15 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     shortcuts: ['Mod+Alt+K'],
     enabled: canCreateComponent,
     run: (e) => createComponent(e),
+  },
+  {
+    id: 'object.detachInstance',
+    label: 'Detach instance',
+    category: 'Object',
+    // ⌥⌘B on macOS; Ctrl+Alt+B elsewhere.
+    shortcuts: ['Mod+Alt+B'],
+    enabled: canDetachInstance,
+    run: (e) => detachInstances(e),
   },
   {
     id: 'object.frameSelection',
