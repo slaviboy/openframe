@@ -19,10 +19,12 @@ import { Fragment, useState, type FormEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { DEFAULT_SHAPE_FILL, solid } from '@/core/document/factory';
 import { isStyle, localStyles, STYLE_SLOTS, type StyleSlot, type StyleType } from '@/core/document/styles';
-import { defaultEffect, EFFECT_TYPES } from '@/core/effects/effects';
+import { PAINT_TYPE_LABELS } from '@/core/color/paints';
+import { defaultEffect, EFFECT_TYPE_LABELS, EFFECT_TYPES, isBlur, isShadow } from '@/core/effects/effects';
 import type { Id } from '@/core/ids/ids';
 import { defaultLayoutGuide } from '@/core/layout/layout-guides';
-import { isGradientPaint, type SceneNode, type StyleNode } from '@/core/schema/document';
+import { isGradientPaint, type Effect, type LayoutGuide, type Paint, type SceneNode, type StyleNode } from '@/core/schema/document';
+import { formatLetterSpacing, formatLineHeight, parseLetterSpacing, parseLineHeight } from '@/core/text/text-values';
 import {
   applyStyle,
   createStyle,
@@ -35,6 +37,7 @@ import {
   renameStyle,
   renameStyleFolder,
   setStyleDescription,
+  setStyleValues,
   styleFolder,
   styleLeafName,
   stylesInFolder,
@@ -46,6 +49,9 @@ import { Icon } from '../../icons/Icon';
 import { useDocumentRevision, useEditor } from '../../hooks/useEditor';
 import { IconButton } from '../../primitives/IconButton';
 import { Menu, type MenuEntry } from '../../primitives/Menu';
+import { NumberField } from '../../primitives/NumberField';
+import primitives from '../../primitives/primitives.module.css';
+import { ColorControl } from './ColorControl';
 import dialogStyles from '../../dialogs/Dialog.module.css';
 import findStyles from '../find/FindPanel.module.css';
 import { gradientCss } from './gradient-css';
@@ -122,11 +128,13 @@ export function Dialog({ title, onClose, children, footer, onSubmit }: { title: 
 }
 
 /** A style's name and description: creates a style (from the selection's slot, or with default values) or edits one. */
-function StyleDialog({ title, submitLabel, name: initialName = '', description: initialDescription = '', onSubmit, onClose }: {
+function StyleDialog({ title, submitLabel, name: initialName = '', description: initialDescription = '', onSubmit, onClose, children }: {
   title: string;
   submitLabel: string;
   name?: string;
   description?: string;
+  /** More of the dialog's content, after the name and description (Edit style: the style's values). */
+  children?: ReactNode;
   onSubmit: (name: string, description: string) => void;
   onClose: () => void;
 }) {
@@ -154,7 +162,215 @@ function StyleDialog({ title, submitLabel, name: initialName = '', description: 
     >
       <input className={dialogStyles.input} aria-label="Style name" placeholder="Name" value={name} autoFocus onChange={(e) => setName(e.target.value)} />
       <textarea className={dialogStyles.input} aria-label="Style description" placeholder="Description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+      {children}
     </Dialog>
+  );
+}
+
+const noop = () => {};
+
+/** A text value parsed when it is committed (Return or leaving the field); Escape restores it. */
+function ParsedInput<T>({ label, text, parse, onCommit }: { label: string; text: string; parse: (input: string) => T | null; onCommit: (value: T) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = () => {
+    if (draft === null) return;
+    const parsed = parse(draft);
+    setDraft(null);
+    if (parsed !== null) onCommit(parsed);
+  };
+  return (
+    <input
+      className={dialogStyles.input}
+      aria-label={label}
+      title={label}
+      value={draft ?? text}
+      spellCheck={false}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          commit();
+        }
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          setDraft(null);
+        }
+      }}
+    />
+  );
+}
+
+/** A color style's paints: solid colors and opacity are edited; other paints show their type. */
+function PaintValues({ paints, onChange }: { paints: readonly Paint[]; onChange: (paints: Paint[]) => void }) {
+  return (
+    <>
+      {paints.map((paint, index) => (
+        <div key={index} className={css.valueRow}>
+          {paint.type === 'SOLID' ? (
+            <ColorControl
+              label={`Paint ${index + 1}`}
+              color={paint.color}
+              opacity={paint.opacity}
+              onGestureStart={noop}
+              onGestureEnd={noop}
+              onColor={(color) => onChange(paints.map((p, i) => (i === index && p.type === 'SOLID' ? { ...p, color: { ...color, a: p.color.a } } : p)))}
+              onOpacity={(opacity) => onChange(paints.map((p, i) => (i === index ? { ...p, opacity } : p)))}
+            />
+          ) : (
+            <span className={css.valueLabel}>{PAINT_TYPE_LABELS[paint.type]}</span>
+          )}
+          <IconButton icon="minus" label={`Remove paint ${index + 1}`} onClick={() => onChange(paints.filter((_, i) => i !== index))} />
+        </div>
+      ))}
+      <button type="button" className={dialogStyles.secondary} onClick={() => onChange([...paints, solid(DEFAULT_SHAPE_FILL)])}>
+        Add paint
+      </button>
+    </>
+  );
+}
+
+/** A text style's typography. */
+function TextValues({ style, onChange }: { style: StyleNode; onChange: (values: Record<string, unknown>) => void }) {
+  const editor = useEditor();
+  const fonts = editor.textLayout?.availableFonts() ?? [];
+  const fontName = style.fontName ?? { family: 'Inter', style: 'Regular' };
+  const faces = fonts.find((f) => f.family === fontName.family)?.styles ?? [];
+  return (
+    <>
+      <div className={css.valueGrid}>
+        <select
+          className={primitives.select}
+          aria-label="Font family"
+          value={fontName.family}
+          onChange={(e) => {
+            const next = fonts.find((f) => f.family === e.target.value)?.styles ?? [];
+            onChange({ fontName: { family: e.target.value, style: next.includes(fontName.style) ? fontName.style : (next[0] ?? fontName.style) } });
+          }}
+        >
+          {!fonts.some((f) => f.family === fontName.family) && <option value={fontName.family}>{fontName.family}</option>}
+          {fonts.map((f) => (
+            <option key={f.family} value={f.family}>
+              {f.family}
+            </option>
+          ))}
+        </select>
+        <select className={primitives.select} aria-label="Font style" value={fontName.style} onChange={(e) => onChange({ fontName: { ...fontName, style: e.target.value } })}>
+          {!faces.includes(fontName.style) && <option value={fontName.style}>{fontName.style}</option>}
+          {faces.map((face) => (
+            <option key={face} value={face}>
+              {face}
+            </option>
+          ))}
+        </select>
+        <NumberField label="Aa" ariaLabel="Font size" min={1} max={10_000} value={style.fontSize} onChange={(fontSize) => onChange({ fontSize })} />
+        <ParsedInput label="Line height" text={style.lineHeight ? formatLineHeight(style.lineHeight) : ''} parse={parseLineHeight} onCommit={(lineHeight) => onChange({ lineHeight })} />
+        <ParsedInput
+          label="Letter spacing"
+          text={style.letterSpacing ? formatLetterSpacing(style.letterSpacing) : ''}
+          parse={(input) => parseLetterSpacing(input, style.letterSpacing?.unit ?? 'PERCENT')}
+          onCommit={(letterSpacing) => onChange({ letterSpacing })}
+        />
+        <NumberField label="¶↕" ariaLabel="Paragraph spacing" min={0} max={10_000} value={style.paragraphSpacing ?? 0} onChange={(paragraphSpacing) => onChange({ paragraphSpacing })} />
+        <NumberField label="¶→" ariaLabel="Paragraph indent" min={0} max={10_000} value={style.paragraphIndent ?? 0} onChange={(paragraphIndent) => onChange({ paragraphIndent })} />
+      </div>
+    </>
+  );
+}
+
+/** An effect style's effects: shadows' offset, blur, spread and color, and blurs' radius. */
+function EffectValues({ effects, onChange }: { effects: readonly Effect[]; onChange: (effects: Effect[]) => void }) {
+  const patch = (index: number, next: Effect) => onChange(effects.map((effect, i) => (i === index ? next : effect)));
+  return (
+    <>
+      {effects.map((effect, index) => {
+        const name = `Effect ${index + 1}`;
+        return (
+          <div key={index} className={css.valueGroup} role="group" aria-label={name}>
+            <div className={css.valueRow}>
+              <span className={css.valueLabel}>{EFFECT_TYPE_LABELS[effect.type]}</span>
+              <IconButton icon="minus" label={`Remove ${name.toLowerCase()}`} onClick={() => onChange(effects.filter((_, i) => i !== index))} />
+            </div>
+            {isShadow(effect) && (
+              <div className={css.valueGrid}>
+                <NumberField label="X" ariaLabel={`${name} X`} value={effect.offset.x} onChange={(x) => patch(index, { ...effect, offset: { ...effect.offset, x } })} />
+                <NumberField label="Y" ariaLabel={`${name} Y`} value={effect.offset.y} onChange={(y) => patch(index, { ...effect, offset: { ...effect.offset, y } })} />
+                <NumberField label="Blur" ariaLabel={`${name} blur`} min={0} value={effect.radius} onChange={(radius) => patch(index, { ...effect, radius })} />
+                <NumberField label="Spread" ariaLabel={`${name} spread`} value={effect.spread} onChange={(spread) => patch(index, { ...effect, spread })} />
+                <ColorControl
+                  label={`${name} color`}
+                  color={effect.color}
+                  opacity={effect.color.a}
+                  onGestureStart={noop}
+                  onGestureEnd={noop}
+                  onColor={(color) => patch(index, { ...effect, color: { ...color, a: effect.color.a } })}
+                  onOpacity={(a) => patch(index, { ...effect, color: { ...effect.color, a } })}
+                />
+              </div>
+            )}
+            {isBlur(effect) && <NumberField label="Blur" ariaLabel={`${name} blur`} min={0} value={effect.radius} onChange={(radius) => patch(index, { ...effect, radius })} />}
+          </div>
+        );
+      })}
+      <button type="button" className={dialogStyles.secondary} onClick={() => onChange([...effects, defaultEffect(EFFECT_TYPES[0]!)])}>
+        Add effect
+      </button>
+    </>
+  );
+}
+
+/** A layout guide style's guides: type, size, and for columns and rows their count, gutter and offset. */
+function GuideValues({ guides, onChange }: { guides: readonly LayoutGuide[]; onChange: (guides: LayoutGuide[]) => void }) {
+  const patch = (index: number, changes: Partial<LayoutGuide>) => onChange(guides.map((guide, i) => (i === index ? { ...guide, ...changes } : guide)));
+  return (
+    <>
+      {guides.map((guide, index) => {
+        const name = `Layout guide ${index + 1}`;
+        return (
+          <div key={index} className={css.valueGroup} role="group" aria-label={name}>
+            <div className={css.valueRow}>
+              <select className={primitives.select} aria-label={`${name} type`} value={guide.pattern} onChange={(e) => patch(index, { pattern: e.target.value as LayoutGuide['pattern'] })}>
+                <option value="GRID">Grid</option>
+                <option value="COLUMNS">Columns</option>
+                <option value="ROWS">Rows</option>
+              </select>
+              <IconButton icon="minus" label={`Remove ${name.toLowerCase()}`} onClick={() => onChange(guides.filter((_, i) => i !== index))} />
+            </div>
+            <div className={css.valueGrid}>
+              <NumberField label="Size" ariaLabel={`${name} size`} min={1} value={guide.sectionSize} onChange={(sectionSize) => patch(index, { sectionSize })} />
+              {guide.pattern !== 'GRID' && (
+                <>
+                  <NumberField label="Count" ariaLabel={`${name} count`} min={1} max={1000} decimals={0} value={guide.count ?? undefined} onChange={(count) => patch(index, { count: Math.round(count) })} />
+                  <NumberField label="Gutter" ariaLabel={`${name} gutter`} min={0} value={guide.gutterSize} onChange={(gutterSize) => patch(index, { gutterSize })} />
+                  <NumberField label="Offset" ariaLabel={`${name} offset`} min={0} value={guide.offset} onChange={(offset) => patch(index, { offset })} />
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })}
+      <button type="button" className={dialogStyles.secondary} onClick={() => onChange([...guides, defaultLayoutGuide()])}>
+        Add layout guide
+      </button>
+    </>
+  );
+}
+
+/** Edit style's properties: the style's values, which update every layer using the style as they change. */
+function StyleValuesEditor({ styleId }: { styleId: Id }) {
+  const editor = useEditor();
+  useDocumentRevision();
+  const style = editor.doc.get(styleId);
+  if (!isStyle(style)) return null;
+  const set = (values: Record<string, unknown>) => setStyleValues(editor, styleId, values);
+  return (
+    <fieldset className={css.values}>
+      <legend>Properties</legend>
+      {style.styleType === 'FILL' && <PaintValues paints={style.paints ?? []} onChange={(paints) => set({ paints })} />}
+      {style.styleType === 'TEXT' && <TextValues style={style} onChange={set} />}
+      {style.styleType === 'EFFECT' && <EffectValues effects={style.effects ?? []} onChange={(effects) => set({ effects })} />}
+      {style.styleType === 'GRID' && <GuideValues guides={style.layoutGuides ?? []} onChange={(layoutGuides) => set({ layoutGuides })} />}
+    </fieldset>
   );
 }
 
@@ -490,7 +706,9 @@ export function LocalStylesSection() {
             setStyleDescription(editor, prompt.style.id, description);
           }}
           onClose={() => setPrompt(null)}
-        />
+        >
+          <StyleValuesEditor styleId={prompt.style.id} />
+        </StyleDialog>
       )}
       {prompt?.kind === 'folder' && (
         <NameDialog

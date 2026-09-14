@@ -259,3 +259,13 @@ tr[data-selected] > th {
 .value[data-overridden] {
   background: color-mix(in srgb, var(--accent, #0d99ff) 16%, transparent);
 }
+
+/* Minimized: a smaller window in the corner of the canvas, resized from its edges. */
+.view[data-minimized] {
+  inset: auto var(--panel-gap) var(--panel-gap) auto;
+  width: min(720px, calc(100% - 2 * var(--panel-gap)));
+  height: 420px;
+  min-width: 360px;
+  min-height: 240px;
+  resize: both;
+}

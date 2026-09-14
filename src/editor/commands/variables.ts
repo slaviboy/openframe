@@ -18,7 +18,7 @@
 import { keyOnTop } from '@/core/document/factory';
 import type { DocumentStore } from '@/core/document/store';
 import type { Transaction } from '@/core/history/history';
-import { keyBetween } from '@/core/ids/fractional-index';
+import { keyBetween, keysBetween } from '@/core/ids/fractional-index';
 import { ROOT_ID, type Id } from '@/core/ids/ids';
 import { hasGeometry, isSceneNode, type Paint, type SceneNode, type VariableCollectionNode, type VariableNode } from '@/core/schema/document';
 import {
@@ -41,6 +41,7 @@ import { componentSetProperties } from '@/core/document/variants';
 import { exportMode, extensionChain, importTokens, isAlias, resolveVariable, wouldCreateAliasCycle, type ResolvedValue, type TokenGroup, type VariableAlias, type VariableType, type VariableValue } from '@/core/variables/resolve';
 import type { Editor } from '../editor';
 import { keyOf, nextKeyAbove } from './selection-helpers';
+import { styleFolder, styleLeafName } from './styles';
 import { instanceVariant } from './variants';
 
 /** The value a new variable has in every mode. */
@@ -691,4 +692,125 @@ export function importMode(editor: Editor, collectionId: Id, json: unknown, targ
     }
   });
   return result;
+}
+
+/** Variables copied in the variables view, to paste into any collection. */
+export interface VariablesClipboard {
+  readonly kind: 'openframe/variables';
+  readonly variables: ReadonlyArray<{
+    readonly id: Id;
+    readonly name: string;
+    readonly type: VariableType;
+    readonly description?: string;
+    readonly scopes?: readonly string[];
+    readonly codeSyntax?: { readonly [platform in CodeSyntaxPlatform]?: string | undefined };
+    /** Values by the name of the mode they come from. */
+    readonly valuesByModeName: Readonly<Record<string, VariableValue>>;
+    /** The value in the copied collection's default mode. */
+    readonly defaultValue?: VariableValue;
+  }>;
+}
+
+/** Copies variables with their values (by mode name), description, scopes and code syntax. */
+export function copyVariables(editor: Editor, ids: readonly Id[]): VariablesClipboard | null {
+  const variables = ids.map((id) => variableOf(editor.doc, id)).filter((v): v is VariableNode => v !== undefined);
+  if (variables.length === 0) return null;
+  return {
+    kind: 'openframe/variables',
+    variables: variables.map((variable) => {
+      const collection = collectionOf(editor.doc, editor.doc.parentOf(variable.id)!)!;
+      const defaultValue = variable.valuesByMode[collection.modes[0]!.modeId];
+      return {
+        id: variable.id,
+        name: variable.name,
+        type: variable.resolvedType,
+        ...(variable.description !== undefined ? { description: variable.description } : {}),
+        ...(variable.scopes !== undefined ? { scopes: [...variable.scopes] } : {}),
+        ...(variable.codeSyntax !== undefined ? { codeSyntax: { ...variable.codeSyntax } } : {}),
+        valuesByModeName: Object.fromEntries(collection.modes.flatMap((mode) => (variable.valuesByMode[mode.modeId] === undefined ? [] : [[mode.name, variable.valuesByMode[mode.modeId]!]]))),
+        ...(defaultValue !== undefined ? { defaultValue } : {}),
+      };
+    }),
+  };
+}
+
+/** Copied variables from clipboard text, or null when the text isn't copied variables. */
+export function parseVariablesClipboard(text: string): VariablesClipboard | null {
+  try {
+    const raw = JSON.parse(text) as Partial<VariablesClipboard> | null;
+    return raw?.kind === 'openframe/variables' && Array.isArray(raw.variables) ? (raw as VariablesClipboard) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pastes copied variables at the end of a collection, with unique names: each mode takes the copied value of the mode
+ * with the same name, else the copied default mode's value. An alias stays when its target is in this file with the same
+ * type; otherwise the value it had is pasted. Returns the new variables. One undo step.
+ */
+export function pasteVariables(editor: Editor, collectionId: Id, clipboard: VariablesClipboard): Id[] {
+  const collection = collectionOf(editor.doc, collectionId);
+  if (!collection || collection.extendsCollectionId !== undefined) return [];
+  const lookup = variableLookup(editor.doc);
+  const pasted: Id[] = [];
+  editor.history.run(clipboard.variables.length === 1 ? 'Paste variable' : 'Paste variables', (tx) => {
+    for (const copied of clipboard.variables) {
+      if (!(copied.type in TYPE_NAMES) || collectionVariables(tx.store, collectionId).length >= MAX_VARIABLES) continue;
+      const valueFor = (value: VariableValue | undefined): VariableValue => {
+        if (isAlias(value)) {
+          const target = variableOf(tx.store, value.id);
+          if (target && target.resolvedType === copied.type) return value;
+          return (variableOf(editor.doc, copied.id) ? resolveVariable(lookup, copied.id) : null) ?? DEFAULT_VALUES[copied.type];
+        }
+        return value !== undefined && validValue(copied.type, value) ? value : DEFAULT_VALUES[copied.type];
+      };
+      const id = editor.ids.next();
+      tx.create({
+        id,
+        type: 'VARIABLE',
+        name: uniqueName(tx.store, collectionId, copied.name),
+        parent: { id: collectionId, key: keyOnTop(tx.store, collectionId) },
+        visible: true,
+        locked: false,
+        resolvedType: copied.type,
+        valuesByMode: Object.fromEntries(collection.modes.map((mode) => [mode.modeId, valueFor(copied.valuesByModeName[mode.name] ?? copied.defaultValue)])),
+        ...(copied.description !== undefined ? { description: copied.description } : {}),
+        ...(copied.scopes !== undefined ? { scopes: [...copied.scopes] } : {}),
+        ...(copied.codeSyntax !== undefined ? { codeSyntax: { ...copied.codeSyntax } } : {}),
+      });
+      pasted.push(id);
+    }
+  });
+  return pasted;
+}
+
+/**
+ * Moves variables before or after another variable of their collection, keeping their order. Variables moved next to
+ * one in another group join its group. One undo step.
+ */
+export function moveVariables(editor: Editor, ids: readonly Id[], targetId: Id, position: 'before' | 'after'): boolean {
+  const target = variableOf(editor.doc, targetId);
+  const collectionId = target ? editor.doc.parentOf(targetId) : null;
+  if (!target || collectionId === null || collectionOf(editor.doc, collectionId)?.extendsCollectionId !== undefined) return false;
+  const moving = new Set(ids.filter((id) => id !== targetId && editor.doc.parentOf(id) === collectionId && variableOf(editor.doc, id) !== undefined));
+  if (moving.size === 0) return false;
+  const siblings = editor.doc.children(collectionId);
+  const ordered = siblings.filter((id) => moving.has(id));
+  const index = siblings.indexOf(targetId);
+  const neighbour = (step: number) => {
+    for (let i = index + step; i >= 0 && i < siblings.length; i += step) if (!moving.has(siblings[i]!)) return keyOf(editor.doc, siblings[i]!);
+    return null;
+  };
+  const targetKey = keyOf(editor.doc, targetId);
+  const keys = position === 'before' ? keysBetween(neighbour(-1), targetKey, ordered.length) : keysBetween(targetKey, neighbour(1), ordered.length);
+  const group = styleFolder(target.name);
+  editor.history.run(moving.size === 1 ? 'Move variable' : 'Move variables', (tx) =>
+    ordered.forEach((id, i) => {
+      tx.set(id, 'parent', { id: collectionId, key: keys[i]! });
+      const name = (tx.store.get(id) as VariableNode).name;
+      if (styleFolder(name) !== group) tx.set(id, 'name', uniqueName(tx.store, collectionId, group ? `${group}/${styleLeafName(name)}` : styleLeafName(name), id));
+    }),
+  );
+  return true;
 }

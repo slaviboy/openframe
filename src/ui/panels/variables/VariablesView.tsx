@@ -23,6 +23,7 @@ import { extensionChain, isAlias, resolveVariable, wouldCreateAliasCycle, type R
 import { styleFolder, styleLeafName } from '@/editor/commands/styles';
 import {
   addMode,
+  copyVariables,
   createCollection,
   createVariable,
   deleteCollection,
@@ -35,6 +36,9 @@ import {
   extendCollection,
   importMode,
   moveMode,
+  moveVariables,
+  parseVariablesClipboard,
+  pasteVariables,
   renameCollection,
   renameMode,
   renameVariable,
@@ -47,6 +51,7 @@ import {
   setVariableScopes,
   setVariableValue,
   type CodeSyntaxPlatform,
+  type VariablesClipboard,
 } from '@/editor/commands/variables';
 import { useDocumentRevision, useEditor } from '../../hooks/useEditor';
 import dialogStyles from '../../dialogs/Dialog.module.css';
@@ -105,6 +110,13 @@ interface ContextMenu {
 }
 
 const noop = () => {};
+
+/** The variables last copied in this window, used when the system clipboard can't be read. */
+let lastCopied: VariablesClipboard | null = null;
+
+function rememberCopy(clipboard: VariablesClipboard): void {
+  lastCopied = clipboard;
+}
 
 /** Saves JSON as a file. */
 function downloadJson(name: string, json: unknown): void {
@@ -343,6 +355,8 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
   const [createMenu, setCreateMenu] = useState<DOMRect | null>(null);
   const [prompt, setPrompt] = useState<Prompt | null>(null);
   const [status, setStatus] = useState('');
+  const [minimized, setMinimized] = useState(false);
+  const [dragging, setDragging] = useState<readonly Id[]>([]);
   const fileInput = useRef<HTMLInputElement>(null);
   const importTarget = useRef<{ collectionId: Id; modeId?: string } | null>(null);
 
@@ -415,6 +429,29 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
     const json = exportCollectionMode(editor, c.id, modeId);
     if (json) downloadJson(`${c.name}.${modeName}.tokens.json`, json);
   };
+  const copy = (ids: readonly Id[]) => {
+    const clipboard = copyVariables(editor, ids);
+    if (!clipboard) return;
+    rememberCopy(clipboard);
+    navigator.clipboard?.writeText(JSON.stringify(clipboard)).catch(noop);
+    setStatus(ids.length === 1 ? 'Copied 1 variable' : `Copied ${ids.length} variables`);
+  };
+  const paste = async (collectionId: Id) => {
+    let clipboard = lastCopied;
+    try {
+      const text = await navigator.clipboard?.readText();
+      const parsed = text ? parseVariablesClipboard(text) : null;
+      if (parsed) clipboard = parsed;
+    } catch {
+      // Reading the clipboard can be refused; the last copy in this window is used.
+    }
+    if (!clipboard) return;
+    const ids = pasteVariables(editor, collectionId, clipboard);
+    if (ids.length > 0) {
+      setSelected(ids);
+      setStatus(ids.length === 1 ? 'Pasted 1 variable' : `Pasted ${ids.length} variables`);
+    }
+  };
   const select = (e: React.MouseEvent, variable: VariableNode) => {
     if (e.metaKey || e.ctrlKey) {
       setSelected(live.includes(variable.id) ? live.filter((id) => id !== variable.id) : [...live, variable.id]);
@@ -431,6 +468,7 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
   return (
     <section
       className={css.view}
+      data-minimized={minimized || undefined}
       aria-label="Variables"
       onKeyDown={(e) => {
         e.stopPropagation();
@@ -442,7 +480,10 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
     >
       <header className={css.header}>
         <h2 className={css.title}>Variables</h2>
-        <IconButton icon="close" label="Close variables" onClick={onClose} />
+        <span>
+          <IconButton icon="collapse" label={minimized ? 'Expand variables' : 'Minimize variables'} onClick={() => setMinimized(!minimized)} />
+          <IconButton icon="close" label="Close variables" onClick={onClose} />
+        </span>
       </header>
       <div className={css.body}>
         <nav className={css.sidebar} aria-label="Collections">
@@ -467,6 +508,7 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                       entries: [
                         { kind: 'item', id: 'rename', label: 'Rename collection', onSelect: () => setPrompt({ kind: 'renameCollection', collection: c }) },
                         { kind: 'item', id: 'extend', label: 'Extend collection', onSelect: () => setSelectedCollection(extendCollection(editor, c.id)) },
+                        { kind: 'item', id: 'paste', label: 'Paste variables', disabled: c.extendsCollectionId !== undefined, onSelect: () => void paste(c.id) },
                         { kind: 'item', id: 'import', label: 'Import modes', disabled: c.extendsCollectionId !== undefined, onSelect: () => pickImport(c.id) },
                         { kind: 'item', id: 'export', label: 'Export modes', onSelect: () => c.modes.forEach((mode) => exportModeFile(c, mode.modeId, mode.name)) },
                         { kind: 'separator', id: 'collection-separator' },
@@ -518,6 +560,16 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                   className={css.table}
                   aria-label={`${collection.name} variables`}
                   onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c' && live.length > 0) {
+                      e.preventDefault();
+                      copy(live);
+                      return;
+                    }
+                    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v' && !extended) {
+                      e.preventDefault();
+                      void paste(collection.id);
+                      return;
+                    }
                     if (e.key === 'Enter' && e.shiftKey && live.length > 0 && !extended) {
                       e.preventDefault();
                       setSelected(duplicateVariables(editor, live));
@@ -587,7 +639,25 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                               </th>
                             </tr>
                           )}
-                          <tr data-selected={live.includes(variable.id) || undefined}>
+                          <tr
+                            data-selected={live.includes(variable.id) || undefined}
+                            draggable={!extended}
+                            onDragStart={(e) => {
+                              e.dataTransfer.effectAllowed = 'move';
+                              e.dataTransfer.setData('text/plain', variable.name);
+                              setDragging(ids);
+                            }}
+                            onDragOver={(e) => {
+                              if (dragging.length > 0) e.preventDefault();
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              const box = e.currentTarget.getBoundingClientRect();
+                              moveVariables(editor, dragging, variable.id, e.clientY < box.top + box.height / 2 ? 'before' : 'after');
+                              setDragging([]);
+                            }}
+                            onDragEnd={() => setDragging([])}
+                          >
                             <th scope="row">
                               <button
                                 type="button"
@@ -605,6 +675,7 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                                     anchor: at(e),
                                     label: 'Variable actions',
                                     entries: [
+                                      { kind: 'item', id: 'copy', label: ids.length === 1 ? 'Copy variable' : 'Copy variables', shortcut: '⌘C', onSelect: () => copy(ids) },
                                       { kind: 'item', id: 'edit', label: 'Edit variable', disabled: extended || ids.length !== 1, onSelect: () => setPrompt({ kind: 'edit', variable }) },
                                       { kind: 'item', id: 'duplicate', label: ids.length === 1 ? 'Duplicate variable' : 'Duplicate variables', shortcut: '⇧↩', disabled: extended, onSelect: () => setSelected(duplicateVariables(editor, ids)) },
                                       { kind: 'separator', id: 'variable-separator' },
