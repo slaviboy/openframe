@@ -29,6 +29,8 @@ export const COMPONENT_DRAG_TYPE = 'application/x-openframe-component';
 export interface LocalComponent {
   readonly id: Id;
   readonly name: string;
+  /** The component's description (The reference searches it too). */
+  readonly description: string | undefined;
   readonly pageId: Id;
 }
 
@@ -38,7 +40,7 @@ export function localComponents(editor: Editor): LocalComponent[] {
   for (const pageId of editor.doc.pages()) {
     for (const id of editor.doc.descendants(pageId, false)) {
       const node = editor.doc.get(id);
-      if (node && isSceneNode(node) && isMainComponent(node)) found.push({ id, name: node.name, pageId });
+      if (node && isSceneNode(node) && node.type === 'FRAME' && isMainComponent(node)) found.push({ id, name: node.name, description: node.component?.description, pageId });
     }
   }
   return found.sort((a, b) => a.name.localeCompare(b.name));

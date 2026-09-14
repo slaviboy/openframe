@@ -22,7 +22,7 @@ import { useDocumentRevision, useEditor } from '../../hooks/useEditor';
 import styles from '../find/FindPanel.module.css';
 
 /**
- * Assets tab (⌥2): the main components in this file, searchable by name. Clicking one inserts an
+ * Assets tab (⌥2): the main components in this file, searchable by name and description. Clicking one inserts an
  * instance next to its main component; dragging one onto the canvas inserts it where it is dropped.
  */
 export function AssetsPanel() {
@@ -30,7 +30,8 @@ export function AssetsPanel() {
   useDocumentRevision();
   const [query, setQuery] = useState('');
   const needle = query.trim().toLowerCase();
-  const components = localComponents(editor).filter((c) => needle === '' || c.name.toLowerCase().includes(needle));
+  // Descriptions are searched too, so they can tag components with keywords.
+  const components = localComponents(editor).filter((c) => needle === '' || c.name.toLowerCase().includes(needle) || (c.description?.toLowerCase().includes(needle) ?? false));
 
   return (
     <section className={styles.panel} aria-label="Assets">

@@ -59,7 +59,7 @@ import { canonicalStringify } from '@/core/serialize/serialize';
 import gradientStyles from './Gradient.module.css';
 import { gradientCss } from './gradient-css';
 import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
-import { canCreateComponent, createComponent } from '@/editor/commands/components';
+import { canCreateComponent, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
 import { canResetOverrides, resetSelectedOverrides } from '@/editor/commands/reset-overrides';
 import { eraserWeight, vectorEditPaint } from '@/editor/interactions/vector-edit';
 import { invert, applyLinear } from '@/core/math/matrix';
@@ -557,7 +557,9 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
   return (
     <>
       <div className={styles.typeHeader}>
-        <span className={styles.typeLabel}>{typeLabel}</span>
+        <span className={styles.typeLabel} data-testid="type-label">
+          {typeLabel}
+        </span>
         {canCreateComponent(editor) && <IconButton icon="component" label="Create component" onClick={() => createComponent(editor)} />}
         {canResetOverrides(editor) && (
           <button type="button" className={gradientStyles.textButton} onClick={() => resetSelectedOverrides(editor)}>
@@ -566,6 +568,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         )}
         {nodes.length > 1 && <span className={styles.count}>{nodes.length} layers</span>}
       </div>
+      {single && <ComponentSection node={single} />}
       {tool === 'scale' && <ScaleSection nodes={nodes} />}
       <Section title="Position">
         <div className={styles.grid2}>
@@ -849,6 +852,61 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
 }
 
 type GeometryNode = Extract<SceneNode, { fills: readonly Paint[] }>;
+
+/**
+ * Component configuration, edited in the properties panel: a main component's description and link to
+ * documentation (saved when the field loses focus). An instance shows its main component's.
+ */
+function ComponentSection({ node }: { node: SceneNode }) {
+  const editor = useEditor();
+  if (node.type !== 'FRAME') return null;
+  const main = node.component ? node : node.instance ? editor.doc.get(node.instance.mainId) : undefined;
+  if (!main || main.type !== 'FRAME' || !main.component) return null;
+  const description = main.component.description ?? '';
+  const link = main.component.link ?? '';
+  const docs = link && isSafeLink(link) ? (
+    <a href={link} target="_blank" rel="noreferrer noopener">
+      Open documentation
+    </a>
+  ) : null;
+  if (main.id !== node.id) {
+    if (!description && !docs) return null;
+    return (
+      <Section title="Component">
+        {description && <p className={styles.hint}>{description}</p>}
+        {docs}
+      </Section>
+    );
+  }
+  return (
+    <Section title="Component">
+      <textarea
+        key={`description-${main.id}-${description}`}
+        className={primitives.textInput}
+        aria-label="Component description"
+        placeholder="Add a description"
+        rows={3}
+        defaultValue={description}
+        onKeyDown={(e) => e.stopPropagation()}
+        onBlur={(e) => setComponentConfiguration(editor, main.id, { description: e.currentTarget.value })}
+      />
+      <input
+        key={`link-${main.id}-${link}`}
+        className={primitives.textInput}
+        type="url"
+        aria-label="Documentation link"
+        placeholder="Add a link to documentation"
+        defaultValue={link}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
+        onBlur={(e) => setComponentConfiguration(editor, main.id, { link: e.currentTarget.value })}
+      />
+      {docs}
+    </Section>
+  );
+}
 
 /** The width of the selected width points while the Variable width tool is picked in vector edit mode. */
 function WidthPointSection() {

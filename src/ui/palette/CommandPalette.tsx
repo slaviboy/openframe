@@ -57,7 +57,7 @@ export function CommandPalette({ editor, onClose, mode = 'commands' }: CommandPa
   const entries = useMemo<PaletteEntry[]>(
     () =>
       mode === 'components'
-        ? localComponents(editor).map((c) => ({ id: c.id, label: c.name, category: 'Component', shortcut: undefined, enabled: () => true, run: () => void insertInstance(editor, c.id) }))
+        ? localComponents(editor).map((c) => ({ id: c.id, label: c.name, category: c.description ? `Component · ${c.description}` : 'Component', shortcut: undefined, enabled: () => true, run: () => void insertInstance(editor, c.id) }))
         : editor.commands
             .all()
             .filter((c) => c.palette !== false)

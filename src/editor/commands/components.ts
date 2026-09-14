@@ -54,3 +54,28 @@ export function createComponent(editor: Editor): Id | null {
     },
   });
 }
+
+/** Whether a documentation link can be opened from the properties panel: only http and https links are shown as links. */
+export const isSafeLink = (link: string): boolean => /^https?:\/\//i.test(link.trim());
+
+/**
+ * Component configuration: sets a main component's description and documentation link. Values are
+ * trimmed, an empty value removes the field, and a change is one undo step (nothing happens when the
+ * value is unchanged).
+ */
+export function setComponentConfiguration(editor: Editor, id: Id, change: { readonly description?: string; readonly link?: string }): void {
+  const node = editor.doc.get(id) as SceneNode | undefined;
+  if (node?.type !== 'FRAME' || !node.component) return;
+  const current = node.component;
+  // The changed value (trimmed; empty removes the field), otherwise the current one.
+  const pick = (key: 'description' | 'link'): string | undefined => {
+    const value = change[key];
+    return value === undefined ? current[key] : value.trim() || undefined;
+  };
+  const description = pick('description');
+  const link = pick('link');
+  const next = { ...(description !== undefined ? { description } : {}), ...(link !== undefined ? { link } : {}) };
+  if (JSON.stringify(next) === JSON.stringify(current)) return;
+  editor.history.run(change.link !== undefined ? 'Change documentation link' : 'Change component description', (tx) => tx.set(id, 'component', next));
+}
+

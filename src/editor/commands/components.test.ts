@@ -21,7 +21,7 @@ import { IdGenerator } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { BUILTIN_COMMANDS } from './builtin';
-import { canCreateComponent, isComponent } from './components';
+import { canCreateComponent, isComponent, isSafeLink, setComponentConfiguration } from './components';
 
 let editor: Editor;
 let a: string;
@@ -74,5 +74,25 @@ describe('create component', () => {
   test('needs a selection without sections', () => {
     editor.state.select([]);
     expect(canCreateComponent(editor)).toBe(false);
+  });
+
+  test('component configuration sets a description and a documentation link; empty values remove them', () => {
+    editor.state.select([a]);
+    editor.commands.run('object.createComponent');
+    const component = editor.selection[0]!;
+    setComponentConfiguration(editor, component, { description: '  Primary action  ' });
+    setComponentConfiguration(editor, component, { link: 'https://example.com/button' });
+    expect(node(component)).toMatchObject({ component: { description: 'Primary action', link: 'https://example.com/button' } });
+    setComponentConfiguration(editor, component, { description: '' });
+    expect((node(component) as { component?: object }).component).toEqual({ link: 'https://example.com/button' });
+    editor.history.undo();
+    expect(node(component)).toMatchObject({ component: { description: 'Primary action' } });
+  });
+
+  test('only http and https documentation links are opened', () => {
+    expect(isSafeLink('https://example.com')).toBe(true);
+    expect(isSafeLink('http://example.com')).toBe(true);
+    expect(isSafeLink('javascript:alert(1)')).toBe(false);
+    expect(isSafeLink('example.com')).toBe(false);
   });
 });

@@ -17,10 +17,7 @@
 
 import { expect, test } from './fixtures';
 
-/** ⌃⌥⌘K on macOS, Ctrl+Alt+Shift+K elsewhere. */
-const GO_TO_MAIN = process.platform === 'darwin' ? 'Control+Alt+Meta+K' : 'Control+Alt+Shift+K';
-
-test('go to main component selects the main component of the selected instance', async ({ page }) => {
+test('a component description persists, and its instances show it', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
   const box = (await page.getByTestId('canvas').boundingBox())!;
@@ -31,11 +28,18 @@ test('go to main component selects the main component of the selected instance',
   await page.mouse.move(box.x + 500, box.y + 400, { steps: 5 });
   await page.mouse.up();
   await page.keyboard.press('ControlOrMeta+Alt+K');
-  await page.keyboard.press('ControlOrMeta+D');
-  const label = (text: string) => page.getByText(text, { exact: true });
-  await expect(label('Instance')).toBeVisible();
 
-  await page.keyboard.press(GO_TO_MAIN);
-  await expect(page.getByTestId('type-label')).toHaveText('Component');
-  await expect(label('Instance')).toHaveCount(0);
+  const description = page.getByRole('textbox', { name: 'Component description' });
+  await description.fill('Primary action');
+  await description.press('Tab');
+
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+  await page.reload();
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await page.getByRole('treeitem', { name: /Component 1/ }).click();
+  await expect(page.getByRole('textbox', { name: 'Component description' })).toHaveValue('Primary action');
+
+  await page.keyboard.press('ControlOrMeta+D');
+  await expect(page.getByText('Instance', { exact: true })).toBeVisible();
+  await expect(page.getByText('Primary action', { exact: true })).toBeVisible();
 });

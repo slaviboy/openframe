@@ -28,7 +28,7 @@ test('duplicating a component creates an instance, labeled Instance, that persis
   await page.mouse.move(box.x + 500, box.y + 400, { steps: 5 });
   await page.mouse.up();
   await page.keyboard.press('ControlOrMeta+Alt+K');
-  await expect(page.getByText('Component', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('type-label')).toHaveText('Component');
 
   await page.keyboard.press('ControlOrMeta+D');
   await expect(page.getByRole('treeitem', { name: /Component 1/ })).toHaveCount(2);
