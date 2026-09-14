@@ -56,9 +56,9 @@ import type { ChromeTheme } from './chrome-theme';
 import { forEachSection, handlePoint, isLineFrame, screenQuad, sectionTitleRect, selectionFrame, type SelectionFrame, addVariantButtonRect, ADD_INSTANCES_LABEL, addInstancesButtonRect, hoveredInstanceSlots } from './selection-geometry';
 import { variantsOf } from '@/core/document/variants';
 import { slotIndicators } from '@/core/document/component-properties';
-import { noodleBetween, visibleConnections, type Noodle } from '@/core/prototype/connections';
+import { noodleBetween, type Noodle } from '@/core/prototype/connections';
 import { flowsOf } from '@/core/prototype/flows';
-import { CONNECT_HANDLE_SIZE, connectHandle, overlayBadgeRect, overlayFrames, screenBounds } from './prototype-geometry';
+import { CONNECT_HANDLE_SIZE, connectHandle, overlayBadgeRect, overlayFrames, screenBounds, shownConnections } from './prototype-geometry';
 
 export interface OverlayInput {
   readonly editor: Editor;
@@ -192,7 +192,7 @@ function drawPrototypeChrome(ctx: CanvasRenderingContext2D, input: OverlayInput,
   const dragging = input.connectionDrag;
   const isRef = (refs: readonly { sourceId: Id; reactionIndex: number; actionIndex: number }[], connection: { sourceId: Id; reactionIndex: number; actionIndex: number }) =>
     refs.some((ref) => ref.sourceId === connection.sourceId && ref.reactionIndex === connection.reactionIndex && ref.actionIndex === connection.actionIndex);
-  for (const connection of visibleConnections(editor.doc, editor.pageId, selection)) {
+  for (const connection of shownConnections(editor, selection)) {
     const source = screenRectOf(editor, connection.sourceId);
     const moved = dragging && isRef(dragging.refs, connection);
     // Dragged connections follow the pointer, or end on the frame under it.

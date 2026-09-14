@@ -18,13 +18,13 @@
 import type { Id } from '@/core/ids/ids';
 import type { Rect } from '@/core/math/rect';
 import type { Vec2 } from '@/core/math/vec';
-import { distanceToNoodle, noodleBetween, noodleCrossesRect, visibleConnections, type Connection } from '@/core/prototype/connections';
-import { topLevelFrame, variantSetOf } from '@/core/prototype/reactions';
+import { distanceToNoodle, noodleBetween, noodleCrossesRect, visibleConnections, type Connection } from '@/core/prototype/connections';import { topLevelFrame, variantSetOf } from '@/core/prototype/reactions';
 import { isOverlayDestination } from '@/core/prototype/flows';
 import { presentableFrames } from '@/core/prototype/player';
 import { hitTestDeepest } from '@/core/scene/hit-test';
+import { matchingInteractions } from '../commands/prototype';
 import type { Editor } from '../editor';
-import { worldToScreen } from '../viewport/viewport';
+import { visibleWorldRect, worldToScreen } from '../viewport/viewport';
 
 /** Diameter of the + handle a connection is dragged from. */
 export const CONNECT_HANDLE_SIZE = 16;
@@ -61,6 +61,41 @@ export function hitConnectHandle(editor: Editor, screen: Vec2): boolean {
   return handle !== null && Math.hypot(screen.x - handle.center.x, screen.y - handle.center.y) <= CONNECT_HANDLE_SIZE / 2 + 2;
 }
 
+const sameRef = (a: { sourceId: Id; reactionIndex: number; actionIndex: number }, b: { sourceId: Id; reactionIndex: number; actionIndex: number }) =>
+  a.sourceId === b.sourceId && a.reactionIndex === b.reactionIndex && a.actionIndex === b.actionIndex;
+
+/**
+ * The connections the canvas draws for `selection`. Of matching interactions (identical interactions on matching layers),
+ * only the first connection — the top-left one in view — is drawn, until one of them is selected, which draws them all.
+ */
+export function shownConnections(editor: Editor, selection: readonly Id[]): Connection[] {
+  const selected = editor.state.getSnapshot().selectedConnections;
+  // A selected connection's matching connections are drawn too, though their layers aren't selected.
+  const matching = selected.flatMap((ref) => matchingInteractions(editor, ref.sourceId, ref.reactionIndex).map((match) => ({ ...match, actionIndex: ref.actionIndex })));
+  const key = (ref: { sourceId: Id; reactionIndex: number; actionIndex: number }) => `${ref.sourceId}/${ref.reactionIndex}/${ref.actionIndex}`;
+  const inSelection = new Set(visibleConnections(editor.doc, editor.pageId, selection).map(key));
+  const visible = visibleConnections(editor.doc, editor.pageId, []).filter((connection) => inSelection.has(key(connection)) || matching.some((ref) => sameRef(ref, connection)));
+  const view = visibleWorldRect(editor.state.viewport, editor.canvasSize.width, editor.canvasSize.height);
+  const hidden = new Set<Connection>();
+  const grouped = new Set<Connection>();
+  for (const connection of visible) {
+    if (grouped.has(connection)) continue;
+    const refs = matchingInteractions(editor, connection.sourceId, connection.reactionIndex);
+    const group = visible.filter((other) => other.actionIndex === connection.actionIndex && refs.some((ref) => ref.sourceId === other.sourceId && ref.reactionIndex === other.reactionIndex));
+    group.forEach((member) => grouped.add(member));
+    if (group.length < 2 || group.some((member) => selected.some((ref) => sameRef(ref, member)))) continue;
+    // The top-left hotspot in view (or anywhere, when none is in view) keeps its connection: hotspots side by side are
+    // one row, where the left one comes first.
+    editor.scene.ensure(editor.pageId);
+    const placed = group.map((member) => ({ member, bounds: editor.scene.worldBounds(member.sourceId) ?? { x: 0, y: 0, width: 0, height: 0 } }));
+    const inView = placed.filter(({ bounds }) => bounds.x < view.x + view.width && bounds.x + bounds.width > view.x && bounds.y < view.y + view.height && bounds.y + bounds.height > view.y);
+    const sameRow = (a: Rect, b: Rect) => a.y < b.y + b.height && b.y < a.y + a.height;
+    const [first] = (inView.length > 0 ? inView : placed).sort((a, b) => (sameRow(a.bounds, b.bounds) ? a.bounds.x - b.bounds.x : a.bounds.y - b.bounds.y));
+    group.forEach((member) => member !== first!.member && hidden.add(member));
+  }
+  return visible.filter((connection) => !hidden.has(connection));
+}
+
 /** How close (screen pixels) a click must be to a noodle to select its connection. */
 export const CONNECTION_HIT_PX = 6;
 
@@ -68,7 +103,7 @@ export const CONNECTION_HIT_PX = 6;
 export function connectionAt(editor: Editor, screen: Vec2): Connection | null {
   if (editor.state.getSnapshot().rightTab !== 'prototype') return null;
   let best: { connection: Connection; distance: number } | null = null;
-  for (const connection of visibleConnections(editor.doc, editor.pageId, editor.selection)) {
+  for (const connection of shownConnections(editor, editor.selection)) {
     const source = screenBounds(editor, connection.sourceId);
     const destination = screenBounds(editor, connection.destinationId);
     if (!source || !destination) continue;
@@ -81,7 +116,7 @@ export function connectionAt(editor: Editor, screen: Vec2): Connection | null {
 /** The connections shown for `selection` whose noodles pass through a screen rectangle (a marquee), while the Prototype tab is open. */
 export function connectionsInScreenRect(editor: Editor, rect: Rect, selection: readonly Id[]): Connection[] {
   if (editor.state.getSnapshot().rightTab !== 'prototype') return [];
-  return visibleConnections(editor.doc, editor.pageId, selection).filter((connection) => {
+  return shownConnections(editor, selection).filter((connection) => {
     const source = screenBounds(editor, connection.sourceId);
     const destination = screenBounds(editor, connection.destinationId);
     return source !== null && destination !== null && noodleCrossesRect(noodleBetween(source, destination), rect);

@@ -189,6 +189,11 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - `easingCurve` / `curveRange` / `clampHandle` in `src/core/anim/easing-curve.ts`
     - `EasingGraph` in `src/ui/panels/prototype/EasingGraph.tsx`, under the easing fields: drags Bézier handles and custom springs, and plays the preview on hover (`data-playing`)
     - rows 229, 230, 231, 235 and 243 had no pending notes left and are now Implemented
+  - Only the first of matching connections (the commit after the easing graph):
+    - `shownConnections` in prototype-geometry.ts groups the visible connections with `matchingInteractions`
+    - it keeps the top-left hotspot's connection in view (hotspots overlapping vertically count as one row)
+    - the whole group is drawn while one of them is selected, even outside the selected layers' frames
+    - the overlay renderer, `connectionAt` and `connectionsInScreenRect` all use it
 
 ## In progress (uncommitted)
 
@@ -199,7 +204,6 @@ This file is how work continues after a pause (for example, a usage limit). Read
 1. The pending sub-items left in the M10 rows of `docs/FEATURE_MATRIX.md`:
    - 160 Video / GIF fills: video crop, video from the fill picker, GIF label next to the dimensions, GIF metadata on export
    - 200 Interactive components: the Variant interactions section, animating Change to, sharing states between matching instances
-   - 227 Connections: show only the first of several matching connections
    - 228 Triggers: On drag dragging through the transition
    - 233 Smart animate: gradient and image fill blending
    - 236 State memorization: sharing interactive component and video states between matching layers
