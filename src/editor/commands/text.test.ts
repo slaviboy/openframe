@@ -23,6 +23,7 @@ import { Editor } from '../editor';
 import { applyScale, captureScale } from '../interactions/scale';
 import { setSize } from './properties';
 import {
+  replaceFonts,
   paragraphDirections,
   setTextDirection,
   setFontVariation,
@@ -249,6 +250,15 @@ describe('text properties', () => {
     editor.history.run('auto', (tx) => setTextDirection(tx, get(), 'AUTO'));
     expect(get().textDirection).toBeUndefined();
     expect(get().styleRuns).toBeUndefined();
+  });
+
+  test('replacing fonts changes every text layer using them in one step', () => {
+    editor.history.run('font', (tx) => tx.set(id, 'fontName', { family: 'Gone Sans', style: 'Regular' }));
+    const changed = editor.history.run('Replace fonts', (tx) => replaceFonts(tx, [{ from: { family: 'Gone Sans', style: 'Regular' }, to: { family: 'Inter', style: 'Bold' } }]));
+    expect(changed).toBe(1);
+    expect(get().fontName).toEqual({ family: 'Inter', style: 'Bold' });
+    editor.history.undo();
+    expect(get().fontName).toEqual({ family: 'Gone Sans', style: 'Regular' });
   });
 
   test('the Scale tool scales font size and pixel spacing', () => {

@@ -69,6 +69,8 @@ export interface EditorState {
   readonly textEdit: TextEditRef | null;
   /** The link editor is open for the text being edited (⇧⌘U, Create link). */
   readonly linkEditing: boolean;
+  /** The text engine is installed, so fonts can be checked against what it has. */
+  readonly textLayoutReady: boolean;
 }
 
 /** Text editing: the layer and its text selection (`anchor` stays, `focus` moves). */
@@ -91,7 +93,7 @@ export interface GradientEditRef {
   readonly index: number;
 }
 
-export type EditorDialog = 'batchRename' | 'nudgeAmount';
+export type EditorDialog = 'batchRename' | 'nudgeAmount' | 'missingFonts';
 
 /** Transient, non-document editor state. Never persisted inside the document. */
 export class EditorStore extends Observable<EditorState> {
@@ -117,6 +119,7 @@ export class EditorStore extends Observable<EditorState> {
       blurEdit: null,
       textEdit: null,
       linkEditing: false,
+      textLayoutReady: false,
     });
   }
 
@@ -126,6 +129,10 @@ export class EditorStore extends Observable<EditorState> {
     if (current === textEdit || (current && textEdit && current.nodeId === textEdit.nodeId && current.anchor === textEdit.anchor && current.focus === textEdit.focus)) return;
     const linkEditing = this.state.linkEditing && !!textEdit && current?.nodeId === textEdit.nodeId;
     this.setState(textEdit ? { textEdit, linkEditing, croppingId: null, gradientEdit: null, blurEdit: null } : { textEdit, linkEditing });
+  }
+
+  setTextLayoutReady(textLayoutReady: boolean): void {
+    if (this.state.textLayoutReady !== textLayoutReady) this.setState({ textLayoutReady });
   }
 
   setLinkEditing(linkEditing: boolean): void {

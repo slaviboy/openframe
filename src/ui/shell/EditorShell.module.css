@@ -88,6 +88,23 @@
   color: var(--fg-primary);
 }
 
+.railNotice {
+  width: 40px;
+  height: 40px;
+  margin-top: auto;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: var(--bg-control);
+  color: var(--fg-warning, #e5a000);
+  cursor: pointer;
+}
+
+.railNotice:hover {
+  background: var(--bg-control-hover, var(--bg-control));
+}
+
 .railLabel {
   font-size: var(--text-xs);
   line-height: 12px;

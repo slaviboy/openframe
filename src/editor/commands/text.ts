@@ -69,8 +69,30 @@ export function setFontVariation(tx: Transaction, node: SceneNode, axis: string,
     range,
   );
 }
-import type { ListType, TextDirection } from '@/core/schema/document';
+import type { FontName, ListType, TextDirection } from '@/core/schema/document';
+import { replaceFontInText } from '@/core/text/missing-fonts';
 import { resolveDirection } from '@/core/text/direction';
+
+/** Replaces fonts everywhere in the document (layer fonts and mixed-style runs). Returns the number of text layers changed. */
+export function replaceFonts(tx: Transaction, replacements: readonly { readonly from: FontName; readonly to: FontName }[]): number {
+  let changed = 0;
+  for (const node of [...tx.store.nodes()]) {
+    if (node.type !== 'TEXT') continue;
+    let current = node;
+    let touched = false;
+    for (const { from, to } of replacements) {
+      const result = replaceFontInText(current, from, to);
+      if (!result) continue;
+      current = { ...current, ...result };
+      touched = true;
+    }
+    if (!touched) continue;
+    tx.set(node.id, 'fontName', current.fontName);
+    tx.set(node.id, 'styleRuns', current.styleRuns);
+    changed++;
+  }
+  return changed;
+}
 
 /**
  * Links the characters of a range (or the whole layer) to a web address and underlines them, or

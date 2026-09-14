@@ -32,6 +32,7 @@ import type { Box } from '../primitives/position';
 import { NAV_RAIL_W, PANEL_GAP, SIDEBAR_LEFT_DEFAULT, SIDEBAR_LEFT_MAX, SIDEBAR_LEFT_MIN, SIDEBAR_RIGHT_W } from '../tokens';
 import styles from './EditorShell.module.css';
 import { Toolbar } from './Toolbar';
+import { MissingFontsNotice } from '../dialogs/MissingFontsDialog';
 
 /**
  * - `full`: navigation, both sidebars and the toolbar.
@@ -97,6 +98,8 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
                 <Icon name="file" />
                 <span className={styles.railLabel}>File</span>
               </span>
+              {/* File notifications sit at the bottom of the navigation bar. */}
+              <MissingFontsNotice className={styles.railNotice} />
             </nav>
             <div className={styles.sidebar}>
               <FileHeader />

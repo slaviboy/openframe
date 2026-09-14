@@ -90,6 +90,7 @@ export class Editor {
   /** Installs (or removes) the text layout service used to fit text boxes, place carets and hit-test text. */
   setTextLayout(layout: TextLayoutService | null): void {
     this.textLayout = layout;
+    this.state.setTextLayoutReady(layout !== null);
   }
 
   /** Installs (or removes, with null) the canvas pixel reader used by the eyedropper. */
