@@ -1025,6 +1025,103 @@ export class SceneRenderer {
     }
   }
 
+  /**
+   * The area a layer's stroke covers, as path commands in its local space (GeometryService): the
+   * centerline dashed, stroked with the layer's caps and joins, and — for inside or outside strokes
+   * of closed shapes — a double-width stroke intersected with (or cut from) the shape.
+   */
+  strokeOutline(node: SceneNode): PathCommand[] | null {
+    const ck = this.ck;
+    if (node.type !== 'RECTANGLE' && node.type !== 'ELLIPSE' && node.type !== 'POLYGON' && node.type !== 'STAR' && node.type !== 'LINE' && node.type !== 'VECTOR') return null;
+    if (node.strokeWeight <= 0 || !node.strokes.some((p) => p.visible && p.opacity > 0)) return null;
+    if (node.type === 'RECTANGLE' && node.individualStrokeWeights) return null;
+    let area: Path | null = null;
+    let centerline: Path | null;
+    if (node.type === 'LINE') {
+      centerline = node.size.width > 0 ? new ck.PathBuilder().moveTo(0, 0).lineTo(node.size.width, 0).detachAndDelete() : null;
+    } else if (node.type === 'VECTOR') {
+      area = this.vectorFillPath(node);
+      centerline = node.vectorNetwork.segments.length > 0 ? this.pathFrom(networkStrokePath(node.vectorNetwork)) : null;
+    } else {
+      area = this.shapePath(node);
+      if (!area) {
+        const box = this.boxRRect(node);
+        area = box ? new ck.PathBuilder().addRRect(box).detachAndDelete() : null;
+      }
+      centerline = area;
+    }
+    const release = () => {
+      if (centerline && centerline !== area) centerline.delete();
+      area?.delete();
+    };
+    if (!centerline) {
+      release();
+      return null;
+    }
+    const dashes = node.strokeDashes && node.strokeDashes.some((d) => d > 0) ? node.strokeDashes : null;
+    // Dashed strokes start and end with a half-length dash, as drawn.
+    const dashed = dashes ? centerline.makeDashed(dashes[0]!, dashes[1] ?? dashes[0]!, dashes[0]! / 2) : null;
+    const aligned = node.strokeAlign !== 'CENTER' && area !== null && node.type !== 'LINE';
+    const angle = node.strokeMiterAngle ?? DEFAULT_MITER_ANGLE;
+    const endCap = node.type === 'VECTOR' && !dashes ? node.endpointCap : node.strokeCap;
+    let outline = (dashed ?? centerline).makeStroked({
+      width: aligned ? node.strokeWeight * 2 : node.strokeWeight,
+      join: node.strokeJoin === 'ROUND' ? ck.StrokeJoin.Round : node.strokeJoin === 'BEVEL' ? ck.StrokeJoin.Bevel : ck.StrokeJoin.Miter,
+      miter_limit: angle <= 0 ? 1000 : Math.min(1000, 1 / Math.sin((angle * Math.PI) / 360)),
+      cap: endCap === 'ROUND' ? ck.StrokeCap.Round : endCap === 'SQUARE' ? ck.StrokeCap.Square : ck.StrokeCap.Butt,
+    });
+    dashed?.delete();
+    if (outline && aligned && area) {
+      const clipped: Path | null = ck.Path.MakeFromOp(outline, area, node.strokeAlign === 'INSIDE' ? ck.PathOp.Intersect : ck.PathOp.Difference);
+      outline.delete();
+      outline = clipped;
+    }
+    // A union with an empty path removes the stroke's self-overlaps (this CanvasKit build has no makeSimplified).
+    const empty = new ck.PathBuilder().detachAndDelete();
+    const simplified: Path | null = outline ? ck.Path.MakeFromOp(outline, empty, ck.PathOp.Union) : null;
+    empty.delete();
+    outline?.delete();
+    release();
+    if (!simplified) return null;
+    const commands = this.commandsOf(simplified);
+    simplified.delete();
+    return commands.length > 0 ? commands : null;
+  }
+
+  /** A path's contours as move, line, cubic and close commands (quadratic and conic curves become cubics). */
+  private commandsOf(path: Path): PathCommand[] {
+    const ck = this.ck;
+    const cmds = path.toCmds();
+    const out: PathCommand[] = [];
+    let x = 0;
+    let y = 0;
+    for (let i = 0; i < cmds.length; ) {
+      const verb = cmds[i++]!;
+      if (verb === ck.MOVE_VERB || verb === ck.LINE_VERB) {
+        x = cmds[i++]!;
+        y = cmds[i++]!;
+        out.push({ op: verb === ck.MOVE_VERB ? 'M' : 'L', x, y });
+      } else if (verb === ck.CUBIC_VERB) {
+        const [x1, y1, x2, y2, ex, ey] = [cmds[i]!, cmds[i + 1]!, cmds[i + 2]!, cmds[i + 3]!, cmds[i + 4]!, cmds[i + 5]!];
+        i += 6;
+        out.push({ op: 'C', x1, y1, x2, y2, x: ex, y: ey });
+        [x, y] = [ex, ey];
+      } else if (verb === ck.QUAD_VERB || verb === ck.CONIC_VERB) {
+        const [qx, qy, ex, ey] = [cmds[i]!, cmds[i + 1]!, cmds[i + 2]!, cmds[i + 3]!];
+        i += 4;
+        const w = verb === ck.CONIC_VERB ? cmds[i++]! : 1;
+        // A quadratic is exactly a cubic with controls 2/3 of the way to its control point; a conic's
+        // weight scales that fraction (exact for w = 1, close for the circular arcs of round joins and caps).
+        const k = (4 * w) / (3 * (1 + w));
+        out.push({ op: 'C', x1: x + k * (qx - x), y1: y + k * (qy - y), x2: ex + k * (qx - ex), y2: ey + k * (qy - ey), x: ex, y: ey });
+        [x, y] = [ex, ey];
+      } else {
+        out.push({ op: 'Z' });
+      }
+    }
+    return out;
+  }
+
   /** A boolean group's shape: its visible children's outlines, placed by their transforms and combined by its operation. */
   private booleanPath(node: BooleanOperationNode, store: DocumentStore, depth = 0): Path | null {
     const ck = this.ck;

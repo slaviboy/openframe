@@ -26,6 +26,7 @@ import type { Id, IdGenerator } from '@/core/ids/ids';
 import { unionAll, type Rect } from '@/core/math/rect';
 import { SceneIndex } from '@/core/scene/scene-index';
 import type { TextLayoutService } from '@/core/text/text-layout';
+import type { GeometryService } from '@/core/vector/geometry-service';
 import type { SpellChecker } from '@/core/text/spelling';
 import { createTextFinalizer, fitTextBox } from '@/core/text/text-resize';
 import type { Color, Transform } from '@/core/schema/document';
@@ -95,6 +96,13 @@ export class Editor {
   setTextLayout(layout: TextLayoutService | null): void {
     this.textLayout = layout;
     this.state.setTextLayoutReady(layout !== null);
+  }
+
+  /** Path operations of the rendering engine (outline stroke); installed by the canvas host once the engine loads. */
+  geometry: GeometryService | null = null;
+
+  setGeometry(geometry: GeometryService | null): void {
+    this.geometry = geometry;
   }
 
   /** Spell checker for text being edited (misspelled words are underlined), or null when spelling isn't checked. */

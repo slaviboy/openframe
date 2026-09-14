@@ -36,6 +36,7 @@ import { addAutoLayout, canAddAutoLayout, canRemoveAutoLayout, removeAutoLayout,
 import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/core/color/color-profile';
 import { beginCrop, cropTarget, endCrop } from '../interactions/crop';
 import { BOOLEAN_NAMES, booleanSelection, canBooleanSelection } from './boolean';
+import { canOutlineStroke, outlineStrokeSelection } from './outline-stroke';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
 
 const hasSelection = (e: Editor) => e.selection.length > 0;
@@ -184,6 +185,15 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     shortcuts: ['Shift+Alt+F'],
     enabled: canFlatten,
     run: (e) => flattenSelection(e),
+  },
+  {
+    id: 'object.outlineStroke',
+    label: 'Outline stroke',
+    category: 'Object',
+    // ⌘⌥O on macOS; Ctrl+Alt+O elsewhere.
+    shortcuts: ['Mod+Alt+O'],
+    enabled: canOutlineStroke,
+    run: (e) => outlineStrokeSelection(e),
   },
   {
     id: 'object.wrapInSection',
