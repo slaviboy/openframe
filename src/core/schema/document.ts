@@ -145,6 +145,24 @@ export const ReactionSchema = z.object({
 });
 export type Reaction = z.infer<typeof ReactionSchema>;
 
+/** Where a prototype flow starts: a top-level frame, with the flow's name and description. */
+export const FlowStartingPointSchema = z.object({
+  nodeId: IdSchema,
+  name: z.string().max(200),
+  description: z.string().max(10_000).optional(),
+});
+export type FlowStartingPoint = z.infer<typeof FlowStartingPointSchema>;
+
+/** How a frame shows when an interaction opens it as an overlay (set on the overlay, not the connection). */
+export const OverlaySettingsSchema = z.object({
+  position: z.enum(['CENTER', 'TOP_LEFT', 'TOP_CENTER', 'TOP_RIGHT', 'BOTTOM_LEFT', 'BOTTOM_CENTER', 'BOTTOM_RIGHT']),
+  /** Close when clicking outside the overlay. */
+  closeOnClickOutside: z.boolean(),
+  /** The background added behind the overlay (its alpha is the opacity); null for none. */
+  background: ColorSchema.nullable(),
+});
+export type OverlaySettings = z.infer<typeof OverlaySettingsSchema>;
+
 /** A reference to a variable: a variable's value that follows another variable, or a property bound to a variable. */
 export const VariableAliasSchema = z.object({ type: z.literal('VARIABLE_ALIAS'), id: IdSchema });
 
@@ -390,6 +408,8 @@ const SceneFields = {
   exportSettings: z.array(ExportSettingSchema).max(64).optional(),
   /** Prototype interactions starting on this layer (the Prototype tab), in order. Absent when the layer has none. */
   reactions: z.array(ReactionSchema).max(64).optional(),
+  /** How this frame shows when an interaction opens it as an overlay. Absent means the defaults. */
+  overlay: OverlaySettingsSchema.optional(),
   /** Inside a main component or variant: the component properties (by name) this layer's visibility and text, or for a nested instance its component, follow. */
   componentPropertyReferences: z
     .object({
@@ -496,6 +516,8 @@ export const PageNodeSchema = z.object({
   guides: GuidesField,
   /** Variable modes set on the page, by collection id. */
   explicitVariableModes: ExplicitVariableModesSchema.optional(),
+  /** Prototype flows on the page: their starting points, in order. Absent when the page has none. */
+  flowStartingPoints: z.array(FlowStartingPointSchema).max(256).optional(),
 });
 
 /**

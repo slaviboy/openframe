@@ -44,8 +44,10 @@ import {
   type TransitionType,
   type TriggerType,
 } from '@/core/prototype/reactions';
-import type { PrototypeAction, PrototypeEasing, PrototypeTransition, Reaction, SceneNode } from '@/core/schema/document';
-import { addInteraction, removeInteraction, updateInteraction } from '@/editor/commands/prototype';
+import { DEFAULT_OVERLAY_BACKGROUND, flowsOf, isOverlayDestination, OVERLAY_POSITION_LABELS, overlaySettings } from '@/core/prototype/flows';
+import { topLevelFrame } from '@/core/prototype/reactions';
+import type { Color, OverlaySettings, PrototypeAction, PrototypeEasing, PrototypeTransition, Reaction, SceneNode } from '@/core/schema/document';
+import { addFlowStartingPoint, addInteraction, removeFlowStartingPoint, removeInteraction, setOverlaySettings, updateFlowStartingPoint, updateInteraction } from '@/editor/commands/prototype';
 import type { Editor } from '@/editor/editor';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import { IconButton } from '../../primitives/IconButton';
@@ -290,9 +292,136 @@ function InteractionDetails({ ids, hotspotId, reactions, index }: { ids: readonl
   );
 }
 
+const hex2 = (value: number) => Math.round(value * 255).toString(16).padStart(2, '0');
+const colorHex = (color: Color) => `#${hex2(color.r)}${hex2(color.g)}${hex2(color.b)}`;
+const hexColor = (hex: string, a: number): Color => ({ r: parseInt(hex.slice(1, 3), 16) / 255, g: parseInt(hex.slice(3, 5), 16) / 255, b: parseInt(hex.slice(5, 7), 16) / 255, a });
+
+/** A text field committed on blur (or Enter, for single-line fields). */
+function CommitText({ label, value, multiline = false, onCommit }: { label: string; value: string; multiline?: boolean; onCommit: (value: string) => void }) {
+  const props = {
+    key: value,
+    className: primitives.textInput,
+    'aria-label': label,
+    defaultValue: value,
+    onBlur: (e: { currentTarget: HTMLInputElement | HTMLTextAreaElement }) => {
+      if (e.currentTarget.value !== value) onCommit(e.currentTarget.value);
+    },
+    onKeyDown: (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+      e.stopPropagation();
+      if (e.key === 'Enter' && !multiline) e.currentTarget.blur();
+    },
+  };
+  return multiline ? <textarea {...props} rows={3} placeholder="Description" /> : <input {...props} />;
+}
+
+/** With nothing selected: the page's flows, each with a button selecting its starting frame. */
+function FlowsSection() {
+  const editor = useEditor();
+  const pageId = useEditorState((s) => s.activePageId);
+  const flows = flowsOf(editor.doc, pageId);
+  return (
+    <section className={inspector.section} aria-label="Flows">
+      <header className={inspector.sectionHeader}>
+        <h3 className={inspector.sectionTitle}>Flows</h3>
+      </header>
+      <div className={inspector.sectionBody}>
+        {flows.length === 0 ? (
+          <p className={inspector.hint}>Connect two frames, or select a top-level frame and add a flow starting point.</p>
+        ) : (
+          <ul className={styles.list} aria-label="Flow list">
+            {flows.map((flow) => (
+              <li key={flow.nodeId} className={styles.flow}>
+                <div className={styles.flowText}>
+                  <span className={styles.flowName}>{flow.name}</span>
+                  {flow.description && <span className={styles.flowDescription}>{flow.description}</span>}
+                </div>
+                <button
+                  type="button"
+                  className={styles.textButton}
+                  aria-label={`Select frame of ${flow.name}`}
+                  onClick={() => {
+                    editor.state.select([flow.nodeId]);
+                    editor.commands.run('view.zoomToSelection');
+                  }}
+                >
+                  Select frame
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** For a selected top-level frame: its flow starting point (name and description), or + to add one. */
+function FlowStartingPointSection({ frameId, pageId }: { frameId: Id; pageId: Id }) {
+  const editor = useEditor();
+  const flow = flowsOf(editor.doc, pageId).find((candidate) => candidate.nodeId === frameId);
+  return (
+    <section className={inspector.section} aria-label="Flow starting point">
+      <header className={inspector.sectionHeader}>
+        <h3 className={inspector.sectionTitle}>Flow starting point</h3>
+        <div className={inspector.sectionActions}>
+          {flow ? (
+            <IconButton icon="minus" label="Remove starting point" onClick={() => removeFlowStartingPoint(editor, frameId)} />
+          ) : (
+            <IconButton icon="plus" label="Add starting point" onClick={() => addFlowStartingPoint(editor, frameId)} />
+          )}
+        </div>
+      </header>
+      {flow && (
+        <div className={inspector.sectionBody}>
+          <CommitText label="Flow name" value={flow.name} onCommit={(name) => updateFlowStartingPoint(editor, frameId, { name })} />
+          <CommitText label="Flow description" value={flow.description ?? ''} multiline onCommit={(description) => updateFlowStartingPoint(editor, frameId, { description })} />
+        </div>
+      )}
+    </section>
+  );
+}
+
+/** For a selected frame that opens as an overlay: its position, closing when clicking outside, and background. */
+function OverlaySection({ node }: { node: SceneNode }) {
+  const editor = useEditor();
+  const settings = overlaySettings(node);
+  const change = (patch: Partial<OverlaySettings>) => setOverlaySettings(editor, node.id, patch);
+  return (
+    <section className={inspector.section} aria-label="Overlay">
+      <header className={inspector.sectionHeader}>
+        <h3 className={inspector.sectionTitle}>Overlay</h3>
+      </header>
+      <div className={inspector.sectionBody}>
+        <select className={primitives.select} aria-label="Overlay position" value={settings.position} onKeyDown={stopKeys} onChange={(e) => change({ position: e.target.value as OverlaySettings['position'] })}>
+          {(Object.keys(OVERLAY_POSITION_LABELS) as OverlaySettings['position'][]).map((position) => (
+            <option key={position} value={position}>
+              {OVERLAY_POSITION_LABELS[position]}
+            </option>
+          ))}
+        </select>
+        <label className={inspector.checkbox}>
+          <input type="checkbox" checked={settings.closeOnClickOutside} onChange={(e) => change({ closeOnClickOutside: e.target.checked })} />
+          Close when clicking outside
+        </label>
+        <label className={inspector.checkbox}>
+          <input type="checkbox" checked={settings.background !== null} onChange={(e) => change({ background: e.target.checked ? DEFAULT_OVERLAY_BACKGROUND : null })} />
+          Add background behind overlay
+        </label>
+        {settings.background && (
+          <div className={styles.grid}>
+            <input className={styles.color} type="color" aria-label="Overlay background color" value={colorHex(settings.background)} onChange={(e) => change({ background: hexColor(e.target.value, settings.background!.a) })} />
+            <CommitNumber label="Opacity (%)" value={Math.round(settings.background.a * 100)} min={0} max={100} onCommit={(percent) => change({ background: { ...settings.background!, a: percent / 100 } })} />
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /**
- * The Prototype tab of the right sidebar: the selected layers' interactions. + adds one (to each selected layer), and
- * an interaction opens its details — trigger, actions, destination and animation.
+ * The Prototype tab of the right sidebar: the page's flows while nothing is selected; for a selected top-level frame, its
+ * flow starting point (and its overlay settings when it opens as an overlay); and the selected layers' interactions. +
+ * adds one (to each selected layer), and an interaction opens its details — trigger, actions, destination and animation.
  */
 export function PrototypePanel() {
   const editor = useEditor();
@@ -304,16 +433,18 @@ export function PrototypePanel() {
   if (nodes.length === 0) {
     return (
       <div className={styles.panel} role="tabpanel" aria-label="Prototype">
-        <p className={inspector.hint}>Select a layer to add interactions.</p>
+        <FlowsSection />
       </div>
     );
   }
   const ids = nodes.map((node) => node.id);
   const mixed = new Set(nodes.map((node) => JSON.stringify(node.reactions ?? []))).size > 1;
   const reactions = mixed ? [] : (nodes[0]!.reactions ?? []);
+  const frame = nodes.length === 1 && topLevelFrame(editor.doc, nodes[0]!.id) === nodes[0]!.id ? nodes[0]! : null;
 
   return (
     <div className={styles.panel} role="tabpanel" aria-label="Prototype">
+      {frame && <FlowStartingPointSection frameId={frame.id} pageId={frame.parent.id} />}
       <section className={inspector.section} aria-label="Interactions">
         <header className={inspector.sectionHeader}>
           <h3 className={inspector.sectionTitle}>Interactions</h3>
@@ -351,6 +482,7 @@ export function PrototypePanel() {
           </div>
         )}
       </section>
+      {frame && isOverlayDestination(editor.doc, frame.parent.id, frame.id) && <OverlaySection node={frame} />}
     </div>
   );
 }

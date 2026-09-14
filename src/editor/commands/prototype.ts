@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
+import type { Transaction } from '@/core/history/history';
 import type { Id } from '@/core/ids/ids';
-import { makeReaction, triggerAllowed } from '@/core/prototype/reactions';
-import type { Reaction, SceneNode } from '@/core/schema/document';
+import { DEFAULT_OVERLAY, flowForNewConnection, flowsOf, nextFlowName } from '@/core/prototype/flows';
+import { makeReaction, topLevelFrame, triggerAllowed } from '@/core/prototype/reactions';
+import type { FlowStartingPoint, OverlaySettings, PageNode, Reaction, SceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 
 const reactionsOf = (node: SceneNode | undefined): readonly Reaction[] => node?.reactions ?? [];
@@ -25,6 +27,14 @@ const reactionsOf = (node: SceneNode | undefined): readonly Reaction[] => node?.
 /** The layers among `ids` (pages, the document and resources have no interactions). */
 function layers(editor: Editor, ids: readonly Id[]): SceneNode[] {
   return ids.map((id) => editor.doc.get(id)).filter((node): node is SceneNode => node !== undefined && 'transform' in node);
+}
+
+/** A connection between two frames that had none starts a flow at the first frame. */
+function startFlowForConnection(tx: Transaction, nodeId: Id, reaction: Reaction, index: number): void {
+  const found = flowForNewConnection(tx.store, nodeId, reaction, index);
+  if (!found) return;
+  const page = tx.store.getOrThrow(found.pageId) as PageNode;
+  tx.set(found.pageId, 'flowStartingPoints', [...(page.flowStartingPoints ?? []), found.flow]);
 }
 
 /**
@@ -37,7 +47,9 @@ export function addInteraction(editor: Editor, ids: readonly Id[], destinationId
   editor.history.run('Add interaction', (tx) =>
     targets.forEach((node) => {
       const current = reactionsOf(tx.store.get(node.id) as SceneNode);
-      tx.set(node.id, 'reactions', [...current, makeReaction(current, destinationId)]);
+      const reaction = makeReaction(current, destinationId);
+      startFlowForConnection(tx, node.id, reaction, current.length);
+      tx.set(node.id, 'reactions', [...current, reaction]);
     }),
   );
   return true;
@@ -54,10 +66,12 @@ export function updateInteraction(editor: Editor, ids: readonly Id[], index: num
     targets.forEach((node) => {
       const current = reactionsOf(tx.store.get(node.id) as SceneNode);
       const trigger = triggerAllowed(current, reaction.trigger.type, index) ? reaction.trigger : current[index]!.trigger;
+      const next = { ...reaction, trigger };
+      startFlowForConnection(tx, node.id, next, index);
       tx.set(
         node.id,
         'reactions',
-        current.map((existing, i) => (i === index ? { ...reaction, trigger } : existing)),
+        current.map((existing, i) => (i === index ? next : existing)),
       );
     }),
   );
@@ -74,5 +88,55 @@ export function removeInteraction(editor: Editor, ids: readonly Id[], index: num
       tx.set(node.id, 'reactions', next.length > 0 ? next : undefined);
     }),
   );
+  return true;
+}
+
+/** The page a top-level frame is on; null for layers that aren't top-level frames. */
+function framePage(editor: Editor, frameId: Id): PageNode | null {
+  if (topLevelFrame(editor.doc, frameId) !== frameId) return null;
+  const page = editor.doc.get((editor.doc.getOrThrow(frameId) as SceneNode).parent.id);
+  return page?.type === 'PAGE' ? page : null;
+}
+
+/** Makes a top-level frame a flow starting point (Flow 1, Flow 2, …). One undo step; false when it can't be one or is one. */
+export function addFlowStartingPoint(editor: Editor, frameId: Id): boolean {
+  const page = framePage(editor, frameId);
+  if (!page) return false;
+  const flows = flowsOf(editor.doc, page.id);
+  if (flows.some((flow) => flow.nodeId === frameId)) return false;
+  editor.history.run('Add flow starting point', (tx) => tx.set(page.id, 'flowStartingPoints', [...flows, { nodeId: frameId, name: nextFlowName(flows) }]));
+  return true;
+}
+
+/** Renames or describes the flow starting at a frame (an empty name keeps the old one). One undo step. */
+export function updateFlowStartingPoint(editor: Editor, frameId: Id, patch: { readonly name?: string; readonly description?: string }): boolean {
+  const page = framePage(editor, frameId);
+  if (!page) return false;
+  const flows = flowsOf(editor.doc, page.id);
+  const flow = flows.find((candidate) => candidate.nodeId === frameId);
+  if (!flow) return false;
+  const name = patch.name?.trim() || flow.name;
+  const description = patch.description === undefined ? flow.description : patch.description.trim();
+  const next: FlowStartingPoint = { nodeId: frameId, name, ...(description ? { description } : {}) };
+  editor.history.run('Change flow', (tx) => tx.set(page.id, 'flowStartingPoints', flows.map((candidate) => (candidate === flow ? next : candidate))));
+  return true;
+}
+
+/** Removes the flow starting at a frame. One undo step. */
+export function removeFlowStartingPoint(editor: Editor, frameId: Id): boolean {
+  const page = framePage(editor, frameId);
+  if (!page) return false;
+  const flows = flowsOf(editor.doc, page.id);
+  if (!flows.some((flow) => flow.nodeId === frameId)) return false;
+  const next = flows.filter((flow) => flow.nodeId !== frameId);
+  editor.history.run('Remove flow starting point', (tx) => tx.set(page.id, 'flowStartingPoints', next.length > 0 ? next : undefined));
+  return true;
+}
+
+/** Changes how a frame shows as an overlay (position, closing when clicking outside, background). One undo step. */
+export function setOverlaySettings(editor: Editor, frameId: Id, patch: Partial<OverlaySettings>): boolean {
+  const node = layers(editor, [frameId])[0];
+  if (!node) return false;
+  editor.history.run('Change overlay', (tx) => tx.set(frameId, 'overlay', { ...(node.overlay ?? DEFAULT_OVERLAY), ...patch }));
   return true;
 }
