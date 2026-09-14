@@ -27,6 +27,8 @@ import {
   type ClipboardPayload,
 } from '@/editor/clipboard/payload';
 import type { Editor } from '@/editor/editor';
+import { copiedInteractions, decodeInteractionsHtml, encodeInteractionsHtml } from '@/editor/clipboard/interactions';
+import { pasteInteractions, removeConnections } from '@/editor/commands/prototype';
 import {
   allPropertiesPayload,
   decodePropertiesHtml,
@@ -107,12 +109,25 @@ export class ClipboardController {
         return;
       }
     }
+    // An interaction selected on the canvas copies its interaction details.
+    if (this.writeInteractions(e)) {
+      e.preventDefault();
+      return;
+    }
     if (!this.write(e)) return;
     e.preventDefault();
   };
 
   private readonly onCut = (e: ClipboardEvent): void => {
-    if (isEditableTarget(e.target) || !this.write(e)) return;
+    if (isEditableTarget(e.target)) return;
+    // Cutting a selected interaction copies its details and removes its connections.
+    if (this.writeInteractions(e)) {
+      e.preventDefault();
+      removeConnections(this.editor, this.editor.state.getSnapshot().selectedConnections);
+      this.editor.state.selectConnections([]);
+      return;
+    }
+    if (!this.write(e)) return;
     e.preventDefault();
     this.editor.commands.run('edit.delete');
   };
@@ -123,6 +138,13 @@ export class ClipboardController {
     if (isEditableTarget(e.target)) return;
     const html = e.clipboardData?.getData('text/html') ?? '';
     try {
+      // Copied interaction details paste onto the selected layers.
+      const interactions = decodeInteractionsHtml(html);
+      if (interactions) {
+        e.preventDefault();
+        pasteInteractions(this.editor, this.editor.selection, interactions);
+        return;
+      }
       // A copied fill, stroke or effect pastes onto the selected layers.
       const property = decodePropertiesHtml(html);
       if (property) {
@@ -161,6 +183,15 @@ export class ClipboardController {
       void this.pasteToReplace();
     }
   };
+
+  /** Writes the interaction details of the connections selected on the canvas; false when none is selected. */
+  private writeInteractions(e: ClipboardEvent): boolean {
+    const reactions = copiedInteractions(this.editor);
+    if (!reactions || !e.clipboardData) return false;
+    e.clipboardData.setData('text/html', encodeInteractionsHtml(reactions));
+    e.clipboardData.setData('text/plain', reactions.length === 1 ? 'Interaction' : 'Interactions');
+    return true;
+  }
 
   private write(e: ClipboardEvent): boolean {
     const payload = createClipboardPayload(this.editor);

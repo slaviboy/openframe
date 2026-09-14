@@ -78,6 +78,28 @@ export function updateInteraction(editor: Editor, ids: readonly Id[], index: num
   return true;
 }
 
+/**
+ * Pastes interaction details onto layers: each interaction is added to each layer, replacing the layer's interaction
+ * whose trigger it can't be combined with (the same trigger, or On click with While hovering). One undo step; false
+ * when there are no layers or interactions.
+ */
+export function pasteInteractions(editor: Editor, ids: readonly Id[], pasted: readonly Reaction[]): boolean {
+  const targets = layers(editor, ids);
+  if (targets.length === 0 || pasted.length === 0) return false;
+  editor.history.run('Paste interactions', (tx) =>
+    targets.forEach((node) => {
+      for (const reaction of pasted) {
+        const current = reactionsOf(tx.store.get(node.id) as SceneNode);
+        const conflict = triggerAllowed(current, reaction.trigger.type) ? -1 : current.findIndex((existing) => !triggerAllowed([existing], reaction.trigger.type));
+        const index = conflict >= 0 ? conflict : current.length;
+        startFlowForConnection(tx, node.id, reaction, index);
+        tx.set(node.id, 'reactions', conflict >= 0 ? current.map((existing, i) => (i === conflict ? reaction : existing)) : [...current, reaction]);
+      }
+    }),
+  );
+  return true;
+}
+
 /** Removes an interaction from layers. One undo step. */
 export function removeInteraction(editor: Editor, ids: readonly Id[], index: number): boolean {
   const targets = layers(editor, ids).filter((node) => reactionsOf(node)[index] !== undefined);
