@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { isSceneNode } from '@/core/schema/document';
 import type { Id } from '@/core/ids/ids';
 import { apply, multiply, type Matrix } from '@/core/math/matrix';
 import { unionAll, type Rect } from '@/core/math/rect';
@@ -40,7 +41,7 @@ export function selectionFrame(editor: Editor, ids: readonly Id[] = editor.selec
   editor.scene.ensure(editor.pageId);
   if (ids.length === 1) {
     const node = editor.doc.get(ids[0]!);
-    if (!node || node.type === 'DOCUMENT' || node.type === 'PAGE') return null;
+    if (!node || !isSceneNode(node)) return null;
     return { toWorld: editor.scene.worldTransform(node.id), width: node.size.width, height: node.size.height, nodeId: node.id };
   }
   const bounds = unionAll(ids.map((id) => editor.scene.worldBounds(id)).filter((r): r is Rect => r !== null));

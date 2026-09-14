@@ -29,9 +29,12 @@ export const OVERRIDABLE_FIELDS: ReadonlySet<string> = new Set([
   'opacity',
   'blendMode',
   'effects',
+  'effectStyleId',
   // Fill and stroke
   'fills',
   'strokes',
+  'fillStyleId',
+  'strokeStyleId',
   'strokeWeight',
   'strokeAlign',
   'strokeDashes',
@@ -41,9 +44,11 @@ export const OVERRIDABLE_FIELDS: ReadonlySet<string> = new Set([
   'individualStrokeWeights',
   // Layout guides
   'layoutGuides',
+  'gridStyleId',
   // Text
   'characters',
   'fontName',
+  'textStyleId',
   'fontSize',
   'lineHeight',
   'letterSpacing',

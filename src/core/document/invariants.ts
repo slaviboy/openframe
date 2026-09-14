@@ -47,6 +47,10 @@ export function assertDocumentInvariants(store: DocumentStore): void {
       if (parent.type !== 'DOCUMENT') throw new InvariantError(`page ${node.id} must be a child of the root`);
       continue;
     }
+    if (node.type === 'STYLE') {
+      if (parent.type !== 'DOCUMENT') throw new InvariantError(`style ${node.id} must be a child of the root`);
+      continue;
+    }
     if (parent.type === 'DOCUMENT') throw new InvariantError(`${node.id}: scene nodes cannot be children of the root`);
     if (parent.type !== 'PAGE' && parent.type !== 'FRAME' && parent.type !== 'GROUP' && parent.type !== 'BOOLEAN_OPERATION' && parent.type !== 'SECTION') {
       throw new InvariantError(`${node.id}: parent ${parent.id} (${parent.type}) cannot have children`);

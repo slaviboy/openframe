@@ -294,6 +294,8 @@ const SceneFields = {
   blendMode: BlendModeSchema,
   /** Shadows and blurs, in paint order. Absent when the layer has none. */
   effects: z.array(EffectSchema).max(64).optional(),
+  /** The effect style the effects come from, while it is applied. */
+  effectStyleId: IdSchema.optional(),
   /** Inside a main component or variant: the component properties (by name) this layer's visibility and text, or for a nested instance its component, follow. */
   componentPropertyReferences: z
     .object({
@@ -349,6 +351,10 @@ export const IndividualStrokeWeightsSchema = z.object({
 const GeometryFields = {
   fills: z.array(PaintSchema).max(256),
   strokes: z.array(PaintSchema).max(256),
+  /** The color style the fills come from, while it is applied. */
+  fillStyleId: IdSchema.optional(),
+  /** The color style the strokes come from, while it is applied. */
+  strokeStyleId: IdSchema.optional(),
   strokeWeight: z.number().min(0),
   strokeAlign: StrokeAlignSchema,
   /** Dash pattern as alternating dash and gap lengths; absent for a solid stroke. */
@@ -471,6 +477,8 @@ export const FrameNodeSchema = z.object({
   guides: GuidesField,
   /** Layout guides, drawn over the frame's contents. Absent when none. */
   layoutGuides: z.array(LayoutGuideSchema).max(100).optional(),
+  /** The layout guide style the layout guides come from, while it is applied. */
+  gridStyleId: IdSchema.optional(),
   /** Auto layout flow of the children, in layer order (first child first). Absent means freeform. */
   layoutMode: z.enum(['HORIZONTAL', 'VERTICAL', 'GRID']).optional(),
   /** Horizontal auto layout only: children that overflow continue on the next line. */
@@ -722,6 +730,8 @@ export const TextNodeSchema = z.object({
   type: z.literal('TEXT'),
   characters: z.string().max(1_000_000),
   fontName: FontNameSchema,
+  /** The text style the typography comes from, while it is applied. */
+  textStyleId: IdSchema.optional(),
   fontSize: z.number().min(1).max(10_000),
   lineHeight: LineHeightSchema,
   letterSpacing: LetterSpacingSchema,
@@ -776,9 +786,38 @@ export const TextNodeSchema = z.object({
   decorationColor: ColorSchema.optional(),
 });
 
+/**
+ * A local style: named properties layers reuse. Color styles hold paints (for fills or strokes), text styles typography (not
+ * alignment), effect styles effects, and layout guide styles layout guides. Styles are children of the document.
+ */
+export const StyleNodeSchema = z.object({
+  ...BaseNodeFields,
+  type: z.literal('STYLE'),
+  styleType: z.enum(['FILL', 'TEXT', 'EFFECT', 'GRID']),
+  /** Shown when hovering over the style in the style picker. */
+  description: z.string().max(10_000).optional(),
+  paints: z.array(PaintSchema).max(256).optional(),
+  effects: z.array(EffectSchema).max(64).optional(),
+  layoutGuides: z.array(LayoutGuideSchema).max(100).optional(),
+  fontName: FontNameSchema.optional(),
+  fontSize: z.number().min(1).max(10_000).optional(),
+  lineHeight: LineHeightSchema.optional(),
+  letterSpacing: LetterSpacingSchema.optional(),
+  paragraphSpacing: z.number().min(0).max(10_000).optional(),
+  paragraphIndent: z.number().min(0).max(10_000).optional(),
+  listSpacing: z.number().min(0).max(10_000).optional(),
+  textCase: TextCaseSchema.optional(),
+  textDecoration: TextDecorationSchema.optional(),
+  openTypeFeatures: OpenTypeFeaturesSchema.optional(),
+  fontVariations: FontVariationsSchema.optional(),
+  leadingTrim: z.literal('CAP_HEIGHT').optional(),
+  hangingPunctuation: z.boolean().optional(),
+});
+
 export const NodeSchema = z.discriminatedUnion('type', [
   DocumentNodeSchema,
   PageNodeSchema,
+  StyleNodeSchema,
   FrameNodeSchema,
   GroupNodeSchema,
   RectangleNodeSchema,
@@ -835,6 +874,7 @@ export type GridTrack = z.infer<typeof GridTrackSchema>;
 export type CornerRadii = z.infer<typeof CornerRadiiSchema>;
 export type DocumentNode = z.infer<typeof DocumentNodeSchema>;
 export type PageNode = z.infer<typeof PageNodeSchema>;
+export type StyleNode = z.infer<typeof StyleNodeSchema>;
 export type FrameNode = z.infer<typeof FrameNodeSchema>;
 export type GroupNode = z.infer<typeof GroupNodeSchema>;
 export type RectangleNode = z.infer<typeof RectangleNodeSchema>;
@@ -873,7 +913,7 @@ export type NodeType = Node['type'];
 export type DocumentMeta = z.infer<typeof DocumentMetaSchema>;
 export type SerializedDocument = z.infer<typeof DocumentSchema>;
 
-export const isSceneNode = (n: Node): n is SceneNode => n.type !== 'DOCUMENT' && n.type !== 'PAGE';
+export const isSceneNode = (n: Node): n is SceneNode => n.type !== 'DOCUMENT' && n.type !== 'PAGE' && n.type !== 'STYLE';
 export const hasGeometry = (n: Node): n is FrameNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | VectorNode | BooleanOperationNode | SectionNode | TextNode =>
   n.type === 'FRAME' ||
   n.type === 'RECTANGLE' ||

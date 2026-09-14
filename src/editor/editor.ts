@@ -16,6 +16,7 @@
  */
 
 import { createComponentFinalizer } from '@/core/document/instances';
+import { styleFinalizer } from '@/core/document/styles';
 import { groupFinalizer } from '@/core/document/groups';
 import { constraintsFinalizer } from '@/core/document/constraints';
 import { createAutoLayoutFinalizer } from '@/core/layout/auto-layout';
@@ -173,9 +174,9 @@ export class Editor {
       // Text boxes fit their content before groups measure their children.
       // Constraints move children of resized frames before text boxes fit and groups measure them.
       // Constraints and text sizes settle before auto layout measures its children; groups hug the result.
-      finalizers: [createComponentFinalizer(() => this.ids.next()), vectorFinalizer, constraintsFinalizer, createTextFinalizer(() => this.textLayout), createAutoLayoutFinalizer(() => this.textLayout), groupFinalizer],
+      finalizers: [styleFinalizer, createComponentFinalizer(() => this.ids.next()), vectorFinalizer, constraintsFinalizer, createTextFinalizer(() => this.textLayout), createAutoLayoutFinalizer(() => this.textLayout), groupFinalizer],
       // Constraints and auto layout follow resize drags live.
-      previewFinalizers: [createComponentFinalizer(() => this.ids.next()), vectorFinalizer, constraintsFinalizer, createAutoLayoutFinalizer(() => this.textLayout, { preview: true })],
+      previewFinalizers: [styleFinalizer, createComponentFinalizer(() => this.ids.next()), vectorFinalizer, constraintsFinalizer, createAutoLayoutFinalizer(() => this.textLayout, { preview: true })],
       ...(options.validate ? { validate: assertDocumentInvariants } : {}),
     });
     // The scene index must learn about every change before anything renders or hit-tests.

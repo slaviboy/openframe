@@ -918,7 +918,7 @@ export class MoveTool implements Tool {
       resizeSingle(g.tx, g.starts[0]!, result);
       const resized = g.tx.store.get(g.frame.nodeId);
       // Resizing by hand makes hug and fill layers fixed on the resized axes.
-      if (resized && resized.type !== 'DOCUMENT' && resized.type !== 'PAGE') {
+      if (resized && isSceneNode(resized)) {
         const [rx, ry] = HANDLE_AXES[g.handle];
         if (rx !== 0 && resized.layoutSizingHorizontal) g.tx.set(resized.id, 'layoutSizingHorizontal', undefined);
         if (ry !== 0 && resized.layoutSizingVertical) g.tx.set(resized.id, 'layoutSizingVertical', undefined);

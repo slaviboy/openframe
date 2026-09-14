@@ -23,6 +23,8 @@ import type { NodeType } from '../schema/document';
  * canvas hierarchy, optionally nested in other sections). Leaf layers hold nothing.
  */
 export function canParent(parent: NodeType, child: NodeType): boolean {
+  // Styles live directly under the document.
+  if (child === 'STYLE') return parent === 'DOCUMENT';
   switch (parent) {
     case 'DOCUMENT':
       return child === 'PAGE';

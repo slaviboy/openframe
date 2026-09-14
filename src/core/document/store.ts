@@ -84,7 +84,8 @@ export class DocumentStore {
   }
 
   pages(): Id[] {
-    return [...this.children(ROOT_ID)];
+    // Styles are children of the root too.
+    return [...this.children(ROOT_ID)].filter((id) => this.nodeMap.get(id)?.type === 'PAGE');
   }
 
   /** Ancestors from parent up to (and including) the root. */
