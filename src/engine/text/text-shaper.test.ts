@@ -236,6 +236,27 @@ describe('text shaping', () => {
     expect(shaper.underlines(wrappedLaid).length).toBeGreaterThanOrEqual(2);
   });
 
+  test('hanging quotes put an opening quote outside the box on the first line only', () => {
+    const quote = String.fromCodePoint(0x201c);
+    const base = text({ characters: `${quote}Quoted words that wrap onto another line`, textAutoResize: 'HEIGHT' });
+    const laid = { ...base, size: { width: 140, height: shaper.measure(base, 140).height } };
+    const quoteWidth = shaper.caretAt(laid, 1).x;
+    expect(quoteWidth).toBeGreaterThan(3);
+    const hanging = { ...laid, hangingPunctuation: true };
+    // The quote starts left of the box; the first letter is at the edge.
+    expect(shaper.caretAt(hanging, 0).x).toBeCloseTo(-quoteWidth, 0);
+    expect(shaper.caretAt(hanging, 1).x).toBeCloseTo(0, 0);
+    expect(shaper.selectionRects(hanging, 0, 1)[0]!.x).toBeCloseTo(-quoteWidth, 0);
+    expect(shaper.offsetAt(hanging, { x: 1, y: 5 })).toBe(1);
+    // The second line isn't shifted.
+    const secondLine = shaper.offsetOnAdjacentLine(hanging, 1, 1, 0);
+    expect(secondLine).toBeGreaterThan(1);
+    expect(shaper.caretAt(hanging, secondLine).x).toBeCloseTo(0, 0);
+    // Centered text and paragraphs without an opening quote don't hang.
+    expect(shaper.caretAt({ ...hanging, textAlignHorizontal: 'CENTER' }, 0).x).toBeGreaterThan(0);
+    expect(shaper.caretAt({ ...hanging, characters: 'Plain words' }, 0).x).toBeCloseTo(0, 0);
+  });
+
   test('letter case changes the shaped text and max lines limits the height', () => {
     const lower = shaper.measure(text({ characters: 'hello' }), null).width;
     expect(shaper.measure(text({ characters: 'hello', textCase: 'UPPER' }), null).width).toBeGreaterThan(lower);

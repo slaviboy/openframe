@@ -59,6 +59,35 @@ function redPixels(patch: Partial<TextNode>): number {
   return red;
 }
 
+/** Draws a text layer at x = 40 and counts dark pixels left of the layer. */
+function darkLeftOfBox(patch: Partial<TextNode>): number {
+  const base = { ...makeText({ id: 'x:2', parent: { id: 'x:0', key: 'V' }, name: 'T', x: 0, y: 0, width: 0, height: 0 }), fontSize: 40, characters: `${String.fromCodePoint(0x201c)}Hi`, ...patch };
+  const node: TextNode = { ...base, size: shaper.measure(base, null) };
+  const surface = ck.MakeSurface(W, H)!;
+  const canvas = surface.getCanvas();
+  canvas.clear(ck.WHITE);
+  canvas.translate(40, 0);
+  const glyph = new ck.Paint();
+  glyph.setColor(ck.BLACK);
+  const background = new ck.Paint();
+  background.setColor(ck.TRANSPARENT);
+  shaper.draw(canvas, node, { background, paint: () => glyph });
+  const pixels = surface.makeImageSnapshot().readPixels(0, 0, { width: W, height: H, colorType: ck.ColorType.RGBA_8888, alphaType: ck.AlphaType.Unpremul, colorSpace: ck.ColorSpace.SRGB })!;
+  let dark = 0;
+  for (let y = 0; y < H; y++) for (let x = 0; x < 39; x++) if (pixels[(y * W + x) * 4]! < 120) dark++;
+  glyph.delete();
+  background.delete();
+  surface.delete();
+  return dark;
+}
+
+describe('drawing hanging quotes', () => {
+  test('the hanging quote is drawn left of the text box', () => {
+    expect(darkLeftOfBox({})).toBe(0);
+    expect(darkLeftOfBox({ hangingPunctuation: true })).toBeGreaterThan(10);
+  });
+});
+
 describe('drawing underlines', () => {
   test('underlines paint in each style, skip ink erases around descenders, and a pass without decorations draws none', () => {
     const solid = redPixels({ decorationSkipInk: false });

@@ -81,6 +81,8 @@ const LIST_INDENT_EM = 1.5;
 const LIST_MARKER_GAP_EM = 0.4;
 /** The most a Pretty wrap narrows a paragraph to avoid an orphan, as a share of its width. */
 const PRETTY_MAX_SHRINK = 0.2;
+/** Opening quotation marks that hang with hanging quotes on. */
+const OPENING_QUOTES = new Set(['"', "'", '“', '‘', '«', '‹', '„', '‚', '「', '『']);
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -92,6 +94,8 @@ interface ParagraphLayout {
   readonly prefix: number;
   /** Left edge of every line (list indentation), in the layer. */
   readonly left: number;
+  /** Extra x offset of the first line only (a hanging opening quote), ≤ 0. */
+  readonly firstLineShift: number;
   /** The list marker, positioned in the block. */
   readonly marker: { readonly paragraph: Paragraph; readonly x: number; readonly y: number } | null;
   /** Top within the text block, before vertical alignment. */
@@ -286,11 +290,36 @@ export class TextShaper implements TextLayoutService {
           const line = lines.find((l) => middle >= l.baseline - l.ascent - 0.5 && middle <= l.baseline + l.descent + 0.5) ?? lines[0];
           if (!line || rect[2]! <= rect[0]!) continue;
           const { y, thickness } = underlineLine(block.dy + layout.top + line.baseline, metrics, segment.decorationThickness, segment.decorationOffset);
-          pieces.push({ x1: layout.left + rect[0]!, x2: layout.left + rect[2]!, y, thickness, segment });
+          const left = lineLeft(layout, lines.indexOf(line));
+          pieces.push({ x1: left + rect[0]!, x2: left + rect[2]!, y, thickness, segment });
         }
       }
     }
     return pieces;
+  }
+
+  /** Draws a laid-out paragraph; with a hanging first line, that line and the rest are drawn clipped, each at its own offset. */
+  private drawParagraphLines(canvas: Canvas, p: ParagraphLayout, dy: number): void {
+    if (p.firstLineShift === 0) {
+      canvas.drawParagraph(p.paragraph, p.left, dy + p.top);
+      return;
+    }
+    const ck = this.ck;
+    const lines = p.paragraph.getLineMetrics();
+    const second = lines[1];
+    // The boundary between the first and second lines.
+    const split = second ? dy + p.top + second.baseline - second.ascent : dy + p.top + p.height;
+    const far = 1e6;
+    canvas.save();
+    canvas.clipRect(ck.LTRBRect(-far, -far, far, split), ck.ClipOp.Intersect, true);
+    canvas.drawParagraph(p.paragraph, p.left + p.firstLineShift, dy + p.top);
+    canvas.restore();
+    if (second) {
+      canvas.save();
+      canvas.clipRect(ck.LTRBRect(-far, split, far, far), ck.ClipOp.Intersect, true);
+      canvas.drawParagraph(p.paragraph, p.left, dy + p.top);
+      canvas.restore();
+    }
   }
 
   /** Draws underline pieces; with skip ink, erases them where a stroked copy of the glyphs crosses them. */
@@ -345,7 +374,7 @@ export class TextShaper implements TextLayoutService {
       eraser.setBlendMode(ck.BlendMode.DstOut);
       // Only runs that skip ink erase; the others keep their underline whole.
       const mask = this.stack(node, 'box', { background: painter.background, paint: (segment) => (segment.decorationSkipInk && segment.textDecoration === 'UNDERLINE' ? eraser : painter.background) });
-      for (const p of mask.paragraphs) if (!p.hidden) canvas.drawParagraph(p.paragraph, p.left, mask.dy + p.top);
+      for (const p of mask.paragraphs) if (!p.hidden) this.drawParagraphLines(canvas, p, mask.dy);
       deleteBlock(mask);
       eraser.delete();
       canvas.restore();
@@ -561,7 +590,15 @@ export class TextShaper implements TextLayoutService {
           y: top + baseline - markerParagraph.getAlphabeticBaseline(),
         };
       }
-      layouts.push({ range: ranges[i]!, paragraph, prefix: indents[i]! > 0 ? 1 : 0, left: lefts[i]! + shifts[i]!, marker, top, height, hidden });
+      // Hanging quotes: an opening quote starting a left-aligned, left-to-right paragraph sits outside the box on the first line.
+      let firstLineShift = 0;
+      const first = node.characters[ranges[i]!.start];
+      if (!hidden && node.hangingPunctuation && !rtl[i] && items[i]!.type === 'NONE' && (node.textAlignHorizontal === 'LEFT' || node.textAlignHorizontal === 'JUSTIFIED') && first !== undefined && OPENING_QUOTES.has(first)) {
+        const prefix = indents[i]! > 0 ? 1 : 0;
+        const quote = paragraph.getRectsForRange(prefix, prefix + 1, this.ck.RectHeightStyle.Tight, this.ck.RectWidthStyle.Tight)[0];
+        if (quote) firstLineShift = -(quote.rect[2]! - quote.rect[0]!);
+      }
+      layouts.push({ range: ranges[i]!, paragraph, prefix: indents[i]! > 0 ? 1 : 0, left: lefts[i]! + shifts[i]!, firstLineShift, marker, top, height, hidden });
       if (!hidden) {
         top += height;
         previous = i;
@@ -592,7 +629,7 @@ export class TextShaper implements TextLayoutService {
     const block = this.stack(node, 'box', painter);
     for (const p of block.paragraphs) {
       if (p.hidden) continue;
-      canvas.drawParagraph(p.paragraph, p.left, block.dy + p.top);
+      this.drawParagraphLines(canvas, p, block.dy);
       if (p.marker) canvas.drawParagraph(p.marker.paragraph, p.marker.x, block.dy + p.marker.y);
     }
     deleteBlock(block);
@@ -653,7 +690,11 @@ export class TextShaper implements TextLayoutService {
     // The paragraph under the point; the gap between two belongs to the nearer one.
     let target = visible[0]!;
     for (const p of visible) if (y >= p.top - spacing / 2) target = p;
-    const local = target.paragraph.getGlyphPositionAtCoordinate(point.x - target.left, y - target.top).pos;
+    const localY = y - target.top;
+    const targetLines = target.paragraph.getLineMetrics();
+    // The line under the point: the first whose next line starts below it.
+    const lineUnder = Math.max(0, targetLines.findIndex((_, i) => i === targetLines.length - 1 || localY < targetLines[i + 1]!.baseline - targetLines[i + 1]!.ascent));
+    const local = target.paragraph.getGlyphPositionAtCoordinate(point.x - lineLeft(target, lineUnder), localY).pos;
     return this.clamp(node, fromParagraphOffset(target.range, local, target.prefix));
   }
 
@@ -671,16 +712,17 @@ export class TextShaper implements TextLayoutService {
       const line = lines[this.lineIndex(lines, localIndex)]!;
       return { top: line.baseline - line.ascent + y, bottom: line.baseline + line.descent + y };
     };
+    const leftAt = (localIndex: number) => lineLeft(layout, this.lineIndex(lines, localIndex));
     const rtlValue = this.ck.TextDirection.RTL.value;
     const glyph = (start: number, end: number) => paragraph.getRectsForRange(start, end, this.ck.RectHeightStyle.Tight, this.ck.RectWidthStyle.Tight)[0];
     // The caret sits before a glyph on its leading edge (left in left-to-right runs, right in right-to-left ones), or after it on the trailing edge.
     if (at < range.end) {
       const g = glyph(local(at), local(nextGrapheme(text, at)));
-      if (g) return { x: layout.left + (g.dir.value === rtlValue ? g.rect[2]! : g.rect[0]!), ...box(local(at)) };
+      if (g) return { x: leftAt(local(at)) + (g.dir.value === rtlValue ? g.rect[2]! : g.rect[0]!), ...box(local(at)) };
     }
     if (at > range.start) {
       const g = glyph(local(previousGrapheme(text, at)), local(at));
-      if (g) return { x: layout.left + (g.dir.value === rtlValue ? g.rect[0]! : g.rect[2]!), ...box(local(at) - 1) };
+      if (g) return { x: leftAt(local(at) - 1) + (g.dir.value === rtlValue ? g.rect[0]! : g.rect[2]!), ...box(local(at) - 1) };
     }
     // An empty paragraph.
     const width = paragraph.getMaxWidth();
@@ -698,7 +740,9 @@ export class TextShaper implements TextLayoutService {
       if (layout.hidden || to <= from) continue;
       const y = block.dy + layout.top;
       for (const { rect: r } of layout.paragraph.getRectsForRange(toParagraphOffset(layout.range, from, layout.prefix), toParagraphOffset(layout.range, to, layout.prefix), this.ck.RectHeightStyle.Max, this.ck.RectWidthStyle.Tight)) {
-        rects.push({ x: layout.left + r[0]!, y: r[1]! + y, width: r[2]! - r[0]!, height: r[3]! - r[1]! });
+        const middle = (r[1]! + r[3]!) / 2;
+        const line = Math.max(0, layout.paragraph.getLineMetrics().findIndex((l) => middle <= l.baseline + l.descent + 0.5));
+        rects.push({ x: lineLeft(layout, line) + r[0]!, y: r[1]! + y, width: r[2]! - r[0]!, height: r[3]! - r[1]! });
       }
     }
     return rects;
@@ -710,7 +754,7 @@ export class TextShaper implements TextLayoutService {
     const lines = layout.paragraph.getLineMetrics();
     const line = this.lineIndex(lines, toParagraphOffset(layout.range, this.clamp(node, offset), layout.prefix)) + direction;
     if (line >= 0 && line < lines.length) {
-      return this.clamp(node, fromParagraphOffset(layout.range, layout.paragraph.getGlyphPositionAtCoordinate(x - layout.left, lines[line]!.baseline).pos, layout.prefix));
+      return this.clamp(node, fromParagraphOffset(layout.range, layout.paragraph.getGlyphPositionAtCoordinate(x - lineLeft(layout, line), lines[line]!.baseline).pos, layout.prefix));
     }
     // Into the paragraph above or below.
     const visible = block.paragraphs.filter((p) => !p.hidden);
@@ -719,7 +763,7 @@ export class TextShaper implements TextLayoutService {
     const nextLines = next.paragraph.getLineMetrics();
     const nextLine = direction > 0 ? nextLines[0] : nextLines[nextLines.length - 1];
     if (!nextLine) return direction > 0 ? next.range.start : next.range.end;
-    return this.clamp(node, fromParagraphOffset(next.range, next.paragraph.getGlyphPositionAtCoordinate(x - next.left, nextLine.baseline).pos, next.prefix));
+    return this.clamp(node, fromParagraphOffset(next.range, next.paragraph.getGlyphPositionAtCoordinate(x - lineLeft(next, direction > 0 ? 0 : nextLines.length - 1), nextLine.baseline).pos, next.prefix));
   }
 
   lineRange(node: TextNode, offset: number): [number, number] {
@@ -731,6 +775,11 @@ export class TextShaper implements TextLayoutService {
     if (!line) return [layout.range.start, layout.range.end];
     return [fromParagraphOffset(layout.range, line.startIndex, layout.prefix), fromParagraphOffset(layout.range, line.endIndex, layout.prefix)];
   }
+}
+
+/** The x of a paragraph's line in the layer: its left edge, shifted on the first line for a hanging quote. */
+function lineLeft(layout: ParagraphLayout, line: number): number {
+  return layout.left + (line === 0 ? layout.firstLineShift : 0);
 }
 
 function deleteBlock(block: BlockLayout): void {

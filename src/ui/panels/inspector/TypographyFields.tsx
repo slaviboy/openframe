@@ -56,6 +56,7 @@ import {
   paragraphListTypes,
   paragraphWrapStyles,
   setHangingList,
+  setHangingPunctuation,
   setListSpacing,
   setListType,
   setTextDirection,
@@ -178,6 +179,7 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
   const direction = single([...new Set(nodes.flatMap((n) => paragraphDirections(n, listRange)))]);
   const wrapStyle = single([...new Set(nodes.flatMap((n) => paragraphWrapStyles(n, listRange)))]);
   const hangingList = single([...new Set(nodes.map((n) => n.hangingList ?? false))]);
+  const hangingPunctuation = single([...new Set(nodes.map((n) => n.hangingPunctuation ?? false))]);
   const hAlign = shared(nodes, (n) => n.textAlignHorizontal);
   const vAlign = shared(nodes, (n) => n.textAlignVertical);
   const run = (label: string, apply: (tx: Transaction, node: TextNode) => void) => editor.history.run(label, (tx) => nodes.forEach((n) => apply(tx, n)));
@@ -305,6 +307,10 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
           <label className={styles.checkbox}>
             <input type="checkbox" checked={hangingList === true} onChange={(e) => run('Change hanging lists', (tx, n) => setHangingList(tx, n, e.target.checked))} />
             Hanging lists
+          </label>
+          <label className={styles.checkbox}>
+            <input type="checkbox" checked={hangingPunctuation === true} onChange={(e) => run('Change hanging quotes', (tx, n) => setHangingPunctuation(tx, n, e.target.checked))} />
+            Hanging quotes
           </label>
           <select className={primitives.select} aria-label="Wrap style" value={wrapStyle ?? ''} onChange={(e) => run('Change wrap style', (tx, n) => setWrapStyle(tx, n, e.target.value as WrapStyle, listRange))}>
             {wrapStyle === undefined && <option value="">Mixed</option>}

@@ -266,6 +266,11 @@ export function setHangingList(tx: Transaction, node: SceneNode, hanging: boolea
   if (textOf(tx, node)) tx.set(node.id, 'hangingList', hanging ? true : undefined);
 }
 
+/** Hanging quotes: an opening quotation mark starting a paragraph sits outside the text box. */
+export function setHangingPunctuation(tx: Transaction, node: SceneNode, hanging: boolean): void {
+  if (textOf(tx, node)) tx.set(node.id, 'hangingPunctuation', hanging ? true : undefined);
+}
+
 /** Sets the direction of the paragraphs a range touches (or the whole layer): left to right, right to left, or detected (AUTO). */
 export function setTextDirection(tx: Transaction, node: SceneNode, direction: TextDirection, range: TextRange = null): void {
   const text = textOf(tx, node);

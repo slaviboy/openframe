@@ -26,6 +26,7 @@ import {
   setUnderlineOptions,
   paragraphWrapStyles,
   setHangingList,
+  setHangingPunctuation,
   setWrapStyle,
   replaceFonts,
   paragraphDirections,
@@ -278,6 +279,10 @@ describe('text properties', () => {
     expect(get().hangingList).toBe(true);
     editor.history.run('hang', (tx) => setHangingList(tx, get(), false));
     expect(get().hangingList).toBeUndefined();
+    editor.history.run('quotes', (tx) => setHangingPunctuation(tx, get(), true));
+    expect(get().hangingPunctuation).toBe(true);
+    editor.history.run('quotes', (tx) => setHangingPunctuation(tx, get(), false));
+    expect(get().hangingPunctuation).toBeUndefined();
   });
 
   test('underline options apply per range and return to their defaults', () => {

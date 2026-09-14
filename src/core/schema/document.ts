@@ -548,6 +548,8 @@ export const TextNodeSchema = z.object({
   wrapStyle: WrapStyleSchema.optional(),
   /** List markers hang outside the text box, so item text aligns with its edge. Absent means false. */
   hangingList: z.boolean().optional(),
+  /** An opening quotation mark starting a paragraph hangs outside the text box. Absent means false. */
+  hangingPunctuation: z.boolean().optional(),
   /** Underline style. Absent means SOLID. */
   decorationStyle: DecorationStyleSchema.optional(),
   /** Underline thickness in pixels. Absent means the font's own. */
