@@ -21,7 +21,7 @@ import type { Id } from '@/core/ids/ids';
 import { apply, invert, multiply } from '@/core/math/matrix';
 import { fromPoints, transformRect, unionAll, type Rect } from '@/core/math/rect';
 import { edgeValues, guidesFor, snapBounds, snapValue, type SnapGuide } from '@/core/scene/snapping';
-import { SNAP_THRESHOLD_PX, snapCandidatesFor } from '../interactions/snap-candidates';
+import { isLayoutGuideRect, SNAP_THRESHOLD_PX, snapCandidatesFor } from '../interactions/snap-candidates';
 import { adoptCoveredLayers, duplicateNodes } from '../commands/structure';
 import { applySpacing, captureSpacingStarts, smartSelectionInfo, spacingHandleAt, type SmartSelectionInfo } from '../commands/smart-selection';
 import { canParent } from '@/core/document/containment';
@@ -529,7 +529,8 @@ export class MoveTool implements Tool {
       dy += snap.dy;
       g.guides = snap.guides;
       // Axes that didn't snap to an edge may snap to equal spacing between neighbors.
-      const equal = snapEqualGaps({ ...g.startBounds, x: g.startBounds.x + dx, y: g.startBounds.y + dy }, g.candidates, threshold, {
+      const neighbors = g.candidates.filter((rect) => !isLayoutGuideRect(rect));
+      const equal = snapEqualGaps({ ...g.startBounds, x: g.startBounds.x + dx, y: g.startBounds.y + dy }, neighbors, threshold, {
         x: lockedAxis !== 'x' && !snap.guides.some((guide) => guide.axis === 'x'),
         y: lockedAxis !== 'y' && !snap.guides.some((guide) => guide.axis === 'y'),
       });

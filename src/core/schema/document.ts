@@ -359,6 +359,23 @@ export const PageNodeSchema = z.object({
   guides: GuidesField,
 });
 
+/**
+ * Layout guide on a frame. `GRID` is a uniform grid of `sectionSize` squares. `COLUMNS` and `ROWS`
+ * divide the frame's width or height: `count` bands (null is Auto: as many as fit) separated by
+ * `gutterSize`. With `STRETCH` alignment bands share the space left by `offset` margins on both sides;
+ * with `MIN`, `CENTER` or `MAX` they are `sectionSize` wide and start `offset` from that side.
+ */
+export const LayoutGuideSchema = z.object({
+  pattern: z.enum(['GRID', 'COLUMNS', 'ROWS']),
+  visible: z.boolean(),
+  color: ColorSchema,
+  sectionSize: z.number().min(1).max(100_000),
+  count: z.number().int().min(1).max(1000).nullable(),
+  alignment: z.enum(['MIN', 'CENTER', 'MAX', 'STRETCH']),
+  gutterSize: z.number().min(0).max(100_000),
+  offset: z.number().min(0).max(100_000),
+});
+
 export const FrameNodeSchema = z.object({
   ...SceneFields,
   ...GeometryFields,
@@ -367,6 +384,8 @@ export const FrameNodeSchema = z.object({
   clipsContent: z.boolean(),
   /** Frame guides (for frames directly on the page or in a section). Absent when none. */
   guides: GuidesField,
+  /** Layout guides, drawn over the frame's contents. Absent when none. */
+  layoutGuides: z.array(LayoutGuideSchema).max(100).optional(),
 });
 
 export const GroupNodeSchema = z.object({ ...SceneFields, type: z.literal('GROUP') });
@@ -622,6 +641,7 @@ export type IndividualStrokeWeights = z.infer<typeof IndividualStrokeWeightsSche
 /** Default miter angle (degrees), matching a miter limit of about 4. */
 export const DEFAULT_MITER_ANGLE = 28.96;
 export type Guide = z.infer<typeof GuideSchema>;
+export type LayoutGuide = z.infer<typeof LayoutGuideSchema>;
 export type CornerRadii = z.infer<typeof CornerRadiiSchema>;
 export type DocumentNode = z.infer<typeof DocumentNodeSchema>;
 export type PageNode = z.infer<typeof PageNodeSchema>;

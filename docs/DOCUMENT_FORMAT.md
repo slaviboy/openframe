@@ -139,9 +139,11 @@ Frames and rectangles also accept `individualStrokeWeights: { top, right, bottom
 |---|---|
 | `DOCUMENT` | `id: "0:0"`, `name`, optional `colorProfile` (`"SRGB"` \| `"DISPLAY_P3"`; absent means sRGB): how every color value in the file is interpreted |
 | `PAGE` | `backgroundColor: Color` (canvas color); optional `guides: Guide[]` in world coordinates |
-| `FRAME` | `clipsContent: boolean`; optional `guides: Guide[]` in the frame's local space (used for frames on the page or in a section) |
+| `FRAME` | `clipsContent: boolean`; optional `guides: Guide[]` in the frame's local space (used for frames on the page or in a section); optional `layoutGuides: LayoutGuide[]` |
 
 A `Guide` is `{ "axis": "X" | "Y", "offset": number }`: `X` guides are vertical lines at x = offset, `Y` guides horizontal lines at y = offset. The field is absent when a page or frame has no guides.
+
+A `LayoutGuide` is `{ "pattern": "GRID" | "COLUMNS" | "ROWS", "visible": boolean, "color": Color, "sectionSize": number, "count": number | null, "alignment": "MIN" | "CENTER" | "MAX" | "STRETCH", "gutterSize": number, "offset": number }`. `GRID` draws squares of `sectionSize`. `COLUMNS` and `ROWS` divide the width or height into `count` bands (`null` is Auto: as many `sectionSize` bands as fit) separated by `gutterSize`; `STRETCH` bands share the space inside `offset` margins, while `MIN`/`CENTER`/`MAX` bands are `sectionSize` long and start `offset` from the left/top or right/bottom (centered ignores `offset`). `layoutGuides` is absent when a frame has none.
 | `GROUP` | none; its `size` is informational in v1 |
 | `RECTANGLE` | corner fields |
 | `ELLIPSE` | none beyond geometry fields |

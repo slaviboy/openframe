@@ -30,6 +30,8 @@ export interface ViewPrefs {
   readonly maskOutlines: boolean;
   /** One-pixel grid, drawn at 400% zoom and above. */
   readonly pixelGrid: boolean;
+  /** Layout guides on frames (they still apply to snapping and constraints when hidden). */
+  readonly layoutGuides: boolean;
   /** Moving, resizing and drawing land on whole pixels. */
   readonly snapToPixelGrid: boolean;
   /** Text captions on properties panel fields. */
@@ -54,6 +56,7 @@ export const VIEW_PREF_DEFAULTS: ViewPrefs = {
   outlineHidden: false,
   maskOutlines: false,
   pixelGrid: true,
+  layoutGuides: true,
   snapToPixelGrid: true,
   propertyLabels: false,
   smartSymbols: false,
@@ -83,6 +86,7 @@ function readStored(): ViewPrefs {
       outlineHidden: flag('outlineHidden'),
       maskOutlines: flag('maskOutlines'),
       pixelGrid: flag('pixelGrid'),
+      layoutGuides: flag('layoutGuides'),
       snapToPixelGrid: flag('snapToPixelGrid'),
       propertyLabels: flag('propertyLabels'),
       smartSymbols: flag('smartSymbols'),
@@ -151,6 +155,14 @@ export const VIEW_PREF_COMMANDS: CommandDefinition[] = [
     shortcuts: ["Mod+'"],
     checked: () => viewPrefs.getSnapshot().pixelGrid,
     run: () => viewPrefs.toggle('pixelGrid'),
+  },
+  {
+    id: 'view.toggleLayoutGuides',
+    label: 'Layout guides',
+    category: 'View',
+    shortcuts: ['Shift+G'],
+    checked: () => viewPrefs.getSnapshot().layoutGuides,
+    run: () => viewPrefs.toggle('layoutGuides'),
   },
   {
     id: 'view.toggleSnapToPixelGrid',

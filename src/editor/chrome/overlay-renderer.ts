@@ -36,6 +36,7 @@ import { toCss, toHex6, type ColorProfile } from '@/core/color/color';
 import { documentColorProfile } from '@/core/color/color-profile';
 import type { Color } from '@/core/schema/document';
 import { isMaskLayer } from '@/core/scene/masks';
+import { gridLines, layoutGuideBands } from '@/core/layout/layout-guides';
 
 const MASK_OUTLINE_COLOR = '#14ae5c';
 import { allGuides, guideSegment, sameGuide } from '../interactions/guides';
@@ -67,6 +68,8 @@ export interface OverlayInput {
   readonly rulers?: boolean;
   /** Draw the one-pixel grid (only at `PIXEL_GRID_MIN_ZOOM` and above). */
   readonly pixelGrid?: boolean;
+  /** Draw frames' layout guides (View › Layout guides). */
+  readonly layoutGuides?: boolean;
   readonly hoveredGuide?: GuideRef | null;
   /** Outline every mask on the page (View › Mask outlines). */
   readonly maskOutlines?: boolean;
@@ -96,6 +99,7 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
   const selected = new Set(state.selection);
 
   if (input.pixelGrid) drawPixelGrid(ctx, input);
+  if (input.layoutGuides) drawLayoutGuides(ctx, input);
   drawFrameTitles(ctx, input, selected);
   drawSectionTitles(ctx, input, selected);
   if (input.rulers) drawRulerGuides(ctx, input);
@@ -599,6 +603,71 @@ function drawPixelGrid(ctx: CanvasRenderingContext2D, input: OverlayInput): void
   ctx.strokeStyle = theme.pixelGrid;
   ctx.lineWidth = 1;
   ctx.stroke();
+}
+
+/** Grid lines closer than this many screen pixels are not drawn. */
+const LAYOUT_GRID_MIN_SPACING_PX = 3;
+
+const rgba = (c: Color): string => `rgba(${Math.round(c.r * 255)}, ${Math.round(c.g * 255)}, ${Math.round(c.b * 255)}, ${c.a})`;
+
+/**
+ * Visible layout guides of every visible, unrotated frame on the page, clipped to the frame: columns
+ * and rows as translucent bands, uniform grids as lines. Drawn over the scene, so exports never include them.
+ */
+function drawLayoutGuides(ctx: CanvasRenderingContext2D, input: OverlayInput): void {
+  const { editor, width, height } = input;
+  const v = editor.state.viewport;
+  const visit = (parent: Id) => {
+    for (const id of editor.doc.children(parent)) {
+      const node = editor.doc.get(id);
+      if (!node || !isSceneNode(node) || !node.visible) continue;
+      if (node.type === 'FRAME' && node.layoutGuides?.some((g) => g.visible)) {
+        const m = editor.scene.worldTransform(id);
+        if (Math.abs(m.b) < 1e-9 && Math.abs(m.c) < 1e-9 && m.a > 0 && m.d > 0) {
+          const origin = worldToScreen(v, apply(m, { x: 0, y: 0 }));
+          const sx = m.a * v.zoom;
+          const sy = m.d * v.zoom;
+          const w = node.size.width * sx;
+          const h = node.size.height * sy;
+          if (origin.x < width && origin.y < height && origin.x + w > 0 && origin.y + h > 0) {
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(origin.x, origin.y, w, h);
+            ctx.clip();
+            for (const guide of node.layoutGuides) {
+              if (!guide.visible) continue;
+              if (guide.pattern === 'GRID') {
+                if (guide.sectionSize * Math.min(sx, sy) < LAYOUT_GRID_MIN_SPACING_PX) continue;
+                ctx.beginPath();
+                for (const gx of gridLines(guide, node.size.width)) {
+                  const x = Math.round(origin.x + gx * sx) + 0.5;
+                  ctx.moveTo(x, origin.y);
+                  ctx.lineTo(x, origin.y + h);
+                }
+                for (const gy of gridLines(guide, node.size.height)) {
+                  const y = Math.round(origin.y + gy * sy) + 0.5;
+                  ctx.moveTo(origin.x, y);
+                  ctx.lineTo(origin.x + w, y);
+                }
+                ctx.strokeStyle = rgba(guide.color);
+                ctx.lineWidth = 1;
+                ctx.stroke();
+              } else {
+                ctx.fillStyle = rgba(guide.color);
+                for (const band of layoutGuideBands(guide, node.size)) {
+                  if (guide.pattern === 'COLUMNS') ctx.fillRect(origin.x + band.start * sx, origin.y, band.length * sx, h);
+                  else ctx.fillRect(origin.x, origin.y + band.start * sy, w, band.length * sy);
+                }
+              }
+            }
+            ctx.restore();
+          }
+        }
+      }
+      if (editor.doc.children(id).length > 0) visit(id);
+    }
+  };
+  visit(editor.pageId);
 }
 
 /** Titles above artboards: frames directly on the page or inside a (visible) section. */

@@ -68,7 +68,7 @@ const MAIN_MENU: readonly (readonly [string, readonly (readonly string[])[]])[] 
       ['view.commandPalette'],
       ['view.toggleHideUi', 'view.toggleMinimizeUi'],
       ['view.toggleRulers', 'view.toggleOutlines', 'view.toggleOutlineHidden', 'view.toggleMaskOutlines'],
-      ['view.togglePixelGrid', 'view.toggleSnapToPixelGrid', 'view.togglePropertyLabels'],
+      ['view.togglePixelGrid', 'view.toggleSnapToPixelGrid', 'view.toggleLayoutGuides', 'view.togglePropertyLabels'],
       ['view.themeSystem', 'view.themeLight', 'view.themeDark'],
       ['view.zoomIn', 'view.zoomOut', 'view.zoomToFit', 'view.zoomToSelection'],
       ['view.zoom50', 'view.zoom100', 'view.zoom200'],

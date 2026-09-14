@@ -43,7 +43,9 @@ import { backgroundColorBehind } from '@/core/color/contrast';
 import { useColorProfile } from '../../hooks/useColorProfile';
 import { ReorderHandle } from './ReorderHandle';
 import { TextResizingButtons, TypographyFields } from './TypographyFields';
-import type { TextNode } from '@/core/schema/document';
+import type { LayoutGuide, TextNode } from '@/core/schema/document';
+import { convertLayoutGuide, defaultLayoutGuide, type LayoutGuideAlignment, type LayoutGuidePattern } from '@/core/layout/layout-guides';
+import { setLayoutGuides } from '@/editor/commands/properties';
 import type { Transaction } from '@/core/history/history';
 import { setTextFills, textStyleValue } from '@/editor/commands/text';
 import { textStyleRange } from '@/editor/interactions/text-edit';
@@ -807,6 +809,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       )}
       <SelectionColorsSection nodes={nodes} />
       {!allSlices && <EffectsSection nodes={nodes} />}
+      {frames.length === nodes.length && <LayoutGuideSection nodes={frames} />}
     </>
   );
 }
@@ -1340,6 +1343,139 @@ function EffectsSection({ nodes }: { nodes: SceneNode[] }) {
                   ) : (
                     <GrainSettings name={name} index={index} effect={effect} change={change} write={write} gesture={gesture} />
                   )}
+                </li>
+              </Fragment>
+            );
+          })}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
+const LAYOUT_GUIDE_PATTERNS: Record<LayoutGuidePattern, string> = { GRID: 'Grid', COLUMNS: 'Columns', ROWS: 'Rows' };
+const LAYOUT_GUIDE_ALIGNMENTS: Record<Exclude<LayoutGuidePattern, 'GRID'>, Record<LayoutGuideAlignment, string>> = {
+  COLUMNS: { MIN: 'Left', CENTER: 'Center', MAX: 'Right', STRETCH: 'Stretch' },
+  ROWS: { MIN: 'Top', CENTER: 'Center', MAX: 'Bottom', STRETCH: 'Stretch' },
+};
+
+/** Layout guide (frames only): one row per guide (type, visibility, remove) with its settings below. */
+function LayoutGuideSection({ nodes }: { nodes: SceneNode[] }) {
+  const editor = useEditor();
+  const gesture = useGesture('Change layout guide');
+  const guidesOf = (n: SceneNode): readonly LayoutGuide[] => (n.type === 'FRAME' ? (n.layoutGuides ?? []) : []);
+  const guides = shared(nodes, guidesOf, (a, b) => canonicalStringify(a) === canonicalStringify(b));
+  const mixed = guides === MIXED;
+  const list = mixed || guides === undefined ? [] : guides;
+  const current = (tx: Transaction, n: SceneNode) => guidesOf(tx.store.getOrThrow(n.id) as SceneNode);
+  const write = (label: string, next: (current: readonly LayoutGuide[]) => readonly LayoutGuide[]) =>
+    editor.history.run(label, (tx) => nodes.forEach((n) => setLayoutGuides(tx, n, next(current(tx, n)))));
+  const change = (index: number, patch: (guide: LayoutGuide) => LayoutGuide) =>
+    gesture.change((tx) => nodes.forEach((n) => setLayoutGuides(tx, n, current(tx, n).map((g, i) => (i === index ? patch(g) : g)))));
+  const edit = (index: number, patch: Partial<LayoutGuide>) => write('Change layout guide', (cur) => cur.map((g, i) => (i === index ? { ...g, ...patch } : g)));
+
+  return (
+    <Section
+      title="Layout guide"
+      actions={<IconButton icon="plus" label="Add layout guide" onClick={() => write('Add layout guide', (cur) => [...(mixed ? [] : cur), defaultLayoutGuide()])} />}
+    >
+      {mixed && <p className={styles.hint}>Click + to replace mixed layout guides</p>}
+      {list.length > 0 && (
+        <ul className={styles.paintList}>
+          {list.map((guide, index) => {
+            const name = `Layout guide ${index + 1}`;
+            const lower = name.toLowerCase();
+            const stretch = guide.alignment === 'STRETCH';
+            return (
+              <Fragment key={index}>
+                <li className={styles.paintRow} data-hidden={!guide.visible || undefined}>
+                  <span />
+                  <select
+                    className={`${primitives.select} ${gradientStyles.type}`}
+                    aria-label={`${name} type`}
+                    value={guide.pattern}
+                    onChange={(e) => write('Change layout guide type', (cur) => cur.map((g, i) => (i === index ? convertLayoutGuide(g, e.target.value as LayoutGuidePattern) : g)))}
+                  >
+                    {(Object.keys(LAYOUT_GUIDE_PATTERNS) as LayoutGuidePattern[]).map((pattern) => (
+                      <option key={pattern} value={pattern}>
+                        {LAYOUT_GUIDE_PATTERNS[pattern]}
+                      </option>
+                    ))}
+                  </select>
+                  <span />
+                  <IconButton icon={guide.visible ? 'eye' : 'eyeOff'} label={guide.visible ? `Hide ${lower}` : `Show ${lower}`} onClick={() => edit(index, { visible: !guide.visible })} />
+                  <IconButton icon="minus" label={`Remove ${lower}`} onClick={() => write('Remove layout guide', (cur) => cur.filter((_, i) => i !== index))} />
+                </li>
+                <li className={gradientStyles.stops} aria-label={`${name} settings`}>
+                  {guide.pattern === 'GRID' ? (
+                    <div className={styles.grid2}>
+                      <NumberField label="Size" ariaLabel={`${name} size`} min={1} value={guide.sectionSize} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => change(index, (g) => ({ ...g, sectionSize: Math.max(1, v) }))} />
+                    </div>
+                  ) : (
+                    <>
+                      <div className={styles.grid2}>
+                        <NumberField
+                          label="Count"
+                          ariaLabel={`${name} count`}
+                          min={1}
+                          max={1000}
+                          decimals={0}
+                          disabled={guide.count === null}
+                          value={guide.count ?? undefined}
+                          onGestureStart={gesture.start}
+                          onGestureEnd={gesture.end}
+                          onChange={(v) => change(index, (g) => ({ ...g, count: Math.min(1000, Math.max(1, Math.round(v))) }))}
+                        />
+                        <label className={styles.checkbox}>
+                          <input type="checkbox" checked={guide.count === null} onChange={(e) => edit(index, { count: e.target.checked ? null : 5 })} />
+                          Auto
+                        </label>
+                        <select
+                          className={primitives.select}
+                          aria-label={`${name} ${guide.pattern === 'COLUMNS' ? 'column' : 'row'} type`}
+                          value={guide.alignment}
+                          onChange={(e) => edit(index, { alignment: e.target.value as LayoutGuideAlignment })}
+                        >
+                          {(['MIN', 'CENTER', 'MAX', 'STRETCH'] as const).map((alignment) => (
+                            <option key={alignment} value={alignment}>
+                              {LAYOUT_GUIDE_ALIGNMENTS[guide.pattern as Exclude<LayoutGuidePattern, 'GRID'>][alignment]}
+                            </option>
+                          ))}
+                        </select>
+                        <NumberField
+                          label={guide.pattern === 'COLUMNS' ? 'Width' : 'Height'}
+                          ariaLabel={`${name} ${guide.pattern === 'COLUMNS' ? 'width' : 'height'}`}
+                          min={1}
+                          // Stretched columns and rows size themselves, unless the count is Auto, where the size decides how many fit.
+                          disabled={stretch && guide.count !== null}
+                          value={guide.sectionSize}
+                          onGestureStart={gesture.start}
+                          onGestureEnd={gesture.end}
+                          onChange={(v) => change(index, (g) => ({ ...g, sectionSize: Math.max(1, v) }))}
+                        />
+                        <NumberField
+                          label={stretch ? 'Margin' : 'Offset'}
+                          ariaLabel={`${name} ${stretch ? 'margin' : 'offset'}`}
+                          min={0}
+                          disabled={guide.alignment === 'CENTER'}
+                          value={guide.offset}
+                          onGestureStart={gesture.start}
+                          onGestureEnd={gesture.end}
+                          onChange={(v) => change(index, (g) => ({ ...g, offset: Math.max(0, v) }))}
+                        />
+                        <NumberField label="Gutter" ariaLabel={`${name} gutter`} min={0} value={guide.gutterSize} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => change(index, (g) => ({ ...g, gutterSize: Math.max(0, v) }))} />
+                      </div>
+                    </>
+                  )}
+                  <ColorControl
+                    label={name}
+                    color={guide.color}
+                    opacity={guide.color.a}
+                    onGestureStart={gesture.start}
+                    onGestureEnd={gesture.end}
+                    onColor={(c) => change(index, (g) => ({ ...g, color: { ...c, a: g.color.a } }))}
+                    onOpacity={(o) => change(index, (g) => ({ ...g, color: { ...g.color, a: o } }))}
+                  />
                 </li>
               </Fragment>
             );

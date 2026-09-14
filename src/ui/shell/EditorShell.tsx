@@ -246,7 +246,7 @@ function RightHeader() {
           entries={commandSections(editor, [
             ['view.zoomIn', 'view.zoomOut', 'view.zoomToFit', 'view.zoomToSelection'],
             ['view.zoom50', 'view.zoom100', 'view.zoom200'],
-            ['view.togglePixelGrid', 'view.toggleSnapToPixelGrid'],
+            ['view.togglePixelGrid', 'view.toggleSnapToPixelGrid', 'view.toggleLayoutGuides'],
             ['view.toggleRulers', 'view.toggleOutlines', 'view.toggleOutlineHidden', 'view.toggleMaskOutlines'],
             ['view.togglePropertyLabels'],
           ])}

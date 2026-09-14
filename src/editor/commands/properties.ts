@@ -20,7 +20,7 @@ import type { Transaction } from '@/core/history/history';
 import type { Id } from '@/core/ids/ids';
 import { apply, determinant, multiply, rotation, scaling, type Matrix } from '@/core/math/matrix';
 import { matrixOf } from '@/core/scene/scene-index';
-import type { Constraint } from '@/core/schema/document';
+import type { Constraint, LayoutGuide } from '@/core/schema/document';
 import {
   DEFAULT_MITER_ANGLE,
   hasGeometry,
@@ -175,6 +175,11 @@ export function setLineCap(tx: Transaction, node: SceneNode, end: 'startCap' | '
 /** Replaces a layer's effects (stored only when there are any). */
 export function setEffects(tx: Transaction, node: SceneNode, effects: readonly Effect[]): void {
   tx.set(node.id, 'effects', effects.length > 0 ? [...effects] : undefined);
+}
+
+/** Replaces a frame's layout guides; the field is removed when none are left. */
+export function setLayoutGuides(tx: Transaction, node: SceneNode, guides: readonly LayoutGuide[]): void {
+  if (node.type === 'FRAME') tx.set(node.id, 'layoutGuides', guides.length > 0 ? guides : undefined);
 }
 
 export type PaintField = 'fills' | 'strokes';

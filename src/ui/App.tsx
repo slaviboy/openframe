@@ -239,7 +239,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
   return (
     <>
       <EditorShell session={session} uiMode={uiMode} onRestoreUi={restoreUi}>
-        <CanvasHost editor={editor} tools={tools} theme={theme} rulers={prefs.rulers} pixelGrid={prefs.pixelGrid} maskOutlines={prefs.maskOutlines} outlines={outlines} onContextMenu={openContextMenu} onDropFiles={dropFiles} />
+        <CanvasHost editor={editor} tools={tools} theme={theme} rulers={prefs.rulers} pixelGrid={prefs.pixelGrid} layoutGuides={prefs.layoutGuides} maskOutlines={prefs.maskOutlines} outlines={outlines} onContextMenu={openContextMenu} onDropFiles={dropFiles} />
         {editorState.textEdit && <LinkPopover />}
         {editorState.textEdit && <EmojiSuggestions />}
         {editorState.dialog === 'missingFonts' && <MissingFontsDialog editor={editor} onClose={closeDialog} />}

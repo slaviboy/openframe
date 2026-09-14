@@ -18,7 +18,8 @@
 import type { Transaction } from '../history/history';
 import { valuesEqual } from '../ops/equality';
 import type { Id } from '../ids/ids';
-import type { Constraint, SceneNode, Size, Transform } from '../schema/document';
+import { constraintBand } from '../layout/layout-guides';
+import type { Constraint, LayoutGuide, SceneNode, Size, Transform } from '../schema/document';
 
 const EPSILON = 1e-6;
 const round = (v: number) => Math.round(v * 100) / 100;
@@ -49,6 +50,26 @@ export function constrainAxis(constraint: Constraint, start: number, length: num
       return resizable ? [round(start * k), round(length * k)] : [round(start * k), length];
     }
   }
+}
+
+/** One axis relative to the frame, or to the stretched layout guide column or row the layer is in. */
+function constrainInFrame(
+  constraint: Constraint,
+  guides: readonly LayoutGuide[] | undefined,
+  axis: 'x' | 'y',
+  start: number,
+  length: number,
+  before: Size,
+  after: Size,
+  resizable: boolean,
+): [number, number] {
+  const band = constraintBand(guides, axis, start, length, before, after);
+  if (!band) {
+    const key = axis === 'x' ? 'width' : 'height';
+    return constrainAxis(constraint, start, length, before[key], after[key], resizable);
+  }
+  const [offset, next] = constrainAxis(constraint, start - band.before.start, length, band.before.length, band.after.length, resizable);
+  return [round(offset + band.after.start), next];
 }
 
 /**
@@ -90,9 +111,9 @@ export function constraintsFinalizer(tx: Transaction): void {
         continue;
       }
       const axisAligned = Math.abs(transform[1]) < EPSILON && Math.abs(transform[2]) < EPSILON;
-      const [x, width] = constrainAxis(constraints.horizontal, transform[4], size.width, before.width, after.width, axisAligned);
+      const [x, width] = constrainInFrame(constraints.horizontal, frame.layoutGuides, 'x', transform[4], size.width, before, after, axisAligned);
       // Lines have no height to stretch.
-      const [y, height] = constrainAxis(constraints.vertical, transform[5], size.height, before.height, after.height, axisAligned && child.type !== 'LINE');
+      const [y, height] = constrainInFrame(constraints.vertical, frame.layoutGuides, 'y', transform[5], size.height, before, after, axisAligned && child.type !== 'LINE');
       const next = [...transform] as unknown as Transform;
       (next as unknown as number[])[4] = x;
       (next as unknown as number[])[5] = y;

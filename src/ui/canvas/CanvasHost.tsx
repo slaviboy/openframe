@@ -89,6 +89,8 @@ interface CanvasHostProps {
   rulers: boolean;
   /** Show the one-pixel grid at high zoom. */
   pixelGrid: boolean;
+  /** Show layout guides on frames. */
+  layoutGuides?: boolean;
   /** Outline masks in green. */
   maskOutlines?: boolean;
   /** Outline mode and whether it includes hidden layers. */
@@ -106,11 +108,12 @@ type Status = { kind: 'loading' } | { kind: 'ready' } | { kind: 'error'; message
  * editor render requests and draws at most once per animation frame; React never
  * re-renders on document changes.
  */
-export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlines = false, outlines, onContextMenu, onDropFiles }: CanvasHostProps) {
+export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuides = true, maskOutlines = false, outlines, onContextMenu, onDropFiles }: CanvasHostProps) {
   const maskOutlinesRef = useRef(maskOutlines);
   const dropRef = useRef(onDropFiles);
   const outlinesRef = useRef(outlines);
   const pixelGridRef = useRef(pixelGrid);
+  const layoutGuidesRef = useRef(layoutGuides);
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
@@ -158,9 +161,10 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
   useEffect(() => {
     outlinesRef.current = outlines;
     pixelGridRef.current = pixelGrid;
+    layoutGuidesRef.current = layoutGuides;
     maskOutlinesRef.current = maskOutlines;
     editor.requestRender();
-  }, [outlines, pixelGrid, maskOutlines, editor]);
+  }, [outlines, pixelGrid, layoutGuides, maskOutlines, editor]);
 
   useEffect(() => {
     rulersRef.current = rulers;
@@ -243,6 +247,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
         gaps: tools.moveTool.gapIndicators,
         rulers: rulersRef.current,
         pixelGrid: pixelGridRef.current,
+        layoutGuides: layoutGuidesRef.current,
         maskOutlines: maskOutlinesRef.current,
         eyedropper: tools.eyedropperSample,
         hoveredGuide: tools.hoveredGuide,
