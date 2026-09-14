@@ -15,16 +15,46 @@
  * limitations under the License.
  */
 
-import type { ReactNode } from 'react';
+import { Fragment, type ReactNode } from 'react';
 import type { DocumentStore } from '@/core/document/store';
 import type { Id } from '@/core/ids/ids';
-import { accessibleContent, type AccessibleNode } from '@/core/prototype/accessibility';
+import { accessibleContent, type AccessibleNode, type TextList, type TextPart } from '@/core/prototype/accessibility';
 import { layerRects, type PresentedScene } from '@/core/prototype/presentation';
 import type { SceneIndex } from '@/core/scene/scene-index';
 import styles from './AccessibleContent.module.css';
 
 /** A transparent image: the canvas shows the picture, and screen readers read the alt text. */
 const BLANK_IMAGE = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+/** Text with its links (opening in a new tab). */
+function Parts({ parts }: { parts: readonly TextPart[] }) {
+  return (
+    <>
+      {parts.map((part, index) =>
+        part.href ? (
+          <a key={index} href={part.href} target="_blank" rel="noopener noreferrer">
+            {part.text}
+          </a>
+        ) : (
+          <Fragment key={index}>{part.text}</Fragment>
+        ),
+      )}
+    </>
+  );
+}
+
+/** A bulleted or numbered list, with the lists nested in its items. */
+function List({ list }: { list: TextList }) {
+  const items = list.items.map((item, index) => (
+    <li key={index}>
+      <Parts parts={item.parts} />
+      {item.lists.map((nested, i) => (
+        <List key={i} list={nested} />
+      ))}
+    </li>
+  ));
+  return list.ordered ? <ol>{items}</ol> : <ul>{items}</ul>;
+}
 
 interface AccessibleContentProps {
   readonly doc: DocumentStore;
@@ -54,9 +84,17 @@ export function AccessibleContent({ doc, index, scene, frameIds, onActivate }: A
     const style = rect ? { left: rect.x, top: rect.y, width: rect.width, height: rect.height } : undefined;
     if (node.kind === 'text') {
       return (
-        <p key={node.nodeId} className={styles.item} style={style}>
-          {node.text}
-        </p>
+        <div key={node.nodeId} className={styles.item} style={style}>
+          {node.blocks.map((block, index) =>
+            block.type === 'paragraph' ? (
+              <p key={index}>
+                <Parts parts={block.parts} />
+              </p>
+            ) : (
+              <List key={index} list={block.list} />
+            ),
+          )}
+        </div>
       );
     }
     if (node.kind === 'image') return <img key={node.nodeId} className={styles.item} style={style} src={BLANK_IMAGE} alt={node.label} />;

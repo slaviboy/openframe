@@ -19,8 +19,8 @@ import { describe, expect, test } from 'vitest';
 import { createEmptyDocument, keyOnTop, makeFrame, makeRectangle, makeText } from '../document/factory';
 import { History } from '../history/history';
 import { IdGenerator } from '../ids/ids';
-import type { Reaction } from '../schema/document';
-import { accessibleContent } from './accessibility';
+import type { Reaction, TextNode } from '../schema/document';
+import { accessibleContent, textBlocks } from './accessibility';
 
 const onClick = (action: Reaction['actions'][number]): Reaction[] => [{ trigger: { type: 'ON_CLICK' }, actions: [action] }];
 
@@ -51,14 +51,45 @@ describe('accessible prototypes', () => {
         nodeId: 'home',
         label: 'home',
         children: [
-          { kind: 'section', nodeId: 'card', label: 'card', children: [{ kind: 'text', nodeId: 'card-text', text: 'Card' }] },
+          { kind: 'section', nodeId: 'card', label: 'card', children: [{ kind: 'text', nodeId: 'card-text', text: 'Card', blocks: [{ type: 'paragraph', parts: [{ text: 'Card' }] }] }] },
           // A button is named by the text in it.
           { kind: 'button', nodeId: 'more', label: 'Show more' },
           { kind: 'link', nodeId: 'buy', label: 'buy' },
           { kind: 'image', nodeId: 'photo', label: 'photo' },
-          { kind: 'text', nodeId: 'title', text: 'Welcome' },
+          { kind: 'text', nodeId: 'title', text: 'Welcome', blocks: [{ type: 'paragraph', parts: [{ text: 'Welcome' }] }] },
         ],
       },
+    ]);
+  });
+
+  test('a text layer reads as paragraphs and nested lists, with its links', () => {
+    const ids = new IdGenerator('t');
+    const store = createEmptyDocument({ name: 'D', now: 'n', appVersion: 't', ids });
+    const page = store.pages()[0]!;
+    const history = new History({ store, captureMeta: () => null, restoreMeta: () => undefined });
+    history.run('Build', (tx) => {
+      tx.create(makeText({ id: 'notes', parent: { id: page, key: keyOnTop(store, page) }, name: 'notes', x: 0, y: 0, width: 100, height: 100 }));
+      // "Intro", then a bulleted list (First, Second) with a numbered item under Second, then "See docs" linking "docs".
+      tx.set('notes', 'characters', 'Intro\nFirst\nSecond\nSub\nSee docs');
+      tx.set('notes', 'styleRuns', [
+        { start: 6, end: 19, style: { listType: 'UNORDERED' } },
+        { start: 19, end: 22, style: { listType: 'ORDERED', indentation: 2 } },
+        { start: 27, end: 31, style: { hyperlink: { type: 'URL', value: 'https://example.com' } } },
+      ]);
+    });
+    expect(textBlocks(store.getOrThrow('notes') as TextNode)).toEqual([
+      { type: 'paragraph', parts: [{ text: 'Intro' }] },
+      {
+        type: 'list',
+        list: {
+          ordered: false,
+          items: [
+            { parts: [{ text: 'First' }], lists: [] },
+            { parts: [{ text: 'Second' }], lists: [{ ordered: true, items: [{ parts: [{ text: 'Sub' }], lists: [] }] }] },
+          ],
+        },
+      },
+      { type: 'paragraph', parts: [{ text: 'See ' }, { text: 'docs', href: 'https://example.com' }] },
     ]);
   });
 });

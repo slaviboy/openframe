@@ -151,6 +151,9 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - becomes `resetComponents` on the transition effect
     - PresentationView drops the destination's switched variants and rebuilds the runtime
     - `reactions` is now in `OVERRIDABLE_FIELDS`: interactions added on an instance used to be reverted by instance sync
+  - Lists and links in accessible text (the commit after Reset component state):
+    - `textBlocks` in accessibility.ts turns a text layer into paragraphs, nested lists and links
+    - `AccessibleContent` renders them as `p`, `ul`/`ol` and `a`
 
 ## In progress (uncommitted)
 
@@ -159,7 +162,6 @@ This file is how work continues after a pause (for example, a usage limit). Read
 ## Next (M10, in order)
 
 1. The smaller pending sub-items in the M10 rows:
-   - lists and inline links in accessible text layers
    - dragging a manual overlay into place on the canvas
    - choosing which frame of a GIF the canvas shows
    - copy/paste interactions
