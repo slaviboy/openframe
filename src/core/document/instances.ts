@@ -280,7 +280,8 @@ export function resetOverrides(tx: Transaction, ids: readonly Id[], nextId?: () 
       if (!layer || !isSceneNode(layer) || !layer.overrides) continue;
       const root = ownerOf(store, layerId)?.root ?? owner.root;
       for (const name of layer.overrides) {
-        if (name === 'instance' || (only !== undefined && name !== only)) continue;
+        // (A swapped instance is rebuilt above; a changed slot's content is reset with Reset slot.)
+        if (name === 'instance' || name === 'slotContent' || (only !== undefined && name !== only)) continue;
         const value = mainValue(store, layer, root, name);
         // Document values are plain JSON data, so a JSON round trip copies them.
         tx.set(layerId, name, value === undefined ? undefined : (JSON.parse(JSON.stringify(value)) as unknown));
@@ -318,7 +319,7 @@ export function hasOverrides(store: DocumentStore, ids: readonly Id[]): boolean 
   });
 }
 
-/** Per transaction, the `id field` values the component finalizer copied, so later runs (previews, the commit) don't take them for edits. */
+/** Per transaction, the `id\0field` values the component finalizer copied, so later runs (previews, the commit) don't take them for edits. */
 const copiedValues = new WeakMap<Transaction, Set<string>>();
 
 /** A change the component finalizer passes on: an edit of the transaction, or a copy of one on a linked layer. */
@@ -367,9 +368,30 @@ function linkIndex(store: DocumentStore): Map<Id, Link[]> {
  * level by level through nested instances. Layers rebuilt under the same id (swaps, resets) rebuild their copies
  * themselves, and only the topmost layer of a created or deleted subtree is handled.
  */
+/** Per transaction, the layers the structure sync created, deleted or moved itself, which aren't edits to a slot. */
+const syncedLayers = new WeakMap<Transaction, Set<Id>>();
+
+/** Whether a slot in an instance has content changed on the instance. */
+const isModifiedSlot = (store: DocumentStore, slotId: Id): boolean => ((store.get(slotId) as SceneNode | undefined)?.overrides ?? []).includes('slotContent');
+
+/** Whether a layer is content of a slot changed on its instance (the slot frame itself isn't). */
+function inModifiedSlot(store: DocumentStore, id: Id): boolean {
+  const slot = instanceSlotOf(store, id);
+  return slot !== null && slot !== id && isModifiedSlot(store, slot);
+}
+
+/** Marks a slot in an instance as changed: its content no longer follows the main component's slot. */
+function markSlotModified(tx: Transaction, slotId: Id): void {
+  const slot = tx.store.get(slotId) as SceneNode | undefined;
+  const overrides = slot?.overrides ?? [];
+  if (slot && !overrides.includes('slotContent')) tx.set(slotId, 'overrides', [...overrides, 'slotContent']);
+}
+
 function syncStructure(tx: Transaction, nextId: () => Id, linked: (id: Id) => Link[]): void {
   const store = tx.store;
   const ops = [...tx.ops];
+  const synced = syncedLayers.get(tx) ?? new Set<Id>();
+  syncedLayers.set(tx, synced);
   const created = new Set<Id>();
   const deleted = new Set<Id>();
   for (const op of ops) {
@@ -398,8 +420,9 @@ function syncStructure(tx: Transaction, nextId: () => Id, linked: (id: Id) => Li
   };
   const deleteCopies = (id: Id): void => {
     for (const copy of copiesOf(id)) {
-      if (!store.get(copy.id)) continue;
+      if (!store.get(copy.id) || inModifiedSlot(store, copy.id)) continue;
       deleteCopies(copy.id);
+      synced.add(copy.id);
       tx.delete(copy.id);
     }
   };
@@ -409,9 +432,15 @@ function syncStructure(tx: Transaction, nextId: () => Id, linked: (id: Id) => Li
     if (!node || !isSceneNode(node)) return;
     for (const parentCopy of copiesOf(node.parent.id)) {
       if (!store.get(parentCopy.id)) continue;
+      // A slot changed on its instance keeps its own content.
+      const slot = instanceSlotOf(store, parentCopy.id);
+      if (slot !== null && isModifiedSlot(store, slot)) continue;
       const existing = store.children(parentCopy.id).find((childId) => (store.get(childId) as SceneNode | undefined)?.source === id);
       const copyId = existing ?? nextId();
-      if (existing === undefined) cloneNestedCopy(tx, id, { id: parentCopy.id, key: node.parent.key }, nextId, copyId);
+      if (existing === undefined) {
+        cloneNestedCopy(tx, id, { id: parentCopy.id, key: node.parent.key }, nextId, copyId);
+        synced.add(copyId);
+      }
       createCopies(copyId);
     }
   };
@@ -421,17 +450,19 @@ function syncStructure(tx: Transaction, nextId: () => Id, linked: (id: Id) => Li
     const parentCopies = new Set(node && isSceneNode(node) && mainRootOf(node.parent.id) !== null ? copiesOf(node.parent.id).map((c) => c.id) : []);
     for (const copy of copiesOf(id)) {
       const current = store.get(copy.id);
-      if (!current || !isSceneNode(current) || parentCopies.has(current.parent.id)) continue;
+      if (!current || !isSceneNode(current) || parentCopies.has(current.parent.id) || inModifiedSlot(store, copy.id)) continue;
       deleteCopies(copy.id);
+      synced.add(copy.id);
       tx.delete(copy.id);
     }
   };
   const moveCopies = (id: Id, sourceRoot: Id): void => {
     const node = store.getOrThrow(id) as SceneNode;
     for (const copy of copiesOf(id)) {
-      if (!store.get(copy.id)) continue;
+      if (!store.get(copy.id) || inModifiedSlot(store, copy.id)) continue;
       const root = copyRootOf(copy.id, sourceRoot);
       const target = root ? copyIn(root, sourceRoot, node.parent.id) : null;
+      synced.add(copy.id);
       if (!root || target === null) {
         deleteCopies(copy.id);
         tx.delete(copy.id);
@@ -444,15 +475,35 @@ function syncStructure(tx: Transaction, nextId: () => Id, linked: (id: Id) => Li
   for (const op of ops) {
     if (op.kind === 'create') {
       const node = store.get(op.node.id);
-      if (!node || !isSceneNode(node) || deleted.has(node.id) || created.has(node.parent.id) || mainRootOf(node.parent.id) === null) continue;
+      if (!node || !isSceneNode(node) || synced.has(node.id)) continue;
+      // Content added to a slot in an instance changes that slot.
+      const slot = created.has(node.parent.id) ? null : instanceSlotOf(store, node.parent.id);
+      if (slot !== null) {
+        markSlotModified(tx, slot);
+        continue;
+      }
+      if (deleted.has(node.id) || created.has(node.parent.id) || mainRootOf(node.parent.id) === null) continue;
       createCopies(node.id);
     } else if (op.kind === 'delete') {
-      if (!isSceneNode(op.node) || created.has(op.node.id) || deleted.has(op.node.parent.id) || mainRootOf(op.node.parent.id) === null) continue;
+      if (!isSceneNode(op.node) || synced.has(op.node.id)) continue;
+      // Content deleted from a slot in an instance changes that slot.
+      const slot = deleted.has(op.node.parent.id) || !store.get(op.node.parent.id) ? null : instanceSlotOf(store, op.node.parent.id);
+      if (slot !== null) {
+        markSlotModified(tx, slot);
+        continue;
+      }
+      if (created.has(op.node.id) || deleted.has(op.node.parent.id) || mainRootOf(op.node.parent.id) === null) continue;
       deleteCopies(op.node.id);
-    } else if (op.field === 'parent' && !created.has(op.id) && !deleted.has(op.id) && store.get(op.id)) {
+    } else if (op.field === 'parent' && !created.has(op.id) && !deleted.has(op.id) && store.get(op.id) && !synced.has(op.id)) {
       const prev = op.prev as SceneNode['parent'] | undefined;
       const next = op.value as SceneNode['parent'] | undefined;
       if (!prev || !next) continue;
+      // Moving content within, into or out of a slot in an instance changes the slots involved.
+      const slots = [store.get(prev.id) ? instanceSlotOf(store, prev.id) : null, instanceSlotOf(store, next.id)].filter((slot): slot is Id => slot !== null);
+      if (slots.length > 0) {
+        for (const slot of slots) markSlotModified(tx, slot);
+        continue;
+      }
       const from = mainRootOf(prev.id);
       const to = mainRootOf(next.id);
       if (to !== null && from === to) moveCopies(op.id, to);
@@ -487,14 +538,13 @@ export function createComponentFinalizer(nextId: () => Id): Finalizer {
     const copied = copiedValues.get(tx) ?? new Set<string>();
     copiedValues.set(tx, copied);
     const changes: Change[] = tx.ops.flatMap((op) =>
-      op.kind === 'set' && !LINK_FIELDS.has(op.field) && !copied.has(`${op.id} ${op.field}`) ? [{ id: op.id, field: op.field, value: op.value, prev: op.prev, edit: true }] : [],
+      op.kind === 'set' && !LINK_FIELDS.has(op.field) && !copied.has(`${op.id}\0${op.field}`) ? [{ id: op.id, field: op.field, value: op.value, prev: op.prev, edit: true }] : [],
     );
     if (changes.length === 0) return;
     const copy = (target: SceneNode, name: string, value: unknown) => {
       const prev = field(target, name);
       if (same(prev, value)) return;
       tx.set(target.id, name, value);
-
       copied.add(`${target.id}\0${name}`);
       changes.push({ id: target.id, field: name, value, prev, edit: false });
     };
@@ -513,6 +563,12 @@ export function createComponentFinalizer(nextId: () => Id): Finalizer {
       if (!owner) continue;
       const isRoot = owner.root.id === change.id;
       if (change.edit && owner.kind === 'instance') {
+        // Content of a slot changes freely in an instance; the slot is marked as changed instead.
+        const slot = instanceSlotOf(store, change.id);
+        if (slot !== null && slot !== change.id) {
+          markSlotModified(tx, slot);
+          continue;
+        }
         if (isOverridable(change.field)) {
           const overrides = node.overrides ?? [];
           // Back to the main component's value (as when resetting), the field follows the component again.
@@ -527,17 +583,45 @@ export function createComponentFinalizer(nextId: () => Id): Finalizer {
       for (const { node: target, byMain, placementOnly } of linked(change.id)) {
         const current = store.get(target.id);
         if (!current || !isSceneNode(current) || (current.overrides ?? []).includes(change.field)) continue;
+        // Content of a slot changed on an instance no longer follows the main component.
+        if (inModifiedSlot(store, current.id)) continue;
         if (placementOnly && !ROOT_PLACEMENT.has(change.field) && change.field !== 'componentPropertyReferences' && change.field !== 'isExposedInstance') continue;
         if (byMain) {
           // Instances keep their own placement and, for a variant, the component set's name; a resize reaches
           // the instances that still had the previous size.
           if (ROOT_PLACEMENT.has(change.field) || (change.field === 'name' && componentSetOf(store, change.id))) continue;
           // (An instance that followed earlier in this transaction, during a drag, keeps following.)
-
           if (change.field === 'size' && !copied.has(`${current.id}\0size`) && !same(field(current, 'size'), change.prev)) continue;
         }
         copy(current, change.field, change.value);
       }
     }
   };
+}
+
+/** The slot a layer is in within an instance (the slot frame itself included), or null outside instances' slots. */
+export function instanceSlotOf(store: DocumentStore, id: Id): Id | null {
+  let slot: Id | null = null;
+  for (let cur: Id | null = id; cur !== null; cur = store.parentOf(cur)) {
+    const node = store.get(cur);
+    if (!node || !isSceneNode(node)) return null;
+    if (isInstance(node)) return slot;
+    if (slot === null && node.componentPropertyReferences?.slot) slot = cur;
+  }
+  return null;
+}
+
+/**
+ * Whether new or moved layers can go into a container: anything outside instances, and inside an instance only a slot
+ * (or a layer inside one), where the instance's content can change.
+ */
+export function acceptsLayers(store: DocumentStore, id: Id): boolean {
+  let inSlot = false;
+  for (let cur: Id | null = id; cur !== null; cur = store.parentOf(cur)) {
+    const node = store.get(cur);
+    if (!node || !isSceneNode(node)) return true;
+    if (isInstance(node)) return inSlot;
+    if (node.componentPropertyReferences?.slot) inSlot = true;
+  }
+  return true;
 }

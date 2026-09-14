@@ -33,6 +33,7 @@ import { roundTransform, toTransform } from '../interactions/transform';
 import { containerAt } from '../tools/draw-helpers';
 import { visibleWorldRect } from '../viewport/viewport';
 import type { ClipboardPayload } from './payload';
+import { acceptsLayers } from '@/core/document/instances';
 
 export type PasteMode = 'default' | 'over-selection' | 'replace';
 
@@ -142,14 +143,14 @@ export function pastePayload(editor: Editor, payload: ClipboardPayload, mode: Pa
 
 /**
  * Moves an insertion point up the hierarchy until the parent accepts every pasted root
- * (sections cannot be pasted into frames or groups); content then goes directly above the
- * ancestor it left. The page accepts every layer, so this always terminates.
+ * (sections cannot be pasted into frames or groups, and instances only take layers in their slots);
+ * content then goes directly above the ancestor it left. The page accepts every layer, so this always terminates.
  */
 function acceptingSlot(store: DocumentStore, payload: ClipboardPayload, parent: Id, lo: string | null, hi: string | null): { parent: Id; lo: string | null; hi: string | null } {
   const rootTypes = payload.nodes.filter((n) => payload.roots.includes(n.id)).map((n) => n.type);
   const accepts = (id: Id) => {
     const type = store.get(id)?.type;
-    return type !== undefined && rootTypes.every((t) => canParent(type, t));
+    return type !== undefined && rootTypes.every((t) => canParent(type, t)) && acceptsLayers(store, id);
   };
   let current = parent;
   let anchor: Id | null = null;

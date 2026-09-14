@@ -24,10 +24,12 @@ import type { NodeType } from '@/core/schema/document';
 import type { Editor } from '../editor';
 import { SNAP_THRESHOLD_PX } from '../interactions/snap-candidates';
 import { positionStep } from '../interactions/transform';
+import { acceptsLayers } from '@/core/document/instances';
 
 /**
  * Deepest visible, unlocked container of the given types containing the world point (or the
- * page). New layers are created there; new sections pass `['SECTION']`.
+ * page). New layers are created there; new sections pass `['SECTION']`. Inside an instance only
+ * a slot takes new layers.
  */
 export function containerAt(editor: Editor, world: Vec2, types: readonly NodeType[] = ['FRAME', 'SECTION']): Id {
   const store = editor.doc;
@@ -39,7 +41,8 @@ export function containerAt(editor: Editor, world: Vec2, types: readonly NodeTyp
       if (!child || (child.type !== 'FRAME' && child.type !== 'SECTION') || !types.includes(child.type) || !child.visible || child.locked) continue;
       const local = editor.scene.toLocal(child.id, world);
       if (local && nodeContainsLocal(child, local, 0)) {
-        result = child.id;
+        // Instances are searched for slots, but only containers that take layers are used.
+        if (acceptsLayers(store, child.id)) result = child.id;
         visit(child.id);
         return;
       }

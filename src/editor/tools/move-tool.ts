@@ -78,6 +78,7 @@ import { applyScale, captureScale, type ScaleSnapshot } from '../interactions/sc
 import { screenToWorld } from '../viewport/viewport';
 import { constrain45, lineTransform, parentToLocal, roundPoint, snapWorldPoint } from './draw-helpers';
 import type { CursorKind, ModifierState, PointerInfo, Tool, ToolEnvironment } from './types';
+import { acceptsLayers } from '@/core/document/instances';
 
 type Gesture =
   | { kind: 'idle' }
@@ -767,6 +768,8 @@ export class MoveTool implements Tool {
       // Only reparent layers whose parent is a frame or the page (never pull layers out of groups or boolean groups).
       const parent = store.get(node.parent.id);
       if (parent?.type === 'GROUP' || parent?.type === 'BOOLEAN_OPERATION') continue;
+      // An instance's layers stay where they are, except the content of its slots.
+      if (!acceptsLayers(store, node.parent.id)) continue;
       const world = editor.scene.computeWorld(s.id);
       const containerWorld = container === editor.pageId ? null : editor.scene.computeWorld(container);
       const inv = containerWorld ? invert(containerWorld) : { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
@@ -795,7 +798,7 @@ export class MoveTool implements Tool {
         const local = editor.scene.toLocal(childId, world);
         if (local && nodeContainsLocal(child, local, 0)) {
           visit(childId);
-          found ??= childId;
+          if (acceptsLayers(store, childId)) found ??= childId;
         }
       }
     };
