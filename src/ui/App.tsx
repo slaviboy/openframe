@@ -25,6 +25,8 @@ import { placeImages } from '@/editor/commands/images';
 import { screenToWorld } from '@/editor/viewport/viewport';
 import { importImageFiles, pickImageFiles } from './images/image-actions';
 import { IMAGE_ACCEPT } from './images/import-image';
+import { isSvgFile, readSvgFile } from './import/svg-files';
+import { placeSvgs, type PlaceableSvg } from '@/editor/commands/import-svg';
 import { Notice, PlaceImageHint, ToolHint } from './shell/Notice';
 import { setSnapToPixelGrid } from '@/editor/interactions/transform';
 import { StorageError } from '@/platform/idb/persistence';
@@ -184,12 +186,29 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
         await openPackage(packageFile);
         return;
       }
-      const { images, errors } = await importImageFiles(editor, files);
-      if (errors.length > 0) setNotice(errors.join(' '));
-      if (images.length === 0) return;
+      // SVG files import as editable vectors, not images.
+      const svgs: PlaceableSvg[] = [];
+      const svgErrors: string[] = [];
+      for (const file of files.filter(isSvgFile)) {
+        try {
+          svgs.push(await readSvgFile(file));
+        } catch (error) {
+          svgErrors.push(error instanceof Error ? error.message : `${file.name} could not be imported.`);
+        }
+      }
+      const { images, errors } = await importImageFiles(
+        editor,
+        files.filter((file) => !isSvgFile(file)),
+      );
+      const skipped = [...new Set(svgs.flatMap((item) => item.svg.skipped.map((what) => what.replace(/^.*: /, ''))))];
+      const notices = [...svgErrors, ...errors, ...(skipped.length > 0 ? [`Some SVG content wasn't imported: ${skipped.join(', ')}.`] : [])];
+      if (notices.length > 0) setNotice(notices.join(' '));
+      if (images.length === 0 && svgs.length === 0) return;
       const insets = editor.canvasInsets;
       const center = { x: (insets.left + editor.canvasSize.width - insets.right) / 2, y: (insets.top + editor.canvasSize.height - insets.bottom) / 2 };
-      placeImages(editor, images, world ?? screenToWorld(editor.state.viewport, center));
+      const point = world ?? screenToWorld(editor.state.viewport, center);
+      if (images.length > 0) placeImages(editor, images, point);
+      if (svgs.length > 0) placeSvgs(editor, svgs, point);
     },
     [editor, openPackage],
   );

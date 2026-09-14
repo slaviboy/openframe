@@ -36,6 +36,7 @@ import {
   type PropertiesPayload,
 } from '@/editor/clipboard/properties';
 import { imageFilesOf } from '../images/import-image';
+import { isSvgMarkup, svgFilesOf, svgMarkupFile } from '../import/svg-files';
 import { IS_MAC } from '../keyboard/keyboard-controller';
 
 const isEditableTarget = (target: EventTarget | null): boolean =>
@@ -130,7 +131,10 @@ export class ClipboardController {
       }
       const payload = decodeClipboardHtml(html);
       if (!payload) {
-        const files = imageFilesOf(e.clipboardData);
+        const files = [...imageFilesOf(e.clipboardData), ...svgFilesOf(e.clipboardData)];
+        // SVG markup copied from another tool imports as vectors.
+        const text = files.length === 0 ? (e.clipboardData?.getData('text/plain') ?? '') : '';
+        if (isSvgMarkup(text)) files.push(svgMarkupFile(text));
         if (files.length > 0 && this.onImageFiles) {
           e.preventDefault();
           this.onImageFiles(files);
@@ -300,13 +304,19 @@ export class ClipboardController {
    */
   async paste(mode: PasteMode, at?: Vec2): Promise<void> {
     let payload: ClipboardPayload | null = null;
+    let svg = '';
     try {
       if (navigator.clipboard && 'read' in navigator.clipboard) {
         const items = await navigator.clipboard.read();
         for (const item of items) {
-          if (!item.types.includes('text/html')) continue;
-          payload = decodeClipboardHtml(await (await item.getType('text/html')).text());
-          if (payload) break;
+          if (item.types.includes('text/html')) {
+            payload = decodeClipboardHtml(await (await item.getType('text/html')).text());
+            if (payload) break;
+          }
+          if (!svg && item.types.includes('text/plain')) {
+            const text = await (await item.getType('text/plain')).text();
+            if (isSvgMarkup(text)) svg = text;
+          }
         }
       }
     } catch (error) {
@@ -315,6 +325,10 @@ export class ClipboardController {
         return;
       }
       // Permission denied or unsupported: fall back to this tab's last copy.
+    }
+    if (!payload && svg && this.onImageFiles) {
+      this.onImageFiles([svgMarkupFile(svg)]);
+      return;
     }
     payload ??= this.lastPayload;
     if (payload) pastePayload(this.editor, payload, mode, at);
