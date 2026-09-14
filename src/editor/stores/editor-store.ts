@@ -73,6 +73,15 @@ export interface EditorState {
   readonly textLayoutReady: boolean;
   /** Frames that Suggest auto layout gave auto layout, marked with a blue dot in the layers panel until selected. */
   readonly suggested: ReadonlySet<Id>;
+  /** The value field open on a spacing handle of the selected auto layout frame, or null. */
+  readonly layoutValueEdit: LayoutValueEditRef | null;
+}
+
+/** A value field open on an auto layout frame's padding or gap handle; `mode` is which sides a padding value applies to. */
+export interface LayoutValueEditRef {
+  readonly frameId: Id;
+  readonly handle: { readonly kind: 'padding'; readonly side: 'top' | 'right' | 'bottom' | 'left' } | { readonly kind: 'gap'; readonly index: number };
+  readonly mode: 'side' | 'opposite' | 'all';
 }
 
 /** Text editing: the layer and its text selection (`anchor` stays, `focus` moves). */
@@ -123,6 +132,7 @@ export class EditorStore extends Observable<EditorState> {
       linkEditing: false,
       textLayoutReady: false,
       suggested: new Set(),
+      layoutValueEdit: null,
     });
   }
 
@@ -241,6 +251,10 @@ export class EditorStore extends Observable<EditorState> {
     this.setState({ rightTab });
   }
 
+  setLayoutValueEdit(layoutValueEdit: LayoutValueEditRef | null): void {
+    this.setState({ layoutValueEdit });
+  }
+
   /** Marks frames created or converted by Suggest auto layout. */
   markSuggested(ids: readonly Id[]): void {
     if (ids.length === 0) return;
@@ -262,6 +276,9 @@ export class EditorStore extends Observable<EditorState> {
       for (const id of normalized) suggested.delete(id);
       this.setState({ suggested });
     }
+    // A handle's value field belongs to its frame's selection.
+    const valueEdit = this.state.layoutValueEdit;
+    if (valueEdit && !(normalized.length === 1 && normalized[0] === valueEdit.frameId)) this.setState({ layoutValueEdit: null });
     const unchanged = normalized.length === this.state.selection.length && normalized.every((id, i) => id === this.state.selection[i]);
     if (unchanged && this.state.selectedGuide === null) return;
     // Selecting anything other than the layer being cropped leaves crop mode.

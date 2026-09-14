@@ -527,9 +527,18 @@ export class MoveTool implements Tool {
         this.adoptIntoSections(g.tx, g.starts);
         editor.history.commit(g.tx);
         break;
+      case 'layout-handle':
+        // A click without dragging opens a field to type the value instead.
+        if (Math.hypot(p.screen.x - g.down.screen.x, p.screen.y - g.down.screen.y) < this.env.dragThresholdPx) {
+          editor.history.cancel(g.tx);
+          const handle = g.handle.kind === 'gap' ? { kind: 'gap' as const, index: g.handle.index } : { kind: 'padding' as const, side: g.handle.side };
+          editor.state.setLayoutValueEdit({ frameId: g.frameId, handle, mode: g.down.alt ? (g.down.shift ? 'all' : 'opposite') : 'side' });
+        } else {
+          editor.history.commit(g.tx);
+        }
+        break;
       case 'rotate':
       case 'line-end':
-      case 'layout-handle':
       case 'spacing':
       case 'radius':
         editor.history.commit(g.tx);
