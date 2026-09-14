@@ -62,7 +62,7 @@ import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
 import { canCreateComponent, canCreateMultipleComponents, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
 import { addVariant, canAddVariant, canCombineAsVariants, combineAsVariants, deleteVariantProperty, instanceVariant, moveVariantProperty, renameVariantProperty, renameVariantValue, setInstanceVariant } from '@/editor/commands/variants';
 import { componentSetProperties, defaultVariant, parseVariantName, variantErrors } from '@/core/document/variants';
-import { bindingOwner, exposableInstances, exposedInstances, isInInstance, PROPERTY_FIELD, propertyDefinitions, propertyOwner, type ComponentPropertyType } from '@/core/document/component-properties';
+import { bindingOwner, boundLayers, exposableInstances, exposedInstances, isInInstance, PROPERTY_FIELD, propertyDefinitions, propertyOwner, type ComponentPropertyType } from '@/core/document/component-properties';
 import {
   applyComponentProperty,
   canHaveProperties,
@@ -912,10 +912,10 @@ function InstanceActions() {
   const editor = useEditor();
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   const fields = anchor ? selectionOverriddenFields(editor) : [];
-  const commands = ['object.goToMainComponent', 'object.pushChangesToMain', 'object.restoreMainComponent', 'object.detachInstance']
+  const commands = ['object.goToMainComponent', 'object.pushChangesToMain', 'object.restoreMainComponent', 'object.deleteSlotContents', 'object.detachInstance']
     .map((id) => commandItem(editor, id))
-    // Restore main component only shows while the main component is missing.
-    .filter((entry): entry is MenuEntry => entry !== null && !(entry.kind === 'item' && entry.id === 'object.restoreMainComponent' && entry.disabled === true));
+    // Restore main component only shows while the main component is missing, and Delete contents for a slot with content.
+    .filter((entry): entry is MenuEntry => entry !== null && !(entry.kind === 'item' && (entry.id === 'object.restoreMainComponent' || entry.id === 'object.deleteSlotContents') && entry.disabled === true));
   const entries: MenuEntry[] = [
     {
       kind: 'submenu',
@@ -1310,7 +1310,16 @@ function InstanceProperties({ instanceId, nested = false }: { instanceId: string
     <>
       {Object.entries(propertyDefinitions(propertyOwner(editor.doc, instanceId))).map(([name, definition]) => {
         const value = instancePropertyValue(editor, instanceId, name);
-        if (definition.type === 'SLOT') return null;
+        if (definition.type === 'SLOT') {
+          // A slot changed on this instance is tagged Modified.
+          const modified = boundLayers(editor.doc, instanceId, name).some(({ id }) => ((editor.doc.get(id) as SceneNode | undefined)?.overrides ?? []).includes('slotContent'));
+          return (
+            <div key={name} className={styles.grid2}>
+              <span className={styles.hint}>{name}</span>
+              <span className={styles.hint}>{modified ? 'Modified' : 'Slot'}</span>
+            </div>
+          );
+        }
         if (definition.type === 'INSTANCE_SWAP') {
           return <InstanceSwapControl key={name} instanceId={instanceId} name={name} preferred={definition.preferredValues ?? []} value={typeof value === 'string' ? value : definition.defaultValue} />;
         }

@@ -39,7 +39,7 @@ import { BOOLEAN_NAMES, booleanSelection, canBooleanSelection } from './boolean'
 import { canCreateComponent, canCreateMultipleComponents, createMultipleComponents, createComponent } from './components';
 import { addVariant, canAddVariant, canCombineAsVariants, combineAsVariants } from './variants';
 import { canMultiEditVariants, toggleMultiEditVariants } from './multi-edit';
-import { canConvertToSlot, canWrapInNewSlot, convertToSlot, wrapInNewSlot } from './component-properties';
+import { canConvertToSlot, canDeleteSlotContents, canWrapInNewSlot, convertToSlot, deleteSlotContents, wrapInNewSlot } from './component-properties';
 import { canDetachInstance, detachInstances } from './detach';
 import { canResetOverrides, resetSelectedOverrides } from './reset-overrides';
 import { canGoToMainComponent, canPushChangesToMain, canRestoreMainComponent, goToMainComponent, pushChangesToMain, restoreMainComponent } from './main-component';
@@ -222,6 +222,13 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     category: 'Object',
     enabled: canWrapInNewSlot,
     run: (e) => void wrapInNewSlot(e),
+  },
+  {
+    id: 'object.deleteSlotContents',
+    label: 'Delete contents',
+    category: 'Object',
+    enabled: (e) => e.selection.length === 1 && canDeleteSlotContents(e, e.selection[0]!),
+    run: (e) => void deleteSlotContents(e, e.selection[0]!),
   },
   {
     id: 'object.multiEditVariants',

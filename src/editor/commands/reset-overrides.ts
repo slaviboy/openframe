@@ -49,6 +49,7 @@ const OVERRIDE_LABELS: Readonly<Record<string, string>> = {
   fontName: 'font',
   styleRuns: 'text styles',
   instance: 'instance swap',
+  slotContent: 'slot',
 };
 
 /** The name of a changed property, as in Reset [property]. */

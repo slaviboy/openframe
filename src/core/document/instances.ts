@@ -275,6 +275,12 @@ export function resetOverrides(tx: Transaction, ids: readonly Id[], nextId?: () 
         rebuildCopies(tx, layerId, nextId);
       }
     }
+    if (nextId && (only === undefined || only === 'slotContent')) {
+      for (const layerId of scope()) {
+        const layer = store.get(layerId);
+        if (layer && isSceneNode(layer) && (layer.overrides ?? []).includes('slotContent')) resetSlot(tx, layerId, nextId);
+      }
+    }
     for (const layerId of scope()) {
       const layer = store.get(layerId);
       if (!layer || !isSceneNode(layer) || !layer.overrides) continue;
@@ -623,5 +629,32 @@ export function acceptsLayers(store: DocumentStore, id: Id): boolean {
     if (isInstance(node)) return inSlot;
     if (node.componentPropertyReferences?.slot) inSlot = true;
   }
+  return true;
+}
+
+/**
+ * Reset slot: a slot changed on its instance gets the content of the slot it copies again (the main component's, or the
+ * copy it came from), and follows it from then on.
+ */
+export function resetSlot(tx: Transaction, slotId: Id, nextId: () => Id): boolean {
+  const store = tx.store;
+  const slot = store.get(slotId);
+  if (!slot || !isSceneNode(slot) || slot.source === undefined || instanceSlotOf(store, slotId) !== slotId) return false;
+  // The rebuild isn't an edit of the slot's content.
+  const synced = syncedLayers.get(tx) ?? new Set<Id>();
+  syncedLayers.set(tx, synced);
+  for (const child of [...store.children(slotId)]) {
+    for (const id of [child, ...store.descendants(child, false)]) synced.add(id);
+    tx.delete(child);
+  }
+  for (const child of store.children(slot.source)) {
+    const node = store.get(child);
+    if (!node || !isSceneNode(node)) continue;
+    const copyId = nextId();
+    cloneNestedCopy(tx, child, { id: slotId, key: node.parent.key }, nextId, copyId);
+    synced.add(copyId);
+  }
+  const overrides = (slot.overrides ?? []).filter((name) => name !== 'slotContent');
+  tx.set(slotId, 'overrides', overrides.length > 0 ? overrides : undefined);
   return true;
 }

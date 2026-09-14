@@ -26,7 +26,7 @@ import {
   type BoundField,
   type ComponentPropertyType,
 } from '@/core/document/component-properties';
-import { isInstance, isMainComponent, swapInstance, wouldCycle } from '@/core/document/instances';
+import { instanceSlotOf, isInstance, isMainComponent, swapInstance, wouldCycle } from '@/core/document/instances';
 import { componentSetProperties, isComponentSet } from '@/core/document/variants';
 import type { Transaction } from '@/core/history/history';
 import type { Id } from '@/core/ids/ids';
@@ -345,4 +345,16 @@ export function wrapInNewSlot(editor: Editor): Id | null {
   });
   editor.state.select([slotId]);
   return slotId;
+}
+
+/** Whether a layer is a slot of an instance with content to delete. */
+export function canDeleteSlotContents(editor: Editor, id: Id): boolean {
+  return instanceSlotOf(editor.doc, id) === id && editor.doc.children(id).length > 0;
+}
+
+/** Delete contents: removes every layer from a slot of an instance, which marks the slot as changed. One undo step. */
+export function deleteSlotContents(editor: Editor, id: Id): boolean {
+  if (!canDeleteSlotContents(editor, id)) return false;
+  editor.history.run('Delete contents', (tx) => [...tx.store.children(id)].forEach((child) => tx.delete(child)));
+  return true;
 }
