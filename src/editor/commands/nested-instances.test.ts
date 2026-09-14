@@ -22,6 +22,7 @@ import type { SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { BUILTIN_COMMANDS } from './builtin';
 import { insertInstance } from './insert-instance';
+import { swapInstanceFor } from './swap-instance';
 
 const red = { type: 'SOLID', color: { r: 1, g: 0, b: 0, a: 1 }, opacity: 1, visible: true, blendMode: 'NORMAL' } as const;
 const blue = { type: 'SOLID', color: { r: 0, g: 0, b: 1, a: 1 }, opacity: 1, visible: true, blendMode: 'NORMAL' } as const;
@@ -111,5 +112,71 @@ describe('nested instances', () => {
     // Moving the inner main component doesn't move its instances.
     editor.history.run('Move A', (tx) => tx.set(a, 'transform', [1, 0, 0, 1, 500, 500]));
     expect(node(aInB).transform).toEqual([1, 0, 0, 1, 10, 5]);
+  });
+});
+
+/** Another main component, with a rectangle named like A's, at (x, 200). */
+function component(x: number): [string, string] {
+  const rect = editor.history.run('create', (tx) => {
+    const id = editor.ids.next();
+    tx.create(makeRectangle({ id, parent: { id: editor.pageId, key: keyOnTop(tx.store, editor.pageId) }, name: 'Shape', x, y: 200, width: 40, height: 40 }));
+    return id;
+  });
+  editor.state.select([rect]);
+  editor.commands.run('object.createComponent');
+  return [editor.selection[0]!, rect];
+}
+
+describe('swapping nested instances', () => {
+  test('a swapped copy of a nested instance stays linked, keeps the swap as its own change, and reset swaps it back', () => {
+    const [other, otherRect] = component(300);
+    fill(nestedRect, green);
+    expect(swapInstanceFor(editor, nested, other)).toBe(true);
+    const [swappedRect] = editor.doc.children(nested) as [string];
+    expect(node(nested)).toMatchObject({ instance: { mainId: other }, source: aInB });
+    expect(node(nested).overrides).toContain('instance');
+    expect(node(swappedRect)).toMatchObject({ source: otherRect, fills: [green] });
+
+    // The nested instance changing in its component doesn't undo the swap, but moving it still moves the copy.
+    fill(aInBRect, blue);
+    expect(node(nested).instance).toEqual({ mainId: other });
+    editor.history.run('Move nested', (tx) => tx.set(aInB, 'transform', [1, 0, 0, 1, 10, 5]));
+    expect(node(nested).transform).toEqual([1, 0, 0, 1, 10, 5]);
+    // The new component's changes reach the swapped copy.
+    editor.history.run('Other shape name', (tx) => tx.set(otherRect, 'opacity', 0.5));
+    expect(node(swappedRect).opacity).toBe(0.5);
+
+    editor.state.select([bInstance]);
+    editor.commands.run('object.resetOverrides');
+    expect(node(nested)).toMatchObject({ instance: { mainId: a }, source: aInB });
+    expect(node(nested).overrides).toBeUndefined();
+    const [resetRect] = editor.doc.children(nested) as [string];
+    expect(node(resetRect)).toMatchObject({ source: aInBRect, fills: [blue] });
+  });
+
+  test("swapping a nested instance inside a component swaps its copies in the component's instances, unless they were swapped", () => {
+    const [other, otherRect] = component(300);
+    const [third] = component(600);
+    const second = insertInstance(editor, b)!;
+    const [secondNested] = editor.doc.children(second) as [string];
+    swapInstanceFor(editor, secondNested, third);
+    fill(nestedRect, green);
+
+    expect(swapInstanceFor(editor, aInB, other)).toBe(true);
+    expect(node(aInB).instance).toEqual({ mainId: other });
+    expect(node(aInB).source).toBeUndefined();
+    const [innerRect] = editor.doc.children(aInB) as [string];
+    expect(node(innerRect).source).toBe(otherRect);
+    // The copy follows, linked to the new layers, and keeps its own changes.
+    expect(node(nested)).toMatchObject({ instance: { mainId: other }, source: aInB });
+    expect(node(nested).overrides).toBeUndefined();
+    const [copyRect] = editor.doc.children(nested) as [string];
+    expect(node(copyRect)).toMatchObject({ source: innerRect, fills: [green] });
+    // The instance that swapped its copy keeps its own choice.
+    expect(node(secondNested).instance).toEqual({ mainId: third });
+
+    editor.history.undo();
+    expect(node(nested).instance).toEqual({ mainId: a });
+    expect(node(aInB).instance).toEqual({ mainId: a });
   });
 });

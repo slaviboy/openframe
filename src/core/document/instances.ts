@@ -93,10 +93,73 @@ export function instantiate(
   return clone(mainId, { id: parent, key }, true);
 }
 
+/** Changes made on an instance, carried over a rebuild: the root's own, and its layers' by layer type and name. */
+interface KeptChanges {
+  readonly root: Readonly<Record<string, unknown>>;
+  readonly byName: ReadonlyMap<string, Readonly<Record<string, unknown>>>;
+}
+
+const layerKey = (layer: SceneNode): string => `${layer.type}\0${layer.name}`;
+const overriddenValues = (layer: SceneNode): Record<string, unknown> =>
+  Object.fromEntries((layer.overrides ?? []).filter((name) => name !== 'instance').map((name) => [name, field(layer, name)]));
+
+function keptChanges(store: DocumentStore, root: SceneNode): KeptChanges {
+  const byName = new Map<string, Record<string, unknown>>();
+  for (const id of store.descendants(root.id, false)) {
+    const layer = store.get(id);
+    if (layer && isSceneNode(layer) && layer.overrides && !byName.has(layerKey(layer))) byName.set(layerKey(layer), overriddenValues(layer));
+  }
+  return { root: overriddenValues(root), byName };
+}
+
+/** Restores kept changes on a rebuilt instance; the component finalizer records them as overrides again. */
+function restoreChanges(tx: Transaction, rootId: Id, kept: KeptChanges): void {
+  for (const [name, value] of Object.entries(kept.root)) tx.set(rootId, name, value);
+  for (const id of tx.store.descendants(rootId, false)) {
+    const layer = tx.store.get(id);
+    const changes = layer && isSceneNode(layer) ? kept.byName.get(layerKey(layer)) : undefined;
+    if (changes) for (const [name, value] of Object.entries(changes)) tx.set(id, name, value);
+  }
+}
+
+/** Builds the copy of an instance nested in a component for one of that component's instances: each layer links to the one it copies. */
+function cloneNestedCopy(tx: Transaction, sourceId: Id, parent: SceneNode['parent'], nextId: () => Id, id: Id): void {
+  const store = tx.store;
+  const clone = (fromId: Id, parentRef: SceneNode['parent'], cloneId: Id) => {
+    const from = store.getOrThrow(fromId) as SceneNode;
+    tx.create(instanceLayer(from, cloneId, parentRef, { source: fromId }));
+    for (const childId of store.children(fromId)) {
+      const child = store.get(childId);
+      if (child && isSceneNode(child)) clone(childId, { id: cloneId, key: child.parent.key }, nextId());
+    }
+  };
+  clone(sourceId, parent, id);
+}
+
+/** Rebuilds the copies of a rebuilt nested instance from it (keeping their own changes, and those swapped themselves as they are), level by level. */
+function rebuildCopies(tx: Transaction, id: Id, nextId: () => Id): void {
+  const copies: SceneNode[] = [];
+  for (const page of tx.store.pages()) {
+    for (const nodeId of tx.store.descendants(page, false)) {
+      const node = tx.store.get(nodeId);
+      if (node && isSceneNode(node) && node.source === id && !(node.overrides ?? []).includes('instance')) copies.push(node);
+    }
+  }
+  for (const copy of copies) {
+    const kept = keptChanges(tx.store, copy);
+    tx.delete(copy.id);
+    cloneNestedCopy(tx, id, copy.parent, nextId, copy.id);
+    restoreChanges(tx, copy.id, kept);
+    rebuildCopies(tx, copy.id, nextId);
+  }
+}
+
 /**
  * Swap instance: rebuilds an instance from another main component under the same id, keeping its own
  * placement. Changes made on the instance are kept on the layers of the new component with the same name
- * and type (The reference preserves overrides by layer name); the instance frame keeps its own changes too.
+ * and type (The reference preserves overrides by layer name); the instance frame keeps its own changes too. A copy of a
+ * nested instance stays linked to the nested instance, with the swap kept as its own change; swapping a nested
+ * instance inside a component swaps its copies in that component's instances, except those swapped themselves.
  */
 export function swapInstance(tx: Transaction, instanceId: Id, mainId: Id, nextId: () => Id): boolean {
   const store = tx.store;
@@ -104,25 +167,14 @@ export function swapInstance(tx: Transaction, instanceId: Id, mainId: Id, nextId
   const main = store.get(mainId);
   if (!instance || !isSceneNode(instance) || !isInstance(instance) || !main || !isSceneNode(main) || !isMainComponent(main)) return false;
   if (instance.type === 'FRAME' && instance.instance?.mainId === mainId) return false;
-  const overriddenValues = (layer: SceneNode) => Object.fromEntries((layer.overrides ?? []).map((name) => [name, field(layer, name)]));
-  const kept = new Map<string, Record<string, unknown>>();
-  for (const id of store.descendants(instanceId, false)) {
-    const layer = store.get(id);
-    const key = layer && isSceneNode(layer) ? `${layer.type}\0${layer.name}` : '';
-    if (layer && isSceneNode(layer) && layer.overrides && !kept.has(key)) kept.set(key, overriddenValues(layer));
-  }
-  const rootChanges = overriddenValues(instance);
+  const kept = keptChanges(store, instance);
   const placement = Object.fromEntries([...ROOT_PLACEMENT].filter((name) => field(instance, name) !== undefined).map((name) => [name, field(instance, name)]));
+  const nested = instance.source !== undefined ? { source: instance.source, overrides: ['instance'] } : {};
   const parent = instance.parent;
   tx.delete(instanceId);
-  instantiate(tx, mainId, parent.id, parent.key, nextId, { id: instanceId, fields: placement });
-  // Restoring the kept changes records them as overrides again (the sync finalizer sees these edits).
-  for (const [name, value] of Object.entries(rootChanges)) tx.set(instanceId, name, value);
-  for (const id of store.descendants(instanceId, false)) {
-    const layer = store.get(id);
-    const changes = layer && isSceneNode(layer) ? kept.get(`${layer.type}\0${layer.name}`) : undefined;
-    if (changes) for (const [name, value] of Object.entries(changes)) tx.set(id, name, value);
-  }
+  instantiate(tx, mainId, parent.id, parent.key, nextId, { id: instanceId, fields: { ...placement, ...nested } });
+  restoreChanges(tx, instanceId, kept);
+  rebuildCopies(tx, instanceId, nextId);
   return true;
 }
 
@@ -144,8 +196,11 @@ function ownerOf(store: DocumentStore, id: Id): { readonly kind: 'main' | 'insta
 
 /** The main component's layer an instance layer mirrors: the main component itself for the instance frame. */
 function mainLayerOf(store: DocumentStore, layer: SceneNode, root: SceneNode): SceneNode | undefined {
-  // Layers (and copies of nested instances) link to the layer they copy; an instance itself to its main component.
-  const id = layer.source ?? (layer.id === root.id && root.type === 'FRAME' ? root.instance?.mainId : undefined);
+  // Layers (and copies of nested instances) link to the layer they copy; an instance itself, or a copy of a
+  // nested instance that was swapped, to its main component.
+  const isRoot = layer.id === root.id;
+  const swapped = isRoot && (layer.overrides ?? []).includes('instance');
+  const id = layer.source !== undefined && !swapped ? layer.source : isRoot && root.type === 'FRAME' ? root.instance?.mainId : undefined;
   const main = id === undefined ? undefined : store.get(id);
   return main && isSceneNode(main) ? main : undefined;
 }
@@ -165,26 +220,39 @@ function rootName(store: DocumentStore, mainId: Id): string | undefined {
 
 /** The value an instance layer's field follows: its main layer's, except that instances of a variant are named after the set. */
 function mainValue(store: DocumentStore, layer: SceneNode, root: SceneNode, name: string): unknown {
-  if (name === 'name' && layer.id === root.id && root.type === 'FRAME' && root.instance) return rootName(store, root.instance.mainId);
   const main = mainLayerOf(store, layer, root);
+  if (name === 'name' && main && layer.id === root.id && isMainComponent(main)) return rootName(store, main.id);
   return main ? field(main, name) : undefined;
 }
 
 /**
  * Reset all changes: every overridden field of the given instances (with their layers) or instance
- * layers takes the main component's value again, and the layers follow the component for it.
+ * layers takes the main component's value again, and the layers follow the component for it. With `nextId`,
+ * a swapped copy of a nested instance becomes a copy of the nested instance in the component again.
  */
-export function resetOverrides(tx: Transaction, ids: readonly Id[]): void {
+export function resetOverrides(tx: Transaction, ids: readonly Id[], nextId?: () => Id): void {
   const store = tx.store;
   for (const id of ids) {
     const owner = ownerOf(store, id);
     if (owner?.kind !== 'instance') continue;
-    const layers = id === owner.root.id ? [id, ...store.descendants(id, false)] : [id];
-    for (const layerId of layers) {
+    const scope = () => (id === owner.root.id ? [id, ...store.descendants(id, false)] : [id]);
+    if (nextId) {
+      for (const layerId of scope()) {
+        const layer = store.get(layerId);
+        // Layers of a copy rebuilt earlier in this loop are gone.
+        if (!layer || !isSceneNode(layer) || layer.source === undefined || !(layer.overrides ?? []).includes('instance')) continue;
+        tx.delete(layerId);
+        cloneNestedCopy(tx, layer.source, layer.parent, nextId, layerId);
+        rebuildCopies(tx, layerId, nextId);
+      }
+    }
+    for (const layerId of scope()) {
       const layer = store.get(layerId);
       if (!layer || !isSceneNode(layer) || !layer.overrides) continue;
+      const root = ownerOf(store, layerId)?.root ?? owner.root;
       for (const name of layer.overrides) {
-        const value = mainValue(store, layer, owner.root, name);
+        if (name === 'instance') continue;
+        const value = mainValue(store, layer, root, name);
         // Document values are plain JSON data, so a JSON round trip copies them.
         tx.set(layerId, name, value === undefined ? undefined : (JSON.parse(JSON.stringify(value)) as unknown));
       }
@@ -219,6 +287,8 @@ interface Change {
 interface Link {
   readonly node: SceneNode;
   readonly byMain: boolean;
+  /** A swapped copy of a nested instance follows the nested instance only for its placement. */
+  readonly placementOnly?: true;
 }
 
 /**
@@ -236,8 +306,9 @@ function linkIndex(store: DocumentStore): Map<Id, Link[]> {
     for (const id of store.descendants(page, false)) {
       const node = store.get(id);
       if (!node || !isSceneNode(node)) continue;
-      if (node.source !== undefined) add(node.source, { node, byMain: false });
-      else if (node.type === 'FRAME' && node.instance) add(node.instance.mainId, { node, byMain: true });
+      const swapped = node.type === 'FRAME' && node.instance !== undefined && (node.overrides ?? []).includes('instance');
+      if (node.source !== undefined) add(node.source, swapped ? { node, byMain: false, placementOnly: true } : { node, byMain: false });
+      if (node.type === 'FRAME' && node.instance && (node.source === undefined || swapped)) add(node.instance.mainId, { node, byMain: true });
     }
   }
   return links;
@@ -292,9 +363,10 @@ export function componentFinalizer(tx: Transaction): void {
         continue;
       }
     }
-    for (const { node: target, byMain } of linked(change.id)) {
+    for (const { node: target, byMain, placementOnly } of linked(change.id)) {
       const current = store.get(target.id);
       if (!current || !isSceneNode(current) || (current.overrides ?? []).includes(change.field)) continue;
+      if (placementOnly && !ROOT_PLACEMENT.has(change.field)) continue;
       if (byMain) {
         // Instances keep their own placement and, for a variant, the component set's name; a resize reaches
         // the instances that still had the previous size.

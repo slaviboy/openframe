@@ -26,6 +26,6 @@ export const canResetOverrides = (editor: Editor): boolean => hasOverrides(edito
 export function resetSelectedOverrides(editor: Editor): boolean {
   const ids = selectedSceneNodes(editor);
   if (!hasOverrides(editor.doc, ids)) return false;
-  editor.history.run('Reset all changes', (tx) => resetOverrides(tx, ids));
+  editor.history.run('Reset all changes', (tx) => resetOverrides(tx, ids, () => editor.ids.next()));
   return true;
 }
