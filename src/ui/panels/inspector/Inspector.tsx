@@ -126,6 +126,9 @@ const VERTICAL_CONSTRAINTS: readonly (readonly [Constraint, string])[] = [
 import { ImageSettings, ImageSwatch } from './ImageSettings';
 import { AppliedStyle, LocalStylesSection, StyleButton } from './StylesPanel';
 import { ExportSection } from './ExportSection';
+import { FRAME_PRESET_CATEGORIES, presetById, presetForSize, presetsIn } from '@/core/document/frame-presets';
+import { placeFramePreset, resizeFramesToPreset } from '@/editor/commands/frame-presets';
+import { screenToWorld } from '@/editor/viewport/viewport';
 import { BoundPaint, PropertyDefaultVariableButton, sharedBoundVariable, VariableBindingControl, VariableModeButton, VariableNumberField, VariantVariableButton, VisibilityControl } from './VariableFields';
 import { PatternSettings } from './PatternSettings';
 import { PAINT_BLEND_OPTIONS } from './blend-modes';
@@ -204,16 +207,82 @@ const CAP_OPTIONS: readonly [StrokeCap, string][] = [
   ['DIAMOND_FILLED', 'Diamond'],
 ];
 
+/** While the Frame tool is on: frame presets by category; clicking one places a frame of its size in the middle of the view. */
+function FramePresetsSection() {
+  const editor = useEditor();
+  return (
+    <Section title="Frame presets">
+      {FRAME_PRESET_CATEGORIES.map((category) => (
+        <details key={category} className={styles.presetCategory}>
+          <summary>{category}</summary>
+          <ul className={styles.presetList} aria-label={`${category} presets`}>
+            {presetsIn(category).map((preset) => (
+              <li key={preset.id}>
+                <button
+                  type="button"
+                  className={styles.presetButton}
+                  onClick={() => {
+                    const insets = editor.canvasInsets;
+                    const center = { x: (insets.left + editor.canvasSize.width - insets.right) / 2, y: (insets.top + editor.canvasSize.height - insets.bottom) / 2 };
+                    placeFramePreset(editor, preset, screenToWorld(editor.state.viewport, center));
+                  }}
+                >
+                  <span>{preset.name}</span>
+                  <span className={styles.presetSize}>
+                    {preset.width}×{preset.height}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ))}
+    </Section>
+  );
+}
+
+/** The Frame dropdown: the preset the selected frames' size matches (or Custom), and every preset to change them to. */
+function FramePresetSelect({ frames }: { frames: readonly SceneNode[] }) {
+  const editor = useEditor();
+  const sizes = new Set(frames.map((frame) => `${frame.size.width}×${frame.size.height}`));
+  const match = sizes.size === 1 ? presetForSize(frames[0]!.size.width, frames[0]!.size.height) : null;
+  return (
+    <select
+      className={primitives.select}
+      aria-label="Frame preset"
+      value={match && !match.landscape ? match.preset.id : ''}
+      onKeyDown={(e) => e.stopPropagation()}
+      onChange={(e) => {
+        const preset = presetById(e.target.value);
+        if (preset) resizeFramesToPreset(editor, frames.map((frame) => frame.id), preset);
+      }}
+    >
+      <option value="">{sizes.size === 1 ? (match ? `${match.preset.name} (landscape)` : 'Custom') : 'Mixed'}</option>
+      {FRAME_PRESET_CATEGORIES.map((category) => (
+        <optgroup key={category} label={category}>
+          {presetsIn(category).map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {preset.name} ({preset.width}×{preset.height})
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
+
 export function Inspector() {
   const editor = useEditor();
   useDocumentRevision();
   const selection = useEditorState((s) => s.selection);
+  const tool = useEditorState((s) => s.tool);
   const nodes = sceneNodes(editor.doc, selection);
 
   return (
     <div className={styles.inspector} data-testid="inspector">
       {nodes.length === 0 ? (
         <>
+          {tool === 'frame' && <FramePresetsSection />}
           <PageSection />
           <LocalStylesSection />
         </>
@@ -780,6 +849,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             }}
           />
         )}
+        {frames.length === nodes.length && <FramePresetSelect frames={frames} />}
         {frames.length === nodes.length && (
           <label className={styles.checkbox}>
             <input

@@ -399,3 +399,39 @@
   background: repeating-conic-gradient(var(--border) 0 25%, transparent 0 50%) 0 0 / 12px 12px;
   object-fit: contain;
 }
+
+.presetCategory > summary {
+  padding: var(--space-1) 0;
+  cursor: pointer;
+  font-weight: var(--weight-medium);
+}
+
+.presetList {
+  display: flex;
+  flex-direction: column;
+  margin: 0 0 var(--space-1);
+  padding: 0;
+  list-style: none;
+}
+
+.presetButton {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.presetButton:hover {
+  background: var(--bg-hover);
+}
+
+.presetSize {
+  color: var(--fg-secondary);
+}

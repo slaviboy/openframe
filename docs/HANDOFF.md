@@ -72,10 +72,23 @@ This file is how work continues after a pause (for example, a usage limit). Read
   - Inline preview (the commit after selecting connections):
     - ⇧Space or Preview opens `InlinePreview`, `PresentationView` with `inline`
     - it follows edits and the canvas selection, has Follow prototype, and keeps its keys while focused
+  - Frame presets (the commit after inline preview, Frames row):
+    - the `src/core/document/frame-presets.ts` catalog
+    - the Frame tool's preset list, and the Frame preset dropdown
 
 ## In progress (uncommitted)
 
-1. **Device and background settings.** Starting: the prototype settings in the Prototype tab with nothing selected (device, orientation, background color), used by presentation view and inline preview.
+1. **Device and background settings.** Started, uncommitted, and builds on the committed frame presets:
+   - `prototypeDevice` and `prototypeBackground` on the page (`src/core/schema/document.ts`)
+   - `setPrototypeDevice` and `setPrototypeBackground` in `src/editor/commands/prototype.ts`
+
+   Still to do:
+   - `effectiveDevice`: the explicit setting, or the device preset matching the first frame's size
+   - a device layout in `composeScene` (device body, screen clip, scaling the frame to the device width)
+   - the renderer drawing the device body and clip
+   - using the background color in `PresentationView`, with mobile devices only inline
+   - a Prototype settings section in `PrototypePanel` with nothing selected (Device, Orientation, Background)
+   - tests, the matrix row, the gate, commit
 
 **Known flake to investigate:** WebKit's `e2e/presentation.spec.ts` once logged `StorageError: Browser storage is unavailable` when the presentation tab opened IndexedDB while the editor tab held it. It passed on retry.
 
