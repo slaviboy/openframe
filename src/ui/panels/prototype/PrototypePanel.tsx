@@ -50,6 +50,8 @@ import type { Color, OverlaySettings, PrototypeAction, PrototypeEasing, Prototyp
 import { addFlowStartingPoint, addInteraction, removeFlowStartingPoint, removeInteraction, setOverflowDirection, setOverlaySettings, setPrototypeBackground, setPrototypeDevice, setScrollBehavior, updateFlowStartingPoint, updateInteraction } from '@/editor/commands/prototype';
 import { DEVICE_CATEGORIES, presetsIn } from '@/core/document/frame-presets';
 import { effectiveDevice } from '@/core/prototype/device';
+import { parseExpression } from '@/core/prototype/expressions';
+import { collectionVariables, isVariableCollection, localCollections } from '@/core/variables/document';
 import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
 import { needsBiggerContent, OVERFLOW_DIRECTIONS, OVERFLOW_LABELS, overflowOf, SCROLL_BEHAVIOR_LABELS, SCROLL_BEHAVIORS, scrollFrameOf, type OverflowDirection, type ScrollBehavior } from '@/core/prototype/scroll';
 import type { Editor } from '@/editor/editor';
@@ -213,6 +215,9 @@ function ActionFields({ editor, hotspotId, action, suffix, onChange, onRemove }:
           }}
         />
       )}
+      {action.type === 'SET_VARIABLE' && <SetVariableFields editor={editor} action={action} suffix={suffix} onChange={onChange} />}
+      {action.type === 'SET_VARIABLE_MODE' && <SetVariableModeFields editor={editor} action={action} suffix={suffix} onChange={onChange} />}
+      {action.type === 'CONDITIONAL' && <ConditionalFields editor={editor} hotspotId={hotspotId} action={action} suffix={suffix} onChange={onChange} />}
       {action.type === 'NODE' && (
         <>
           <select className={primitives.select} aria-label={`Destination${suffix}`} value={action.destinationId ?? ''} onKeyDown={stopKeys} onChange={(e) => onChange({ ...action, destinationId: e.target.value || null })}>
@@ -242,6 +247,130 @@ function ActionFields({ editor, hotspotId, action, suffix, onChange, onRemove }:
           )}
         </>
       )}
+    </div>
+  );
+}
+
+const isValidExpression = (text: string): boolean => {
+  try {
+    parseExpression(text);
+    return true;
+  } catch {
+    return false;
+  }
+};
+const HEX_COLOR = /^#?[0-9a-f]{6}([0-9a-f]{2})?$/i;
+
+/** An expression (or, for colors, a hex code) typed and committed on Enter or blur, outlined in red while it isn't valid. */
+function ExpressionInput({ label, value, color = false, onCommit }: { label: string; value: string; color?: boolean; onCommit: (value: string) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const text = draft ?? value;
+  const valid = text.trim() === '' || (color ? HEX_COLOR.test(text.trim()) : isValidExpression(text));
+  return (
+    <input
+      className={`${primitives.textInput} ${valid ? '' : styles.invalid}`}
+      aria-label={label}
+      aria-invalid={!valid || undefined}
+      placeholder={color ? '#000000' : 'e.g. {count} + 1'}
+      value={text}
+      spellCheck={false}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (draft !== null && draft !== value) onCommit(draft);
+        setDraft(null);
+      }}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') e.currentTarget.blur();
+      }}
+    />
+  );
+}
+
+/** Set variable: the variable to set and the expression its new value comes from (a hex code for colors). */
+function SetVariableFields({ editor, action, suffix, onChange }: { editor: Editor; action: Extract<PrototypeAction, { type: 'SET_VARIABLE' }>; suffix: string; onChange: (action: PrototypeAction) => void }) {
+  const variable = action.variableId ? editor.doc.get(action.variableId) : undefined;
+  const color = variable?.type === 'VARIABLE' && variable.resolvedType === 'COLOR';
+  return (
+    <>
+      <select className={primitives.select} aria-label={`Variable${suffix}`} value={action.variableId ?? ''} onKeyDown={stopKeys} onChange={(e) => onChange({ ...action, variableId: e.target.value || null })}>
+        <option value="">Choose a variable</option>
+        {localCollections(editor.doc).map((collection) => (
+          <optgroup key={collection.id} label={collection.name}>
+            {collectionVariables(editor.doc, collection.id).map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.name}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+      <ExpressionInput label={`Value${suffix}`} value={action.expression} color={color} onCommit={(expression) => onChange({ ...action, expression })} />
+    </>
+  );
+}
+
+/** Set variable mode: the collection and the mode the page switches it to. */
+function SetVariableModeFields({ editor, action, suffix, onChange }: { editor: Editor; action: Extract<PrototypeAction, { type: 'SET_VARIABLE_MODE' }>; suffix: string; onChange: (action: PrototypeAction) => void }) {
+  const collection = action.collectionId ? editor.doc.get(action.collectionId) : undefined;
+  return (
+    <>
+      <select className={primitives.select} aria-label={`Collection${suffix}`} value={action.collectionId ?? ''} onKeyDown={stopKeys} onChange={(e) => onChange({ ...action, collectionId: e.target.value || null, modeId: null })}>
+        <option value="">Choose a collection</option>
+        {localCollections(editor.doc).map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.name}
+          </option>
+        ))}
+      </select>
+      {isVariableCollection(collection) && (
+        <select className={primitives.select} aria-label={`Mode${suffix}`} value={action.modeId ?? ''} onKeyDown={stopKeys} onChange={(e) => onChange({ ...action, modeId: e.target.value || null })}>
+          <option value="">Choose a mode</option>
+          {collection.modes.map((mode) => (
+            <option key={mode.modeId} value={mode.modeId}>
+              {mode.name}
+            </option>
+          ))}
+        </select>
+      )}
+    </>
+  );
+}
+
+/** Conditional: the If condition and its actions, and the Else actions that run when it doesn't hold. */
+function ConditionalFields({ editor, hotspotId, action, suffix, onChange }: { editor: Editor; hotspotId: Id; action: Extract<PrototypeAction, { type: 'CONDITIONAL' }>; suffix: string; onChange: (action: PrototypeAction) => void }) {
+  const setBlock = (index: number, block: (typeof action.blocks)[number]) => onChange({ ...action, blocks: action.blocks.map((existing, i) => (i === index ? block : existing)) });
+  return (
+    <div className={styles.conditional}>
+      {action.blocks.map((block, index) => {
+        const branch = block.condition === null ? 'else' : 'if';
+        return (
+          <div key={index} className={styles.block} role="group" aria-label={`${branch === 'if' ? 'If' : 'Else'}${suffix}`}>
+            {block.condition === null ? (
+              <span className={styles.fieldLabel}>Else</span>
+            ) : (
+              <label className={styles.field}>
+                <span className={styles.fieldLabel}>If</span>
+                <ExpressionInput label={`Condition${suffix}`} value={block.condition} onCommit={(condition) => setBlock(index, { ...block, condition })} />
+              </label>
+            )}
+            {block.actions.map((nested, i) => (
+              <ActionFields
+                key={i}
+                editor={editor}
+                hotspotId={hotspotId}
+                action={nested}
+                suffix={`${suffix} ${branch} ${i + 1}`}
+                onChange={(next) => setBlock(index, { ...block, actions: block.actions.map((existing, j) => (j === i ? next : existing)) })}
+                onRemove={() => setBlock(index, { ...block, actions: block.actions.filter((_, j) => j !== i) })}
+              />
+            ))}
+            <button type="button" className={styles.textButton} disabled={block.actions.length >= 32} onClick={() => setBlock(index, { ...block, actions: [...block.actions, makeAction('NAVIGATE')] })}>
+              {branch === 'if' ? 'Add if action' : 'Add else action'}
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }

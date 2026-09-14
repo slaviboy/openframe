@@ -46,7 +46,7 @@ export const TRIGGER_LABELS: Readonly<Record<TriggerType, string>> = {
 /** Triggers a layer can have any number of; it can have each other trigger once. */
 export const REPEATABLE_TRIGGERS: ReadonlySet<TriggerType> = new Set(['ON_KEY_DOWN', 'ON_DRAG']);
 
-export const ACTION_KINDS: readonly ActionKind[] = ['NAVIGATE', 'BACK', 'SCROLL_TO', 'URL', 'OVERLAY', 'SWAP', 'CLOSE', 'CHANGE_TO'];
+export const ACTION_KINDS: readonly ActionKind[] = ['NAVIGATE', 'BACK', 'SCROLL_TO', 'URL', 'OVERLAY', 'SWAP', 'CLOSE', 'CHANGE_TO', 'SET_VARIABLE', 'SET_VARIABLE_MODE', 'CONDITIONAL'];
 
 export const ACTION_LABELS: Readonly<Record<ActionKind, string>> = {
   NAVIGATE: 'Navigate to',
@@ -57,6 +57,9 @@ export const ACTION_LABELS: Readonly<Record<ActionKind, string>> = {
   SWAP: 'Swap overlay',
   CLOSE: 'Close overlay',
   CHANGE_TO: 'Change to',
+  SET_VARIABLE: 'Set variable',
+  SET_VARIABLE_MODE: 'Set variable mode',
+  CONDITIONAL: 'Conditional',
 };
 
 /**
@@ -154,6 +157,10 @@ export const actionKind = (action: PrototypeAction): ActionKind => (action.type 
 export function makeAction(kind: ActionKind, previous?: PrototypeAction): PrototypeAction {
   if (kind === 'BACK' || kind === 'CLOSE') return { type: kind };
   if (kind === 'URL') return { type: 'URL', url: previous?.type === 'URL' ? previous.url : '' };
+  if (kind === 'SET_VARIABLE') return { type: kind, variableId: null, expression: '' };
+  if (kind === 'SET_VARIABLE_MODE') return { type: kind, collectionId: null, modeId: null };
+  // A Conditional starts with an empty `if` and an empty `else`.
+  if (kind === 'CONDITIONAL') return { type: kind, blocks: [{ condition: '', actions: [] }, { condition: null, actions: [] }] };
   const node = previous?.type === 'NODE' ? previous : null;
   let transition: PrototypeTransition = node?.transition ?? { type: 'INSTANT' };
   // Scroll to is instant or animated.
@@ -292,6 +299,7 @@ export function reactionSummary(store: DocumentStore, reaction: Reaction): strin
   let target = '';
   if (first?.type === 'NODE') target = first.destinationId ? (store.get(first.destinationId)?.name ?? 'None') : 'None';
   if (first?.type === 'URL') target = first.url || 'No link';
+  if (first?.type === 'SET_VARIABLE') target = first.variableId ? (store.get(first.variableId)?.name ?? 'None') : 'None';
   const more = reaction.actions.length > 1 ? ` +${reaction.actions.length - 1}` : '';
   return `${TRIGGER_LABELS[reaction.trigger.type]}: ${action ? ACTION_LABELS[action] : ''}${target ? ` ${target}` : ''}${more}`;
 }

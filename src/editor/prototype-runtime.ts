@@ -17,27 +17,46 @@
 
 import { DocumentStore } from '@/core/document/store';
 import { IdGenerator, type Id } from '@/core/ids/ids';
+import { hasVariableChanges, NO_VARIABLES, type PrototypeVariables } from '@/core/prototype/variables-runtime';
 import { SceneIndex } from '@/core/scene/scene-index';
 import { swapInstanceFor } from './commands/swap-instance';
+import { setExplicitVariableMode, setVariableValue } from './commands/variables';
 import { Editor } from './editor';
 
-/** The document a prototype plays after interactive components switched variants, with its scene index. */
+/** The document a prototype plays after interactive components switched variants or interactions set variables, with its scene index. */
 export interface RuntimeDocument {
   readonly doc: DocumentStore;
   readonly index: SceneIndex;
 }
 
+/** What a prototype changed while playing: instances switched to variants (in order), and variables and modes. */
+export interface RuntimeChanges {
+  readonly variants: ReadonlyArray<readonly [instanceId: Id, variantId: Id]>;
+  readonly variables: PrototypeVariables;
+}
+
 /**
- * Interactive components: the document with an instance switched to another variant of its component set, as the
- * variant swap does in the editor (keeping the instance's changes on matching layers). The file itself isn't changed:
- * the swap happens on a copy (nodes are immutable, so copying shares them). Null when the instance can't switch.
+ * The document with a prototype's changes applied, as the editor would apply them: instances swapped to their variants
+ * (keeping their changes on matching layers), the page's variable modes switched, and variables given their values —
+ * so the layers bound to them follow. The file isn't changed: this happens on a copy (nodes are immutable, so the copy
+ * shares them). Null when there is nothing to change.
  */
-export function changeVariant(source: DocumentStore, pageId: Id, instanceId: Id, variantId: Id, textLayout?: Editor['textLayout']): RuntimeDocument | null {
+export function buildRuntime(source: DocumentStore, pageId: Id, changes: RuntimeChanges, textLayout?: Editor['textLayout']): RuntimeDocument | null {
+  if (changes.variants.length === 0 && !hasVariableChanges(changes.variables)) return null;
   const doc = new DocumentStore(source.meta, [...source.nodes()]);
   const scratch = new Editor({ doc, ids: new IdGenerator('prototype'), pageId });
   if (textLayout) scratch.setTextLayout(textLayout);
-  if (!swapInstanceFor(scratch, instanceId, variantId)) return null;
+  for (const [instanceId, variantId] of changes.variants) swapInstanceFor(scratch, instanceId, variantId);
+  for (const [collectionId, modeId] of Object.entries(changes.variables.pageModes)) setExplicitVariableMode(scratch, [pageId], collectionId, modeId);
+  for (const [variableId, modes] of Object.entries(changes.variables.values)) {
+    for (const [modeId, value] of Object.entries(modes)) setVariableValue(scratch, variableId, modeId, value);
+  }
   const index = new SceneIndex(doc);
   index.ensure(pageId);
   return { doc, index };
+}
+
+/** Interactive components: the document with one instance switched to another variant of its component set. */
+export function changeVariant(source: DocumentStore, pageId: Id, instanceId: Id, variantId: Id, textLayout?: Editor['textLayout']): RuntimeDocument | null {
+  return buildRuntime(source, pageId, { variants: [[instanceId, variantId]], variables: NO_VARIABLES }, textLayout);
 }

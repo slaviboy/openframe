@@ -122,8 +122,29 @@ export const PrototypeTriggerSchema = z.union([
 ]);
 export type PrototypeTrigger = z.infer<typeof PrototypeTriggerSchema>;
 
+/** An action of a Conditional: its blocks in order — `if` conditions, then an optional `else` (a null condition). */
+export interface ConditionalAction {
+  type: 'CONDITIONAL';
+  blocks: { condition: string | null; actions: PrototypeAction[] }[];
+}
+
+/** Set variable: the variable (null until chosen) and the expression its new value comes from. */
+const SetVariableActionSchema = z.object({ type: z.literal('SET_VARIABLE'), variableId: IdSchema.nullable(), expression: z.string().max(10_000) });
+/** Set variable mode: the collection and the mode the page switches it to (null until chosen). */
+const SetVariableModeActionSchema = z.object({ type: z.literal('SET_VARIABLE_MODE'), collectionId: IdSchema.nullable(), modeId: z.string().min(1).max(64).nullable() });
+const ConditionalActionSchema = z.object({
+  type: z.literal('CONDITIONAL'),
+  blocks: z
+    .array(z.object({ condition: z.string().max(10_000).nullable(), actions: z.array(z.lazy(() => PrototypeActionSchema)).max(32) }))
+    .min(1)
+    .max(16),
+});
+
 /** What an interaction does. */
-export const PrototypeActionSchema = z.union([
+export const PrototypeActionSchema: z.ZodType<PrototypeAction> = z.union([
+  SetVariableActionSchema,
+  SetVariableModeActionSchema,
+  ConditionalActionSchema,
   z.object({
     type: z.literal('NODE'),
     /** CHANGE_TO (interactive components) switches the instance the hotspot is in to the destination variant. */
@@ -137,7 +158,19 @@ export const PrototypeActionSchema = z.union([
   z.object({ type: z.enum(['BACK', 'CLOSE']) }),
   z.object({ type: z.literal('URL'), url: z.string().max(4096) }),
 ]);
-export type PrototypeAction = z.infer<typeof PrototypeActionSchema>;
+export type PrototypeAction =
+  | {
+      type: 'NODE';
+      navigation: 'NAVIGATE' | 'OVERLAY' | 'SWAP' | 'SCROLL_TO' | 'CHANGE_TO';
+      destinationId: string | null;
+      transition: PrototypeTransition;
+      resetScrollPosition?: boolean | undefined;
+    }
+  | { type: 'BACK' | 'CLOSE' }
+  | { type: 'URL'; url: string }
+  | z.infer<typeof SetVariableActionSchema>
+  | z.infer<typeof SetVariableModeActionSchema>
+  | ConditionalAction;
 
 /** A prototype interaction: a trigger and the actions it runs, in order. */
 export const ReactionSchema = z.object({

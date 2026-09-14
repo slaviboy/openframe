@@ -57,7 +57,8 @@ import { toEasing, topLevelFrame, transitionDurationMs } from '@/core/prototype/
 import { clampScroll, scrolledFrameStore, scrollFrameOf, scrollLimits, wheelScrollTarget } from '@/core/prototype/scroll';
 import type { Vec2 } from '@/core/math/vec';
 import { SceneIndex } from '@/core/scene/scene-index';
-import { changeVariant, type RuntimeDocument } from '@/editor/prototype-runtime';
+import { buildRuntime, type RuntimeDocument } from '@/editor/prototype-runtime';
+import { NO_VARIABLES } from '@/core/prototype/variables-runtime';
 import type { Reaction, SceneNode } from '@/core/schema/document';
 import { Menu, type MenuEntry } from '../primitives/Menu';
 import type { Box } from '../primitives/position';
@@ -145,6 +146,8 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
   const [scrollLabel, setScrollLabel] = useState('');
   /** Instances interactive components switched, as "instance=variant" (shown on the stage for tests). */
   const [variantLabel, setVariantLabel] = useState('');
+  /** Variables set while playing, as "name=value" (shown on the stage for tests). */
+  const [variableLabel, setVariableLabel] = useState('');
   const closeMenu = () => setMenuAnchor(null);
 
   // Mutable playback state the draw loop and input handlers share.
@@ -171,6 +174,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     /** Instances interactive components switched, and the variant each shows. */
     variantChanges: new Map<Id, Id>(),
     variantLabel: '',
+    variableLabel: '',
     deviceScaling: null as ScalingMode | null,
     frame: 0,
     box: '',
@@ -188,6 +192,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     (step: PlayerStep) => {
       const state = live.current;
       const now = performance.now();
+      let rebuild = false;
       for (const effect of step.effects) {
         if (effect.type === 'transition') {
           const duration = transitionDurationMs(effect.transition);
@@ -201,13 +206,8 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
           }
         } else if (effect.type === 'changeTo') {
           // Interactive components: the instance switches variant in the prototype's copy of the document (the file isn't changed).
-          const next = changeVariant(state.runtime?.doc ?? editor.doc, pageId, effect.instanceId, effect.variantId, editor.textLayout);
-          if (next) {
-            state.variantChanges.set(effect.instanceId, effect.variantId);
-            state.runtime = next;
-            state.renderer?.setDocument(next);
-            setRuntime(next);
-          }
+          state.variantChanges.set(effect.instanceId, effect.variantId);
+          rebuild = true;
         } else if (effect.type === 'openUrl') {
           window.open(effect.url, '_blank', 'noopener,noreferrer');
         } else if (effect.type === 'scrollTo' && scrollFrameOf(doc, effect.nodeId)) {
@@ -232,6 +232,13 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
             if (!state.scrolling) state.scrollY = to;
           }
         }
+      }
+      // Switched variants and variables set play in a copy of the document with those changes (bound layers follow).
+      if (rebuild || step.state.variables !== state.player?.variables) {
+        const next = buildRuntime(editor.doc, pageId, { variants: [...state.variantChanges], variables: step.state.variables ?? NO_VARIABLES }, editor.textLayout);
+        state.runtime = next;
+        state.renderer?.setDocument(next);
+        setRuntime(next);
       }
       // Follow prototype: the canvas selection follows the screen the preview shows.
       if (state.follow && step.state && step.state.frameId !== state.player?.frameId) editor.state.select([step.state.frameId]);
@@ -366,6 +373,13 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
       if (variants !== state.variantLabel) {
         state.variantLabel = variants;
         setVariantLabel(variants);
+      }
+      const variables = Object.entries(current.variables?.values ?? {})
+        .map(([id, modes]) => `${editor.doc.get(id)?.name ?? id}=${Object.values(modes).map((value) => (typeof value === 'object' ? 'color' : String(value))).join('|')}`)
+        .join(';');
+      if (variables !== state.variableLabel) {
+        state.variableLabel = variables;
+        setVariableLabel(variables);
       }
       const box = `${scene.screen.x},${scene.screen.y},${scene.screen.width},${scene.screen.height}`;
       if (box !== state.box) {
@@ -648,6 +662,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
           data-scroll={scrollLabel}
           data-device={device?.preset.name}
           data-variants={variantLabel}
+          data-variables={variableLabel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

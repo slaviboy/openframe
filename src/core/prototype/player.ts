@@ -22,6 +22,7 @@ import type { Vec2 } from '../math/vec';
 import { nodeContainsLocal, type SceneIndex } from '../scene/scene-index';
 import type { PrototypeAction, PrototypeTransition, Reaction, SceneNode } from '../schema/document';
 import { topLevelFrame, type TriggerType } from './reactions';
+import { applySetVariable, applySetVariableMode, conditionHolds, NO_VARIABLES, type PrototypeVariables } from './variables-runtime';
 
 /**
  * The prototype player: what presentation view shows and how interactions change it. Pure state: the view renders the
@@ -35,6 +36,8 @@ export interface PlayerState {
   readonly history: readonly Id[];
   /** Open overlays, bottom to top. */
   readonly overlays: readonly Id[];
+  /** Variables set and modes switched by interactions while playing. Absent until one is. */
+  readonly variables?: PrototypeVariables;
   /** While hovering or pressing: the state to return to when the pointer leaves the hotspot or is released. */
   readonly temporary: { readonly nodeId: Id; readonly trigger: 'ON_HOVER' | 'ON_PRESS'; readonly restore: PlayerState } | null;
 }
@@ -169,6 +172,24 @@ export function instanceToChange(store: DocumentStore, hotspotId: Id, variantId:
 
 function runAction(store: DocumentStore, state: PlayerState, action: PrototypeAction, effects: PlayerEffect[], hotspotId: Id | null): PlayerState {
   switch (action.type) {
+    case 'SET_VARIABLE': {
+      const next = applySetVariable(store, state.variables ?? NO_VARIABLES, action, hotspotId);
+      return next ? { ...state, variables: next } : state;
+    }
+    case 'SET_VARIABLE_MODE': {
+      const next = applySetVariableMode(store, state.variables ?? NO_VARIABLES, action);
+      return next ? { ...state, variables: next } : state;
+    }
+    case 'CONDITIONAL': {
+      // The first block whose condition holds (or the else block) runs its actions in order.
+      for (const block of action.blocks) {
+        if (block.condition !== null && !conditionHolds(store, state.variables ?? NO_VARIABLES, block.condition, hotspotId)) continue;
+        let next = state;
+        for (const nested of block.actions) next = runAction(store, next, nested, effects, hotspotId);
+        return next;
+      }
+      return state;
+    }
     case 'URL':
       if (SAFE_LINK.test(action.url.trim())) effects.push({ type: 'openUrl', url: action.url.trim() });
       return state;

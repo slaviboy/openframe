@@ -87,10 +87,14 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - timed autosave flushes catch their errors and retry when storage is briefly unavailable
     - the lastPageId write is best effort
     - the presentation tab retries opening storage
+  - Variables in prototypes (the commit after the storage fix):
+    - Set variable, Set variable mode and Conditional with expressions (`src/core/prototype/variables-runtime.ts`)
+    - `buildRuntime` applies them to a copy so bound layers follow
+    - the Prototype tab fields
 
 ## In progress (uncommitted)
 
-1. **Variables in prototypes.** Next: Set variable, Set variable mode and Conditional actions with expressions (the evaluator is in `src/core/prototype/expressions.ts`), running in presentation view against a runtime copy of the variables.
+1. **Connections from main components and sections as destinations.** Next: interactions on a main component carry to its instances (shown on instances); sections can be Navigate to destinations.
 
 ## Next (M10, in order)
 
@@ -98,7 +102,6 @@ This file is how work continues after a pause (for example, a usage limit). Read
 2. State memorization of scroll position; Animate matching layers on the moving transitions.
 4. Device and background settings; the prototype settings panel with nothing selected.
 5. Connections from main components (instances inherit them), sections as destinations.
-6. Set variable, set variable mode, conditionals and expressions in actions (the evaluator exists in `src/core/prototype/expressions.ts`).
 7. Video fills with video triggers and actions (M10 video row).
 8. Accessible prototypes, manual overlay positions, rich-text flow descriptions, gamepad triggers.
 
