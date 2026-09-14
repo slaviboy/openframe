@@ -53,7 +53,7 @@ import type { GuideRef } from '../stores/editor-store';
 import { RULER_SIZE, rulerTicks } from './rulers';
 import { worldToScreen } from '../viewport/viewport';
 import type { ChromeTheme } from './chrome-theme';
-import { forEachSection, handlePoint, isLineFrame, screenQuad, sectionTitleRect, selectionFrame, type SelectionFrame, addVariantButtonRect } from './selection-geometry';
+import { forEachSection, handlePoint, isLineFrame, screenQuad, sectionTitleRect, selectionFrame, type SelectionFrame, addVariantButtonRect, ADD_INSTANCES_LABEL, addInstancesButtonRect, hoveredInstanceSlots } from './selection-geometry';
 import { variantsOf } from '@/core/document/variants';
 import { slotIndicators } from '@/core/document/component-properties';
 
@@ -141,6 +141,11 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
   }
   // Slots: a pink box around the slots of the hovered instance, and around empty slots set to show.
   for (const slot of slotIndicators(editor.doc, editor.pageId, state.hoverId)) outlineNode(ctx, editor, slot, theme.slot, 1);
+  // Hovering an instance shows Add instances in the top-left corner of each of its slots.
+  for (const slot of hoveredInstanceSlots(editor)) {
+    const pill = addInstancesButtonRect(editor, slot);
+    if (pill) drawAddInstancesButton(ctx, pill, theme);
+  }
 
   if (state.selection.length > 1) {
     for (const id of state.selection) outlineNode(ctx, editor, id, theme.selection, theme.selectionWidth);
@@ -1025,6 +1030,18 @@ function drawAddVariantButton(ctx: CanvasRenderingContext2D, rect: { x: number; 
   ctx.moveTo(cx, cy - 5);
   ctx.lineTo(cx, cy + 5);
   ctx.stroke();
+}
+
+/** The pink Add instances pill in a slot of the hovered instance. */
+function drawAddInstancesButton(ctx: CanvasRenderingContext2D, rect: { x: number; y: number; width: number; height: number }, theme: ChromeTheme): void {
+  ctx.font = theme.font;
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = theme.slot;
+  ctx.beginPath();
+  ctx.roundRect(Math.round(rect.x), Math.round(rect.y), Math.round(rect.width), rect.height, 4);
+  ctx.fill();
+  ctx.fillStyle = theme.labelText;
+  ctx.fillText(ADD_INSTANCES_LABEL, Math.round(rect.x) + 8, rect.y + rect.height / 2 + 0.5);
 }
 
 function truncate(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {

@@ -23,6 +23,7 @@ import type { Editor } from '../editor';
 import { HANDLE_AXES, type HandleId } from '../interactions/transform';
 import { worldToScreen } from '../viewport/viewport';
 import { isComponentSet } from '@/core/document/variants';
+import { instanceSlotOf } from '@/core/document/instances';
 
 export interface SelectionFrame {
   /** Maps the unit-less box (0..width, 0..height) to world space. */
@@ -156,6 +157,52 @@ export function addVariantButtonRect(editor: Editor): Rect | null {
 export function hitAddVariantButton(editor: Editor, screen: Vec2): boolean {
   const r = addVariantButtonRect(editor);
   return r !== null && screen.x >= r.x && screen.x <= r.x + r.width && screen.y >= r.y && screen.y <= r.y + r.height;
+}
+
+/** Height of the Add instances pill in a slot of the hovered instance. */
+export const ADD_INSTANCES_BUTTON_HEIGHT = 20;
+const ADD_INSTANCES_INSET = 8;
+export const ADD_INSTANCES_LABEL = 'Add instances';
+
+/** The slots of the instance under the pointer (the nearest instance around the hovered layer), which show Add instances. */
+export function hoveredInstanceSlots(editor: Editor): Id[] {
+  let instance: Id | null = null;
+  for (let cur: Id | null = editor.state.getSnapshot().hoverId; cur !== null; cur = editor.doc.parentOf(cur)) {
+    const node = editor.doc.get(cur);
+    if (!node || node.type === 'PAGE' || node.type === 'DOCUMENT') break;
+    if (node.type === 'FRAME' && node.instance) {
+      instance = cur;
+      break;
+    }
+  }
+  if (instance === null) return [];
+  return [...editor.doc.descendants(instance, false)].filter((id) => instanceSlotOf(editor.doc, id) === id);
+}
+
+/**
+ * Screen rectangle of the Add instances pill inside the top-left corner of a slot of an instance, or null when the slot is
+ * too small on screen to show it.
+ */
+export function addInstancesButtonRect(editor: Editor, slotId: Id): Rect | null {
+  const node = editor.doc.get(slotId);
+  if (node?.type !== 'FRAME') return null;
+  const v = editor.state.viewport;
+  const world = editor.scene.worldTransform(slotId);
+  const origin = worldToScreen(v, apply(world, { x: 0, y: 0 }));
+  const widthPx = node.size.width * Math.hypot(world.a, world.b) * v.zoom;
+  const heightPx = node.size.height * Math.hypot(world.c, world.d) * v.zoom;
+  const width = titleTextWidth(ADD_INSTANCES_LABEL) + SECTION_TITLE_PADDING * 2;
+  if (widthPx < width + ADD_INSTANCES_INSET * 2 || heightPx < ADD_INSTANCES_BUTTON_HEIGHT + ADD_INSTANCES_INSET * 2) return null;
+  return { x: origin.x + ADD_INSTANCES_INSET, y: origin.y + ADD_INSTANCES_INSET, width, height: ADD_INSTANCES_BUTTON_HEIGHT };
+}
+
+/** The slot whose Add instances pill is under a screen point, among the slots of the hovered instance. */
+export function hitAddInstancesButton(editor: Editor, screen: Vec2): Id | null {
+  for (const slot of hoveredInstanceSlots(editor)) {
+    const r = addInstancesButtonRect(editor, slot);
+    if (r && screen.x >= r.x && screen.x <= r.x + r.width && screen.y >= r.y && screen.y <= r.y + r.height) return slot;
+  }
+  return null;
 }
 
 /** Visits sections top-down in paint order (page children first, nested sections after their parent). */

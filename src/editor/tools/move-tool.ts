@@ -54,7 +54,7 @@ import {
   handleCursor,
   hitHandle,
   hitRotationCorner,
-  hitAddVariantButton, hitSectionTitle,
+  hitAddInstancesButton, hitAddVariantButton, hitSectionTitle,
   isLineFrame,
   rotateCursor,
   selectionFrame,
@@ -437,6 +437,12 @@ export class MoveTool implements Tool {
 
     // Section titles select (and drag) their section; double-click renames it.
     editor.scene.ensure(editor.pageId);
+    // Add instances in a slot of the hovered instance.
+    const slotButton = hitAddInstancesButton(editor, p.screen);
+    if (slotButton) {
+      editor.state.openAddInstances(slotButton);
+      return;
+    }
     // The + below a selected component set adds a variant.
     if (hitAddVariantButton(editor, p.screen)) {
       editor.commands.run('object.addVariant');
