@@ -35,6 +35,7 @@ import { setSnapToPixelGrid } from '@/editor/interactions/transform';
 import { StorageError } from '@/platform/idb/persistence';
 import { CanvasHost, type CanvasContextMenu } from './canvas/CanvasHost';
 import { LinkPopover } from './canvas/LinkPopover';
+import { FlowRenamePopover } from './canvas/FlowRenamePopover';
 import { LayoutValuePopover } from './canvas/LayoutValuePopover';
 import { spellingEntries } from './menus/spelling-menu';
 import { EmojiSuggestions } from './canvas/EmojiSuggestions';
@@ -395,6 +396,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
         <CanvasHost editor={editor} tools={tools} theme={theme} rulers={prefs.rulers} pixelGrid={prefs.pixelGrid} layoutGuides={prefs.layoutGuides} maskOutlines={prefs.maskOutlines} outlines={outlines} onContextMenu={openContextMenu} onDropFiles={dropFiles} />
         {editorState.textEdit && <LinkPopover />}
         {editorState.layoutValueEdit && <LayoutValuePopover />}
+        {editorState.flowRename && <FlowRenamePopover />}
         {editorState.textEdit && <EmojiSuggestions />}
         {editorState.dialog === 'missingFonts' && <MissingFontsDialog editor={editor} onClose={closeDialog} />}
       </EditorShell>

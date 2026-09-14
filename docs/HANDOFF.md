@@ -217,6 +217,9 @@ This file is how work continues after a pause (for example, a usage limit). Read
   - Share prototype in presentation view (the commit after the flow tag):
     - a Share prototype toolbar button opens a menu whose Copy link copies `presentUrl` built from the tab's own `presentParams`, with the flow selected (`start`) as the node
     - "Link copied" is a polite live region, not a second `role="status"` (presentation.spec reads the footer's status)
+  - Renaming a flow on its canvas tag (the commit after Share prototype):
+    - double-clicking a tag's name sets `flowRename` in the editor store (the move tool's `flow-tag` gesture, `clickCount >= 2`)
+    - `FlowRenamePopover` (`src/ui/canvas/FlowRenamePopover.tsx`) sits on the tag at `flowTagRect`; Enter calls `updateFlowStartingPoint`, Escape or blur closes
 
 ## In progress (uncommitted)
 
@@ -227,7 +230,7 @@ This file is how work continues after a pause (for example, a usage limit). Read
 1. The pending sub-items left in the M10 rows of `docs/FEATURE_MATRIX.md`:
    - 160 Video / GIF fills: video crop, video from the fill picker, GIF label next to the dimensions, GIF metadata on export
    - 200 Interactive components: the Variant interactions section, animating Change to, sharing states between matching instances
-   - 237 Flows: WYSIWYG description editing, renaming a flow by double-clicking its canvas tag
+   - 237 Flows: WYSIWYG description editing
    - 239 Variables: extended collections' modes, library variables, variable picker in expressions
    - 240 Presentation view: responsive scaling, device frames, comments, sharing links
    - 241 Inline preview: flow preview icon, Responsive, Resize to 100%, Respect aspect ratio

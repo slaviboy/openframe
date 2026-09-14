@@ -139,6 +139,11 @@ export function setFlowTags(editor: Editor, tags: readonly FlowTagRect[]): void 
   flowTags.set(editor, tags);
 }
 
+/** Where a flow starting point's tag was last drawn on screen. */
+export function flowTagRect(editor: Editor, nodeId: Id): Rect | null {
+  return flowTags.get(editor)?.find((tag) => tag.nodeId === nodeId)?.rect ?? null;
+}
+
 /** The flow starting point tag under a screen point, and whether it's on its preview icon or its name. */
 export function flowTagAt(editor: Editor, screen: Vec2): { readonly nodeId: Id; readonly part: 'preview' | 'name' } | null {
   if (editor.state.getSnapshot().rightTab !== 'prototype') return null;

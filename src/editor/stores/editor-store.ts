@@ -104,6 +104,8 @@ export interface EditorState {
   readonly suggested: ReadonlySet<Id>;
   /** The value field open on a spacing handle of the selected auto layout frame, or null. */
   readonly layoutValueEdit: LayoutValueEditRef | null;
+  /** The frame whose flow starting point is being renamed in a field on its canvas tag. */
+  readonly flowRename: Id | null;
   /** Vector edit mode (Return on a vector layer), or null. */
   readonly vectorEdit: VectorEditRef | null;
 }
@@ -192,6 +194,7 @@ export class EditorStore extends Observable<EditorState> {
       textLayoutReady: false,
       suggested: new Set(),
       layoutValueEdit: null,
+      flowRename: null,
       vectorEdit: null,
     });
   }
@@ -349,6 +352,10 @@ export class EditorStore extends Observable<EditorState> {
 
   setVectorEdit(vectorEdit: VectorEditRef | null): void {
     this.setState({ vectorEdit });
+  }
+
+  setFlowRename(flowRename: Id | null): void {
+    this.setState({ flowRename });
   }
 
   setLayoutValueEdit(layoutValueEdit: LayoutValueEditRef | null): void {

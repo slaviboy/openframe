@@ -752,6 +752,8 @@ export class MoveTool implements Tool {
         // Dropped on another top-level frame, the flow starts there; dropped on empty canvas, its starting point is removed.
         if (g.dragged && g.destination) moveFlowStartingPoint(editor, g.nodeId, g.destination);
         else if (g.dragged && g.overEmpty) removeFlowStartingPoint(editor, g.nodeId);
+        // Double-clicking the name renames the flow in a field on the tag.
+        else if (!g.dragged && p.clickCount >= 2) editor.state.setFlowRename(g.nodeId);
         editor.requestRender();
         break;
       case 'layout-handle':

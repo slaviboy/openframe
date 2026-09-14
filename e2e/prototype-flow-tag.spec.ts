@@ -104,3 +104,35 @@ test('Preview in the Flows list opens inline preview at the flow', async ({ page
   await expect(preview).toHaveAttribute('data-ready', 'true');
   await expect(preview).toHaveAttribute('data-screen', 'Frame 2');
 });
+
+test('double-clicking a flow starting point tag renames the flow in a field on the tag', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await drawFrame(page, 350, 200, 'Frame 1');
+  await drawFrame(page, 650, 200, 'Frame 2');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.getByRole('treeitem', { name: 'Frame 1' }).click();
+  await page.getByRole('tab', { name: 'Prototype' }).click();
+  const panel = page.getByRole('tabpanel', { name: 'Prototype' });
+  await panel.getByRole('button', { name: 'Add interaction' }).click();
+  await panel.getByRole('combobox', { name: 'Destination', exact: true }).selectOption({ label: 'Frame 2' });
+  const flowName = panel.getByRole('region', { name: 'Flow starting point' }).getByLabel('Flow name');
+  await expect(flowName).toHaveValue('Flow 1');
+
+  // Escape leaves the name as it was.
+  await page.mouse.dblclick(box.x + 390, box.y + 169);
+  const field = page.getByRole('textbox', { name: 'Rename flow' });
+  await expect(field).toHaveValue('Flow 1');
+  await field.fill('Onboarding');
+  await field.press('Escape');
+  await expect(field).toHaveCount(0);
+  await expect(flowName).toHaveValue('Flow 1');
+
+  // Enter renames the flow.
+  await page.mouse.dblclick(box.x + 390, box.y + 169);
+  await field.fill('Checkout');
+  await field.press('Enter');
+  await expect(field).toHaveCount(0);
+  await page.getByRole('treeitem', { name: 'Frame 1' }).click();
+  await expect(flowName).toHaveValue('Checkout');
+});
