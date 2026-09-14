@@ -45,6 +45,7 @@ import {
   TRANSITION_TYPES,
   TRIGGER_LABELS,
   TRIGGER_TYPES,
+  transitionDurationMs,
   triggerAllowed,
   videoLayerCandidates,
   type ActionKind,
@@ -89,6 +90,7 @@ import { IconButton } from '../../primitives/IconButton';
 import primitives from '../../primitives/primitives.module.css';
 import inspector from '../inspector/Inspector.module.css';
 import styles from './PrototypePanel.module.css';
+import { EasingGraph } from './EasingGraph';
 
 const SPRING_TYPES: ReadonlySet<EasingType> = new Set(['GENTLE', 'QUICK', 'BOUNCY', 'SLOW', 'CUSTOM_SPRING']);
 const MODIFIER_CODES: ReadonlySet<string> = new Set(['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight']);
@@ -199,6 +201,7 @@ function TransitionFields({ transition, suffix, scroll, onChange }: { transition
       {transition.type !== 'INSTANT' && (
         <>
           <EasingFields easing={transition.easing} suffix={suffix} onChange={(easing) => onChange({ ...transition, easing })} />
+          <EasingGraph easing={transition.easing} durationMs={transitionDurationMs(transition)} suffix={suffix} onChange={(easing) => onChange({ ...transition, easing })} />
           {!isSpringEasing(transition.easing) && <CommitNumber label={`Duration (ms)${suffix}`} value={transition.duration} min={1} max={10_000} onCommit={(duration) => onChange({ ...transition, duration })} />}
         </>
       )}

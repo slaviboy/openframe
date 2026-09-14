@@ -185,6 +185,10 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - the connection context menu
     - correction: an earlier commit dropped the overlay badge as undocumented, but the overlays page does describe it
     - dragging an overlay into place isn't documented, so it's off the list
+  - The easing graph and animation preview (the commit after overlay badges):
+    - `easingCurve` / `curveRange` / `clampHandle` in `src/core/anim/easing-curve.ts`
+    - `EasingGraph` in `src/ui/panels/prototype/EasingGraph.tsx`, under the easing fields: drags Bézier handles and custom springs, and plays the preview on hover (`data-playing`)
+    - rows 229, 230, 231, 235 and 243 had no pending notes left and are now Implemented
 
 ## In progress (uncommitted)
 
@@ -192,7 +196,18 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 ## Next (M10, in order)
 
-1. The smaller pending sub-items in the M10 rows:
-   - responsive scaling
+1. The pending sub-items left in the M10 rows of `docs/FEATURE_MATRIX.md`:
+   - 160 Video / GIF fills: video crop, video from the fill picker, GIF label next to the dimensions, GIF metadata on export
+   - 200 Interactive components: the Variant interactions section, animating Change to, sharing states between matching instances
+   - 227 Connections: show only the first of several matching connections
+   - 228 Triggers: On drag dragging through the transition
+   - 233 Smart animate: gradient and image fill blending
+   - 236 State memorization: sharing interactive component and video states between matching layers
+   - 237 Flows: WYSIWYG description editing, starting point badge on the canvas, preview / present / copy links to flows
+   - 239 Variables: extended collections' modes, library variables, variable picker in expressions
+   - 240 Presentation view: responsive scaling, device frames, comments, sharing links
+   - 241 Inline preview: flow preview icon, Responsive, Resize to 100%, Respect aspect ratio
+   - 242 Device settings: device models and the device switcher
+   - 244 Accessible prototypes: the Accessibility settings dialog
 
 **Stop after M10.** When every M10 row is finished and committed, stop and report to the user. Don't start M11 until the user says to continue. After that, M11–M15 follow `docs/FEATURE_MATRIX.md` (the rows marked Planned or In progress) in milestone order.
