@@ -36,7 +36,7 @@ import { addAutoLayout, canAddAutoLayout, canRemoveAutoLayout, removeAutoLayout,
 import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/core/color/color-profile';
 import { beginCrop, cropTarget, endCrop } from '../interactions/crop';
 import { BOOLEAN_NAMES, booleanSelection, canBooleanSelection } from './boolean';
-import { canCreateComponent, createComponent } from './components';
+import { canCreateComponent, canCreateMultipleComponents, createMultipleComponents, createComponent } from './components';
 import { canDetachInstance, detachInstances } from './detach';
 import { canResetOverrides, resetSelectedOverrides } from './reset-overrides';
 import { canGoToMainComponent, canPushChangesToMain, canRestoreMainComponent, goToMainComponent, pushChangesToMain, restoreMainComponent } from './main-component';
@@ -182,6 +182,13 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     shortcuts: ['Mod+Alt+K'],
     enabled: canCreateComponent,
     run: (e) => createComponent(e),
+  },
+  {
+    id: 'object.createMultipleComponents',
+    label: 'Create multiple components',
+    category: 'Object',
+    enabled: canCreateMultipleComponents,
+    run: (e) => createMultipleComponents(e),
   },
   {
     id: 'object.detachInstance',

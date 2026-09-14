@@ -59,7 +59,9 @@ import { canonicalStringify } from '@/core/serialize/serialize';
 import gradientStyles from './Gradient.module.css';
 import { gradientCss } from './gradient-css';
 import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
-import { canCreateComponent, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
+import { canCreateComponent, canCreateMultipleComponents, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
+import { commandItem } from '../../menus/menu-model';
+import { Menu, type MenuEntry } from '../../primitives/Menu';
 import { localComponents } from '@/editor/commands/insert-instance';
 import { swapInstanceFor } from '@/editor/commands/swap-instance';
 import { canResetOverrides, resetSelectedOverrides } from '@/editor/commands/reset-overrides';
@@ -563,6 +565,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
           {typeLabel}
         </span>
         {canCreateComponent(editor) && <IconButton icon="component" label="Create component" onClick={() => createComponent(editor)} />}
+        {canCreateMultipleComponents(editor) && <CreateComponentOptions />}
         {canResetOverrides(editor) && (
           <button type="button" className={gradientStyles.textButton} onClick={() => resetSelectedOverrides(editor)}>
             Reset all changes
@@ -859,6 +862,25 @@ type GeometryNode = Extract<SceneNode, { fills: readonly Paint[] }>;
  * Component configuration, edited in the properties panel: a main component's description and link to
  * documentation (saved when the field loses focus). An instance shows its main component's.
  */
+/** The Create component options menu next to the selection's type: create one component, or one for each selected layer. */
+function CreateComponentOptions() {
+  const editor = useEditor();
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const entries = ['object.createComponent', 'object.createMultipleComponents'].map((id) => commandItem(editor, id)).filter((e): e is MenuEntry => e !== null);
+  return (
+    <>
+      <IconButton
+        icon="chevronDown"
+        label="Create component options"
+        aria-haspopup="menu"
+        aria-expanded={anchor !== null}
+        onClick={(e) => setAnchor(e.currentTarget.getBoundingClientRect())}
+      />
+      {anchor && <Menu label="Create component options" entries={entries} anchor={anchor} placement="bottom-start" onClose={() => setAnchor(null)} />}
+    </>
+  );
+}
+
 function ComponentSection({ node }: { node: SceneNode }) {
   const editor = useEditor();
   if (node.type !== 'FRAME') return null;

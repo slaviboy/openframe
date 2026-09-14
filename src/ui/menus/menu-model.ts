@@ -78,7 +78,7 @@ const MAIN_MENU: readonly (readonly [string, readonly (readonly string[])[]])[] 
     'Object',
     [
       ['object.group', 'object.frameSelection', 'object.wrapInSection', 'object.ungroup', 'object.removeSection', 'object.useAsMask', 'object.flatten', 'object.outlineStroke'],
-      ['object.createComponent', 'object.detachInstance', 'object.resetOverrides', 'object.goToMainComponent', 'object.restoreMainComponent', 'object.pushChangesToMain'],
+      ['object.createComponent', 'object.createMultipleComponents', 'object.detachInstance', 'object.resetOverrides', 'object.goToMainComponent', 'object.restoreMainComponent', 'object.pushChangesToMain'],
       ['object.booleanUnion', 'object.booleanSubtract', 'object.booleanIntersect', 'object.booleanExclude'],
       ['layout.addAutoLayout', 'layout.suggestAutoLayout', 'layout.removeAutoLayout'],
       ['object.flipHorizontal', 'object.flipVertical'],
@@ -114,7 +114,7 @@ export function objectMenuEntries(editor: Editor): MenuEntry[] {
     ['edit.duplicate', 'edit.delete'],
     ['arrange.bringToFront', 'arrange.bringForward', 'arrange.sendBackward', 'arrange.sendToBack'],
     ['object.group', 'object.frameSelection', 'object.wrapInSection', 'object.ungroup', 'object.removeSection', 'object.useAsMask', 'object.flatten', 'object.outlineStroke'],
-    ['object.createComponent', 'object.detachInstance', 'object.resetOverrides', 'object.goToMainComponent', 'object.restoreMainComponent', 'object.pushChangesToMain'],
+    ['object.createComponent', 'object.createMultipleComponents', 'object.detachInstance', 'object.resetOverrides', 'object.goToMainComponent', 'object.restoreMainComponent', 'object.pushChangesToMain'],
     ['object.booleanUnion', 'object.booleanSubtract', 'object.booleanIntersect', 'object.booleanExclude'],
     ['layout.addAutoLayout', 'layout.suggestAutoLayout', 'layout.removeAutoLayout'],
     ['object.flipHorizontal', 'object.flipVertical'],

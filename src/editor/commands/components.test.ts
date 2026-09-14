@@ -21,7 +21,7 @@ import { IdGenerator } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { BUILTIN_COMMANDS } from './builtin';
-import { canCreateComponent, isComponent, isSafeLink, setComponentConfiguration } from './components';
+import { canCreateComponent, canCreateMultipleComponents, isComponent, isSafeLink, setComponentConfiguration } from './components';
 
 let editor: Editor;
 let a: string;
@@ -94,5 +94,34 @@ describe('create component', () => {
     expect(isSafeLink('http://example.com')).toBe(true);
     expect(isSafeLink('javascript:alert(1)')).toBe(false);
     expect(isSafeLink('example.com')).toBe(false);
+  });
+});
+
+describe('create multiple components', () => {
+  test('each selected layer becomes a component of its own; a frame becomes the component itself; one undo step', () => {
+    const frame = editor.history.run('frame', (tx) => {
+      const id = editor.ids.next();
+      tx.create(makeFrame({ id, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'Card', x: 0, y: 200, width: 80, height: 80 }));
+      return id;
+    });
+    editor.state.select([a]);
+    expect(canCreateMultipleComponents(editor)).toBe(false);
+    editor.state.select([a, b, frame]);
+    expect(canCreateMultipleComponents(editor)).toBe(true);
+    editor.commands.run('object.createMultipleComponents');
+
+    const created = editor.selection;
+    expect(created).toHaveLength(3);
+    expect(node(frame)).toMatchObject({ name: 'Card', component: {} });
+    const wrappers = created.filter((id) => id !== frame).map(node);
+    for (const wrapper of wrappers) expect(wrapper).toMatchObject({ type: 'FRAME', fills: [], component: {}, size: { width: 50, height: 50 } });
+    expect(wrappers.flatMap((w) => editor.doc.children(w.id)).sort()).toEqual([a, b].sort());
+    expect(wrappers.map((w) => w.name).sort()).toEqual(['Component 1', 'Component 2']);
+    expect(node(a).transform).toEqual([1, 0, 0, 1, 0, 0]);
+
+    editor.history.undo();
+    expect(node(a).parent.id).toBe(editor.pageId);
+    expect(node(b).parent.id).toBe(editor.pageId);
+    expect((node(frame) as { component?: unknown }).component).toBeUndefined();
   });
 });

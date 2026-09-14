@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
+import { isMainComponent } from '@/core/document/instances';
 import type { Id } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 import { selectedSceneNodes } from './selection-helpers';
-import { wrapSelection } from './structure';
+import { wrapNodes, wrapSelection } from './structure';
 
 /** Whether a layer is a main component: a frame marked as one. */
 export const isComponent = (node: SceneNode | undefined): boolean => node?.type === 'FRAME' && node.component !== undefined;
@@ -53,6 +54,44 @@ export function createComponent(editor: Editor): Id | null {
       tx.set(containerId, 'component', {});
     },
   });
+}
+
+/** Whether Create multiple components applies: two or more selected layers, no sections, and at least one that isn't a main component yet. */
+export function canCreateMultipleComponents(editor: Editor): boolean {
+  const nodes = selectedSceneNodes(editor).map((id) => editor.doc.get(id) as SceneNode);
+  return nodes.length > 1 && !nodes.some((n) => n.type === 'SECTION') && nodes.some((n) => !isMainComponent(n));
+}
+
+/**
+ * Create multiple components: each selected layer becomes a component of its own, as one undo step. A frame
+ * becomes the component itself; any other layer (a group, boolean group, path or shape) is nested in its own
+ * component frame without a fill. Main components stay as they are. The new components are selected.
+ */
+export function createMultipleComponents(editor: Editor): Id[] {
+  if (!canCreateMultipleComponents(editor)) return [];
+  const ids = selectedSceneNodes(editor).filter((id) => !isMainComponent(editor.doc.get(id) as SceneNode));
+  const created: Id[] = [];
+  editor.history.run('Create multiple components', (tx) => {
+    for (const id of ids) {
+      const node = tx.store.getOrThrow(id) as SceneNode;
+      if (node.type === 'FRAME' && !node.instance) {
+        tx.set(id, 'component', {});
+        created.push(id);
+        continue;
+      }
+      const containerId = editor.ids.next();
+      wrapNodes(tx, editor, [id], 'FRAME', containerId, {
+        name: 'Component',
+        after: (t, container) => {
+          t.set(container, 'fills', []);
+          t.set(container, 'component', {});
+        },
+      });
+      created.push(containerId);
+    }
+  });
+  editor.state.select(created);
+  return created;
 }
 
 /** Whether a documentation link can be opened from the properties panel: only http and https links are shown as links. */

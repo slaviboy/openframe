@@ -64,48 +64,54 @@ export interface WrapOptions {
 
 export function wrapSelection(editor: Editor, kind: 'GROUP' | 'FRAME', options: WrapOptions = {}): Id | null {
   const ids = sortByPaintOrder(editor.doc, selectedSceneNodes(editor));
-  const topmost = ids.at(-1);
-  if (!topmost || ids.some((id) => editor.doc.get(id)?.type === 'SECTION')) return null;
-  const store = editor.doc;
-  const parent = store.parentOf(topmost)!;
+  if (ids.length === 0 || ids.some((id) => editor.doc.get(id)?.type === 'SECTION')) return null;
   const containerId = editor.ids.next();
-  const selected = new Set(ids);
-
-  editor.history.run(options.label ?? (kind === 'GROUP' ? 'Group selection' : 'Frame selection'), (tx) => {
-    const parentWorld = worldOf(editor, parent);
-    const parentInv = invert(parentWorld);
-    if (!parentInv) return;
-    const key = keyBetween(keyOf(store, topmost), nextKeyAbove(store, topmost, selected));
-    const name = nextName(store, editor.pageId, options.name ?? (kind === 'GROUP' ? 'Group' : 'Frame'));
-    let containerWorld = parentWorld;
-    if (kind === 'GROUP') {
-      const init = { id: containerId, parent: { id: parent, key }, name, x: 0, y: 0, width: 0, height: 0 };
-      tx.create(options.booleanOperation ? makeBooleanOperation(init, options.booleanOperation) : makeGroup(init));
-    } else {
-      const bounds = unionAll(
-        ids.map((id) => {
-          const node = store.getOrThrow(id) as SceneNode;
-          return transformRect(multiply(parentInv, worldOf(editor, id)), { x: 0, y: 0, width: node.size.width, height: node.size.height });
-        }),
-      )!;
-      const x = Math.round(bounds.x);
-      const y = Math.round(bounds.y);
-      tx.create(
-        makeFrame({ id: containerId, parent: { id: parent, key }, name, x, y, width: Math.round(bounds.x + bounds.width) - x, height: Math.round(bounds.y + bounds.height) - y }),
-      );
-      containerWorld = multiply(parentWorld, translation(x, y));
-    }
-    const containerInv = invert(containerWorld)!;
-    const keys = keysBetween(null, null, ids.length);
-    ids.forEach((id, i) => {
-      const world = worldOf(editor, id);
-      tx.set(id, 'parent', { id: containerId, key: keys[i]! });
-      tx.set(id, 'transform', toTransform(multiply(containerInv, world)));
-    });
-    options.after?.(tx, containerId, ids);
-  });
+  editor.history.run(options.label ?? (kind === 'GROUP' ? 'Group selection' : 'Frame selection'), (tx) => wrapNodes(tx, editor, ids, kind, containerId, options));
   editor.state.select([containerId]);
   return containerId;
+}
+
+/**
+ * Wraps layers (in paint order, bottom first) in a new group or frame `containerId` inside an open
+ * transaction, at the z-position of the topmost layer, without moving anything on the canvas.
+ */
+export function wrapNodes(tx: Transaction, editor: Editor, ids: readonly Id[], kind: 'GROUP' | 'FRAME', containerId: Id, options: WrapOptions = {}): void {
+  const topmost = ids.at(-1);
+  if (!topmost) return;
+  const store = editor.doc;
+  const parent = store.parentOf(topmost)!;
+  const selected = new Set(ids);
+  const parentWorld = worldOf(editor, parent);
+  const parentInv = invert(parentWorld);
+  if (!parentInv) return;
+  const key = keyBetween(keyOf(store, topmost), nextKeyAbove(store, topmost, selected));
+  const name = nextName(store, editor.pageId, options.name ?? (kind === 'GROUP' ? 'Group' : 'Frame'));
+  let containerWorld = parentWorld;
+  if (kind === 'GROUP') {
+    const init = { id: containerId, parent: { id: parent, key }, name, x: 0, y: 0, width: 0, height: 0 };
+    tx.create(options.booleanOperation ? makeBooleanOperation(init, options.booleanOperation) : makeGroup(init));
+  } else {
+    const bounds = unionAll(
+      ids.map((id) => {
+        const node = store.getOrThrow(id) as SceneNode;
+        return transformRect(multiply(parentInv, worldOf(editor, id)), { x: 0, y: 0, width: node.size.width, height: node.size.height });
+      }),
+    )!;
+    const x = Math.round(bounds.x);
+    const y = Math.round(bounds.y);
+    tx.create(
+      makeFrame({ id: containerId, parent: { id: parent, key }, name, x, y, width: Math.round(bounds.x + bounds.width) - x, height: Math.round(bounds.y + bounds.height) - y }),
+    );
+    containerWorld = multiply(parentWorld, translation(x, y));
+  }
+  const containerInv = invert(containerWorld)!;
+  const keys = keysBetween(null, null, ids.length);
+  ids.forEach((id, i) => {
+    const world = worldOf(editor, id);
+    tx.set(id, 'parent', { id: containerId, key: keys[i]! });
+    tx.set(id, 'transform', toTransform(multiply(containerInv, world)));
+  });
+  options.after?.(tx, containerId, ids);
 }
 
 /** Whether every selected layer is a section, or all selected layers share a page or section parent. */
