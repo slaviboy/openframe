@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import { networkBounds, networkOutlines, networkStrokePath, regionFillPath, straightSegment, transformNetwork, type VectorNetwork } from './vector-network';
+import { networkBounds, networkOutlines, networkStrokePath, regionFillPath, straightSegment, transformNetwork, transformNetworkBy, type VectorNetwork } from './vector-network';
 
 const square: VectorNetwork = {
   vertices: [
@@ -108,5 +108,14 @@ describe('vector networks', () => {
     ]);
     expect(outlines.strokes).toHaveLength(1);
     expect(outlines.strokes[0]!.closed).toBe(true);
+  });
+
+  test('an affine transform moves vertices and rotates tangents', () => {
+    const turned = transformNetworkBy(
+      { vertices: [{ x: 10, y: 0 }], segments: [{ start: 0, end: 0, tangentStart: { x: 1, y: 0 }, tangentEnd: { x: 0, y: 0 } }], regions: [] },
+      { a: 0, b: 1, c: -1, d: 0, e: 5, f: 5 },
+    );
+    expect(turned.vertices[0]).toEqual({ x: 5, y: 15 });
+    expect(turned.segments[0]!.tangentStart).toEqual({ x: 0, y: 1 });
   });
 });

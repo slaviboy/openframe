@@ -114,7 +114,7 @@ Its **Tests** column must then name the covering tests.
 | Variable-width strokes (width points, profiles) | design-with-vector-tools/edit-vector-layers.html | P1 | Stroke geometry | M6 | Planned | |
 | Shape builder (merge, extract, ⌥ subtract) | design-with-vector-tools/create-custom-shapes-with-the-shape-builder-tool.html | P1 | Planarization | M6 | Planned | |
 | Boolean operations: union, subtract, intersect, exclude (⌥⇧U/S/I/E), live boolean groups | design-with-vector-tools/boolean-operations.html | P0 | Skia PathOps | M6 | Planned | |
-| Flatten (⌥⇧F) | design-with-vector-tools/flatten-layers.html | P0 | Geometry | M6 | Planned | |
+| Flatten (⌥⇧F) | design-with-vector-tools/flatten-layers.html | P0 | Geometry | M6 | In progress (⌥⇧F, Object menu and layer context menu: the selected layers merge into one vector layer in the topmost layer's place — every shape (rectangles and frames with their corners, ellipses, polygons, stars, lines, vectors) keeps its outline, transformed into the shared parent's space, and closed outlines stay fillable regions; containers contribute their contents and are removed; the vector takes the topmost layer's name and appearance; one undo step. Flattening text layers, and containers with text inside, pending (glyph outlines)) | src/core/vector/shape-networks.test.ts, src/core/vector/flatten.test.ts, e2e/flatten.spec.ts |
 | Outline stroke (⌘⌥O) | design-with-vector-tools/convert-strokes-to-vector-paths.html | P1 | Geometry | M6 | Planned | |
 | Convert text to vector paths | design-with-vector-tools/convert-text-to-vector-paths.html | P1 | Text, Geometry | M6 | Planned | |
 | Offset path (amount, join) | design-with-vector-tools/offset-a-vector-path.html | P2 | Geometry | M6 | Planned | |

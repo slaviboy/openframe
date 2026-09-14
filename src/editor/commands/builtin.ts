@@ -29,6 +29,7 @@ import type { CommandDefinition } from './registry';
 import { layersWithSame, matchingLayers } from './select-similar';
 import { canTidyUp, tidyUpSelection } from './tidy';
 import { canToggleMask, toggleMask } from './masks';
+import { canFlatten, flattenSelection } from './flatten';
 import { isInFlow, moveInFlow } from '@/core/layout/flow-order';
 import { addAutoLayout, canAddAutoLayout, canRemoveAutoLayout, removeAutoLayout, suggestAutoLayoutForSelection } from './auto-layout';
 import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/core/color/color-profile';
@@ -173,6 +174,14 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     shortcuts: ['Mod+Alt+G'],
     enabled: (e) => hasLayerSelection(e) && !hasSectionSelected(e),
     run: (e) => wrapSelection(e, 'FRAME'),
+  },
+  {
+    id: 'object.flatten',
+    label: 'Flatten',
+    category: 'Object',
+    shortcuts: ['Shift+Alt+F'],
+    enabled: canFlatten,
+    run: (e) => flattenSelection(e),
   },
   {
     id: 'object.wrapInSection',

@@ -208,6 +208,8 @@ A mask applies to the siblings above it, up to the next mask (`maskOf`, `maskRun
 
 ## Structure commands
 
+- **Flatten** (`object.flatten`, ⌥⇧F): [`flattenLayers`](../src/core/vector/flatten.ts) collects the visible layers with an outline (through containers, skipping containers with text), converts each with `shapeNetwork` ([`shape-networks.ts`](../src/core/vector/shape-networks.ts)), transforms it into the topmost layer's parent space (`transformNetworkBy`), merges them (`mergeNetworks`) into a `VECTOR` created at the topmost layer's key, and deletes the flattened layers.
+
 [`src/editor/commands/structure.ts`](../src/editor/commands/structure.ts):
 
 | Command | Shortcut | Behavior |

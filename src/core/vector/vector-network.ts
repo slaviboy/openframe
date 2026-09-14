@@ -16,6 +16,7 @@
  */
 
 import { flattenPath, type PathCommand } from '../geometry/corners';
+import { apply, applyLinear, type Matrix } from '../math/matrix';
 import type { Rect } from '../math/rect';
 import type { Vec2 } from '../math/vec';
 
@@ -186,4 +187,13 @@ export function networkOutlines(network: VectorNetwork, segmentsPerCurve = 8): {
   const fills = network.regions.flatMap((region) => subpaths(regionFillPath(network, region)).map((sub) => flattenPath(sub, segmentsPerCurve)));
   const strokes = subpaths(networkStrokePath(network)).map((sub) => ({ points: flattenPath(sub, segmentsPerCurve), closed: sub.at(-1)?.op === 'Z' }));
   return { fills, strokes };
+}
+
+/** Applies an affine transform to a network: vertices move with the whole matrix, tangents with its linear part. */
+export function transformNetworkBy(network: VectorNetwork, m: Matrix): VectorNetwork {
+  return {
+    vertices: network.vertices.map((v) => ({ ...v, ...apply(m, v) })),
+    segments: network.segments.map((s) => ({ ...s, tangentStart: applyLinear(m, s.tangentStart), tangentEnd: applyLinear(m, s.tangentEnd) })),
+    regions: network.regions,
+  };
 }
