@@ -16,7 +16,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { ToolId } from '@/editor/stores/editor-store';
+import type { ToolId, VectorEditTool } from '@/editor/stores/editor-store';
 import { formatShortcut } from '@/editor/keymap/keymap';
 import { Icon, type IconName } from '../icons/Icon';
 import { useEditor, useEditorState } from '../hooks/useEditor';
@@ -57,13 +57,20 @@ const GROUPS: readonly (readonly ToolItem[])[] = [
   ],
 ];
 
-/** Floating bottom toolbar. Each group remembers the last tool picked from its dropdown. */
+/** Vector edit mode's secondary toolbar. */
+const VECTOR_TOOLS: readonly { readonly tool: VectorEditTool; readonly label: string; readonly icon: IconName; readonly command: string }[] = [
+  { tool: 'move', label: 'Move', icon: 'move', command: 'vector.toolMove' },
+  { tool: 'lasso', label: 'Lasso', icon: 'lasso', command: 'vector.toolLasso' },
+];
+
+/** Floating bottom toolbar. Each group remembers the last tool picked from its dropdown; vector edit mode shows its secondary toolbar instead. */
 export function Toolbar() {
   const editor = useEditor();
   const tool = useEditorState((s) => s.tool);
   // Tool last picked from each group's dropdown; shown when the group is not active.
   const [picked, setPicked] = useState<ToolId[]>(GROUPS.map((g) => g[0]!.tool));
   const [openGroup, setOpenGroup] = useState<number | null>(null);
+  const vectorTool = useEditorState((s) => (s.vectorEdit ? (s.vectorEdit.tool ?? 'move') : null));
 
   const shortcut = (command: string) => {
     const first = editor.commands.get(command)?.shortcuts?.[0];
@@ -86,7 +93,32 @@ export function Toolbar() {
         buttons[(index + (e.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length]!.focus();
       }}
     >
-      {GROUPS.map((group, gi) => {
+      {vectorTool !== null && (
+        <>
+          {VECTOR_TOOLS.map((item) => (
+            <div key={item.command} className={styles.group}>
+              <button
+                type="button"
+                className={styles.tool}
+                aria-pressed={vectorTool === item.tool}
+                data-active={vectorTool === item.tool || undefined}
+                aria-label={`${item.label} (${shortcut(item.command)})`}
+                title={`${item.label}  ${shortcut(item.command)}`}
+                data-tool-button=""
+                onClick={() => editor.commands.run(item.command)}
+              >
+                <Icon name={item.icon} />
+              </button>
+            </div>
+          ))}
+          <div className={styles.group}>
+            <button type="button" className={styles.done} data-tool-button="" title={`Done  ${shortcut('vector.done')}`} onClick={() => editor.commands.run('vector.done')}>
+              Done
+            </button>
+          </div>
+        </>
+      )}
+      {vectorTool === null && GROUPS.map((group, gi) => {
         const active = group.some((t) => t.tool === tool);
         const current = group.find((t) => t.tool === (active ? tool : picked[gi])) ?? group[0]!;
         return (

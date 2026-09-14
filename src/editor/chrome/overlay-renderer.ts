@@ -65,6 +65,8 @@ export interface OverlayInput {
   readonly arcHandles?: { readonly handles: readonly { readonly kind: 'sweep' | 'start' | 'ratio'; readonly screen: Vec2 }[]; readonly active: 'sweep' | 'start' | 'ratio' | null } | null;
   /** Live sweep, start or ratio label while dragging an arc handle. */
   readonly arcLabel?: { readonly text: string; readonly screen: Vec2 } | null;
+  /** Outline of the lasso being drawn in vector edit mode (screen points). */
+  readonly vectorLasso?: readonly Vec2[] | null;
   /** Text editing chrome; `caretVisible` is the blink phase. */
   readonly textEdit?: { readonly caretVisible: boolean } | null;
   /** Snapping guides of the current move, in world coordinates. */
@@ -608,6 +610,20 @@ function drawVectorEdit(ctx: CanvasRenderingContext2D, input: OverlayInput): voi
     ctx.strokeStyle = theme.selection;
     ctx.stroke();
   });
+  const lasso = input.vectorLasso;
+  if (lasso && lasso.length > 1) {
+    ctx.beginPath();
+    lasso.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+    ctx.closePath();
+    ctx.globalAlpha = 0.08;
+    ctx.fillStyle = theme.selection;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = theme.selection;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
   ctx.restore();
 }
 

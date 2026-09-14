@@ -79,10 +79,14 @@ export interface EditorState {
   readonly vectorEdit: VectorEditRef | null;
 }
 
-/** Vector edit mode on a vector layer, with the indices of its selected points. */
+/** Tool of vector edit mode's secondary toolbar: Move (V) drags points; Lasso (Q) selects the points inside a drawn outline. */
+export type VectorEditTool = 'move' | 'lasso';
+
+/** Vector edit mode on a vector layer: the indices of its selected points, and the secondary toolbar's tool (absent: Move). */
 export interface VectorEditRef {
   readonly nodeId: Id;
   readonly vertices: readonly number[];
+  readonly tool?: VectorEditTool;
 }
 
 /** A value field open on an auto layout frame's padding or gap handle; `mode` is which sides a padding value applies to. */

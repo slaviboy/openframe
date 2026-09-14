@@ -30,7 +30,7 @@ import { layersWithSame, matchingLayers } from './select-similar';
 import { canTidyUp, tidyUpSelection } from './tidy';
 import { canToggleMask, toggleMask } from './masks';
 import { canFlatten, flattenSelection } from './flatten';
-import { beginVectorEdit, canBeginVectorEdit, deleteSelectedPoints, healSelectedPoints, endVectorEdit } from '../interactions/vector-edit';
+import { beginVectorEdit, canBeginVectorEdit, deleteSelectedPoints, healSelectedPoints, setVectorEditTool, endVectorEdit } from '../interactions/vector-edit';
 import { isInFlow, moveInFlow } from '@/core/layout/flow-order';
 import { addAutoLayout, canAddAutoLayout, canRemoveAutoLayout, removeAutoLayout, suggestAutoLayoutForSelection } from './auto-layout';
 import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/core/color/color-profile';
@@ -468,6 +468,25 @@ const TEXT_FORMAT_COMMANDS: CommandDefinition[] = [
 export const BUILTIN_COMMANDS: CommandDefinition[] = [
   ...COLOR_PROFILE_COMMANDS,
   // Vector edit mode, registered first: Return and Delete act on the vector's points while it is being edited.
+  // V and Q pick the secondary toolbar's Move and Lasso while editing, before the main tools' shortcuts.
+  {
+    id: 'vector.toolMove',
+    label: 'Move points',
+    category: 'Edit',
+    shortcuts: ['V'],
+    palette: false,
+    enabled: (e) => e.state.getSnapshot().vectorEdit !== null,
+    run: (e) => setVectorEditTool(e, 'move'),
+  },
+  {
+    id: 'vector.toolLasso',
+    label: 'Lasso',
+    category: 'Edit',
+    shortcuts: ['Q'],
+    palette: false,
+    enabled: (e) => e.state.getSnapshot().vectorEdit !== null,
+    run: (e) => setVectorEditTool(e, 'lasso'),
+  },
   {
     id: 'vector.edit',
     label: 'Edit vector',
