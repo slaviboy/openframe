@@ -95,14 +95,18 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - inherited connections are drawn only while their instance is selected (`isInheritedInteraction` in connections.ts)
     - frames in sections are top-level frames and screens
     - a section destination plays the frame of it visited last (`sectionVisits` in PlayerState)
+  - Touch scrolling, nested sticky layers and the Fixed label (the commit after sections):
+    - `scrollBy` in PresentationView serves wheel and touch drags
+    - `stuckInParent` in scroll.ts keeps nested sticky layers within their parent
+    - the overlay "badge" was dropped: the docs mirror doesn't describe one
 
 ## In progress (uncommitted)
 
-1. **The overlay badge on the canvas, dragging to scroll on touch, nested sticky layers.**
+1. **State memorization of scroll position; Animate matching layers on the moving transitions.**
 
 ## Next (M10, in order)
 
-1. State memorization of scroll position; Animate matching layers on the moving transitions.
+
 2. Video fills with video triggers and actions (M10 video row).
 3. Accessible prototypes, manual overlay positions, rich-text flow descriptions, gamepad triggers.
 

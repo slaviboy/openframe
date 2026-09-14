@@ -41,6 +41,9 @@ beforeEach(() => {
     tx.create({ ...makeFrame(shape('slider', 'screen', 0, 40, 60, 30)), overflowDirection: 'HORIZONTAL' });
     tx.create(makeRectangle(shape('slide', 'slider', 50, 0, 50, 30)));
     tx.create({ ...makeFrame(shape('empty', page, 300, 0, 100, 100)), overflowDirection: 'BOTH' });
+    // A sticky title nested in a card.
+    tx.create(makeFrame(shape('card', 'screen', 0, 80, 100, 40)));
+    tx.create({ ...makeRectangle(shape('title', 'card', 0, 0, 100, 10)), scrollBehavior: 'STICKY_SCROLLS' });
   });
   index = new SceneIndex(store);
   index.ensure(page);
@@ -75,5 +78,12 @@ describe('prototype scrolling', () => {
     expect(y('slider')).toBe(-10);
     expect(scrolled.children('screen').at(-1)).toBe('bar');
     expect(scrolled.has('empty')).toBe(false);
+  });
+
+  test('a nested sticky layer sticks at the frame top within its parent, then scrolls away with it', () => {
+    const titleAt = (scroll: number) => (scrolledFrameStore(store, 'screen', new Map([['screen', { x: 0, y: scroll }]])).getOrThrow('title') as SceneNode).transform[5];
+    expect(titleAt(50)).toBe(0);
+    expect(titleAt(90)).toBe(10);
+    expect(titleAt(150)).toBe(30);
   });
 });

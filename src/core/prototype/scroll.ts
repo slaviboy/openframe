@@ -131,10 +131,31 @@ export function scrolledFrameStore(store: DocumentStore, frameId: Id, offsets: R
         nodes.push({ ...node, transform: [a, b, c, d, e - offset.x, y] } as SceneNode);
       }
     } else {
-      nodes.push(node);
+      nodes.push(node.scrollBehavior === 'STICKY_SCROLLS' && id !== frameId ? stuckInParent(store, frameId, node, offsets) : node);
     }
     store.children(id).forEach(visit);
   };
   visit(frameId);
   return new DocumentStore(store.meta, nodes);
+}
+
+/**
+ * A sticky layer nested in another layer of a scrolled frame: it sticks once its top reaches the frame's top, but stays
+ * within its direct parent's bounds, so it scrolls away with the parent.
+ */
+function stuckInParent(store: DocumentStore, frameId: Id, node: SceneNode, offsets: ReadonlyMap<Id, Vec2>): SceneNode {
+  const parent = scene(store, node.parent.id);
+  if (!parent) return node;
+  // The parent's top in the scrolled frame, before scrolling.
+  let top = 0;
+  for (let current: SceneNode | undefined = parent; current && current.id !== frameId; current = scene(store, current.parent.id)) {
+    top += current.transform[5];
+    const offset = offsets.get(current.parent.id);
+    if (!offset) continue;
+    if (offset.y === 0) return node;
+    const [a, b, c, d, e, f] = node.transform;
+    const stuck = Math.max(f, offset.y - top);
+    return { ...node, transform: [a, b, c, d, e, Math.min(stuck, Math.max(f, parent.size.height - node.size.height))] } as SceneNode;
+  }
+  return node;
 }

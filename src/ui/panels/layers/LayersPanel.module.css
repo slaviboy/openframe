@@ -219,6 +219,13 @@
 }
 
 /* Marks the frame used as the file's thumbnail. */
+.fixedTag {
+  flex: none;
+  padding-inline: 4px;
+  font-size: 11px;
+  color: var(--fg-secondary);
+}
+
 .thumbnailTag {
   display: grid;
   flex: none;

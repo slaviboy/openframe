@@ -284,6 +284,11 @@ export function LayersPanel() {
                   </span>
                 )}
                 <ModeTag node={node} />
+                {'scrollBehavior' in node && node.scrollBehavior === 'FIXED' && (
+                  <span className={styles.fixedTag} aria-hidden="true" data-testid="fixed-tag">
+                    Fixed
+                  </span>
+                )}
                 {node.id === thumbnailFrameId(editor.doc) && (
                   <span className={styles.thumbnailTag} title="File thumbnail" aria-hidden="true" data-testid="thumbnail-tag">
                     <Icon name="image" size={16} />

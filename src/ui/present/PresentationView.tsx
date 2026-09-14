@@ -92,6 +92,9 @@ interface Press {
   readonly x: number;
   readonly y: number;
   dragged: boolean;
+  /** A finger on a touch screen: dragging scrolls. */
+  readonly touch: boolean;
+  last: Vec2;
 }
 
 export interface PresentationViewProps {
@@ -485,9 +488,13 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
 
   const onPointerDown = (e: ReactPointerEvent) => {
     if (e.button !== 0 || !live.current.player) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // A pointer that is no longer active can't be captured.
+    }
     const { point, chain } = locate(e);
-    live.current.press = { chain, x: point.x, y: point.y, dragged: false };
+    live.current.press = { chain, x: point.x, y: point.y, dragged: false, touch: e.pointerType === 'touch', last: point };
     const down = findReaction(doc, chain, 'MOUSE_DOWN');
     if (down) run(down.reaction, down.nodeId);
     const pressing = findReaction(doc, chain, 'ON_PRESS');
@@ -503,6 +510,11 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
       press.dragged = true;
       const drag = findReaction(doc, press.chain, 'ON_DRAG');
       if (drag) run(drag.reaction, drag.nodeId);
+    }
+    if (press?.touch && press.dragged) {
+      // Dragging a finger scrolls the content the other way, following it.
+      scrollBy(press.chain, { x: press.last.x - point.x, y: press.last.y - point.y });
+      press.last = point;
     }
     const previous = state.hoverChain;
     if (previous.length === chain.length && previous.every((id, i) => id === chain[i])) return;
@@ -554,14 +566,15 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     }
   };
 
-  const onWheel = (e: ReactWheelEvent) => {
+  const onWheel = (e: ReactWheelEvent) => scrollBy(locate(e).chain, { x: e.deltaX, y: e.deltaY });
+
+  /** Scrolls by a distance on screen: the deepest frame of the layers under the pointer that scrolls and has room to move that way, or else a screen taller than the window. */
+  function scrollBy(chain: readonly Id[], screenDelta: Vec2): void {
     const state = live.current;
     const current = state.player;
     if (!current || !state.scene) return;
-    // The deepest frame under the pointer that scrolls, and has room to move that way, scrolls.
-    const { hit, chain } = locate(e);
-    const delta = { x: e.deltaX / state.scene.screen.scale, y: e.deltaY / state.scene.screen.scale };
-    const target = hit ? wheelScrollTarget(doc, sceneIndex, chain, delta, state.frameScroll) : null;
+    const delta = { x: screenDelta.x / state.scene.screen.scale, y: screenDelta.y / state.scene.screen.scale };
+    const target = chain.length > 0 ? wheelScrollTarget(doc, sceneIndex, [...chain], delta, state.frameScroll) : null;
     if (target) {
       const offset = state.frameScroll.get(target) ?? { x: 0, y: 0 };
       state.nestedScrolling = null;
@@ -575,9 +588,9 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     const limit = screenScrollLimit(state, node.size);
     if (limit <= 0) return;
     state.scrolling = null;
-    state.scrollY = Math.min(limit, Math.max(0, state.scrollY + e.deltaY / state.scene.screen.scale));
+    state.scrollY = Math.min(limit, Math.max(0, state.scrollY + delta.y));
     schedule();
-  };
+  }
 
   const screenIndex = player ? screens.indexOf(player.frameId) : -1;
   const nameOf = (id: Id) => doc.get(id)?.name ?? '';
