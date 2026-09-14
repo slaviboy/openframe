@@ -36,6 +36,8 @@ export interface PlayerState {
   readonly history: readonly Id[];
   /** Open overlays, bottom to top. */
   readonly overlays: readonly Id[];
+  /** Sections as destinations: the frame of each section visited last, by section id. */
+  readonly sectionVisits?: Readonly<Record<Id, Id>> | undefined;
   /** Variables set and modes switched by interactions while playing. Absent until one is. */
   readonly variables?: PrototypeVariables;
   /** While hovering or pressing: the state to return to when the pointer leaves the hotspot or is released. */
@@ -64,14 +66,44 @@ const sceneNode = (store: DocumentStore, id: Id): SceneNode | undefined => {
   return node && 'transform' in node ? node : undefined;
 };
 
-/** Top-level frames on the page, in reading order (top to bottom, then left to right). */
-function pageFrames(store: DocumentStore, pageId: Id): Id[] {
-  return store
-    .children(pageId)
-    .map((id) => sceneNode(store, id))
-    .filter((node): node is SceneNode => node !== undefined && node.visible && FRAME_TYPES.has(node.type))
-    .sort((a, b) => a.transform[5] - b.transform[5] || a.transform[4] - b.transform[4])
-    .map((node) => node.id);
+/**
+ * The top-level frames in a page or section (those in its sections included), in reading order (top to bottom, then
+ * left to right, on the page).
+ */
+export function framesIn(store: DocumentStore, parentId: Id): Id[] {
+  const out: { id: Id; x: number; y: number }[] = [];
+  const visit = (id: Id, x: number, y: number) => {
+    for (const child of store.children(id)) {
+      const node = sceneNode(store, child);
+      if (!node || !node.visible) continue;
+      const cx = x + node.transform[4];
+      const cy = y + node.transform[5];
+      if (FRAME_TYPES.has(node.type)) out.push({ id: child, x: cx, y: cy });
+      else if (node.type === 'SECTION') visit(child, cx, cy);
+    }
+  };
+  visit(parentId, 0, 0);
+  return out.sort((a, b) => a.y - b.y || a.x - b.x).map((entry) => entry.id);
+}
+
+const pageFrames = framesIn;
+
+/** The screen a destination leads to: its top-level frame, or for a section, the frame of it visited last (else its first). */
+function screenFor(store: DocumentStore, state: PlayerState, destination: Id): Id | null {
+  if (sceneNode(store, destination)?.type === 'SECTION') {
+    const last = state.sectionVisits?.[destination];
+    return last && store.has(last) && store.isAncestor(destination, last) ? last : (framesIn(store, destination)[0] ?? null);
+  }
+  return topLevelFrame(store, destination);
+}
+
+/** The sections a screen is in, remembering it as the one of them visited last. */
+function visitSections(store: DocumentStore, state: PlayerState, frameId: Id): PlayerState['sectionVisits'] {
+  let visits = state.sectionVisits;
+  for (let parent = store.parentOf(frameId); parent !== null && sceneNode(store, parent)?.type === 'SECTION'; parent = store.parentOf(parent)) {
+    visits = { ...visits, [parent]: frameId };
+  }
+  return visits;
 }
 
 function hasReactionsWithin(store: DocumentStore, id: Id): boolean {
@@ -86,8 +118,9 @@ function destinationsOn(store: DocumentStore, pageId: Id): Set<Id> {
     for (const reaction of sceneNode(store, id)?.reactions ?? []) {
       for (const action of reaction.actions) {
         if (action.type === 'NODE' && action.destinationId && action.navigation !== 'SCROLL_TO' && action.navigation !== 'CHANGE_TO') {
-          const frame = topLevelFrame(store, action.destinationId);
-          if (frame) out.add(frame);
+          // A section leads to its frames.
+          const destinations = sceneNode(store, action.destinationId)?.type === 'SECTION' ? framesIn(store, action.destinationId) : [topLevelFrame(store, action.destinationId)];
+          for (const frame of destinations) if (frame) out.add(frame);
         }
       }
     }
@@ -217,7 +250,7 @@ function runAction(store: DocumentStore, state: PlayerState, action: PrototypeAc
         effects.push({ type: 'scrollTo', nodeId: destination, transition: action.transition });
         return state;
       }
-      const frame = topLevelFrame(store, destination);
+      const frame = screenFor(store, state, destination);
       if (!frame) return state;
       // State management: the destination's scroll position starts over.
       const reset = action.resetScrollPosition ? { resetScroll: true } : {};
@@ -235,7 +268,7 @@ function runAction(store: DocumentStore, state: PlayerState, action: PrototypeAc
       effects.push({ type: 'transition', from: state.frameId, to: frame, overlay: false, transition: action.transition, ...reset });
       // Swap overlay from a screen replaces the screen without recording it in the history.
       const history = action.navigation === 'SWAP' ? state.history : [...state.history, state.frameId];
-      return { ...state, frameId: frame, history, overlays: [] };
+      return { ...state, frameId: frame, history, overlays: [], sectionVisits: visitSections(store, state, frame) };
     }
   }
 }

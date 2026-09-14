@@ -143,7 +143,8 @@ export function removeConnections(editor: Editor, refs: readonly ConnectionRef[]
 /** The page a top-level frame is on; null for layers that aren't top-level frames. */
 function framePage(editor: Editor, frameId: Id): PageNode | null {
   if (topLevelFrame(editor.doc, frameId) !== frameId) return null;
-  const page = editor.doc.get((editor.doc.getOrThrow(frameId) as SceneNode).parent.id);
+  const pageId = editor.doc.pageOf(frameId);
+  const page = pageId === null ? undefined : editor.doc.get(pageId);
   return page?.type === 'PAGE' ? page : null;
 }
 

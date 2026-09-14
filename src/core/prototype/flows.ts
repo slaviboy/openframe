@@ -35,16 +35,11 @@ export const OVERLAY_POSITION_LABELS: Readonly<Record<OverlaySettings['position'
   BOTTOM_RIGHT: 'Bottom right',
 };
 
-const parentOf = (store: DocumentStore, id: Id): Id | undefined => {
-  const node = store.get(id);
-  return node && node.type !== 'DOCUMENT' ? node.parent.id : undefined;
-};
-
 /** The page's flows whose starting points are still top-level frames on it. */
 export function flowsOf(store: DocumentStore, pageId: Id): FlowStartingPoint[] {
   const page = store.get(pageId);
   if (page?.type !== 'PAGE') return [];
-  return (page.flowStartingPoints ?? []).filter((flow) => topLevelFrame(store, flow.nodeId) === flow.nodeId && parentOf(store, flow.nodeId) === pageId);
+  return (page.flowStartingPoints ?? []).filter((flow) => topLevelFrame(store, flow.nodeId) === flow.nodeId && store.pageOf(flow.nodeId) === pageId);
 }
 
 /** The name a new flow gets: Flow 1, Flow 2, … (the first number not taken). */
@@ -126,7 +121,7 @@ export function frameConnected(store: DocumentStore, pageId: Id, frameId: Id, ex
 export function flowForNewConnection(store: DocumentStore, nodeId: Id, reaction: Reaction, index: number): { readonly pageId: Id; readonly flow: FlowStartingPoint } | null {
   const source = topLevelFrame(store, nodeId);
   if (!source) return null;
-  const pageId = parentOf(store, source);
+  const pageId = store.pageOf(source);
   const page = pageId ? store.get(pageId) : undefined;
   if (!pageId || page?.type !== 'PAGE') return null;
   const destinations = reaction.actions

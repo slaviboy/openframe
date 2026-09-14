@@ -140,9 +140,10 @@ export function smartAnimateStore(store: DocumentStore, fromFrame: Id, toFrame: 
   const matches = matchLayers(store, fromFrame, toFrame);
   const matchedSources = new Set(matches.values());
   const sourceToDestination = new Map([...matches].map(([to, from]) => [from, to]));
-  const frame = scene(store, toFrame)!;
-  const pageId = frame.parent.id;
-  const nodes: Node[] = [store.getOrThrow(ROOT_ID), store.getOrThrow(pageId)];
+  // The frame's page, and the sections it is in.
+  const nodes: Node[] = [];
+  for (let id = store.parentOf(toFrame); id !== null && id !== ROOT_ID; id = store.parentOf(id)) nodes.unshift(store.getOrThrow(id));
+  nodes.unshift(store.getOrThrow(ROOT_ID));
 
   const addDestination = (id: Id, parentMatched: boolean) => {
     const node = scene(store, id);

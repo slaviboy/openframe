@@ -97,7 +97,11 @@ export function variantDestinationAt(editor: Editor, sourceIds: readonly Id[], w
 export function connectDestinationAt(editor: Editor, sourceIds: readonly Id[], world: Vec2): Id | null {
   const hit = hitTestDeepest(editor.doc, editor.scene, editor.pageId, world, { tolerance: 0 });
   const frame = hit ? topLevelFrame(editor.doc, hit) : null;
-  if (!frame) return null;
+  if (!frame) {
+    // Over a section outside its frames: the connection leads to the section.
+    for (let id = hit; id !== null; id = editor.doc.parentOf(id)) if (editor.doc.get(id)?.type === 'SECTION') return id;
+    return null;
+  }
   const own = new Set(sourceIds.map((id) => topLevelFrame(editor.doc, id)));
   return own.has(frame) ? null : frame;
 }

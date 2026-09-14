@@ -249,7 +249,11 @@ export function topLevelFrame(store: DocumentStore, id: Id): Id | null {
   let node = store.get(id);
   while (node && node.type !== 'DOCUMENT' && node.type !== 'PAGE') {
     const parent = store.get(node.parent.id);
-    if (parent?.type === 'PAGE') return FRAME_TYPES.has(node.type) ? node.id : null;
+    // Frames directly on the page, or in a section on it, are top-level frames.
+    if (parent?.type === 'PAGE' || parent?.type === 'SECTION') {
+      if (FRAME_TYPES.has(node.type)) return node.id;
+      if (parent.type === 'PAGE') return null;
+    }
     node = parent;
   }
   return null;
@@ -289,7 +293,21 @@ export function destinationCandidates(store: DocumentStore, hotspotId: Id, kind:
   }
   const page = pageOf(store, hotspotId);
   if (!page) return [];
-  return store.children(page).filter((id) => id !== own && FRAME_TYPES.has(store.get(id)?.type ?? ''));
+  // Top-level frames (on the page or in its sections), and for Navigate to, the sections themselves.
+  const out: Id[] = [];
+  const visit = (parentId: Id) => {
+    for (const id of store.children(parentId)) {
+      const type = store.get(id)?.type ?? '';
+      if (FRAME_TYPES.has(type)) {
+        if (id !== own) out.push(id);
+      } else if (type === 'SECTION') {
+        if (kind === 'NAVIGATE') out.push(id);
+        visit(id);
+      }
+    }
+  };
+  visit(page);
+  return out;
 }
 
 /** A one-line description of an interaction, as the Interactions section lists it (e.g. "On click: Navigate to Home"). */

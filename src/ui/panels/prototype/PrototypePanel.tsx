@@ -714,7 +714,7 @@ export function PrototypePanel() {
 
   return (
     <div className={styles.panel} role="tabpanel" aria-label="Prototype">
-      {frame && <FlowStartingPointSection frameId={frame.id} pageId={frame.parent.id} />}
+      {frame && <FlowStartingPointSection frameId={frame.id} pageId={editor.doc.pageOf(frame.id) ?? frame.parent.id} />}
       <section className={inspector.section} aria-label="Interactions">
         <header className={inspector.sectionHeader}>
           <h3 className={inspector.sectionTitle}>Interactions</h3>
@@ -762,7 +762,7 @@ export function PrototypePanel() {
         )}
       </section>
       <ScrollBehaviorSection nodes={nodes} />
-      {frame && isOverlayDestination(editor.doc, frame.parent.id, frame.id) && <OverlaySection node={frame} />}
+      {frame && isOverlayDestination(editor.doc, editor.doc.pageOf(frame.id) ?? frame.parent.id, frame.id) && <OverlaySection node={frame} />}
     </div>
   );
 }

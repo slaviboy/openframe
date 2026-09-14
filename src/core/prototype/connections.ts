@@ -57,10 +57,33 @@ export function connectionsOnPage(store: DocumentStore, pageId: Id): Connection[
  */
 export function visibleConnections(store: DocumentStore, pageId: Id, selection: readonly Id[]): Connection[] {
   const all = connectionsOnPage(store, pageId);
-  if (selection.length === 0) return all;
-  const frames = new Set(selection.map((id) => topLevelFrame(store, id)).filter((id): id is Id => id !== null));
   const selected = new Set(selection);
-  return all.filter((connection) => selected.has(connection.sourceId) || frames.has(topLevelFrame(store, connection.sourceId) ?? ''));
+  // Connections an instance inherits from its main component show only while the instance (or the layer) is selected.
+  const shows = (connection: Connection) => {
+    if (!isInheritedInteraction(store, connection.sourceId)) return true;
+    const instance = instanceAround(store, connection.sourceId);
+    return selected.has(connection.sourceId) || (instance !== null && selected.has(instance));
+  };
+  if (selection.length === 0) return all.filter(shows);
+  const frames = new Set(selection.map((id) => topLevelFrame(store, id)).filter((id): id is Id => id !== null));
+  return all.filter((connection) => shows(connection) && (selected.has(connection.sourceId) || frames.has(topLevelFrame(store, connection.sourceId) ?? '')));
+}
+
+/** Whether a layer's interactions come from its main component: it is in an instance (or is one) and hasn't changed them. */
+export function isInheritedInteraction(store: DocumentStore, nodeId: Id): boolean {
+  const node = store.get(nodeId) as (SceneNode & { readonly source?: Id; readonly overrides?: readonly string[] }) | undefined;
+  if (!node) return false;
+  const mirrored = node.source !== undefined || (node.type === 'FRAME' && node.instance !== undefined);
+  return mirrored && !(node.overrides ?? []).includes('reactions');
+}
+
+/** The instance a layer is in (itself included). */
+function instanceAround(store: DocumentStore, id: Id): Id | null {
+  for (let current: Id | null = id; current !== null; current = store.parentOf(current)) {
+    const node = store.get(current);
+    if (node?.type === 'FRAME' && node.instance) return current;
+  }
+  return null;
 }
 
 /** A noodle: a cubic curve from the hotspot to the destination, ending in an arrow. */

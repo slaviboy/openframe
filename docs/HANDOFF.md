@@ -91,18 +91,19 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - Set variable, Set variable mode and Conditional with expressions (`src/core/prototype/variables-runtime.ts`)
     - `buildRuntime` applies them to a copy so bound layers follow
     - the Prototype tab fields
+  - Connections from main components and sections as destinations (the commit after variables):
+    - inherited connections are drawn only while their instance is selected (`isInheritedInteraction` in connections.ts)
+    - frames in sections are top-level frames and screens
+    - a section destination plays the frame of it visited last (`sectionVisits` in PlayerState)
 
 ## In progress (uncommitted)
 
-1. **Connections from main components and sections as destinations.** Next: interactions on a main component carry to its instances (shown on instances); sections can be Navigate to destinations.
+1. **The overlay badge on the canvas, dragging to scroll on touch, nested sticky layers.**
 
 ## Next (M10, in order)
 
-1. The overlay badge on the canvas; dragging to scroll on touch; nested sticky layers.
-2. State memorization of scroll position; Animate matching layers on the moving transitions.
-4. Device and background settings; the prototype settings panel with nothing selected.
-5. Connections from main components (instances inherit them), sections as destinations.
-7. Video fills with video triggers and actions (M10 video row).
-8. Accessible prototypes, manual overlay positions, rich-text flow descriptions, gamepad triggers.
+1. State memorization of scroll position; Animate matching layers on the moving transitions.
+2. Video fills with video triggers and actions (M10 video row).
+3. Accessible prototypes, manual overlay positions, rich-text flow descriptions, gamepad triggers.
 
 **Stop after M10.** When every M10 row is finished and committed, stop and report to the user. Don't start M11 until the user says to continue. After that, M11–M15 follow `docs/FEATURE_MATRIX.md` (the rows marked Planned or In progress) in milestone order.

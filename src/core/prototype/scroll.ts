@@ -112,8 +112,10 @@ export const clampScroll = (offset: Vec2, limits: Vec2): Vec2 => ({ x: Math.min(
  * which stop once their top reaches the frame's top.
  */
 export function scrolledFrameStore(store: DocumentStore, frameId: Id, offsets: ReadonlyMap<Id, Vec2>): DocumentStore {
-  const frame = scene(store, frameId)!;
-  const nodes: Node[] = [store.getOrThrow(ROOT_ID), store.getOrThrow(frame.parent.id)];
+  // The frame's page, and the sections it is in.
+  const nodes: Node[] = [];
+  for (let id = store.parentOf(frameId); id !== null && id !== ROOT_ID; id = store.parentOf(id)) nodes.unshift(store.getOrThrow(id));
+  nodes.unshift(store.getOrThrow(ROOT_ID));
   const visit = (id: Id) => {
     const node = scene(store, id);
     if (!node) return;
