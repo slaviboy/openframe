@@ -17,6 +17,7 @@
 
 import { keyOnTop } from '@/core/document/factory';
 import { instantiate, isMainComponent } from '@/core/document/instances';
+import { defaultVariant, isComponentSet } from '@/core/document/variants';
 import type { Id } from '@/core/ids/ids';
 import type { Vec2 } from '@/core/math/vec';
 import { isSceneNode, type SceneNode } from '@/core/schema/document';
@@ -40,7 +41,14 @@ export function localComponents(editor: Editor): LocalComponent[] {
   for (const pageId of editor.doc.pages()) {
     for (const id of editor.doc.descendants(pageId, false)) {
       const node = editor.doc.get(id);
-      if (node && isSceneNode(node) && node.type === 'FRAME' && isMainComponent(node)) found.push({ id, name: node.name, description: node.component?.description, pageId });
+      if (!node || !isSceneNode(node) || node.type !== 'FRAME') continue;
+      if (node.componentSet) {
+        // A component set is listed once, by its default variant (the one in its top-left corner).
+        const main = defaultVariant(editor.doc, id);
+        if (main) found.push({ id: main.id, name: node.name, description: node.componentSet.description, pageId });
+      } else if (isMainComponent(node) && !isComponentSet(editor.doc.get(node.parent.id) as SceneNode | undefined)) {
+        found.push({ id, name: node.name, description: node.component?.description, pageId });
+      }
     }
   }
   return found.sort((a, b) => a.name.localeCompare(b.name));

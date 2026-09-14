@@ -17,6 +17,7 @@
 
 import { makeBooleanOperation, makeFrame, makeGroup, makeSection } from '@/core/document/factory';
 import { instantiate, isMainComponent } from '@/core/document/instances';
+import { isComponentSet } from '@/core/document/variants';
 import { sortByPaintOrder } from '@/core/document/order';
 import type { DocumentStore } from '@/core/document/store';
 import type { Transaction } from '@/core/history/history';
@@ -276,8 +277,9 @@ export function duplicateNodes(tx: Transaction, editor: Editor, ids: readonly Id
   for (const sourceId of sortByPaintOrder(store, ids)) {
     const source = store.getOrThrow(sourceId) as SceneNode;
     const key = keyBetween(source.parent.key, nextKeyAbove(store, sourceId));
-    // Duplicating a main component makes an instance of it.
-    const cloneId = isMainComponent(source) ? instantiate(tx, sourceId, source.parent.id, key, () => editor.ids.next()) : cloneSubtree(tx, editor, sourceId, source.parent.id, key);
+    // Duplicating a main component makes an instance of it; duplicating a variant adds a variant to its set.
+    const makesInstance = isMainComponent(source) && !isComponentSet(store.get(source.parent.id) as SceneNode | undefined);
+    const cloneId = makesInstance ? instantiate(tx, sourceId, source.parent.id, key, () => editor.ids.next()) : cloneSubtree(tx, editor, sourceId, source.parent.id, key);
     const t = source.transform;
     if (offset) tx.set(cloneId, 'transform', [t[0], t[1], t[2], t[3], t[4] + offset.x, t[5] + offset.y] satisfies Transform);
     clones.push(cloneId);

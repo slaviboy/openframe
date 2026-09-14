@@ -34,8 +34,11 @@ test('an instance of a variant is configured from its properties in the right si
   await page.keyboard.press('ControlOrMeta+A');
   await page.getByRole('button', { name: 'Combine as variants' }).click();
 
+  // The Assets tab lists the component set once, named after the set (the first component).
   await page.keyboard.press('Alt+2');
-  await page.getByRole('list', { name: 'Local components' }).getByRole('button', { name: /Variant=Component 1/ }).click();
+  const assets = page.getByRole('list', { name: 'Local components' }).getByRole('button');
+  await expect(assets).toHaveCount(1);
+  await assets.filter({ hasText: 'Component 1' }).click();
   await expect(page.getByTestId('type-label')).toHaveText('Instance');
   const variant = page.getByRole('combobox', { name: 'Variant', exact: true });
   await expect(variant).toHaveValue('Component 1');

@@ -61,7 +61,7 @@ import { gradientCss } from './gradient-css';
 import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
 import { canCreateComponent, canCreateMultipleComponents, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
 import { canCombineAsVariants, combineAsVariants, instanceVariant, setInstanceVariant } from '@/editor/commands/variants';
-import { componentSetProperties, parseVariantName } from '@/core/document/variants';
+import { componentSetProperties, defaultVariant, parseVariantName } from '@/core/document/variants';
 import { commandItem } from '../../menus/menu-model';
 import { Menu, type MenuEntry } from '../../primitives/Menu';
 import { localComponents } from '@/editor/commands/insert-instance';
@@ -906,7 +906,7 @@ function ComponentSection({ node }: { node: SceneNode }) {
     // The instance menu: swap this instance for another component of the file.
     return (
       <Section title="Component">
-        <select className={primitives.select} aria-label="Swap instance" value={main.id} onChange={(e) => swapInstanceFor(editor, node.id, e.target.value)}>
+        <select className={primitives.select} aria-label="Swap instance" value={variantOf ? (defaultVariant(editor.doc, variantOf.set.id)?.id ?? main.id) : main.id} onChange={(e) => swapInstanceFor(editor, node.id, e.target.value)}>
           {localComponents(editor).map((component) => (
             <option key={component.id} value={component.id}>
               {component.name}

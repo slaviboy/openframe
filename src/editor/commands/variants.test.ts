@@ -22,7 +22,7 @@ import { IdGenerator } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { BUILTIN_COMMANDS } from './builtin';
-import { insertInstance } from './insert-instance';
+import { insertInstance, localComponents } from './insert-instance';
 import { canCombineAsVariants, instanceVariant, setInstanceVariant } from './variants';
 
 let editor: Editor;
@@ -145,5 +145,32 @@ describe('configure an instance variant', () => {
     editor.commands.run('object.resetOverrides');
     expect(node(renamed)).toMatchObject({ name: 'CTA' });
     expect(node(renamed).overrides).toBeUndefined();
+  });
+});
+
+describe('variants in a component set', () => {
+  test('⌘D on a variant adds a variant to the set instead of making an instance', () => {
+    editor.state.select([primary, secondary]);
+    editor.commands.run('object.combineAsVariants');
+    const set = editor.selection[0]!;
+    editor.state.select([secondary]);
+    editor.commands.run('edit.duplicate');
+    const copy = editor.selection[0]!;
+    expect(copy).not.toBe(secondary);
+    expect(editor.doc.parentOf(copy)).toBe(set);
+    expect(node(copy)).toMatchObject({ name: node(secondary).name, component: {} });
+    expect(node(copy).instance).toBeUndefined();
+    expect(editor.doc.children(copy)).toHaveLength(1);
+  });
+
+  test('a component set is listed once, by its default variant and the set name', () => {
+    const lone = component(0, 'Card');
+    editor.history.run('Move', (tx) => tx.set(lone, 'transform', [1, 0, 0, 1, 0, 400]));
+    editor.state.select([primary, secondary]);
+    editor.commands.run('object.combineAsVariants');
+    expect(localComponents(editor).map(({ id, name }) => ({ id, name }))).toEqual([
+      { id: primary, name: 'Button' },
+      { id: lone, name: 'Card' },
+    ]);
   });
 });
