@@ -296,7 +296,12 @@ const SceneFields = {
   effects: z.array(EffectSchema).max(64).optional(),
   /** Inside a main component or variant: the component properties (by name) this layer's visibility and text, or for a nested instance its component, follow. */
   componentPropertyReferences: z
-    .object({ visible: z.string().min(1).max(200).optional(), characters: z.string().min(1).max(200).optional(), mainComponent: z.string().min(1).max(200).optional() })
+    .object({
+      visible: z.string().min(1).max(200).optional(),
+      characters: z.string().min(1).max(200).optional(),
+      mainComponent: z.string().min(1).max(200).optional(),
+      slot: z.string().min(1).max(200).optional(),
+    })
     .optional(),
   /** Constrain proportions: width and height edits keep the aspect ratio. Absent means off. */
   constrainProportions: z.boolean().optional(),
@@ -421,6 +426,17 @@ export const ComponentPropertyDefinitionSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('BOOLEAN'), defaultValue: z.boolean() }),
   z.object({ type: z.literal('TEXT'), defaultValue: z.string().max(1_000_000) }),
   z.object({ type: z.literal('INSTANCE_SWAP'), defaultValue: IdSchema, preferredValues: z.array(IdSchema).max(1000).optional() }),
+  // A slot: a frame in the component whose content instances can change (no default value; the frame's layers are the default content).
+  z.object({
+    type: z.literal('SLOT'),
+    description: z.string().max(10_000).optional(),
+    preferredValues: z.array(IdSchema).max(1000).optional(),
+    minLayers: z.number().int().min(0).max(10_000).optional(),
+    maxLayers: z.number().int().min(0).max(10_000).optional(),
+    onlyPreferred: z.literal(true).optional(),
+    showEmpty: z.literal(true).optional(),
+    fillCounterAxis: z.literal(true).optional(),
+  }),
 ]);
 export type ComponentPropertyDefinition = z.infer<typeof ComponentPropertyDefinitionSchema>;
 

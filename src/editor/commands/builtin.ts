@@ -39,6 +39,7 @@ import { BOOLEAN_NAMES, booleanSelection, canBooleanSelection } from './boolean'
 import { canCreateComponent, canCreateMultipleComponents, createMultipleComponents, createComponent } from './components';
 import { addVariant, canAddVariant, canCombineAsVariants, combineAsVariants } from './variants';
 import { canMultiEditVariants, toggleMultiEditVariants } from './multi-edit';
+import { canConvertToSlot, canWrapInNewSlot, convertToSlot, wrapInNewSlot } from './component-properties';
 import { canDetachInstance, detachInstances } from './detach';
 import { canResetOverrides, resetSelectedOverrides } from './reset-overrides';
 import { canGoToMainComponent, canPushChangesToMain, canRestoreMainComponent, goToMainComponent, pushChangesToMain, restoreMainComponent } from './main-component';
@@ -205,6 +206,22 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     category: 'Object',
     enabled: canAddVariant,
     run: (e) => addVariant(e),
+  },
+  {
+    id: 'object.convertToSlot',
+    label: 'Convert to slot',
+    category: 'Object',
+    // ⌘⇧S on macOS; Ctrl+Shift+S elsewhere.
+    shortcuts: ['Mod+Shift+S'],
+    enabled: (e) => e.selection.length === 1 && canConvertToSlot(e, e.selection[0]!),
+    run: (e) => void convertToSlot(e, e.selection[0]!),
+  },
+  {
+    id: 'object.wrapInNewSlot',
+    label: 'Wrap in new slot',
+    category: 'Object',
+    enabled: canWrapInNewSlot,
+    run: (e) => void wrapInNewSlot(e),
   },
   {
     id: 'object.multiEditVariants',

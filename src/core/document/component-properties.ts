@@ -23,10 +23,10 @@ import { isComponentSet, variantsOf } from './variants';
 export type ComponentPropertyType = ComponentPropertyDefinition['type'];
 
 /** What a component property drives on a layer: its visibility, its text, or (`mainComponent`) the component a nested instance is. */
-export type BoundField = 'visible' | 'characters' | 'mainComponent';
+export type BoundField = 'visible' | 'characters' | 'mainComponent' | 'slot';
 
 /** The field each component property type drives: boolean properties layer visibility, text properties text content, instance swap properties a nested instance's component. */
-export const PROPERTY_FIELD: Readonly<Record<ComponentPropertyType, BoundField>> = { BOOLEAN: 'visible', TEXT: 'characters', INSTANCE_SWAP: 'mainComponent' };
+export const PROPERTY_FIELD: Readonly<Record<ComponentPropertyType, BoundField>> = { BOOLEAN: 'visible', TEXT: 'characters', INSTANCE_SWAP: 'mainComponent', SLOT: 'slot' };
 
 /** The part of the document store component properties are read from. */
 interface PropertyStore {
@@ -98,7 +98,7 @@ export function boundLayers(store: PropertyStore, rootId: Id, name: string): Arr
   for (const id of [rootId, ...store.descendants(rootId, false)]) {
     const references = sceneNodeAt(store, id)?.componentPropertyReferences;
     if (!references) continue;
-    for (const field of ['visible', 'characters', 'mainComponent'] as const) if (references[field] === name) bound.push({ id, field });
+    for (const field of ['visible', 'characters', 'mainComponent', 'slot'] as const) if (references[field] === name) bound.push({ id, field });
   }
   return bound;
 }

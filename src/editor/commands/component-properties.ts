@@ -33,6 +33,8 @@ import type { Id } from '@/core/ids/ids';
 import type { ComponentPropertyDefinition, SceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 import { localComponents, type LocalComponent } from './insert-instance';
+import { selectedSceneNodes } from './selection-helpers';
+import { wrapNodes } from './structure';
 
 type Definitions = Readonly<Record<string, ComponentPropertyDefinition>>;
 type PropertyValue = boolean | string;
@@ -65,6 +67,8 @@ function referencesWithout(layer: SceneNode, field: string): SceneNode['componen
 function definitionOf(editor: Editor, type: ComponentPropertyType, value: PropertyValue, preferredValues?: readonly Id[]): ComponentPropertyDefinition | null {
   if (type === 'BOOLEAN') return typeof value === 'boolean' ? { type, defaultValue: value } : null;
   if (type === 'TEXT') return typeof value === 'string' ? { type, defaultValue: value } : null;
+  // Slots are created without a value (createSlotProperty, convertToSlot).
+  if (type === 'SLOT') return null;
   // Instance swap properties take a main component, and the preferred components to swap to.
   const isComponent = (id: unknown): id is Id => typeof id === 'string' && isMainComponent(sceneNode(editor, id));
   if (!isComponent(value) || !(preferredValues ?? []).every(isComponent)) return null;
@@ -106,13 +110,13 @@ export function applyComponentProperty(editor: Editor, layerId: Id, type: Compon
   const layer = sceneNode(editor, layerId);
   const owner = bindingOwner(editor.doc, layerId);
   const field = PROPERTY_FIELD[type];
-  if (!layer || !owner || (field === 'characters' && layer.type !== 'TEXT') || (field === 'mainComponent' && !isInstance(layer))) return false;
+  if (!layer || !owner || (field === 'characters' && layer.type !== 'TEXT') || (field === 'mainComponent' && !isInstance(layer)) || (field === 'slot' && (layer.type !== 'FRAME' || isInstance(layer)))) return false;
   const definition = name === null ? undefined : propertyDefinitions(owner)[name];
   if (name !== null && definition?.type !== type) return false;
   const rest = referencesWithout(layer, field);
   editor.history.run(name === null ? 'Remove component property' : 'Apply component property', (tx) => {
     tx.set(layerId, 'componentPropertyReferences', name === null ? rest : { ...rest, [field]: name });
-    if (definition) setBoundValue(tx, editor, layerId, field, definition.defaultValue);
+    if (definition && definition.type !== 'SLOT') setBoundValue(tx, editor, layerId, field, definition.defaultValue);
   });
   return true;
 }
@@ -125,8 +129,9 @@ export function setComponentPropertyDefault(editor: Editor, ownerId: Id, name: s
   const owner = sceneNode(editor, ownerId);
   const definitions = owner ? propertyDefinitions(owner) : {};
   const current = definitions[name];
-  const definition = current ? definitionOf(editor, current.type, value, current.type === 'INSTANCE_SWAP' ? current.preferredValues : undefined) : null;
-  if (!owner || !current || !definition || current.defaultValue === value) return false;
+  if (!owner || !current || current.type === 'SLOT') return false;
+  const definition = definitionOf(editor, current.type, value, current.type === 'INSTANCE_SWAP' ? current.preferredValues : undefined);
+  if (!definition || current.defaultValue === value) return false;
   editor.history.run('Change property default', (tx) => {
     setDefinitions(tx, ownerId, { ...definitions, [name]: definition });
     for (const main of ownerComponents(tx.store, owner)) for (const { id, field } of boundLayers(tx.store, main.id, name)) setBoundValue(tx, editor, id, field, value);
@@ -169,7 +174,7 @@ export function deleteComponentProperty(editor: Editor, ownerId: Id, name: strin
 /** An instance's value for a component property: what its bound layers show, or else the property's default. */
 export function instancePropertyValue(editor: Editor, instanceId: Id, name: string): PropertyValue | undefined {
   const definition = propertyDefinitions(propertyOwner(editor.doc, instanceId))[name];
-  if (!definition) return undefined;
+  if (!definition || definition.type === 'SLOT') return undefined;
   const [first] = boundLayers(editor.doc, instanceId, name);
   const layer = first ? sceneNode(editor, first.id) : undefined;
   const value = !first || !layer ? undefined : first.field === 'mainComponent' ? (layer.type === 'FRAME' ? layer.instance?.mainId : undefined) : (layer as unknown as Record<string, unknown>)[first.field];
@@ -181,7 +186,7 @@ export function setInstanceProperty(editor: Editor, instanceId: Id, name: string
   const instance = sceneNode(editor, instanceId);
   const definition = propertyDefinitions(propertyOwner(editor.doc, instanceId))[name];
   const bound = boundLayers(editor.doc, instanceId, name);
-  if (!instance || !isInstance(instance) || !definition || typeof value !== typeof definition.defaultValue || bound.length === 0) return false;
+  if (!instance || !isInstance(instance) || !definition || definition.type === 'SLOT' || typeof value !== typeof definition.defaultValue || bound.length === 0) return false;
   if (definition.type === 'INSTANCE_SWAP' && !isMainComponent(sceneNode(editor, value as Id))) return false;
   editor.history.run('Change instance property', (tx) => bound.forEach(({ id, field }) => setBoundValue(tx, editor, id, field, value)));
   return true;
@@ -217,4 +222,127 @@ export function setExposedInstance(editor: Editor, layerId: Id, exposed: boolean
   if (exposed && !exposableInstances(editor.doc, owner).some((instance) => instance.id === layerId)) return false;
   editor.history.run(exposed ? 'Expose nested instance' : 'Stop exposing nested instance', (tx) => tx.set(layerId, 'isExposedInstance', exposed ? true : undefined));
   return true;
+}
+
+type SlotDefinition = Extract<ComponentPropertyDefinition, { type: 'SLOT' }>;
+
+/** Slot settings to change; undefined clears one. */
+export interface SlotSettings {
+  readonly description?: string | undefined;
+  readonly preferredValues?: readonly Id[] | undefined;
+  readonly minLayers?: number | undefined;
+  readonly maxLayers?: number | undefined;
+  readonly onlyPreferred?: boolean | undefined;
+  readonly showEmpty?: boolean | undefined;
+  readonly fillCounterAxis?: boolean | undefined;
+}
+
+/** A slot definition with settings applied; null when they aren't valid (preferred instances must be components, limits whole and min ≤ max). */
+function slotDefinition(editor: Editor, base: SlotSettings, patch: SlotSettings): SlotDefinition | null {
+  const merged: SlotSettings = { ...base, ...patch };
+  const preferred = merged.preferredValues ?? [];
+  const limit = (value: number | undefined) => value === undefined || (Number.isInteger(value) && value >= 0);
+  if (!preferred.every((id) => isMainComponent(sceneNode(editor, id))) || !limit(merged.minLayers) || !limit(merged.maxLayers)) return null;
+  if (merged.minLayers !== undefined && merged.maxLayers !== undefined && merged.minLayers > merged.maxLayers) return null;
+  const description = merged.description?.trim();
+  // Only settings in use are stored.
+  return {
+    type: 'SLOT',
+    ...(description ? { description } : {}),
+    ...(preferred.length > 0 ? { preferredValues: [...preferred] } : {}),
+    ...(merged.minLayers !== undefined ? { minLayers: merged.minLayers } : {}),
+    ...(merged.maxLayers !== undefined ? { maxLayers: merged.maxLayers } : {}),
+    ...(merged.onlyPreferred ? { onlyPreferred: true as const } : {}),
+    ...(merged.showEmpty ? { showEmpty: true as const } : {}),
+    ...(merged.fillCounterAxis ? { fillCounterAxis: true as const } : {}),
+  };
+}
+
+/** The first free name among Slot, Slot 2, Slot 3… for a new slot property. */
+function newSlotName(editor: Editor, owner: SceneNode): string {
+  const taken = takenNames(editor, owner);
+  if (!taken.has('Slot')) return 'Slot';
+  let n = 2;
+  while (taken.has(`Slot ${n}`)) n++;
+  return `Slot ${n}`;
+}
+
+/** Creates a slot property on a main component or component set, not yet applied to a frame. One undo step. */
+export function createSlotProperty(editor: Editor, ownerId: Id, name: string, settings: SlotSettings = {}): boolean {
+  const owner = sceneNode(editor, ownerId);
+  const trimmed = name.trim();
+  const definition = slotDefinition(editor, {}, settings);
+  if (!owner || !definition || !canHaveProperties(editor, ownerId) || trimmed === '' || takenNames(editor, owner).has(trimmed)) return false;
+  editor.history.run('Create slot property', (tx) => setDefinitions(tx, ownerId, { ...propertyDefinitions(owner), [trimmed]: definition }));
+  return true;
+}
+
+/** Changes the settings of a slot property. One undo step. */
+export function setSlotSettings(editor: Editor, ownerId: Id, name: string, patch: SlotSettings): boolean {
+  const owner = sceneNode(editor, ownerId);
+  const definitions = owner ? propertyDefinitions(owner) : {};
+  const current = definitions[name];
+  if (!owner || current?.type !== 'SLOT') return false;
+  const definition = slotDefinition(editor, current, patch);
+  if (!definition || JSON.stringify(definition) === JSON.stringify(current)) return false;
+  editor.history.run('Change slot settings', (tx) => setDefinitions(tx, ownerId, { ...definitions, [name]: definition }));
+  return true;
+}
+
+/** Whether a layer can be converted to a slot: a frame (not an instance, and not a slot already) nested in a main component or variant. */
+export function canConvertToSlot(editor: Editor, layerId: Id): boolean {
+  const layer = sceneNode(editor, layerId);
+  return layer?.type === 'FRAME' && !layer.instance && !layer.component && !layer.componentPropertyReferences?.slot && bindingOwner(editor.doc, layerId) !== null;
+}
+
+/**
+ * Convert to slot (⌘⇧S): makes a nested frame of a main component a slot, bound to an existing slot property of the
+ * component when `propertyName` is given, otherwise to a new one (Slot, Slot 2…). The frame's layers are the slot's
+ * default content. Returns the property name; one undo step.
+ */
+export function convertToSlot(editor: Editor, layerId: Id, propertyName?: string): string | null {
+  if (!canConvertToSlot(editor, layerId)) return null;
+  const layer = sceneNode(editor, layerId)!;
+  const owner = bindingOwner(editor.doc, layerId)!;
+  const definitions = propertyDefinitions(owner);
+  if (propertyName !== undefined && definitions[propertyName]?.type !== 'SLOT') return null;
+  const name = propertyName ?? newSlotName(editor, owner);
+  editor.history.run('Convert to slot', (tx) => {
+    if (propertyName === undefined) setDefinitions(tx, owner.id, { ...definitions, [name]: { type: 'SLOT' } });
+    tx.set(layerId, 'componentPropertyReferences', { ...layer.componentPropertyReferences, slot: name });
+  });
+  return name;
+}
+
+/** Whether the selection can be wrapped in a new slot: layers sharing a parent inside a main component or variant. */
+export function canWrapInNewSlot(editor: Editor): boolean {
+  const ids = selectedSceneNodes(editor);
+  const parent = ids.length > 0 ? editor.doc.parentOf(ids[0]!) : null;
+  return parent !== null && ids.every((id) => editor.doc.parentOf(id) === parent && bindingOwner(editor.doc, id) !== null);
+}
+
+/**
+ * Wrap in new slot: puts the selected layers of a main component in a new frame without a fill, where they sit now,
+ * and converts it to a slot with a new slot property. The slot is selected; one undo step.
+ */
+export function wrapInNewSlot(editor: Editor): Id | null {
+  if (!canWrapInNewSlot(editor)) return null;
+  const selected = new Set(selectedSceneNodes(editor));
+  const parent = editor.doc.parentOf([...selected][0]!)!;
+  const ids = editor.doc.children(parent).filter((id) => selected.has(id));
+  const owner = bindingOwner(editor.doc, ids[0]!)!;
+  const name = newSlotName(editor, owner);
+  const slotId = editor.ids.next();
+  editor.history.run('Wrap in new slot', (tx) => {
+    wrapNodes(tx, editor, ids, 'FRAME', slotId, {
+      name: 'Slot',
+      after: (t, container) => {
+        t.set(container, 'fills', []);
+        t.set(container, 'componentPropertyReferences', { slot: name });
+      },
+    });
+    setDefinitions(tx, owner.id, { ...propertyDefinitions(owner), [name]: { type: 'SLOT' } });
+  });
+  editor.state.select([slotId]);
+  return slotId;
 }

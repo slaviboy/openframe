@@ -1225,7 +1225,9 @@ function ComponentPropertyRows({ ownerId, creating, onCreated }: { ownerId: stri
               {name}
             </span>
           )}
-          {definition.type === 'INSTANCE_SWAP' ? (
+          {definition.type === 'SLOT' ? (
+            <span className={styles.hint}>Slot</span>
+          ) : definition.type === 'INSTANCE_SWAP' ? (
             <SwapPropertyDefault ownerId={ownerId} name={name} definition={definition} />
           ) : definition.type === 'BOOLEAN' ? (
             <label className={styles.checkbox}>
@@ -1308,6 +1310,7 @@ function InstanceProperties({ instanceId, nested = false }: { instanceId: string
     <>
       {Object.entries(propertyDefinitions(propertyOwner(editor.doc, instanceId))).map(([name, definition]) => {
         const value = instancePropertyValue(editor, instanceId, name);
+        if (definition.type === 'SLOT') return null;
         if (definition.type === 'INSTANCE_SWAP') {
           return <InstanceSwapControl key={name} instanceId={instanceId} name={name} preferred={definition.preferredValues ?? []} value={typeof value === 'string' ? value : definition.defaultValue} />;
         }
