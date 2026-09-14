@@ -97,7 +97,10 @@ function MenuList({ label, entries, anchor, placement, onCloseAll, onCloseSelf, 
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
-    setPosition(placeFloating(anchor, { width: rect.width, height: rect.height }, { width: window.innerWidth, height: window.innerHeight }, placement));
+    const next = placeFloating(anchor, { width: rect.width, height: rect.height }, { width: window.innerWidth, height: window.innerHeight }, placement);
+    // The owner rebuilds the entries whenever it renders (e.g. when autosave updates the save status): keep
+    // the same position when nothing moved, so this menu doesn't take focus back from an open submenu.
+    setPosition((prev) => (prev && prev.x === next.x && prev.y === next.y ? prev : next));
   }, [anchor, placement, entries]);
 
   useEffect(() => {
