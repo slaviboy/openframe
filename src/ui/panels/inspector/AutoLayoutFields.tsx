@@ -20,7 +20,7 @@ import type { Transaction } from '@/core/history/history';
 import { applyAutoLayout, clearAutoLayout, horizontalSizing, isAutoLayoutFrame, verticalSizing } from '@/core/layout/auto-layout';
 import type { CounterAlign, FlowDirection, PrimaryAlign, Sizing } from '@/core/layout/flow-layout';
 import type { FrameNode, SceneNode } from '@/core/schema/document';
-import { setLayoutSizing } from '@/editor/commands/auto-layout';
+import { setLayoutSizing, setSizeLimit, type SizeLimitField } from '@/editor/commands/auto-layout';
 import { MIXED, shared } from '@/editor/commands/properties';
 import { useEditor } from '../../hooks/useEditor';
 import { useGesture } from '../../hooks/useGesture';
@@ -49,37 +49,84 @@ type PaddingField = 'paddingTop' | 'paddingRight' | 'paddingBottom' | 'paddingLe
 /** Width and height resizing (fixed, hug contents, fill container) for layers where hug or fill applies. */
 export function LayoutSizingFields({ nodes }: { nodes: SceneNode[] }) {
   const editor = useEditor();
+  const limitGesture = useGesture('Change size limit');
   const inAutoLayout = (n: SceneNode) => isAutoLayoutFrame(editor.doc.get(n.parent.id));
+  const inFlow = (n: SceneNode) => inAutoLayout(n) && n.layoutPositioning !== 'ABSOLUTE';
   const canHug = nodes.every((n) => n.type === 'TEXT' || isAutoLayoutFrame(n));
-  const canFill = nodes.every(inAutoLayout);
+  const canFill = nodes.every(inFlow);
   if (nodes.length === 0 || (!canHug && !canFill)) return null;
+  // Min and max sizes apply to auto layout frames and their children.
+  const canLimit = nodes.every((n) => isAutoLayoutFrame(n) || inAutoLayout(n));
   const axes = [
-    ['horizontal', 'Width sizing', shared(nodes, (n) => horizontalSizing(n, inAutoLayout(n)))],
-    ['vertical', 'Height sizing', shared(nodes, (n) => verticalSizing(n, inAutoLayout(n)))],
+    { axis: 'horizontal', label: 'Width sizing', name: 'width', min: 'minWidth', max: 'maxWidth', current: shared(nodes, (n) => horizontalSizing(n, inFlow(n))) },
+    { axis: 'vertical', label: 'Height sizing', name: 'height', min: 'minHeight', max: 'maxHeight', current: shared(nodes, (n) => verticalSizing(n, inFlow(n))) },
   ] as const;
+  const limits = (field: SizeLimitField) => shared(nodes, (n) => n[field]);
+  const shown = axes.flatMap(({ name, min, max }) =>
+    ([
+      [min, `Min ${name}`],
+      [max, `Max ${name}`],
+    ] as const).filter(([field]) => nodes.some((n) => n[field] !== undefined)),
+  );
   return (
-    <div className={styles.grid2}>
-      {axes.map(([axis, label, current]) => (
-        <select
-          key={axis}
-          className={primitives.select}
-          aria-label={label}
-          value={valueOf(current) ?? ''}
-          onChange={(e) => editor.history.run('Change resizing', (tx) => nodes.forEach((n) => setLayoutSizing(tx, n, axis, e.target.value as Sizing)))}
-        >
-          {current === MIXED && (
-            <option value="" disabled>
-              Mixed
-            </option>
-          )}
-          {(['FIXED', 'HUG', 'FILL'] as const).map((sizing) => (
-            <option key={sizing} value={sizing} disabled={(sizing === 'HUG' && !canHug) || (sizing === 'FILL' && !canFill)}>
-              {SIZING_LABELS[sizing]}
-            </option>
+    <>
+      <div className={styles.grid2}>
+        {axes.map(({ axis, label, name, min, max, current }) => (
+          <select
+            key={axis}
+            className={primitives.select}
+            aria-label={label}
+            value={valueOf(current) ?? ''}
+            onChange={(e) => {
+              const choice = e.target.value;
+              const size = axis === 'horizontal' ? 'width' : 'height';
+              if (choice === 'ADD_MIN' || choice === 'ADD_MAX') {
+                const field = choice === 'ADD_MIN' ? min : max;
+                editor.history.run(`Add ${choice === 'ADD_MIN' ? 'min' : 'max'} ${name}`, (tx) => nodes.forEach((n) => setSizeLimit(tx, n, field, n.size[size])));
+              } else if (choice === 'REMOVE_LIMITS') {
+                editor.history.run('Remove min and max', (tx) => nodes.forEach((n) => [min, max].forEach((field) => setSizeLimit(tx, n, field, undefined))));
+              } else {
+                editor.history.run('Change resizing', (tx) => nodes.forEach((n) => setLayoutSizing(tx, n, axis, choice as Sizing)));
+              }
+            }}
+          >
+            {current === MIXED && (
+              <option value="" disabled>
+                Mixed
+              </option>
+            )}
+            {(['FIXED', 'HUG', 'FILL'] as const).map((sizing) => (
+              <option key={sizing} value={sizing} disabled={(sizing === 'HUG' && !canHug) || (sizing === 'FILL' && !canFill)}>
+                {SIZING_LABELS[sizing]}
+              </option>
+            ))}
+            {canLimit && (
+              <>
+                <option value="ADD_MIN">Add min {name}</option>
+                <option value="ADD_MAX">Add max {name}</option>
+                {nodes.some((n) => n[min] !== undefined || n[max] !== undefined) && <option value="REMOVE_LIMITS">Remove min and max</option>}
+              </>
+            )}
+          </select>
+        ))}
+      </div>
+      {canLimit && shown.length > 0 && (
+        <div className={styles.grid2}>
+          {shown.map(([field, label]) => (
+            <NumberField
+              key={field}
+              label={label.replace('width', 'W').replace('height', 'H')}
+              ariaLabel={label}
+              min={0}
+              value={valueOf(limits(field))}
+              onGestureStart={limitGesture.start}
+              onGestureEnd={limitGesture.end}
+              onChange={(v) => limitGesture.change((tx) => nodes.forEach((n) => setSizeLimit(tx, n, field, v)))}
+            />
           ))}
-        </select>
-      ))}
-    </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -89,6 +136,7 @@ export function AutoLayoutFields({ frames }: { frames: FrameNode[] }) {
   const gapGesture = useGesture('Change gap');
   const paddingGesture = useGesture('Change padding');
   const [individualPadding, setIndividualPadding] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const run = (label: string, apply: (tx: Transaction, frame: FrameNode) => void) =>
     editor.history.run(label, (tx) => frames.forEach((f) => apply(tx, tx.store.getOrThrow(f.id) as FrameNode)));
@@ -224,6 +272,37 @@ export function AutoLayoutFields({ frames }: { frames: FrameNode[] }) {
         )}
       </div>
       <IconButton icon="paddingSides" label="Individual padding" pressed={individualPadding} onClick={() => setIndividualPadding((on) => !on)} />
+      <button type="button" className={styles.disclosure} aria-expanded={settingsOpen} onClick={() => setSettingsOpen((open) => !open)}>
+        Auto layout settings
+      </button>
+      {settingsOpen && (
+        <div className={styles.grid2} role="group" aria-label="Auto layout settings">
+          <select
+            className={primitives.select}
+            aria-label="Canvas stacking"
+            value={valueOf(shared(frames, (f) => (f.itemReverseZIndex ? 'FIRST' : 'LAST'))) ?? ''}
+            onChange={(e) => {
+              const first = e.target.value === 'FIRST';
+              run('Change canvas stacking', (tx, f) => tx.set(f.id, 'itemReverseZIndex', first ? true : undefined));
+            }}
+          >
+            <option value="LAST">Last on top</option>
+            <option value="FIRST">First on top</option>
+          </select>
+          <select
+            className={primitives.select}
+            aria-label="Inside strokes"
+            value={valueOf(shared(frames, (f) => (f.strokesIncludedInLayout === false ? 'EXCLUDED' : 'INCLUDED'))) ?? ''}
+            onChange={(e) => {
+              const excluded = e.target.value === 'EXCLUDED';
+              run('Change strokes in layout', (tx, f) => tx.set(f.id, 'strokesIncludedInLayout', excluded ? false : undefined));
+            }}
+          >
+            <option value="INCLUDED">Included in layout</option>
+            <option value="EXCLUDED">Excluded from layout</option>
+          </select>
+        </div>
+      )}
     </>
   );
 }

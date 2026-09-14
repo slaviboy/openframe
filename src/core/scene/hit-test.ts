@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { stackingOrder } from '../layout/auto-layout';
 import type { DocumentStore } from '../document/store';
 import type { Id } from '../ids/ids';
 import { intersects, contains as rectContains, type Rect } from '../math/rect';
@@ -73,7 +74,7 @@ export function hitTestDeepest(store: DocumentStore, index: SceneIndex, pageId: 
     const node = store.get(id);
     if (!node) return null;
     if (isSceneNode(node) && (!node.visible || node.locked)) return null;
-    const children = store.children(id);
+    const children = stackingOrder(node, store.children(id));
     for (let i = children.length - 1; i >= 0; i--) {
       const hit = visit(children[i]!);
       if (hit) return hit;
@@ -105,7 +106,7 @@ export function layersAt(store: DocumentStore, index: SceneIndex, pageId: Id, wo
     const mark = out.length;
     out.push(id);
     let childHit = false;
-    const children = store.children(id);
+    const children = stackingOrder(node, store.children(id));
     for (let i = children.length - 1; i >= 0; i--) if (visit(children[i]!)) childHit = true;
     let self = false;
     if (node.type !== 'GROUP' && candidates.has(id)) {

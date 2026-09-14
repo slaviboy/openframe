@@ -302,6 +302,13 @@ const SceneFields = {
   layoutSizingHorizontal: LayoutSizingSchema.optional(),
   /** Vertical resizing in auto layout. Absent means fixed. */
   layoutSizingVertical: LayoutSizingSchema.optional(),
+  /** Size limits for auto layout frames and their children. Absent means no limit. */
+  minWidth: z.number().min(0).max(100_000).optional(),
+  maxWidth: z.number().min(0).max(100_000).optional(),
+  minHeight: z.number().min(0).max(100_000).optional(),
+  maxHeight: z.number().min(0).max(100_000).optional(),
+  /** Ignore auto layout: the child keeps its own position (and constraints) inside an auto layout frame. */
+  layoutPositioning: z.literal('ABSOLUTE').optional(),
   /** Used as a mask: masks the siblings above it, up to the next mask. Absent means not a mask. */
   isMask: z.boolean().optional(),
   /** How a mask reveals content; absent means ALPHA. */
@@ -408,6 +415,10 @@ export const FrameNodeSchema = z.object({
   primaryAxisAlignItems: z.enum(['CENTER', 'MAX', 'SPACE_BETWEEN', 'SPACE_AROUND', 'SPACE_EVENLY']).optional(),
   /** Alignment across the flow. Absent means start. */
   counterAxisAlignItems: z.enum(['CENTER', 'MAX']).optional(),
+  /** Canvas stacking: the first child is drawn on top. Absent means the last child is on top. */
+  itemReverseZIndex: z.literal(true).optional(),
+  /** Inside strokes are excluded from the layout. Absent means they take up room like padding. */
+  strokesIncludedInLayout: z.literal(false).optional(),
 });
 
 export const GroupNodeSchema = z.object({ ...SceneFields, type: z.literal('GROUP') });

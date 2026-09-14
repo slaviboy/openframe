@@ -327,7 +327,10 @@ export function setParagraphIndent(tx: Transaction, node: SceneNode, indent: num
 
 /** Max lines (auto height and truncated boxes cut off with an ellipsis); undefined removes the limit. */
 export function setMaxLines(tx: Transaction, node: SceneNode, maxLines: number | undefined): void {
-  if (textOf(tx, node)) tx.set(node.id, 'maxLines', maxLines === undefined ? undefined : Math.min(10_000, Math.max(1, Math.round(maxLines))));
+  if (!textOf(tx, node)) return;
+  tx.set(node.id, 'maxLines', maxLines === undefined ? undefined : Math.min(10_000, Math.max(1, Math.round(maxLines))));
+  // A text layer can't have both max lines and a max height.
+  if (maxLines !== undefined) tx.set(node.id, 'maxHeight', undefined);
 }
 
 /**

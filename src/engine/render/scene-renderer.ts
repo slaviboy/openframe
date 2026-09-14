@@ -20,6 +20,7 @@ import type { Effect } from '@/core/schema/document';
 
 const isNormalBlend = (mode: string): boolean => mode === 'NORMAL' || mode === 'PASS_THROUGH';
 import { maskRuns } from '@/core/scene/masks';
+import { stackingOrder } from '@/core/layout/auto-layout';
 import {
   blurOffsets,
   blurSigma,
@@ -275,7 +276,8 @@ export class SceneRenderer {
     const bounds = ctx.index.paintBounds(id);
     // Subtree culling: a clipping frame contains its children; others may overflow, so
     // only cull when the node has no children or clips content. Outline mode never clips.
-    const children = ctx.store.children(id);
+    // Auto layout frames can draw their first child on top (canvas stacking).
+    const children = stackingOrder(node, ctx.store.children(id));
     const clips = !ctx.outlines && node.type === 'FRAME' && node.clipsContent;
     if (bounds && !intersects(bounds, ctx.visible) && (children.length === 0 || clips)) {
       ctx.stats.culled++;

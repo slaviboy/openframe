@@ -90,3 +90,22 @@ export function setLayoutSizing(tx: Transaction, node: SceneNode, axis: 'horizon
     if (parentAxisIsFlow || tx.store.children(parent.id).length === 1) tx.set(parent.id, field, undefined);
   }
 }
+
+export type SizeLimitField = 'minWidth' | 'maxWidth' | 'minHeight' | 'maxHeight';
+
+/** Sets or removes a min or max size. A text layer's max height replaces its max lines. */
+export function setSizeLimit(tx: Transaction, node: SceneNode, field: SizeLimitField, value: number | undefined): void {
+  tx.set(node.id, field, value === undefined ? undefined : Math.max(0, value));
+  if (field === 'maxHeight' && value !== undefined && node.type === 'TEXT') tx.set(node.id, 'maxLines', undefined);
+}
+
+/** Ignore auto layout: the child leaves the flow, keeping its place and using constraints; fill resizing no longer applies. */
+export function setIgnoreAutoLayout(tx: Transaction, node: SceneNode, on: boolean): void {
+  if (!isAutoLayoutFrame(tx.store.get(node.parent.id))) return;
+  tx.set(node.id, 'layoutPositioning', on ? 'ABSOLUTE' : undefined);
+  if (on) {
+    const current = tx.store.getOrThrow(node.id) as SceneNode;
+    if (current.layoutSizingHorizontal === 'FILL') tx.set(node.id, 'layoutSizingHorizontal', undefined);
+    if (current.layoutSizingVertical === 'FILL') tx.set(node.id, 'layoutSizingVertical', undefined);
+  }
+}

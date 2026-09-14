@@ -49,7 +49,7 @@ export function verticalSizing(node: SceneNode, inAutoLayout: boolean): Sizing {
 
 /** Padding plus inside strokes, which take up room in the layout (outside and center strokes don't). */
 export function layoutPadding(frame: FrameNode): Padding {
-  const inside = frame.strokeAlign === 'INSIDE' && frame.strokes.some((paint) => paint.visible);
+  const inside = frame.strokesIncludedInLayout !== false && frame.strokeAlign === 'INSIDE' && frame.strokes.some((paint) => paint.visible);
   const weights = frame.individualStrokeWeights ?? { top: frame.strokeWeight, right: frame.strokeWeight, bottom: frame.strokeWeight, left: frame.strokeWeight };
   return {
     top: (frame.paddingTop ?? 0) + (inside ? weights.top : 0),
@@ -62,12 +62,17 @@ export function layoutPadding(frame: FrameNode): Padding {
 /** The layer's bounding box in its parent's space. */
 const boundsInParent = (node: SceneNode): Rect => transformRect(matrixOf(node.transform), { x: 0, y: 0, width: node.size.width, height: node.size.height });
 
-/** Children that take part in the flow: visible layers, in layer order. */
+/** Children that take part in the flow: visible layers that don't ignore auto layout, in layer order. */
 const flowChildren = (tx: Transaction, frameId: Id): SceneNode[] =>
   tx.store
     .children(frameId)
     .map((id) => tx.store.get(id))
-    .filter((n): n is SceneNode => n !== undefined && isSceneNode(n) && n.visible);
+    .filter((n): n is SceneNode => n !== undefined && isSceneNode(n) && n.visible && n.layoutPositioning !== 'ABSOLUTE');
+
+/** Children in drawing order (bottom first): reversed when an auto layout frame puts its first child on top. */
+export function stackingOrder(node: Node | undefined, children: readonly Id[]): readonly Id[] {
+  return isAutoLayoutFrame(node) && node.itemReverseZIndex ? [...children].reverse() : children;
+}
 
 /**
  * Lays out one auto layout frame's children and fits the frame when it hugs. Returns whether the
@@ -96,6 +101,8 @@ function layoutFrame(tx: Transaction, frameId: Id, layout: TextLayoutService | n
         horizontalSizing: axisAligned || h !== 'FILL' ? h : 'FIXED',
         verticalSizing: axisAligned || v !== 'FILL' ? v : 'FIXED',
         mainInset: padding ? (horizontal ? padding.left + padding.right : padding.top + padding.bottom) : 0,
+        // Limits apply to the layer's own box, so rotated layers aren't limited.
+        ...(axisAligned ? { minWidth: child.minWidth, maxWidth: child.maxWidth, minHeight: child.minHeight, maxHeight: child.maxHeight } : {}),
       };
     });
     const result = layoutFlow(
@@ -111,6 +118,10 @@ function layoutFrame(tx: Transaction, frameId: Id, layout: TextLayoutService | n
         height: frame.size.height,
         horizontalSizing: frame.layoutSizingHorizontal === 'HUG' ? 'HUG' : 'FIXED',
         verticalSizing: frame.layoutSizingVertical === 'HUG' ? 'HUG' : 'FIXED',
+        minWidth: frame.minWidth,
+        maxWidth: frame.maxWidth,
+        minHeight: frame.minHeight,
+        maxHeight: frame.maxHeight,
       },
       items,
     );
@@ -125,8 +136,11 @@ function layoutFrame(tx: Transaction, frameId: Id, layout: TextLayoutService | n
       const item = items[i]!;
       let width = child.size.width;
       let height = child.size.height;
-      if (item.horizontalSizing === 'FILL') width = round(box.width);
-      if (item.verticalSizing === 'FILL') height = round(box.height);
+      // Axis-aligned children take the laid-out size: filled, or fixed and hugging sizes clamped by their limits.
+      if (Math.abs(child.transform[1]) < EPSILON && Math.abs(child.transform[2]) < EPSILON) {
+        width = round(box.width);
+        height = round(box.height);
+      }
       const m = matrixOf(child.transform);
       // Where the bounding box sits relative to the layer's origin, at the new size.
       const offset = transformRect({ ...m, e: 0, f: 0 }, { x: 0, y: 0, width, height });
@@ -139,7 +153,7 @@ function layoutFrame(tx: Transaction, frameId: Id, layout: TextLayoutService | n
         const resized = tx.store.get(child.id);
         if (resized?.type === 'TEXT') {
           // Text that fills its width wraps (auto height); text that fills its height is a fixed box.
-          const mode = item.verticalSizing === 'FILL' ? 'NONE' : item.horizontalSizing === 'FILL' && resized.textAutoResize === 'WIDTH_AND_HEIGHT' ? 'HEIGHT' : resized.textAutoResize;
+          const mode = item.verticalSizing === 'FILL' ? 'NONE' : width !== child.size.width && resized.textAutoResize === 'WIDTH_AND_HEIGHT' ? 'HEIGHT' : resized.textAutoResize;
           if (mode !== resized.textAutoResize) tx.set(child.id, 'textAutoResize', mode);
           const current = tx.store.get(child.id);
           if (layout && current?.type === 'TEXT') {
@@ -174,10 +188,15 @@ const FRAME_FIELDS: ReadonlySet<string> = new Set([
   'strokeWeight',
   'strokeAlign',
   'individualStrokeWeights',
+  'strokesIncludedInLayout',
+  'minWidth',
+  'maxWidth',
+  'minHeight',
+  'maxHeight',
 ]);
 
 /** Child fields that change its parent's layout. */
-const CHILD_FIELDS: ReadonlySet<string> = new Set(['size', 'transform', 'visible', 'layoutSizingHorizontal', 'layoutSizingVertical', 'textAutoResize']);
+const CHILD_FIELDS: ReadonlySet<string> = new Set(['size', 'transform', 'visible', 'layoutSizingHorizontal', 'layoutSizingVertical', 'textAutoResize', 'layoutPositioning', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight']);
 
 /**
  * Auto layout finalizer: lays out every auto layout frame affected by the transaction — its own
@@ -305,7 +324,7 @@ export function applyAutoLayout(tx: Transaction, frameId: Id, options: { readonl
 export function clearAutoLayout(tx: Transaction, frameId: Id): void {
   const frame = tx.store.get(frameId);
   if (!isAutoLayoutFrame(frame)) return;
-  for (const field of ['layoutMode', 'layoutWrap', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'itemSpacing', 'counterAxisSpacing', 'primaryAxisAlignItems', 'counterAxisAlignItems']) {
+  for (const field of ['layoutMode', 'layoutWrap', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'itemSpacing', 'counterAxisSpacing', 'primaryAxisAlignItems', 'counterAxisAlignItems', 'itemReverseZIndex', 'strokesIncludedInLayout']) {
     tx.set(frameId, field, undefined);
   }
   if (frame.layoutSizingHorizontal === 'HUG') tx.set(frameId, 'layoutSizingHorizontal', undefined);
@@ -315,5 +334,6 @@ export function clearAutoLayout(tx: Transaction, frameId: Id): void {
     if (!child || !isSceneNode(child)) continue;
     if (child.layoutSizingHorizontal === 'FILL') tx.set(id, 'layoutSizingHorizontal', undefined);
     if (child.layoutSizingVertical === 'FILL') tx.set(id, 'layoutSizingVertical', undefined);
+    if (child.layoutPositioning) tx.set(id, 'layoutPositioning', undefined);
   }
 }

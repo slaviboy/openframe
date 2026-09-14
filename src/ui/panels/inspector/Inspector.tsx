@@ -43,6 +43,7 @@ import { backgroundColorBehind } from '@/core/color/contrast';
 import { useColorProfile } from '../../hooks/useColorProfile';
 import { ReorderHandle } from './ReorderHandle';
 import { AutoLayoutFields, LayoutSizingFields } from './AutoLayoutFields';
+import { setIgnoreAutoLayout } from '@/editor/commands/auto-layout';
 import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
 import type { FrameNode } from '@/core/schema/document';
 import { TextResizingButtons, TypographyFields } from './TypographyFields';
@@ -540,7 +541,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
   const hasSection = nodes.some((n) => n.type === 'SECTION');
   // Constraints apply to layers inside frames.
   // Constraints apply to layers inside frames; children of auto layout frames use resizing instead.
-  const constrainable = nodes.length > 0 && nodes.every((n) => { const parent = editor.doc.get(n.parent.id); return parent?.type === 'FRAME' && !isAutoLayoutFrame(parent); });
+  const constrainable = nodes.length > 0 && nodes.every((n) => { const parent = editor.doc.get(n.parent.id); return parent?.type === 'FRAME' && (!isAutoLayoutFrame(parent) || n.layoutPositioning === 'ABSOLUTE'); });
   const horizontalConstraint = val(shared(nodes, (n) => n.constraints?.horizontal ?? 'MIN'));
   const verticalConstraint = val(shared(nodes, (n) => n.constraints?.vertical ?? 'MIN'));
   const changeConstraint = (axis: 'horizontal' | 'vertical', value: Constraint) =>
@@ -590,6 +591,17 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
               ))}
             </select>
           </div>
+        )}
+        {nodes.length > 0 && nodes.every((n) => isAutoLayoutFrame(editor.doc.get(n.parent.id))) && (
+          <IconButton
+            icon="ignoreLayout"
+            label="Ignore auto layout"
+            pressed={nodes.every((n) => n.layoutPositioning === 'ABSOLUTE')}
+            onClick={() => {
+              const on = !nodes.every((n) => n.layoutPositioning === 'ABSOLUTE');
+              editor.history.run(on ? 'Ignore auto layout' : 'Use auto layout', (tx) => nodes.forEach((n) => setIgnoreAutoLayout(tx, tx.store.getOrThrow(n.id) as SceneNode, on)));
+            }}
+          />
         )}
       </Section>
       <Section title="Layout">

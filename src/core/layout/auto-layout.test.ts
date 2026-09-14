@@ -17,11 +17,11 @@
 
 import { describe, expect, test } from 'vitest';
 import { constraintsFinalizer } from '../document/constraints';
-import { createEmptyDocument, keyOnTop, makeFrame, makeRectangle } from '../document/factory';
+import { BLACK, createEmptyDocument, keyOnTop, makeFrame, makeRectangle, solid } from '../document/factory';
 import { History } from '../history/history';
 import { IdGenerator } from '../ids/ids';
 import type { FrameNode, SceneNode } from '../schema/document';
-import { applyAutoLayout, clearAutoLayout, createAutoLayoutFinalizer } from './auto-layout';
+import { applyAutoLayout, clearAutoLayout, createAutoLayoutFinalizer, stackingOrder } from './auto-layout';
 
 function setup() {
   const ids = new IdGenerator('a');
@@ -119,5 +119,46 @@ describe('auto layout', () => {
     expect(box(sibling).x).toBe(100);
     history.commit(tx);
     expect(box(sibling).x).toBe(33);
+  });
+
+  test('min and max limits, ignore auto layout, excluded strokes and canvas stacking', () => {
+    const { ids, store, history, page, box } = setup();
+    const [frame, a, b, abs] = [ids.next(), ids.next(), ids.next(), ids.next()];
+    history.run('create', (tx) => {
+      tx.create({
+        ...makeFrame({ id: frame, parent: { id: page, key: keyOnTop(store, page) }, name: 'F', x: 0, y: 0, width: 10, height: 10 }),
+        layoutMode: 'HORIZONTAL',
+        layoutSizingHorizontal: 'HUG',
+        layoutSizingVertical: 'HUG',
+        minWidth: 100,
+        strokes: [solid(BLACK)],
+        strokeWeight: 4,
+        strokeAlign: 'INSIDE',
+      });
+      tx.create({ ...makeRectangle({ id: a, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'A', x: 0, y: 0, width: 50, height: 20 }), maxWidth: 30 });
+      tx.create(makeRectangle({ id: b, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'B', x: 0, y: 0, width: 20, height: 20 }));
+      tx.create({ ...makeRectangle({ id: abs, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'Abs', x: 70, y: 5, width: 10, height: 10 }), layoutPositioning: 'ABSOLUTE', constraints: { horizontal: 'MAX', vertical: 'MIN' } });
+    });
+    // A is limited to 30; the inside stroke pads the flow; the frame's minimum width wins over hugging.
+    expect(box(a)).toEqual({ x: 4, y: 4, width: 30, height: 20 });
+    expect(box(b).x).toBe(34);
+    expect(box(frame)).toMatchObject({ width: 100, height: 28 });
+    expect(box(abs)).toMatchObject({ x: 70, y: 5 });
+
+    history.run('exclude strokes', (tx) => tx.set(frame, 'strokesIncludedInLayout', false));
+    expect(box(a)).toMatchObject({ x: 0, y: 0 });
+    expect(box(frame).height).toBe(20);
+
+    // The layer that ignores auto layout follows its constraints when the frame is resized.
+    history.run('resize', (tx) => {
+      tx.set(frame, 'layoutSizingHorizontal', undefined);
+      tx.set(frame, 'size', { width: 150, height: 20 });
+    });
+    expect(box(abs).x).toBe(120);
+
+    const node = store.getOrThrow(frame);
+    expect(stackingOrder(node, store.children(frame))).toEqual([a, b, abs]);
+    history.run('first on top', (tx) => tx.set(frame, 'itemReverseZIndex', true));
+    expect(stackingOrder(store.getOrThrow(frame), store.children(frame))).toEqual([abs, b, a]);
   });
 });

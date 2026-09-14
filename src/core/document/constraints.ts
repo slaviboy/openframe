@@ -86,8 +86,7 @@ export function constraintsFinalizer(tx: Transaction): void {
     const op = tx.ops[i]!;
     if (op.kind !== 'set' || op.field !== 'size' || done.has(op.id)) continue;
     const frame = store.get(op.id);
-    // Children of auto layout frames are positioned by the layout instead.
-    if (frame?.type !== 'FRAME' || frame.layoutMode) continue;
+    if (frame?.type !== 'FRAME') continue;
     done.add(op.id);
     const before = op.prev as Size | undefined;
     if (!before) continue;
@@ -95,6 +94,8 @@ export function constraintsFinalizer(tx: Transaction): void {
     for (const childId of store.children(op.id)) {
       const child = store.get(childId) as SceneNode | undefined;
       if (!child || !('transform' in child)) continue;
+      // Children in an auto layout flow are positioned by the layout; those that ignore it keep their constraints.
+      if (frame.layoutMode && child.layoutPositioning !== 'ABSOLUTE') continue;
       const constraints = child.constraints ?? { horizontal: 'MIN', vertical: 'MIN' };
       const transform = original<Transform>(tx, childId, 'transform', child.transform);
       const size = original<Size>(tx, childId, 'size', child.size);

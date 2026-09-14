@@ -57,6 +57,7 @@ const PATHS = {
   layoutHorizontal: <path d="M6.5 7.5h4v9h-4zM13.5 7.5h4v9h-4z" />,
   wrap: <path d="M5.5 7.5h11a2.5 2.5 0 0 1 0 5H9.5m0 0 2-2m-2 2 2 2M5.5 16.5h6" />,
   paddingSides: <path d="M5.5 5.5h13v13h-13zM9 9h6v6H9z" />,
+  ignoreLayout: <path d="M6.5 9.5v-3h3M14.5 6.5h3v3M17.5 14.5v3h-3M9.5 17.5h-3v-3M10.5 10.5h3v3h-3z" />,
   autoHeight: <path d="M12 5.5v13M9.5 8 12 5.5 14.5 8M9.5 16l2.5 2.5 2.5-2.5" />,
   fixedSize: <path d="M6.5 6.5h11v11h-11zM9.5 12h5" />,
   truncate: <path d="M6.5 9.5h11M6.5 13.5h6M15 13.5h.5M17.5 13.5h.5" />,
