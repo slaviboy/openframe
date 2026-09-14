@@ -454,7 +454,24 @@ export const RectangleNodeSchema = z.object({
   type: z.literal('RECTANGLE'),
 });
 
-export const EllipseNodeSchema = z.object({ ...SceneFields, ...GeometryFields, type: z.literal('ELLIPSE') });
+/**
+ * Arc of an ellipse (arc handles): filled from `startingAngle` to `endingAngle` — radians, clockwise on
+ * screen from the right-hand point, up to a full turn either way — and hollowed into a ring by
+ * `innerRadius` (0–1 of the radius).
+ */
+export const ArcDataSchema = z.object({
+  startingAngle: z.number(),
+  endingAngle: z.number(),
+  innerRadius: z.number().min(0).max(1),
+});
+
+export const EllipseNodeSchema = z.object({
+  ...SceneFields,
+  ...GeometryFields,
+  type: z.literal('ELLIPSE'),
+  /** Present once the ellipse is an arc, pie or ring. */
+  arcData: ArcDataSchema.optional(),
+});
 
 const PointCountSchema = z.number().int().min(3).max(60);
 
@@ -756,6 +773,7 @@ export type VectorNode = z.infer<typeof VectorNodeSchema>;
 export type VectorNetworkData = z.infer<typeof VectorNetworkSchema>;
 export type BooleanOperationNode = z.infer<typeof BooleanOperationNodeSchema>;
 export type BooleanOperation = BooleanOperationNode['booleanOperation'];
+export type ArcData = z.infer<typeof ArcDataSchema>;
 export type StrokeCap = z.infer<typeof StrokeCapSchema>;
 export type SectionNode = z.infer<typeof SectionNodeSchema>;
 export type SliceNode = z.infer<typeof SliceNodeSchema>;

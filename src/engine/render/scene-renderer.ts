@@ -20,6 +20,7 @@ import type { Effect } from '@/core/schema/document';
 
 const isNormalBlend = (mode: string): boolean => mode === 'NORMAL' || mode === 'PASS_THROUGH';
 import { maskRuns } from '@/core/scene/masks';
+import { arcCommands } from '@/core/geometry/arc';
 import { networkStrokePath, regionFillPath } from '@/core/vector/vector-network';
 import type { BooleanOperationNode, VectorNode } from '@/core/schema/document';
 import { stackingOrder } from '@/core/layout/auto-layout';
@@ -988,6 +989,7 @@ export class SceneRenderer {
     const { width: w, height: h } = node.size;
     switch (node.type) {
       case 'ELLIPSE':
+        if (node.arcData) return this.pathFrom(arcCommands(w, h, node.arcData));
         return new this.ck.PathBuilder().addOval(this.ck.LTRBRect(0, 0, w, h)).detachAndDelete();
       case 'FRAME':
       case 'RECTANGLE': {

@@ -16,6 +16,7 @@
  */
 
 import { rectangleCorners, resolveCornerRadii, roundedPolygon, type PathCommand } from '../geometry/corners';
+import { arcCommands } from '../geometry/arc';
 import { polygonPoints, starPoints } from '../geometry/shapes';
 import type { Vec2 } from '../math/vec';
 import type { SceneNode } from '../schema/document';
@@ -99,7 +100,7 @@ export function shapeNetwork(node: SceneNode): VectorNetwork | null {
     case 'LINE':
       return { vertices: [{ x: 0, y: 0 }, { x: w, y: 0 }], segments: [straightSegment(0, 1)], regions: [] };
     case 'ELLIPSE':
-      return commandsToNetwork(ellipseCommands(w, h));
+      return commandsToNetwork(node.arcData ? arcCommands(w, h, node.arcData) : ellipseCommands(w, h));
     case 'FRAME':
     case 'RECTANGLE': {
       const radii = resolveCornerRadii(node);

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { arcContains } from '../geometry/arc';
 import type { DocumentStore } from '../document/store';
 import type { ChangeSet } from '../history/history';
 import type { Id } from '../ids/ids';
@@ -220,6 +221,7 @@ export function nodeContainsLocal(node: SceneNode, p: Vec2, tolerance: number): 
       );
     }
     case 'ELLIPSE': {
+      if (node.arcData) return arcContains(w, h, node.arcData, p, tolerance);
       const rx = w / 2 + tolerance;
       const ry = h / 2 + tolerance;
       if (rx <= 0 || ry <= 0) return false;

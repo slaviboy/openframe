@@ -47,6 +47,8 @@ import { resizedTextMode } from '../commands/text';
 import { resolveCornerRadii } from '@/core/geometry/corners';
 import type { CornerRadii } from '@/core/schema/document';
 import { applyDraggedRadius, draggedRadius, hitRadiusHandle, radiusHandles, radiusHandleScreen, radiusTarget, type RadiusHandle } from '../interactions/radius-handles';
+import type { Arc } from '@/core/geometry/arc';
+import { ARC_GESTURE_LABELS, arcHandles, arcHandleScreen, arcLabelText, arcTarget, dragArc, hitArcHandle, startArcDrag, type ArcHandle, type ArcHandleKind } from '../interactions/arc-handles';
 import {
   frameCenterWorld,
   handleCursor,
@@ -141,6 +143,8 @@ type Gesture =
       displayAngle: number;
       last: PointerInfo;
     }
+  /** Dragging an ellipse's arc handle: sweep, start or ratio. */
+  | { kind: 'arc'; tx: Transaction; handle: ArcHandle; arc: Arc; lastAngle: number; last: PointerInfo }
   /** Dragging an on-canvas corner radius handle (⌥: only that rectangle corner). */
   | {
       kind: 'radius';
@@ -265,6 +269,31 @@ export class MoveTool implements Tool {
     return g.kind === 'radius' ? { radius: g.radius, screen: g.last.screen } : null;
   }
 
+  /** Arc handles to draw (screen points), shown while the pointer is over the selected ellipse or while one is dragged. */
+  get arcHandleView(): { readonly handles: readonly { readonly kind: ArcHandleKind; readonly screen: Vec2 }[]; readonly active: ArcHandleKind | null } | null {
+    if (this.id !== 'move') return null;
+    const { editor } = this.env;
+    const g = this.gesture;
+    const view = () => arcHandles(editor).map((h) => ({ kind: h.kind, screen: arcHandleScreen(editor, h) }));
+    if (g.kind === 'arc') return { handles: view(), active: g.handle.kind };
+    if (g.kind !== 'idle' || !this.lastHover) return null;
+    const node = arcTarget(editor);
+    if (!node) return null;
+    const handles = view();
+    const local = editor.scene.toLocal(node.id, this.lastHover.world);
+    const hover = this.lastHover.screen;
+    const over =
+      (local !== null && local.x >= 0 && local.y >= 0 && local.x <= node.size.width && local.y <= node.size.height) ||
+      handles.some((h) => Math.hypot(h.screen.x - hover.x, h.screen.y - hover.y) <= this.env.hitTolerancePx);
+    return over ? { handles, active: null } : null;
+  }
+
+  /** Sweep, start or ratio label while dragging an arc handle. */
+  get arcLabel(): { text: string; screen: Vec2 } | null {
+    const g = this.gesture;
+    return g.kind === 'arc' ? { text: arcLabelText(g.handle.kind, g.arc), screen: g.last.screen } : null;
+  }
+
   /** Current marquee in world space (for the overlay), or null. */
   get marquee(): Rect | null {
     if (this.gesture.kind !== 'marquee') return null;
@@ -352,6 +381,14 @@ export class MoveTool implements Tool {
           startLength: bands[edge.index]!.length,
           toWorld: edge.selected.toWorld,
         };
+        return;
+      }
+    }
+    if (frame && this.id === 'move' && !p.shift) {
+      const arcHandle = hitArcHandle(editor, p.screen, this.env.hitTolerancePx);
+      if (arcHandle) {
+        const tx = editor.history.begin(ARC_GESTURE_LABELS[arcHandle.kind]);
+        this.gesture = { kind: 'arc', tx, handle: arcHandle, last: p, ...startArcDrag(editor, arcHandle, p.world) };
         return;
       }
     }
@@ -493,6 +530,10 @@ export class MoveTool implements Tool {
         g.last = p;
         this.applyLineEnd(p);
         return;
+      case 'arc':
+        g.last = p;
+        this.applyArc(p);
+        return;
       case 'radius':
         g.last = p;
         this.applyRadius(p);
@@ -584,6 +625,7 @@ export class MoveTool implements Tool {
       case 'rotate':
       case 'line-end':
       case 'spacing':
+      case 'arc':
       case 'radius':
         editor.history.commit(g.tx);
         break;
@@ -616,7 +658,7 @@ export class MoveTool implements Tool {
     const g = this.gesture;
     const { editor } = this.env;
     this.gesture = { kind: 'idle' };
-    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate' || g.kind === 'line-end' || g.kind === 'spacing' || g.kind === 'radius' || g.kind === 'layout-handle' || g.kind === 'grid-track') {
+    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate' || g.kind === 'line-end' || g.kind === 'spacing' || g.kind === 'arc' || g.kind === 'radius' || g.kind === 'layout-handle' || g.kind === 'grid-track') {
       editor.history.cancel(g.tx);
       return true;
     }
@@ -920,6 +962,19 @@ export class MoveTool implements Tool {
       g.tx.set(g.frameId, 'paddingBottom', next.bottom || undefined);
       g.tx.set(g.frameId, 'paddingLeft', next.left || undefined);
     }
+    g.tx.flushPreview();
+    editor.requestRender();
+  }
+
+  private applyArc(p: PointerInfo): void {
+    const g = this.gesture;
+    if (g.kind !== 'arc') return;
+    const { editor } = this.env;
+    const local = editor.scene.toLocal(g.handle.id, p.world);
+    if (!local) return;
+    const next = dragArc(g.tx, g.handle, { arc: g.arc, lastAngle: g.lastAngle }, local);
+    g.arc = next.arc;
+    g.lastAngle = next.lastAngle;
     g.tx.flushPreview();
     editor.requestRender();
   }

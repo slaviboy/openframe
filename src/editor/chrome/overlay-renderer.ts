@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { arcCommands } from '@/core/geometry/arc';
 import type { Id } from '@/core/ids/ids';
 import { apply, type Matrix } from '@/core/math/matrix';
 import type { Rect } from '@/core/math/rect';
@@ -60,6 +61,10 @@ export interface OverlayInput {
   readonly radiusHandles?: { readonly points: readonly Vec2[]; readonly active: number } | null;
   /** Live radius label while dragging a radius handle. */
   readonly radiusLabel?: { radius: number; screen: Vec2 } | null;
+  /** Arc handles of the selected ellipse (screen points); `active` is the one being dragged. */
+  readonly arcHandles?: { readonly handles: readonly { readonly kind: 'sweep' | 'start' | 'ratio'; readonly screen: Vec2 }[]; readonly active: 'sweep' | 'start' | 'ratio' | null } | null;
+  /** Live sweep, start or ratio label while dragging an arc handle. */
+  readonly arcLabel?: { readonly text: string; readonly screen: Vec2 } | null;
   /** Text editing chrome; `caretVisible` is the blink phase. */
   readonly textEdit?: { readonly caretVisible: boolean } | null;
   /** Snapping guides of the current move, in world coordinates. */
@@ -202,11 +207,30 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
     });
   }
 
+  if (input.arcHandles) {
+    for (const h of input.arcHandles.handles) {
+      ctx.beginPath();
+      ctx.arc(h.screen.x, h.screen.y, 4, 0, Math.PI * 2);
+      ctx.fillStyle = h.kind === input.arcHandles.active ? theme.selection : theme.handleFill;
+      ctx.fill();
+      ctx.strokeStyle = theme.selection;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      if (h.kind === 'start') {
+        // The start handle has a dot inside it.
+        ctx.beginPath();
+        ctx.arc(h.screen.x, h.screen.y, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = theme.selection;
+        ctx.fill();
+      }
+    }
+  }
+
   const label = input.rotation
     ? { text: `${formatNumber(input.rotation.angle)}°`, screen: input.rotation.screen }
     : input.radiusLabel
       ? { text: `Radius ${formatNumber(input.radiusLabel.radius)}`, screen: input.radiusLabel.screen }
-      : null;
+      : (input.arcLabel ?? null);
   if (label) {
     const text = label.text;
     ctx.font = theme.font;
@@ -863,7 +887,17 @@ function outlineNode(ctx: CanvasRenderingContext2D, editor: Editor, id: Id, colo
       f: (world.f - v.y) * v.zoom,
     };
     ctx.transform(toScreen.a, toScreen.b, toScreen.c, toScreen.d, toScreen.e, toScreen.f);
-    ctx.ellipse(node.size.width / 2, node.size.height / 2, node.size.width / 2, node.size.height / 2, 0, 0, Math.PI * 2);
+    if (node.arcData) {
+      // Arcs, pies and rings are outlined along their shape.
+      for (const c of arcCommands(node.size.width, node.size.height, node.arcData)) {
+        if (c.op === 'M') ctx.moveTo(c.x, c.y);
+        else if (c.op === 'L') ctx.lineTo(c.x, c.y);
+        else if (c.op === 'C') ctx.bezierCurveTo(c.x1, c.y1, c.x2, c.y2, c.x, c.y);
+        else ctx.closePath();
+      }
+    } else {
+      ctx.ellipse(node.size.width / 2, node.size.height / 2, node.size.width / 2, node.size.height / 2, 0, 0, Math.PI * 2);
+    }
     ctx.restore();
     ctx.save();
     ctx.strokeStyle = color;

@@ -242,6 +242,8 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
         rotation: tools.moveTool.rotationLabel,
         radiusHandles: tools.moveTool.radiusHandleView,
         radiusLabel: tools.moveTool.radiusLabel,
+        arcHandles: tools.moveTool.arcHandleView,
+        arcLabel: tools.moveTool.arcLabel,
         guides: tools.snapGuides,
         measurements: tools.moveTool.measurements,
         gaps: tools.moveTool.gapIndicators,
