@@ -70,3 +70,43 @@ test('Preview (⇧Space) plays the prototype inline, jumps to the frame selected
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
   await expect(page.getByRole('region', { name: 'Preview' }).getByTestId('presentation')).toHaveAttribute('data-ready', 'true');
 });
+
+test('Options resize the preview window to 100% of the frame, and keep the window in the frame\'s proportions', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  // A 260 × 300 frame, larger than the preview window's smallest size.
+  await page.keyboard.press('f');
+  await page.mouse.move(box.x + 350, box.y + 150);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 610, box.y + 450, { steps: 4 });
+  await page.mouse.up();
+  const frame = page.getByRole('treeitem', { name: 'Frame 1' });
+  await expect(frame).toBeVisible();
+  await frame.click();
+
+  await page.keyboard.press('Shift+Space');
+  const preview = page.getByRole('region', { name: 'Preview' });
+  await expect(preview.getByTestId('presentation')).toHaveAttribute('data-ready', 'true');
+  const option = async (name: string) => {
+    await preview.getByRole('button', { name: 'Options' }).click();
+    await page.getByRole('menuitem', { name }).or(page.getByRole('menuitemcheckbox', { name })).click();
+  };
+  const header = async () => (await preview.locator('header').boundingBox())!.height;
+
+  // Resize window to 100%: the window shows the frame at its size, under the header.
+  await option('Resize window to 100%');
+  await expect.poll(async () => Math.round((await preview.boundingBox())!.width)).toBe(260);
+  await expect.poll(async () => Math.round((await preview.boundingBox())!.height - (await header()))).toBe(300);
+
+  // Wider by its corner, then Respect aspect ratio: the height follows the width in the frame's 260 : 300 proportions.
+  // The resize corner belongs to the preview's window, beside the Preview region rather than in it.
+  const corner = (await page.getByRole('separator', { name: 'Resize preview' }).boundingBox())!;
+  await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(corner.x + corner.width / 2 - 104, corner.y + corner.height / 2, { steps: 4 });
+  await page.mouse.up();
+  await expect.poll(async () => Math.round((await preview.boundingBox())!.width)).toBe(364);
+  await option('Respect aspect ratio');
+  await expect.poll(async () => Math.round((await preview.boundingBox())!.height - (await header()))).toBe(420);
+});

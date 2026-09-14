@@ -43,7 +43,7 @@ import {
 import { DRAG_FINISH_AT, dragDirection, dragProgress } from '@/core/prototype/drag-transition';
 import { sharedVariants, sharedVideos } from '@/core/prototype/state-sharing';
 import { composeScene, frameAtPoint, layerRects, SCALING_LABELS, SCALING_MODES, screenArea, scrollOffsetOf, type DeviceScreen, type PresentedScene, type ScalingMode } from '@/core/prototype/presentation';
-import { deviceLayout, effectiveDevice, type PrototypeDevice } from '@/core/prototype/device';
+import { deviceLayout, deviceOuterSize, effectiveDevice, type PrototypeDevice } from '@/core/prototype/device';
 import { MOBILE_DEVICE_CATEGORIES } from '@/core/document/frame-presets';
 import type { Size } from '@/core/schema/document';
 
@@ -120,7 +120,17 @@ export interface PresentationViewProps {
    * Inline preview in the editor: compact chrome, keys only while the preview has focus, following edits to the
    * document and the frame selected on the canvas.
    */
-  readonly inline?: { readonly onClose: () => void; readonly onOpenPresentation: (frameId: Id | null) => void } | undefined;
+  readonly inline?:
+    | {
+        readonly onClose: () => void;
+        readonly onOpenPresentation: (frameId: Id | null) => void;
+        /** The preview window's size, and resizing it (Resize window to 100%, Respect aspect ratio). */
+        readonly windowSize: Size;
+        readonly onResizeWindow: (size: Size) => void;
+        readonly respectAspectRatio: boolean;
+        readonly onRespectAspectRatio: (on: boolean) => void;
+      }
+    | undefined;
 }
 
 /**
@@ -170,6 +180,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<Box | null>(null);
   const [shareAnchor, setShareAnchor] = useState<Box | null>(null);
+  const inlineHeaderRef = useRef<HTMLElement>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [screenBox, setScreenBox] = useState<Rect | null>(null);
   /** The scrolled frames and their offsets, as "name:x,y" (shown on the stage for tests and assistive tools). */
@@ -793,6 +804,24 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
     const found = findReaction(doc, [nodeId], 'ON_CLICK');
     if (found) run(found.reaction, found.nodeId);
   };
+  // Inline preview at 100%: the window the current screen needs — the frame, or the device around it (with its margin).
+  const resizeTo100 = () => {
+    const frame = player ? (doc.get(player.frameId) as SceneNode | undefined) : undefined;
+    if (!inline || !frame) return;
+    const content = device ? deviceOuterSize(device) : frame.size;
+    const margin = device ? 48 : 0;
+    const header = inlineHeaderRef.current?.offsetHeight ?? 0;
+    inline.onResizeWindow({ width: Math.ceil(content.width + margin), height: Math.ceil(content.height + margin + header) });
+  };
+  // Respect aspect ratio (without a device): the window's height follows its width in the current frame's proportions.
+  const aspectFrame = inline?.respectAspectRatio && !device && player ? (doc.get(player.frameId) as SceneNode | undefined) : undefined;
+  const aspectWidth = inline?.windowSize.width ?? 0;
+  const aspectHeight = aspectFrame && aspectFrame.size.width > 0 ? Math.round((aspectWidth * aspectFrame.size.height) / aspectFrame.size.width) : null;
+  const onResizeWindow = inline?.onResizeWindow;
+  useEffect(() => {
+    if (aspectHeight === null || !onResizeWindow) return;
+    onResizeWindow({ width: aspectWidth, height: aspectHeight + (inlineHeaderRef.current?.offsetHeight ?? 0) });
+  }, [aspectHeight, aspectWidth, onResizeWindow]);
   const menuEntries: MenuEntry[] = [
     { kind: 'item', id: 'hints', label: 'Show hints on click', checked: showHints, onSelect: () => setShowHints((on) => !on) },
     { kind: 'item', id: 'accessible', label: 'Adapt content for screen readers', checked: accessible, onSelect: () => setAccessibility(!accessible) },
@@ -802,7 +831,13 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
           { kind: 'item', id: 'shortcuts', label: 'Enable keyboard shortcuts', checked: shortcuts, onSelect: () => setShortcuts((on) => !on) },
           { kind: 'item', id: 'hide-ui', label: 'Hide UI', onSelect: () => setHidden(true) },
         ] satisfies MenuEntry[])),
-    ...(inlineMode ? [{ kind: 'item', id: 'follow', label: 'Follow prototype', checked: follow, onSelect: () => setFollow((on) => !on) } satisfies MenuEntry] : []),
+    ...(inline
+      ? ([
+          { kind: 'item', id: 'follow', label: 'Follow prototype', checked: follow, onSelect: () => setFollow((on) => !on) },
+          { kind: 'item', id: 'resize-100', label: device ? 'Resize device to 100%' : 'Resize window to 100%', onSelect: resizeTo100 },
+          ...(device ? [] : [{ kind: 'item', id: 'respect-aspect', label: 'Respect aspect ratio', checked: inline.respectAspectRatio, onSelect: () => inline.onRespectAspectRatio(!inline.respectAspectRatio) } satisfies MenuEntry]),
+        ] satisfies MenuEntry[])
+      : []),
     { kind: 'separator', id: 'scaling-separator' },
     ...SCALING_MODES.map((mode): MenuEntry => ({ kind: 'item', id: mode, label: SCALING_LABELS[mode], checked: scaling === mode, onSelect: () => setScaling(mode) })),
   ];
@@ -836,7 +871,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
     <div ref={rootRef} className={inlineMode ? styles.inlineRoot : styles.root} {...(inlineMode ? { role: 'region', 'aria-label': 'Preview', tabIndex: 0 } : {})}>
       {!inlineMode && <SkipToContent onActivate={() => setAccessibility(true)} />}
       {inline && (
-        <header className={styles.toolbar}>
+        <header ref={inlineHeaderRef} className={styles.toolbar}>
           <span className={styles.title}>{player ? nameOf(player.frameId) : 'Preview'}</span>
           <button type="button" className={styles.button} onClick={() => restartAt(start)}>
             Restart

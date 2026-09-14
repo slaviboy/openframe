@@ -21,7 +21,7 @@ import { presetById } from '../document/frame-presets';
 import type { DocumentStore } from '../document/store';
 import { History } from '../history/history';
 import { IdGenerator } from '../ids/ids';
-import { deviceLayout, deviceScreenSize, effectiveDevice } from './device';
+import { deviceLayout, deviceOuterSize, deviceScreenSize, effectiveDevice } from './device';
 
 let store: DocumentStore;
 let page: string;
@@ -64,5 +64,18 @@ describe('prototype device', () => {
     expect(layout.screen.x).toBeGreaterThan(layout.body.x);
     expect(layout.screen.width / layout.screen.height).toBeCloseTo(393 / 852);
     expect(layout.bodyRadius).toBeGreaterThan(layout.screenRadius);
+  });
+});
+
+describe('a device at 100%', () => {
+  test('its size is the screen with the same bezel on every side, and a window that size plus the margins shows it unscaled', () => {
+    addFrame('phone', 852, 393);
+    const device = effectiveDevice(store, page) as Extract<ReturnType<typeof effectiveDevice>, { kind: 'PRESET' }>;
+    const outer = deviceOuterSize(device);
+    expect(outer.width).toBeGreaterThan(852);
+    expect(outer.width - 852).toBeCloseTo(outer.height - 393, 9);
+    const layout = deviceLayout(device, { width: outer.width + 48, height: outer.height + 48 });
+    expect(layout.screen.width).toBeCloseTo(852, 9);
+    expect(layout.screen.height).toBeCloseTo(393, 9);
   });
 });

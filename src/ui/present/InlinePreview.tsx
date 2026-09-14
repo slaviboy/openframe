@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { presentFile, type PresentationSession } from '@/app/present';
 import { topLevelFrame } from '@/core/prototype/reactions';
 import { useSession } from '../hooks/useEditor';
@@ -33,6 +33,9 @@ export function InlinePreview() {
   const { editor } = app;
   const [size, setSize] = useState({ width: 360, height: 520 });
   const drag = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
+  // Respect aspect ratio: the window keeps the current frame's proportions (presentation view sizes it).
+  const [respectAspectRatio, setRespectAspectRatio] = useState(false);
+  const resizeWindow = useCallback((next: { width: number; height: number }) => setSize({ width: Math.max(MIN_SIZE.width, Math.round(next.width)), height: Math.max(MIN_SIZE.height, Math.round(next.height)) }), []);
   const [startNodeId] = useState(() => {
     const selected = editor.selection[0];
     return selected ? topLevelFrame(editor.doc, selected) : null;
@@ -42,8 +45,12 @@ export function InlinePreview() {
     () => ({
       onClose: () => editor.state.setInlinePreviewOpen(false),
       onOpenPresentation: (frameId: string | null) => presentFile(app, frameId),
+      windowSize: size,
+      onResizeWindow: resizeWindow,
+      respectAspectRatio,
+      onRespectAspectRatio: setRespectAspectRatio,
     }),
-    [app, editor],
+    [app, editor, size, resizeWindow, respectAspectRatio],
   );
 
   return (

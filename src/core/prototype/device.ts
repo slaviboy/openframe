@@ -72,6 +72,13 @@ export interface DeviceLayout {
   readonly screenRadius: number;
 }
 
+/** A device's size at 100%: its screen with the body's bezel around it. */
+export function deviceOuterSize(device: Extract<PrototypeDevice, { kind: 'PRESET' }>): Size {
+  const screen = deviceScreenSize(device);
+  const bezel = Math.min(screen.width, screen.height) * BODY[device.preset.category].bezel;
+  return { width: screen.width + bezel * 2, height: screen.height + bezel * 2 };
+}
+
 /** A device scaled to fit in the window with a margin around it, centered. */
 export function deviceLayout(device: Extract<PrototypeDevice, { kind: 'PRESET' }>, viewport: Size, margin = 24): DeviceLayout {
   const screen = deviceScreenSize(device);

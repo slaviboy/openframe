@@ -225,6 +225,11 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - `inlineText` and `descriptionHtml` in `src/core/prototype/description.ts` (the old `formatDescription` stays for its unit tests)
     - browser traps: Firefox's Bold reads the text's weight (the area sets `font-weight: 400`, and a span's explicit weight turns bold off); WebKit ends each list item with a placeholder `<br>` (ignored inside `li`)
     - the group's `data-description` holds the text, for tests
+  - Inline preview window at 100% and Respect aspect ratio (the commit after description editing):
+    - `InlinePreview` passes `windowSize`, a clamped `onResizeWindow`, `respectAspectRatio` and `onRespectAspectRatio` in PresentationView's `inline` props
+    - Resize window to 100% sizes the window to the frame (or `deviceOuterSize` plus the 24 px margins with a device) plus the measured inline header
+    - Respect aspect ratio (no device) is an effect keeping the height at the width × the frame's proportions
+    - row 241's flow preview icon was already the canvas tag's icon; row 200's instance state sharing came with the state sharing commit
 
 ## In progress (uncommitted)
 
@@ -234,10 +239,10 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 1. The pending sub-items left in the M10 rows of `docs/FEATURE_MATRIX.md`:
    - 160 Video / GIF fills: video crop, video from the fill picker, GIF label next to the dimensions, GIF metadata on export
-   - 200 Interactive components: the Variant interactions section, animating Change to, sharing states between matching instances
+   - 200 Interactive components: the Variant interactions section, animating Change to
    - 239 Variables: extended collections' modes, library variables, variable picker in expressions
    - 240 Presentation view: responsive scaling, device frames, comments, sharing links
-   - 241 Inline preview: flow preview icon, Responsive, Resize to 100%, Respect aspect ratio
+   - 241 Inline preview: Responsive
    - 242 Device settings: device models and the device switcher
    - 244 Accessible prototypes: the Accessibility settings dialog
 
