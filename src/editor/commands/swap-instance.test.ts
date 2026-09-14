@@ -16,12 +16,13 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { createEmptyDocument, keyOnTop, makeRectangle } from '@/core/document/factory';
+import { createEmptyDocument, keyOnTop, makeFrame, makeRectangle } from '@/core/document/factory';
+import { instantiate } from '@/core/document/instances';
 import { IdGenerator } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { BUILTIN_COMMANDS } from './builtin';
-import { swapInstanceFor } from './swap-instance';
+import { instanceToSwap, swapInstanceFor } from './swap-instance';
 
 let editor: Editor;
 let first: string;
@@ -82,5 +83,25 @@ describe('swap instance', () => {
     editor.history.undo();
     expect(node(instance).instance).toEqual({ mainId: first });
     expect(editor.doc.children(instance)).toHaveLength(1);
+  });
+});
+
+describe('instance to swap on drop', () => {
+  test('⌥ targets the instance under the pointer when it is not nested in a frame or component', () => {
+    expect(instanceToSwap(editor, { x: 10, y: 310 }, false)).toBe(instance);
+    expect(instanceToSwap(editor, { x: 10, y: 310 }, true)).toBe(instance);
+    expect(instanceToSwap(editor, { x: 900, y: 900 }, false)).toBeNull();
+    // A main component is not an instance, so dropping on it inserts instead.
+    expect(instanceToSwap(editor, { x: 10, y: 10 }, false)).toBeNull();
+  });
+
+  test('⌥⌘ is needed to target an instance nested in a frame', () => {
+    const nested = editor.history.run('Nested instance', (tx) => {
+      const frame = editor.ids.next();
+      tx.create(makeFrame({ id: frame, parent: { id: editor.pageId, key: keyOnTop(tx.store, editor.pageId) }, name: 'Card', x: 400, y: 0, width: 200, height: 200 }));
+      return instantiate(tx, first, frame, keyOnTop(tx.store, frame), () => editor.ids.next(), { fields: { transform: [1, 0, 0, 1, 10, 10] } });
+    });
+    expect(instanceToSwap(editor, { x: 420, y: 20 }, false)).toBeNull();
+    expect(instanceToSwap(editor, { x: 420, y: 20 }, true)).toBe(nested);
   });
 });

@@ -15,8 +15,11 @@
  * limitations under the License.
  */
 
-import { swapInstance } from '@/core/document/instances';
+import { isInstance, swapInstance } from '@/core/document/instances';
 import type { Id } from '@/core/ids/ids';
+import type { Vec2 } from '@/core/math/vec';
+import { hitTestDeepest } from '@/core/scene/hit-test';
+import { isSceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 
 /**
@@ -30,4 +33,18 @@ export function swapInstanceFor(editor: Editor, instanceId: Id, mainId: Id): boo
   });
   if (swapped) editor.state.select([instanceId]);
   return swapped;
+}
+
+/**
+ * The instance a component dropped from the Assets tab with the swap modifier replaces: the instance under
+ * `world` that isn't nested in a frame or component (⌥), or the nearest one at any depth (⌥⌘ / Alt+Ctrl).
+ */
+export function instanceToSwap(editor: Editor, world: Vec2, nested: boolean): Id | null {
+  const hit = hitTestDeepest(editor.doc, editor.scene, editor.pageId, world, { tolerance: 0 });
+  for (let id = hit; id !== null; id = editor.doc.parentOf(id)) {
+    const node = editor.doc.get(id);
+    if (!node || !isSceneNode(node) || !isInstance(node)) continue;
+    if (nested || node.parent.id === editor.pageId) return id;
+  }
+  return null;
 }

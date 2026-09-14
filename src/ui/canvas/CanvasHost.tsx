@@ -16,6 +16,7 @@
  */
 
 import { COMPONENT_DRAG_TYPE, insertInstance } from '@/editor/commands/insert-instance';
+import { instanceToSwap, swapInstanceFor } from '@/editor/commands/swap-instance';
 import type { CanvasKit, Surface } from 'canvaskit-wasm';
 import type { Id } from '@/core/ids/ids';
 import type { Vec2 } from '@/core/math/vec';
@@ -140,12 +141,16 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
       e.dataTransfer.dropEffect = 'copy';
     };
     const onDrop = (e: DragEvent) => {
-      // A component dragged from the Assets tab becomes an instance at the drop point.
+      // A component dragged from the Assets tab becomes an instance at the drop point. Holding ⌥ (Alt) swaps
+      // the instance under the pointer instead, and ⌥⌘ (Alt+Ctrl) an instance nested in a frame or component.
       const componentId = e.dataTransfer?.getData(COMPONENT_DRAG_TYPE);
       if (componentId) {
         e.preventDefault();
         const bounds = container.getBoundingClientRect();
-        insertInstance(editor, componentId, screenToWorld(editor.state.viewport, { x: e.clientX - bounds.left, y: e.clientY - bounds.top }));
+        const world = screenToWorld(editor.state.viewport, { x: e.clientX - bounds.left, y: e.clientY - bounds.top });
+        const target = e.altKey ? instanceToSwap(editor, world, IS_MAC ? e.metaKey : e.ctrlKey) : null;
+        if (target) swapInstanceFor(editor, target, componentId);
+        else insertInstance(editor, componentId, world);
         return;
       }
       const files = imageFilesOf(e.dataTransfer);
