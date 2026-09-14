@@ -144,7 +144,8 @@ function ownerOf(store: DocumentStore, id: Id): { readonly kind: 'main' | 'insta
 
 /** The main component's layer an instance layer mirrors: the main component itself for the instance frame. */
 function mainLayerOf(store: DocumentStore, layer: SceneNode, root: SceneNode): SceneNode | undefined {
-  const id = layer.id === root.id && root.type === 'FRAME' ? root.instance?.mainId : layer.source;
+  // Layers (and copies of nested instances) link to the layer they copy; an instance itself to its main component.
+  const id = layer.source ?? (layer.id === root.id && root.type === 'FRAME' ? root.instance?.mainId : undefined);
   const main = id === undefined ? undefined : store.get(id);
   return main && isSceneNode(main) ? main : undefined;
 }
@@ -205,6 +206,43 @@ export function hasOverrides(store: DocumentStore, ids: readonly Id[]): boolean 
   });
 }
 
+/** A change the component finalizer passes on: an edit of the transaction, or a copy of one on a linked layer. */
+interface Change {
+  readonly id: Id;
+  readonly field: string;
+  readonly value: unknown;
+  readonly prev: unknown;
+  readonly edit: boolean;
+}
+
+/** An instance layer linked to the layer it copies; `byMain` for an instance linked to its main component. */
+interface Link {
+  readonly node: SceneNode;
+  readonly byMain: boolean;
+}
+
+/**
+ * Instance layers by the layer they copy: `source` for layers and for copies of nested instances, and the
+ * main component for instances placed on their own.
+ */
+function linkIndex(store: DocumentStore): Map<Id, Link[]> {
+  const links = new Map<Id, Link[]>();
+  const add = (key: Id, link: Link) => {
+    const list = links.get(key);
+    if (list) list.push(link);
+    else links.set(key, [link]);
+  };
+  for (const page of store.pages()) {
+    for (const id of store.descendants(page, false)) {
+      const node = store.get(id);
+      if (!node || !isSceneNode(node)) continue;
+      if (node.source !== undefined) add(node.source, { node, byMain: false });
+      else if (node.type === 'FRAME' && node.instance) add(node.instance.mainId, { node, byMain: true });
+    }
+  }
+  return links;
+}
+
 /**
  * Keeps instances in step with their main components (history finalizer; registered first, so it sees
  * the transaction's own edits):
@@ -213,60 +251,57 @@ export function hasOverrides(store: DocumentStore, ids: readonly Id[]): boolean 
  *   resizes instances that still had its previous size.
  * - A change on an instance's layer to a field instances may override is recorded in `overrides`; any
  *   other change (position, size, order, constraints…) is reverted, except the instance's own placement.
+ * - Copied changes pass on in turn, so instances nested in components follow through every level: a change
+ *   to a nested instance inside a main component reaches the copies of it in that component's instances.
  */
 export function componentFinalizer(tx: Transaction): void {
   const store = tx.store;
-  const ops = tx.ops.filter((op) => op.kind === 'set' && !LINK_FIELDS.has(op.field));
-  if (ops.length === 0) return;
-  let byMain: Map<Id, SceneNode[]> | null = null;
-  const instancesOf = (mainId: Id): SceneNode[] => {
-    if (!byMain) {
-      byMain = new Map();
-      for (const page of store.pages()) {
-        for (const id of store.descendants(page, false)) {
-          const node = store.get(id);
-          if (node?.type === 'FRAME' && node.instance) byMain.set(node.instance.mainId, [...(byMain.get(node.instance.mainId) ?? []), node]);
-        }
-      }
-    }
-    return byMain.get(mainId) ?? [];
+  const changes: Change[] = tx.ops.flatMap((op) => (op.kind === 'set' && !LINK_FIELDS.has(op.field) ? [{ id: op.id, field: op.field, value: op.value, prev: op.prev, edit: true }] : []));
+  if (changes.length === 0) return;
+  let links: Map<Id, Link[]> | null = null;
+  const linked = (id: Id): Link[] => (links ??= linkIndex(store)).get(id) ?? [];
+  const copy = (target: SceneNode, name: string, value: unknown) => {
+    const prev = field(target, name);
+    if (same(prev, value)) return;
+    tx.set(target.id, name, value);
+    changes.push({ id: target.id, field: name, value, prev, edit: false });
   };
-  for (const op of ops) {
-    if (op.kind !== 'set') continue;
-    const owner = ownerOf(store, op.id);
-    const node = store.get(op.id);
-    if (op.field === 'name' && node?.type === 'FRAME' && node.componentSet) {
+  for (let i = 0; i < changes.length; i++) {
+    const change = changes[i]!;
+    const node = store.get(change.id);
+    if (!node || !isSceneNode(node)) continue;
+    if (change.edit && change.field === 'name' && node.type === 'FRAME' && node.componentSet) {
       // Renaming a component set renames the instances of its variants, unless they were renamed.
-      for (const variantId of store.children(op.id)) {
-        for (const instance of instancesOf(variantId)) if (!(instance.overrides ?? []).includes('name')) tx.set(instance.id, 'name', op.value);
+      for (const variantId of store.children(change.id)) {
+        for (const { node: instance, byMain } of linked(variantId)) if (byMain && !(instance.overrides ?? []).includes('name')) copy(instance, 'name', change.value);
       }
       continue;
     }
-    if (!owner || !node || !isSceneNode(node)) continue;
-    const isRoot = owner.root.id === op.id;
-    if (owner.kind === 'instance') {
-      if (isOverridable(op.field)) {
+    const owner = ownerOf(store, change.id);
+    if (!owner) continue;
+    const isRoot = owner.root.id === change.id;
+    if (change.edit && owner.kind === 'instance') {
+      if (isOverridable(change.field)) {
         const overrides = node.overrides ?? [];
         // Back to the main component's value (as when resetting), the field follows the component again.
-        const matchesMain = mainLayerOf(store, node, owner.root) !== undefined && same(mainValue(store, node, owner.root, op.field), op.value);
-        if (matchesMain && overrides.includes(op.field)) tx.set(op.id, 'overrides', overrides.length > 1 ? overrides.filter((f) => f !== op.field) : undefined);
-        else if (!matchesMain && !overrides.includes(op.field)) tx.set(op.id, 'overrides', [...overrides, op.field]);
-      } else if (!(isRoot && (ROOT_PLACEMENT.has(op.field) || op.field === 'size'))) {
-        tx.set(op.id, op.field, op.prev);
+        const matchesMain = mainLayerOf(store, node, owner.root) !== undefined && same(mainValue(store, node, owner.root, change.field), change.value);
+        if (matchesMain && overrides.includes(change.field)) tx.set(change.id, 'overrides', overrides.length > 1 ? overrides.filter((f) => f !== change.field) : undefined);
+        else if (!matchesMain && !overrides.includes(change.field)) tx.set(change.id, 'overrides', [...overrides, change.field]);
+      } else if (!(isRoot && (ROOT_PLACEMENT.has(change.field) || change.field === 'size'))) {
+        tx.set(change.id, change.field, change.prev);
+        continue;
       }
-      continue;
     }
-    // Instances of a variant are named after its component set rather than the variant.
-    if (isRoot && (ROOT_PLACEMENT.has(op.field) || (op.field === 'name' && componentSetOf(store, op.id)))) continue;
-    for (const instance of instancesOf(owner.root.id)) {
-      const target = isRoot
-        ? instance
-        : [...store.descendants(instance.id, false)]
-            .map((id) => store.get(id))
-            .find((n): n is SceneNode => n !== undefined && isSceneNode(n) && n.source === op.id);
-      if (!target || (target.overrides ?? []).includes(op.field)) continue;
-      if (isRoot && op.field === 'size' && !same(field(target, 'size'), op.prev)) continue;
-      tx.set(target.id, op.field, op.value);
+    for (const { node: target, byMain } of linked(change.id)) {
+      const current = store.get(target.id);
+      if (!current || !isSceneNode(current) || (current.overrides ?? []).includes(change.field)) continue;
+      if (byMain) {
+        // Instances keep their own placement and, for a variant, the component set's name; a resize reaches
+        // the instances that still had the previous size.
+        if (ROOT_PLACEMENT.has(change.field) || (change.field === 'name' && componentSetOf(store, change.id))) continue;
+        if (change.field === 'size' && !same(field(current, 'size'), change.prev)) continue;
+      }
+      copy(current, change.field, change.value);
     }
   }
 }
