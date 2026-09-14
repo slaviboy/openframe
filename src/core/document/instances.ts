@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { Transaction } from '../history/history';
+import type { Transaction, Finalizer } from '../history/history';
 import type { Id } from '../ids/ids';
 import { isSceneNode, type SceneNode } from '../schema/document';
 import { isOverridable } from './instance-fields';
@@ -331,6 +331,96 @@ function linkIndex(store: DocumentStore): Map<Id, Link[]> {
 }
 
 /**
+ * Keeps the structure of instances in step with their main components: layers created in or deleted from a main
+ * component, moved within it, or moved into or out of it, are created, deleted or moved in the linked copies,
+ * level by level through nested instances. Layers rebuilt under the same id (swaps, resets) rebuild their copies
+ * themselves, and only the topmost layer of a created or deleted subtree is handled.
+ */
+function syncStructure(tx: Transaction, nextId: () => Id, linked: (id: Id) => Link[]): void {
+  const store = tx.store;
+  const ops = [...tx.ops];
+  const created = new Set<Id>();
+  const deleted = new Set<Id>();
+  for (const op of ops) {
+    if (op.kind === 'create') created.add(op.node.id);
+    else if (op.kind === 'delete') deleted.add(op.node.id);
+  }
+  const copiesOf = (id: Id): SceneNode[] => linked(id).flatMap((link) => (link.placementOnly ? [] : [link.node]));
+  const mainRootOf = (parentId: Id): Id | null => {
+    const owner = store.get(parentId) ? ownerOf(store, parentId) : null;
+    return owner?.kind === 'main' ? owner.root.id : null;
+  };
+  // The root of the copy tree a copy is in: its nearest ancestor that copies `sourceRoot`.
+  const copyRootOf = (copyId: Id, sourceRoot: Id): SceneNode | null => {
+    for (let cur = store.parentOf(copyId); cur !== null; cur = store.parentOf(cur)) {
+      const node = store.get(cur);
+      if (!node || !isSceneNode(node)) return null;
+      if (node.source === sourceRoot || (node.type === 'FRAME' && node.source === undefined && node.instance?.mainId === sourceRoot)) return node;
+    }
+    return null;
+  };
+  // The layer of a copy tree that copies `layerId` of the tree rooted at `sourceRoot`.
+  const copyIn = (root: SceneNode, sourceRoot: Id, layerId: Id): Id | null => {
+    if (layerId === sourceRoot) return root.id;
+    for (const id of store.descendants(root.id, false)) if ((store.get(id) as SceneNode | undefined)?.source === layerId) return id;
+    return null;
+  };
+  const deleteCopies = (id: Id): void => {
+    for (const copy of copiesOf(id)) {
+      if (!store.get(copy.id)) continue;
+      deleteCopies(copy.id);
+      tx.delete(copy.id);
+    }
+  };
+  const createCopies = (id: Id): void => {
+    const node = store.get(id);
+    if (!node || !isSceneNode(node)) return;
+    for (const parentCopy of copiesOf(node.parent.id)) {
+      if (!store.get(parentCopy.id)) continue;
+      const copyId = nextId();
+      cloneNestedCopy(tx, id, { id: parentCopy.id, key: node.parent.key }, nextId, copyId);
+      createCopies(copyId);
+    }
+  };
+  const moveCopies = (id: Id, sourceRoot: Id): void => {
+    const node = store.getOrThrow(id) as SceneNode;
+    for (const copy of copiesOf(id)) {
+      if (!store.get(copy.id)) continue;
+      const root = copyRootOf(copy.id, sourceRoot);
+      const target = root ? copyIn(root, sourceRoot, node.parent.id) : null;
+      if (!root || target === null) {
+        deleteCopies(copy.id);
+        tx.delete(copy.id);
+        continue;
+      }
+      tx.set(copy.id, 'parent', { id: target, key: node.parent.key });
+      moveCopies(copy.id, root.id);
+    }
+  };
+  for (const op of ops) {
+    if (op.kind === 'create') {
+      const node = store.get(op.node.id);
+      if (!node || !isSceneNode(node) || deleted.has(node.id) || created.has(node.parent.id) || mainRootOf(node.parent.id) === null) continue;
+      createCopies(node.id);
+    } else if (op.kind === 'delete') {
+      if (!isSceneNode(op.node) || created.has(op.node.id) || deleted.has(op.node.parent.id) || mainRootOf(op.node.parent.id) === null) continue;
+      deleteCopies(op.node.id);
+    } else if (op.field === 'parent' && !created.has(op.id) && !deleted.has(op.id) && store.get(op.id)) {
+      const prev = op.prev as SceneNode['parent'] | undefined;
+      const next = op.value as SceneNode['parent'] | undefined;
+      if (!prev || !next) continue;
+      const from = mainRootOf(prev.id);
+      const to = mainRootOf(next.id);
+      if (from !== null && from === to) moveCopies(op.id, from);
+      else {
+        if (from !== null) deleteCopies(op.id);
+        if (to !== null) createCopies(op.id);
+      }
+    }
+  }
+}
+
+/**
  * Keeps instances in step with their main components (history finalizer; registered first, so it sees
  * the transaction's own edits):
  * - A change on a main component's layer is copied to the matching layer of every instance, unless the
@@ -340,56 +430,64 @@ function linkIndex(store: DocumentStore): Map<Id, Link[]> {
  *   other change (position, size, order, constraints…) is reverted, except the instance's own placement.
  * - Copied changes pass on in turn, so instances nested in components follow through every level: a change
  *   to a nested instance inside a main component reaches the copies of it in that component's instances.
+ * - Layers added to, deleted from or moved within a main component are added, deleted or moved in the copies
+ *   (see `syncStructure`); `nextId` gives the new copies their ids.
  */
-export function componentFinalizer(tx: Transaction): void {
-  const store = tx.store;
-  const changes: Change[] = tx.ops.flatMap((op) => (op.kind === 'set' && !LINK_FIELDS.has(op.field) ? [{ id: op.id, field: op.field, value: op.value, prev: op.prev, edit: true }] : []));
-  if (changes.length === 0) return;
-  let links: Map<Id, Link[]> | null = null;
-  const linked = (id: Id): Link[] => (links ??= linkIndex(store)).get(id) ?? [];
-  const copy = (target: SceneNode, name: string, value: unknown) => {
-    const prev = field(target, name);
-    if (same(prev, value)) return;
-    tx.set(target.id, name, value);
-    changes.push({ id: target.id, field: name, value, prev, edit: false });
-  };
-  for (let i = 0; i < changes.length; i++) {
-    const change = changes[i]!;
-    const node = store.get(change.id);
-    if (!node || !isSceneNode(node)) continue;
-    if (change.edit && change.field === 'name' && node.type === 'FRAME' && node.componentSet) {
-      // Renaming a component set renames the instances of its variants, unless they were renamed.
-      for (const variantId of store.children(change.id)) {
-        for (const { node: instance, byMain } of linked(variantId)) if (byMain && !(instance.overrides ?? []).includes('name')) copy(instance, 'name', change.value);
-      }
-      continue;
+export function createComponentFinalizer(nextId: () => Id): Finalizer {
+  return (tx) => {
+    const store = tx.store;
+    let links: Map<Id, Link[]> | null = null;
+    const linked = (id: Id): Link[] => (links ??= linkIndex(store)).get(id) ?? [];
+    if (tx.ops.some((op) => op.kind !== 'set' || op.field === 'parent')) {
+      syncStructure(tx, nextId, linked);
+      links = null;
     }
-    const owner = ownerOf(store, change.id);
-    if (!owner) continue;
-    const isRoot = owner.root.id === change.id;
-    if (change.edit && owner.kind === 'instance') {
-      if (isOverridable(change.field)) {
-        const overrides = node.overrides ?? [];
-        // Back to the main component's value (as when resetting), the field follows the component again.
-        const matchesMain = mainLayerOf(store, node, owner.root) !== undefined && same(mainValue(store, node, owner.root, change.field), change.value);
-        if (matchesMain && overrides.includes(change.field)) tx.set(change.id, 'overrides', overrides.length > 1 ? overrides.filter((f) => f !== change.field) : undefined);
-        else if (!matchesMain && !overrides.includes(change.field)) tx.set(change.id, 'overrides', [...overrides, change.field]);
-      } else if (!(isRoot && (ROOT_PLACEMENT.has(change.field) || change.field === 'size'))) {
-        tx.set(change.id, change.field, change.prev);
+    const changes: Change[] = tx.ops.flatMap((op) => (op.kind === 'set' && !LINK_FIELDS.has(op.field) ? [{ id: op.id, field: op.field, value: op.value, prev: op.prev, edit: true }] : []));
+    if (changes.length === 0) return;
+    const copy = (target: SceneNode, name: string, value: unknown) => {
+      const prev = field(target, name);
+      if (same(prev, value)) return;
+      tx.set(target.id, name, value);
+      changes.push({ id: target.id, field: name, value, prev, edit: false });
+    };
+    for (let i = 0; i < changes.length; i++) {
+      const change = changes[i]!;
+      const node = store.get(change.id);
+      if (!node || !isSceneNode(node)) continue;
+      if (change.edit && change.field === 'name' && node.type === 'FRAME' && node.componentSet) {
+        // Renaming a component set renames the instances of its variants, unless they were renamed.
+        for (const variantId of store.children(change.id)) {
+          for (const { node: instance, byMain } of linked(variantId)) if (byMain && !(instance.overrides ?? []).includes('name')) copy(instance, 'name', change.value);
+        }
         continue;
       }
-    }
-    for (const { node: target, byMain, placementOnly } of linked(change.id)) {
-      const current = store.get(target.id);
-      if (!current || !isSceneNode(current) || (current.overrides ?? []).includes(change.field)) continue;
-      if (placementOnly && !ROOT_PLACEMENT.has(change.field)) continue;
-      if (byMain) {
-        // Instances keep their own placement and, for a variant, the component set's name; a resize reaches
-        // the instances that still had the previous size.
-        if (ROOT_PLACEMENT.has(change.field) || (change.field === 'name' && componentSetOf(store, change.id))) continue;
-        if (change.field === 'size' && !same(field(current, 'size'), change.prev)) continue;
+      const owner = ownerOf(store, change.id);
+      if (!owner) continue;
+      const isRoot = owner.root.id === change.id;
+      if (change.edit && owner.kind === 'instance') {
+        if (isOverridable(change.field)) {
+          const overrides = node.overrides ?? [];
+          // Back to the main component's value (as when resetting), the field follows the component again.
+          const matchesMain = mainLayerOf(store, node, owner.root) !== undefined && same(mainValue(store, node, owner.root, change.field), change.value);
+          if (matchesMain && overrides.includes(change.field)) tx.set(change.id, 'overrides', overrides.length > 1 ? overrides.filter((f) => f !== change.field) : undefined);
+          else if (!matchesMain && !overrides.includes(change.field)) tx.set(change.id, 'overrides', [...overrides, change.field]);
+        } else if (!(isRoot && (ROOT_PLACEMENT.has(change.field) || change.field === 'size'))) {
+          tx.set(change.id, change.field, change.prev);
+          continue;
+        }
       }
-      copy(current, change.field, change.value);
+      for (const { node: target, byMain, placementOnly } of linked(change.id)) {
+        const current = store.get(target.id);
+        if (!current || !isSceneNode(current) || (current.overrides ?? []).includes(change.field)) continue;
+        if (placementOnly && !ROOT_PLACEMENT.has(change.field)) continue;
+        if (byMain) {
+          // Instances keep their own placement and, for a variant, the component set's name; a resize reaches
+          // the instances that still had the previous size.
+          if (ROOT_PLACEMENT.has(change.field) || (change.field === 'name' && componentSetOf(store, change.id))) continue;
+          if (change.field === 'size' && !same(field(current, 'size'), change.prev)) continue;
+        }
+        copy(current, change.field, change.value);
+      }
     }
-  }
+  };
 }
