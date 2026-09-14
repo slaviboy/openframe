@@ -54,6 +54,7 @@ import { RULER_SIZE, rulerTicks } from './rulers';
 import { worldToScreen } from '../viewport/viewport';
 import type { ChromeTheme } from './chrome-theme';
 import { forEachSection, handlePoint, isLineFrame, screenQuad, sectionTitleRect, selectionFrame, type SelectionFrame, addVariantButtonRect } from './selection-geometry';
+import { variantsOf } from '@/core/document/variants';
 
 export interface OverlayInput {
   readonly editor: Editor;
@@ -140,6 +141,13 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
 
   if (state.selection.length > 1) {
     for (const id of state.selection) outlineNode(ctx, editor, id, theme.selection, theme.selectionWidth);
+  }
+
+  // Multi-edit variants: a dotted rectangle around each variant of the set.
+  if (state.multiEditSetId) {
+    ctx.setLineDash([4, 3]);
+    for (const variant of variantsOf(editor.doc, state.multiEditSetId)) outlineNode(ctx, editor, variant.id, theme.component, 1);
+    ctx.setLineDash([]);
   }
 
   const frame = selectionFrame(editor);

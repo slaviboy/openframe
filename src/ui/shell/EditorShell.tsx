@@ -223,6 +223,19 @@ function MultiEditTextButton() {
   );
 }
 
+/** Multi-edit variants: shown for a selection in a component set; while on, the button ends it (Q does both). */
+function MultiEditVariantsButton() {
+  const editor = useEditor();
+  useEditorState((s) => s.selection);
+  const active = useEditorState((s) => s.multiEditSetId !== null);
+  if (!active && !editor.commands.isEnabled('object.multiEditVariants')) return null;
+  return (
+    <button type="button" className={styles.zoomButton} aria-pressed={active} onClick={() => editor.commands.run('object.multiEditVariants')}>
+      {active ? 'Exit multi-edit' : 'Multi-edit variants'}
+    </button>
+  );
+}
+
 function RightHeader() {
   const editor = useEditor();
   const zoom = useEditorState((s) => s.viewports[s.activePageId]?.zoom ?? 1);
@@ -236,6 +249,7 @@ function RightHeader() {
         </span>
       </div>
       <MultiEditTextButton />
+      <MultiEditVariantsButton />
       <button
         type="button"
         className={styles.zoomButton}

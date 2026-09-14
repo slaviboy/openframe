@@ -38,6 +38,7 @@ import { beginCrop, cropTarget, endCrop } from '../interactions/crop';
 import { BOOLEAN_NAMES, booleanSelection, canBooleanSelection } from './boolean';
 import { canCreateComponent, canCreateMultipleComponents, createMultipleComponents, createComponent } from './components';
 import { addVariant, canAddVariant, canCombineAsVariants, combineAsVariants } from './variants';
+import { canMultiEditVariants, toggleMultiEditVariants } from './multi-edit';
 import { canDetachInstance, detachInstances } from './detach';
 import { canResetOverrides, resetSelectedOverrides } from './reset-overrides';
 import { canGoToMainComponent, canPushChangesToMain, canRestoreMainComponent, goToMainComponent, pushChangesToMain, restoreMainComponent } from './main-component';
@@ -204,6 +205,15 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     category: 'Object',
     enabled: canAddVariant,
     run: (e) => addVariant(e),
+  },
+  {
+    id: 'object.multiEditVariants',
+    label: 'Multi-edit variants',
+    category: 'Edit',
+    // Q is Lasso while editing a vector; the two are never enabled together.
+    shortcuts: ['Q'],
+    enabled: canMultiEditVariants,
+    run: (e) => toggleMultiEditVariants(e),
   },
   {
     id: 'object.detachInstance',

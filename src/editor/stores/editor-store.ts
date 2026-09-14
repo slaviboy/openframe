@@ -71,6 +71,8 @@ export interface EditorState {
   readonly blurEdit: BlurEditRef | null;
   /** Text layer whose content is being edited, with the text selection (UTF-16 offsets), or null. */
   readonly textEdit: TextEditRef | null;
+  /** Component set whose variants are being multi-edited (Q), or null. */
+  readonly multiEditSetId: Id | null;
   /** The link editor is open for the text being edited (⇧⌘U, Create link). */
   readonly linkEditing: boolean;
   /** The text engine is installed, so fonts can be checked against what it has. */
@@ -154,6 +156,7 @@ export class EditorStore extends Observable<EditorState> {
       gradientEdit: null,
       blurEdit: null,
       textEdit: null,
+      multiEditSetId: null,
       linkEditing: false,
       textLayoutReady: false,
       suggested: new Set(),
@@ -168,6 +171,11 @@ export class EditorStore extends Observable<EditorState> {
     if (current === textEdit || (current && textEdit && current.nodeId === textEdit.nodeId && current.anchor === textEdit.anchor && current.focus === textEdit.focus)) return;
     const linkEditing = this.state.linkEditing && !!textEdit && current?.nodeId === textEdit.nodeId;
     this.setState(textEdit ? { textEdit, linkEditing, croppingId: null, gradientEdit: null, blurEdit: null } : { textEdit, linkEditing });
+  }
+
+  /** Starts multi-editing the variants of a component set, or ends it with null. */
+  setMultiEditSet(setId: Id | null): void {
+    if (this.state.multiEditSetId !== setId) this.setState({ multiEditSetId: setId });
   }
 
   setTextLayoutReady(textLayoutReady: boolean): void {
@@ -250,7 +258,7 @@ export class EditorStore extends Observable<EditorState> {
 
   setActivePage(pageId: Id): void {
     if (this.doc.get(pageId)?.type !== 'PAGE') return;
-    this.setState({ activePageId: pageId, selection: [], selectedGuide: null, hoverId: null, renamingId: null, croppingId: null, gradientEdit: null, blurEdit: null, textEdit: null });
+    this.setState({ activePageId: pageId, selection: [], selectedGuide: null, hoverId: null, renamingId: null, croppingId: null, gradientEdit: null, blurEdit: null, textEdit: null, multiEditSetId: null });
   }
 
   setViewport(viewport: Viewport, pageId: Id = this.state.activePageId): void {
@@ -324,6 +332,13 @@ export class EditorStore extends Observable<EditorState> {
     const keepGradient = only !== null && only === this.state.gradientEdit?.nodeId;
     const keepBlur = only !== null && only === this.state.blurEdit?.nodeId;
     const keepText = only !== null && only === this.state.textEdit?.nodeId;
+    // Multi-edit variants lasts while the selection stays inside its component set.
+    const multiEditSet = this.state.multiEditSetId;
+    const inSet = (id: Id): boolean => {
+      for (let cur: Id | null = id; cur !== null; cur = this.doc.parentOf(cur)) if (cur === multiEditSet) return true;
+      return false;
+    };
+    const keepMultiEdit = multiEditSet !== null && normalized.length > 0 && normalized.every(inSet);
     this.setState({
       selection: normalized,
       selectedGuide: null,
@@ -331,6 +346,7 @@ export class EditorStore extends Observable<EditorState> {
       gradientEdit: keepGradient ? this.state.gradientEdit : null,
       blurEdit: keepBlur ? this.state.blurEdit : null,
       textEdit: keepText ? this.state.textEdit : null,
+      multiEditSetId: keepMultiEdit ? multiEditSet : null,
     });
     this.revealInLayers(normalized);
   }
