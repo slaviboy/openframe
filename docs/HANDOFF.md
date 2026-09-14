@@ -209,6 +209,11 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - PresentationView's `apply` sets the shared variants in `variantChanges` unless the action resets component state
     - it calls `PresentationRenderer.shareVideo` unless the action resets video state
     - `shareVideo` keeps a pending share until the destination video's element exists, then marks it shown so autoplay leaves it alone
+  - The flow starting point tag on the canvas (the commit after state sharing):
+    - the renderer records each drawn tag with `setFlowTags`; `flowTagAt` in prototype-geometry.ts finds the preview icon or the name under the pointer
+    - the move tool's `flow-tag` gesture calls `moveFlowStartingPoint` (in `src/editor/commands/prototype.ts`) or `removeFlowStartingPoint` on drop
+    - `openInlinePreview` bumps `inlinePreviewKey`, so the preview remounts at the selected frame; the Flows list's Preview uses it too
+    - Copy link in the Flow starting point section copies `presentUrl` for the flow
 
 ## In progress (uncommitted)
 
@@ -219,7 +224,7 @@ This file is how work continues after a pause (for example, a usage limit). Read
 1. The pending sub-items left in the M10 rows of `docs/FEATURE_MATRIX.md`:
    - 160 Video / GIF fills: video crop, video from the fill picker, GIF label next to the dimensions, GIF metadata on export
    - 200 Interactive components: the Variant interactions section, animating Change to, sharing states between matching instances
-   - 237 Flows: WYSIWYG description editing, starting point badge on the canvas, preview / present / copy links to flows
+   - 237 Flows: WYSIWYG description editing, renaming a flow by double-clicking its canvas tag, Copy link from presentation view's Share prototype
    - 239 Variables: extended collections' modes, library variables, variable picker in expressions
    - 240 Presentation view: responsive scaling, device frames, comments, sharing links
    - 241 Inline preview: flow preview icon, Responsive, Resize to 100%, Respect aspect ratio

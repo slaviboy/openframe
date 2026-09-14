@@ -83,8 +83,9 @@ import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
 import { needsBiggerContent, OVERFLOW_DIRECTIONS, OVERFLOW_LABELS, overflowOf, SCROLL_BEHAVIOR_LABELS, SCROLL_BEHAVIORS, scrollFrameOf, type OverflowDirection, type ScrollBehavior } from '@/core/prototype/scroll';
 import { videoFillsOf, videoOptionsOf, type VideoOptions } from '@/core/prototype/video';
 import { setVideoOptions } from '@/editor/commands/video';
+import { presentUrl } from '@/app/present';
 import type { Editor } from '@/editor/editor';
-import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
+import { useDocumentRevision, useEditor, useEditorState, useSession } from '../../hooks/useEditor';
 import { useGamepadButtons } from '../../hooks/useGamepadButtons';
 import { IconButton } from '../../primitives/IconButton';
 import primitives from '../../primitives/primitives.module.css';
@@ -831,6 +832,18 @@ function FlowsSection() {
                 <button
                   type="button"
                   className={styles.textButton}
+                  aria-label={`Preview ${flow.name}`}
+                  onClick={() => {
+                    // Inline preview starts at the frame selected when it opens.
+                    editor.state.select([flow.nodeId]);
+                    editor.state.openInlinePreview();
+                  }}
+                >
+                  Preview
+                </button>
+                <button
+                  type="button"
+                  className={styles.textButton}
                   aria-label={`Select frame of ${flow.name}`}
                   onClick={() => {
                     editor.state.select([flow.nodeId]);
@@ -851,12 +864,25 @@ function FlowsSection() {
 /** For a selected top-level frame: its flow starting point (name and description), or + to add one. */
 function FlowStartingPointSection({ frameId, pageId }: { frameId: Id; pageId: Id }) {
   const editor = useEditor();
+  const app = useSession();
   const flow = flowsOf(editor.doc, pageId).find((candidate) => candidate.nodeId === frameId);
+  // The frame whose link was copied last: "Link copied" shows while that frame is the one selected.
+  const [copiedFor, setCopiedFor] = useState<Id | null>(null);
+  const copied = copiedFor === frameId;
+  const copyLink = () => {
+    // The address of presentation view playing this flow (it opens where this file is stored: this browser).
+    const url = presentUrl(window.location.href, { fileId: app.session.getSnapshot().file.id, pageId, nodeId: frameId });
+    void navigator.clipboard?.writeText(url).then(
+      () => setCopiedFor(frameId),
+      () => undefined,
+    );
+  };
   return (
     <section className={inspector.section} aria-label="Flow starting point">
       <header className={inspector.sectionHeader}>
         <h3 className={inspector.sectionTitle}>Flow starting point</h3>
         <div className={inspector.sectionActions}>
+          {flow && <IconButton icon="link" label="Copy link" onClick={copyLink} />}
           {flow ? (
             <IconButton icon="minus" label="Remove starting point" onClick={() => removeFlowStartingPoint(editor, frameId)} />
           ) : (
@@ -866,6 +892,11 @@ function FlowStartingPointSection({ frameId, pageId }: { frameId: Id; pageId: Id
       </header>
       {flow && (
         <div className={inspector.sectionBody}>
+          {copied && (
+            <p className={inspector.hint} role="status">
+              Link copied
+            </p>
+          )}
           <CommitText label="Flow name" value={flow.name} onCommit={(name) => updateFlowStartingPoint(editor, frameId, { name })} />
           {flow.description && <FlowDescription text={flow.description} className={styles.flowDescription} />}
           <DescriptionEditor value={flow.description ?? ''} onSave={(description) => updateFlowStartingPoint(editor, frameId, { description })} />

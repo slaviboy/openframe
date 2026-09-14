@@ -123,6 +123,32 @@ export function connectionsInScreenRect(editor: Editor, rect: Rect, selection: r
   });
 }
 
+/** Width of the preview icon at the start of a flow starting point's tag. */
+export const FLOW_TAG_ICON_WIDTH = 16;
+
+/** A flow starting point's tag as last drawn on screen (its width follows its name, measured as it is drawn). */
+export interface FlowTagRect {
+  readonly nodeId: Id;
+  readonly rect: Rect;
+}
+
+const flowTags = new WeakMap<Editor, readonly FlowTagRect[]>();
+
+/** Remembers where the flow starting points' tags were drawn, for pointing at them. */
+export function setFlowTags(editor: Editor, tags: readonly FlowTagRect[]): void {
+  flowTags.set(editor, tags);
+}
+
+/** The flow starting point tag under a screen point, and whether it's on its preview icon or its name. */
+export function flowTagAt(editor: Editor, screen: Vec2): { readonly nodeId: Id; readonly part: 'preview' | 'name' } | null {
+  if (editor.state.getSnapshot().rightTab !== 'prototype') return null;
+  for (const { nodeId, rect } of flowTags.get(editor) ?? []) {
+    if (screen.x < rect.x || screen.x > rect.x + rect.width || screen.y < rect.y || screen.y > rect.y + rect.height) continue;
+    return { nodeId, part: screen.x <= rect.x + FLOW_TAG_ICON_WIDTH ? 'preview' : 'name' };
+  }
+  return null;
+}
+
 /** Size of the badge next to an overlay frame on the canvas. */
 export const OVERLAY_BADGE_SIZE = 16;
 

@@ -248,6 +248,19 @@ export function removeFlowStartingPoint(editor: Editor, frameId: Id): boolean {
   return true;
 }
 
+/**
+ * Moves the flow starting at a frame to another top-level frame on its page, keeping the flow's name and description;
+ * refused when that frame starts a flow already. One undo step.
+ */
+export function moveFlowStartingPoint(editor: Editor, frameId: Id, toFrameId: Id): boolean {
+  const page = framePage(editor, frameId);
+  if (!page || frameId === toFrameId || framePage(editor, toFrameId)?.id !== page.id || topLevelFrame(editor.doc, toFrameId) !== toFrameId) return false;
+  const flows = flowsOf(editor.doc, page.id);
+  if (!flows.some((flow) => flow.nodeId === frameId) || flows.some((flow) => flow.nodeId === toFrameId)) return false;
+  editor.history.run('Move flow starting point', (tx) => tx.set(page.id, 'flowStartingPoints', flows.map((flow) => (flow.nodeId === frameId ? { ...flow, nodeId: toFrameId } : flow))));
+  return true;
+}
+
 /** Sets the device prototypes on a page play in (null for none). One undo step. */
 export function setPrototypeDevice(editor: Editor, pageId: Id, device: PageNode['prototypeDevice'] | null): boolean {
   if (editor.doc.get(pageId)?.type !== 'PAGE') return false;

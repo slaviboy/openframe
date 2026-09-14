@@ -76,6 +76,8 @@ export interface EditorState {
   readonly versionHistoryOpen: boolean;
   /** The inline preview (⇧Space) plays the prototype in a window over the canvas. */
   readonly inlinePreviewOpen: boolean;
+  /** Changes each time inline preview is opened anew, so it starts over at the frame selected then. */
+  readonly inlinePreviewKey: number;
   /** Anchor used by the Scale panel's multiplier and dimension fields. */
   readonly scaleAnchor: ScaleAnchor;
   /** Layer whose image fill is being cropped (crop mode), or null. */
@@ -176,6 +178,7 @@ export class EditorStore extends Observable<EditorState> {
       variablesOpen: false,
       versionHistoryOpen: false,
       inlinePreviewOpen: false,
+      inlinePreviewKey: 0,
       scaleAnchor: 'nw',
       croppingId: null,
       cropAspect: 'FREE',
@@ -284,6 +287,11 @@ export class EditorStore extends Observable<EditorState> {
 
   setVersionHistoryOpen(versionHistoryOpen: boolean): void {
     this.setState({ versionHistoryOpen });
+  }
+
+  /** Opens inline preview anew, starting at the selected frame — also while it's already open. */
+  openInlinePreview(): void {
+    this.setState({ inlinePreviewOpen: true, inlinePreviewKey: this.getSnapshot().inlinePreviewKey + 1 });
   }
 
   setInlinePreviewOpen(inlinePreviewOpen: boolean): void {

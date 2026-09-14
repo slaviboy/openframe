@@ -32,9 +32,9 @@ import { canParent } from '@/core/document/containment';
 import type { DuplicateMemory } from '../editor';
 import type { Vec2 } from '@/core/math/vec';
 import { hitTestDeepest, isArtboardWithChildren, isInteractive, marqueeSelect, selectionTarget } from '@/core/scene/hit-test';
-import { connectDestinationAt, connectHandle, connectionAt, connectionsInScreenRect, hitConnectHandle, overlayBadgeAt, variantDestinationAt } from '../chrome/prototype-geometry';
+import { connectDestinationAt, connectHandle, connectionAt, connectionsInScreenRect, flowTagAt, hitConnectHandle, overlayBadgeAt, variantDestinationAt } from '../chrome/prototype-geometry';
 import { variantSetOf } from '@/core/prototype/reactions';
-import { addInteraction, removeConnections, setConnectionsDestination, type ConnectionRef } from '../commands/prototype';
+import { addInteraction, moveFlowStartingPoint, removeConnections, removeFlowStartingPoint, setConnectionsDestination, type ConnectionRef } from '../commands/prototype';
 import { snapEqualGaps, type GapIndicator } from '@/core/scene/equal-gaps';
 import { measureBetween, type MeasureLine } from '@/core/scene/measure';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
@@ -188,7 +188,8 @@ type Gesture =
   /** Prototype tab: dragging the selection's + to a destination frame connects the selection to it. */
   | { kind: 'connect'; sourceIds: readonly Id[]; start: Vec2; current: PointerInfo; destination: Id | null }
   /** Prototype tab: pressing a connection's noodle selects it; dragging the selected connections moves their destination. */
-  | { kind: 'connection'; refs: readonly ConnectionRef[]; down: PointerInfo; current: PointerInfo; dragged: boolean; destination: Id | null; overEmpty: boolean };
+  | { kind: 'connection'; refs: readonly ConnectionRef[]; down: PointerInfo; current: PointerInfo; dragged: boolean; destination: Id | null; overEmpty: boolean }
+  | { kind: 'flow-tag'; nodeId: Id; down: PointerInfo; current: PointerInfo; dragged: boolean; destination: Id | null; overEmpty: boolean };
 
 /**
  * Move tool (V): selection, dragging, marquee selection, and resizing via handles.
@@ -310,6 +311,12 @@ export class MoveTool implements Tool {
   }
 
   /** The connection being dragged from the + handle: where it starts and the pointer (screen), and the frame under it. */
+  /** A flow starting point's tag being dragged: the pointer (screen) and the frame the flow would move to. */
+  get flowTagDrag(): { readonly nodeId: Id; readonly end: Vec2; readonly destination: Id | null } | null {
+    const g = this.gesture;
+    return g.kind === 'flow-tag' && g.dragged ? { nodeId: g.nodeId, end: g.current.screen, destination: g.destination } : null;
+  }
+
   get connectDrag(): { readonly start: Vec2; readonly end: Vec2; readonly destination: Id | null } | null {
     const g = this.gesture;
     return g.kind === 'connect' ? { start: g.start, end: g.current.screen, destination: g.destination } : null;
@@ -324,6 +331,7 @@ export class MoveTool implements Tool {
     if (this.gesture.kind === 'resize') return handleCursor(this.gesture.frame, this.gesture.handle);
     if (this.gesture.kind === 'rotate') return rotateCursor(this.gesture.frame, this.gesture.corner);
     if (this.gesture.kind === 'line-end' || this.gesture.kind === 'connect' || (this.gesture.kind === 'connection' && this.gesture.dragged)) return 'crosshair';
+    if (this.gesture.kind === 'flow-tag' && this.gesture.dragged) return 'grabbing';
     if (this.gesture.kind === 'grid-track') return this.gesture.axis === 'column' ? 'ew-resize' : 'ns-resize';
     if (this.gesture.kind === 'layout-handle') return isUprightHandle(this.gesture.handle, this.gesture.direction) ? 'ew-resize' : 'ns-resize';
     if (this.gesture.kind === 'spacing') return this.gesture.info.selection.axis === 'x' ? 'ew-resize' : 'ns-resize';
@@ -339,6 +347,20 @@ export class MoveTool implements Tool {
     if (connect && hitConnectHandle(editor, p.screen)) {
       editor.scene.ensure(editor.pageId);
       this.gesture = { kind: 'connect', sourceIds: connect.sourceIds, start: connect.center, current: p, destination: null };
+      return;
+    }
+    // Prototype tab: a flow starting point's tag. Its preview icon opens inline preview at the flow; its name is dragged
+    // onto another frame (moving the flow there) or off onto empty canvas (removing the starting point).
+    const tag = this.id === 'move' ? flowTagAt(editor, p.screen) : null;
+    if (tag) {
+      if (tag.part === 'preview') {
+        editor.state.select([tag.nodeId]);
+        editor.state.openInlinePreview();
+      } else {
+        editor.scene.ensure(editor.pageId);
+        this.gesture = { kind: 'flow-tag', nodeId: tag.nodeId, down: p, current: p, dragged: false, destination: null, overEmpty: false };
+      }
+      editor.requestRender();
       return;
     }
     // Prototype tab: an overlay frame's badge selects the overlay (Delete then removes the interactions opening it).
@@ -632,6 +654,16 @@ export class MoveTool implements Tool {
         editor.requestRender();
         return;
       }
+      case 'flow-tag': {
+        g.current = p;
+        if (!g.dragged && Math.hypot(p.screen.x - g.down.screen.x, p.screen.y - g.down.screen.y) < this.env.dragThresholdPx) return;
+        g.dragged = true;
+        const { editor } = this.env;
+        g.destination = connectDestinationAt(editor, [g.nodeId], p.world);
+        g.overEmpty = hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, { tolerance: 0 }) === null;
+        editor.requestRender();
+        return;
+      }
       case 'spacing': {
         g.last = p;
         const delta = g.info.selection.axis === 'x' ? p.world.x - g.down.world.x : p.world.y - g.down.world.y;
@@ -714,6 +746,12 @@ export class MoveTool implements Tool {
           removeConnections(editor, g.refs);
           editor.state.selectConnections([]);
         }
+        editor.requestRender();
+        break;
+      case 'flow-tag':
+        // Dropped on another top-level frame, the flow starts there; dropped on empty canvas, its starting point is removed.
+        if (g.dragged && g.destination) moveFlowStartingPoint(editor, g.nodeId, g.destination);
+        else if (g.dragged && g.overEmpty) removeFlowStartingPoint(editor, g.nodeId);
         editor.requestRender();
         break;
       case 'layout-handle':

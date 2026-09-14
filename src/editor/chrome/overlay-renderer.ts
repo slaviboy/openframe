@@ -58,7 +58,7 @@ import { variantsOf } from '@/core/document/variants';
 import { slotIndicators } from '@/core/document/component-properties';
 import { noodleBetween, type Noodle } from '@/core/prototype/connections';
 import { flowsOf } from '@/core/prototype/flows';
-import { CONNECT_HANDLE_SIZE, connectHandle, overlayBadgeRect, overlayFrames, screenBounds, shownConnections } from './prototype-geometry';
+import { CONNECT_HANDLE_SIZE, connectHandle, FLOW_TAG_ICON_WIDTH, overlayBadgeRect, overlayFrames, screenBounds, setFlowTags, shownConnections, type FlowTagRect } from './prototype-geometry';
 
 export interface OverlayInput {
   readonly editor: Editor;
@@ -107,6 +107,8 @@ export interface OverlayInput {
   readonly connectionDrag?: { readonly refs: readonly { readonly sourceId: Id; readonly reactionIndex: number; readonly actionIndex: number }[]; readonly end: Vec2; readonly destination: Id | null } | null;
   /** A connection being dragged from the + handle (screen points), and the frame it would connect to. */
   readonly connectDrag?: { readonly start: Vec2; readonly end: Vec2; readonly destination: Id | null } | null;
+  /** A flow starting point's tag being dragged by its name (screen point), and the frame it would move to. */
+  readonly flowTagDrag?: { readonly nodeId: Id; readonly end: Vec2; readonly destination: Id | null } | null;
   /** Eyedropper loupe: the sampled color at a canvas point. */
   readonly eyedropper?: { readonly screen: Vec2; readonly color: Color } | null;
   readonly width: number;
@@ -149,19 +151,32 @@ function drawPrototypeChrome(ctx: CanvasRenderingContext2D, input: OverlayInput,
   const { editor, theme } = input;
   ctx.font = theme.font;
   ctx.textBaseline = 'middle';
+  const flowDrag = input.flowTagDrag ?? null;
+  const tags: FlowTagRect[] = [];
   for (const flow of flowsOf(editor.doc, editor.pageId)) {
     const rect = screenRectOf(editor, flow.nodeId);
     if (!rect) continue;
     const text = `▶ ${flow.name}`;
     const width = Math.ceil(ctx.measureText(text).width) + 10;
-    const x = Math.round(rect.x);
-    const y = Math.round(rect.y - 40);
+    // A tag being dragged follows the pointer, held by its name.
+    const held = flowDrag !== null && flowDrag.nodeId === flow.nodeId ? flowDrag.end : null;
+    const x = Math.round(held ? held.x - FLOW_TAG_ICON_WIDTH - 4 : rect.x);
+    const y = Math.round(held ? held.y - 9 : rect.y - 40);
+    if (!held) tags.push({ nodeId: flow.nodeId, rect: { x, y, width, height: 18 } });
     ctx.fillStyle = PROTOTYPE_COLOR;
     ctx.beginPath();
     ctx.roundRect(x, y, width, 18, 4);
     ctx.fill();
     ctx.fillStyle = '#ffffff';
     ctx.fillText(text, x + 5, y + 9.5);
+  }
+  setFlowTags(editor, tags);
+  // The frame a dragged tag would move the flow to, outlined.
+  const flowTarget = flowDrag?.destination ? screenRectOf(editor, flowDrag.destination) : null;
+  if (flowTarget) {
+    ctx.strokeStyle = PROTOTYPE_COLOR;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(Math.round(flowTarget.x) + 0.5, Math.round(flowTarget.y) + 0.5, Math.round(flowTarget.width), Math.round(flowTarget.height));
   }
   // Each overlay frame's badge: a blue icon just outside its top-right corner (outlined while it is selected).
   const selectedOverlay = editor.state.getSnapshot().selectedOverlay;
