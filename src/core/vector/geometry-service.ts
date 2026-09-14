@@ -34,4 +34,11 @@ export interface GeometryService {
    * `weight` along `path`, as path commands; [] when nothing is left, null when the stroke doesn't reach it.
    */
   regionMinusStroke(network: VectorNetwork, region: number, path: readonly Vec2[], weight: number): PathCommand[] | null;
+
+  /**
+   * Cut divide on a closed region: its area (in the network's space) split by the infinite line through
+   * `a` and `b`, as path commands for the part on each side — `positive` where (b − a) × (p − a) > 0 —
+   * with [] for a side nothing is on. Null without the region.
+   */
+  regionHalves(network: VectorNetwork, region: number, a: Vec2, b: Vec2): { readonly positive: PathCommand[]; readonly negative: PathCommand[] } | null;
 }

@@ -15,9 +15,12 @@
  * limitations under the License.
  */
 
+import type { PathCommand } from '../geometry/corners';
 import type { Vec2 } from '../math/vec';
+import { commandsToNetwork } from './shape-networks';
 import { cutVertex, segmentPoint, splitSegment } from './vector-edit';
-import type { VectorNetwork, VectorSegment } from './vector-network';
+import { withoutSegments } from './vector-erase';
+import type { VectorNetwork, VectorRegion, VectorSegment } from './vector-network';
 
 const SAMPLES = 64;
 /** Crossings this close to a segment's ends are left alone: the cut would only touch an existing point. */
@@ -133,4 +136,41 @@ export function splitComponents(network: VectorNetwork): VectorNetwork[] {
       .map((r) => ({ ...r, loops: r.loops.map((loop) => loop.map((i) => segmentIndex.get(i)!)) }));
     return [{ vertices: group.map((v) => network.vertices[v]!), segments, regions }];
   });
+}
+
+/** A closed region split by the infinite line through `a` and `b`: path commands for the part on each side ([] when nothing is there), or null when it can't be split. */
+export type RegionSplitter = (network: VectorNetwork, region: number, a: Vec2, b: Vec2) => { readonly positive: PathCommand[]; readonly negative: PathCommand[] } | null;
+
+const withFills = (network: VectorNetwork, fills: VectorRegion['fills']): VectorNetwork =>
+  fills ? { ...network, regions: network.regions.map((r) => ({ ...r, fills })) } : network;
+
+/**
+ * Divides a network with a Cut drag from `a` to `b` into its separate pieces, or null when the drag
+ * crosses nothing. A region whose outline the drag crosses is rebuilt as the parts of its area on each
+ * side of the line (`split`, the engine's path operations), each keeping its fills; everything else is
+ * cut along the line (`cutAlongLine`). Pieces on the side of the network's first point come first.
+ */
+export function divideNetwork(network: VectorNetwork, a: Vec2, b: Vec2, split: RegionSplitter): VectorNetwork[] | null {
+  const crossed = new Set(lineCrossings(network, a, b).map((c) => c.segment));
+  if (crossed.size === 0) return null;
+  const side = (p: Vec2) => (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+  const first = network.vertices[0];
+  const firstPositive = !first || side(first) >= 0;
+  const near: VectorNetwork[] = [];
+  const far: VectorNetwork[] = [];
+  const rebuilt = new Set<number>();
+  network.regions.forEach((region, index) => {
+    if (!region.loops.some((loop) => loop.some((s) => crossed.has(s)))) return;
+    const parts = split(network, index, a, b);
+    if (!parts) return;
+    rebuilt.add(index);
+    const pieces = (commands: PathCommand[]) => (commands.length === 0 ? [] : splitComponents(withFills(commandsToNetwork(commands), region.fills)));
+    near.push(...pieces(firstPositive ? parts.positive : parts.negative));
+    far.push(...pieces(firstPositive ? parts.negative : parts.positive));
+  });
+  const regions = network.regions.filter((_, i) => !rebuilt.has(i));
+  const stillUsed = new Set(regions.flatMap((r) => r.loops.flat()));
+  const outlines = new Set(network.regions.flatMap((r, i) => (rebuilt.has(i) ? r.loops.flat() : [])).filter((s) => !stillUsed.has(s)));
+  const rest = rebuilt.size > 0 ? withoutSegments({ ...network, regions }, outlines) : network;
+  return [...near, ...splitComponents(cutAlongLine(rest, a, b).network), ...far];
 }

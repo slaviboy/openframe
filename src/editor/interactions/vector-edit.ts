@@ -27,7 +27,7 @@ import { cutVertex, deleteVertices, healVertices, moveVertices, nearestOnSegment
 import { bendVertex, oppositeEnd, setTangent, tangentAt, type SegmentEnd } from '@/core/vector/vector-bend';
 import { keyBetween } from '@/core/ids/fractional-index';
 import { matrixOf } from '@/core/scene/scene-index';
-import { cutAlongLine, splitComponents } from '@/core/vector/vector-divide';
+import { divideNetwork } from '@/core/vector/vector-divide';
 import { rotatePoints, scalePoints } from '@/core/vector/vector-transform-points';
 import { eraseNetwork } from '@/core/vector/vector-erase';
 import { addWidthPoint, chainPointAt, nearestOnChain, snapPosition, strokeChain, widthAt, type StrokeChain, type WidthPoint } from '@/core/vector/vector-width';
@@ -620,11 +620,15 @@ export class VectorEditController implements Tool {
     if (!state || !node) return;
     const inverse = invert(editor.scene.worldTransform(node.id));
     if (!inverse) return;
-    const { network, cuts } = cutAlongLine(node.vectorNetwork, apply(inverse, g.down.world), apply(inverse, g.current.world));
-    if (cuts === 0) return;
-    const [kept, ...divided] = splitComponents(network);
+    // Filled regions the drag crosses are split with the engine's path operations; without it their outlines are cut open.
+    const geometry = editor.geometry;
+    const pieces = divideNetwork(node.vectorNetwork, apply(inverse, g.down.world), apply(inverse, g.current.world), (n, region, from, to) =>
+      geometry ? geometry.regionHalves(n, region, from, to) : null,
+    );
+    const [kept, ...divided] = pieces ?? [];
+    if (!kept) return;
     editor.history.run('Divide path', (tx) => {
-      refitVector(tx, node.id, kept ?? network);
+      refitVector(tx, node.id, kept);
       // Width points were placed along the whole path; the pieces start without them.
       if (node.strokeWidths) tx.set(node.id, 'strokeWidths', undefined);
       let below = node.id;

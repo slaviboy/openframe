@@ -16,7 +16,9 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import { connectedComponents, cutAlongLine, lineCrossings, splitComponents } from './vector-divide';
+import type { PathCommand } from '../geometry/corners';
+import type { Paint } from '../schema/document';
+import { connectedComponents, cutAlongLine, divideNetwork, lineCrossings, splitComponents } from './vector-divide';
 import { straightSegment, type VectorNetwork } from './vector-network';
 
 const square: VectorNetwork = {
@@ -64,5 +66,29 @@ describe('dividing with the Cut tool', () => {
   test('a cut that crosses nothing leaves the network as it is, and one piece keeps its region', () => {
     expect(cutAlongLine(square, { x: -50, y: 0 }, { x: -50, y: 100 })).toEqual({ network: square, cuts: 0 });
     expect(splitComponents(square)).toEqual([square]);
+  });
+
+  describe('divideNetwork', () => {
+    const red = { type: 'SOLID', color: { r: 1, g: 0, b: 0, a: 1 }, opacity: 1, visible: true } as unknown as Paint;
+    const filled: VectorNetwork = { ...square, regions: [{ loops: [[0, 1, 2, 3]], windingRule: 'NONZERO', fills: [red] }] };
+    const rect = (x0: number, x1: number): PathCommand[] => [
+      { op: 'M', x: x0, y: 0 },
+      { op: 'L', x: x1, y: 0 },
+      { op: 'L', x: x1, y: 100 },
+      { op: 'L', x: x0, y: 100 },
+      { op: 'Z' },
+    ];
+
+    test('a filled region the drag crosses splits into its two sides, the side with the first point first, each keeping the fills', () => {
+      // For a drag straight down x = 50, the positive side is x < 50, where the first point (0, 0) is.
+      const pieces = divideNetwork(filled, a, b, () => ({ positive: rect(0, 50), negative: rect(50, 100) }))!;
+      expect(pieces.map((p) => Math.max(...p.vertices.map((v) => v.x)))).toEqual([50, 100]);
+      expect(pieces.every((p) => p.regions.length === 1 && p.regions[0]!.fills?.[0] === red)).toBe(true);
+    });
+
+    test('without the engine the outline is cut open as before, and a drag that crosses nothing divides nothing', () => {
+      expect(divideNetwork(filled, a, b, () => null)!.map((p) => p.segments.length)).toEqual([3, 3]);
+      expect(divideNetwork(filled, { x: -50, y: 0 }, { x: -50, y: 100 }, () => null)).toBeNull();
+    });
   });
 });

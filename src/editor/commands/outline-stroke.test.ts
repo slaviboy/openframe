@@ -42,7 +42,7 @@ beforeEach(() => {
   const ids = new IdGenerator('e');
   editor = new Editor({ doc: createEmptyDocument({ name: 'D', now: 'n', appVersion: 't', ids }), ids, validate: true });
   editor.commands.register(...BUILTIN_COMMANDS);
-  editor.setGeometry({ strokeOutline: (node) => outside(node.size.width, node.size.height), regionMinusStroke: () => null });
+  editor.setGeometry({ strokeOutline: (node) => outside(node.size.width, node.size.height), regionMinusStroke: () => null, regionHalves: () => null });
   id = editor.history.run('create', (tx) => {
     const rectId = editor.ids.next();
     const node = makeRectangle({ id: rectId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'Box', x: 50, y: 20, width: 100, height: 100 });

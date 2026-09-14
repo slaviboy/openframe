@@ -1119,6 +1119,38 @@ export class SceneRenderer {
     return commands;
   }
 
+  /** A vector region's area split by the line through `a` and `b` (GeometryService); null without the region. */
+  regionHalves(
+    network: VectorNetwork,
+    index: number,
+    a: { readonly x: number; readonly y: number },
+    b: { readonly x: number; readonly y: number },
+  ): { positive: PathCommand[]; negative: PathCommand[] } | null {
+    const ck = this.ck;
+    const region = network.regions[index];
+    const [dx, dy] = [b.x - a.x, b.y - a.y];
+    const length = Math.hypot(dx, dy);
+    if (!region || length === 0) return null;
+    const area = this.pathFrom(regionFillPath(network, region), region.windingRule === 'EVENODD');
+    const bounds = area.getBounds();
+    // Each side is the region intersected with a polygon along the line, reaching past the whole region.
+    const reach = Math.hypot(bounds[2]! - bounds[0]!, bounds[3]! - bounds[1]!) + Math.hypot(a.x - bounds[0]!, a.y - bounds[1]!) + 1;
+    const [ux, uy] = [dx / length, dy / length];
+    const side = (sign: 1 | -1): PathCommand[] => {
+      const [nx, ny] = [-uy * sign * reach, ux * sign * reach];
+      const [x1, y1, x2, y2] = [a.x - ux * reach, a.y - uy * reach, a.x + ux * reach, a.y + uy * reach];
+      const half = new ck.PathBuilder().addPolygon([x1, y1, x2, y2, x2 + nx, y2 + ny, x1 + nx, y1 + ny], true).detachAndDelete();
+      const part: Path | null = ck.Path.MakeFromOp(area, half, ck.PathOp.Intersect);
+      half.delete();
+      const commands = part ? this.commandsOf(part) : [];
+      part?.delete();
+      return commands;
+    };
+    const halves = { positive: side(1), negative: side(-1) };
+    area.delete();
+    return halves;
+  }
+
   /** A path's contours as move, line, cubic and close commands (quadratic and conic curves become cubics). */
   private commandsOf(path: Path): PathCommand[] {
     const ck = this.ck;

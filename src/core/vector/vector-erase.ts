@@ -116,7 +116,7 @@ export function eraseOpenSegments(network: VectorNetwork, path: readonly Vec2[],
 }
 
 /** The network without some segments: region loops are re-pointed, and points left without segments removed. */
-function withoutSegments(network: VectorNetwork, removed: ReadonlySet<number>): VectorNetwork {
+export function withoutSegments(network: VectorNetwork, removed: ReadonlySet<number>): VectorNetwork {
   const index = new Map<number, number>();
   const segments: VectorSegment[] = [];
   network.segments.forEach((s, i) => {

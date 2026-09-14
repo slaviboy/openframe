@@ -61,6 +61,7 @@ beforeEach(() => {
   rest = [{ op: 'M', x: 0, y: 0 }, { op: 'L', x: 90, y: 0 }, { op: 'L', x: 90, y: 100 }, { op: 'L', x: 0, y: 100 }, { op: 'Z' }];
   editor.setGeometry({
     strokeOutline: () => null,
+    regionHalves: () => null,
     regionMinusStroke: (_network, _region, path, weight) => {
       lastCall = { path: [...path], weight };
       return rest;
