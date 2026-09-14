@@ -194,6 +194,11 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - it keeps the top-left hotspot's connection in view (hotspots overlapping vertically count as one row)
     - the whole group is drawn while one of them is selected, even outside the selected layers' frames
     - the overlay renderer, `connectionAt` and `connectionsInScreenRect` all use it
+  - Dragging through a transition (the commit after matching connections):
+    - `dragDirection` / `dragProgress` / `DRAG_FINISH_AT` in `src/core/prototype/drag-transition.ts`
+    - in PresentationView, an On drag transition sets `press.scrub`, and the pointer sets `Playing.drag` in place of the time
+    - letting go (or a cancelled pointer) finishes it past halfway, or runs it back with `Playing.back` and restores the previous player state
+    - the stage's `data-drag` is `dragging` or `returning`
 
 ## In progress (uncommitted)
 
@@ -204,7 +209,6 @@ This file is how work continues after a pause (for example, a usage limit). Read
 1. The pending sub-items left in the M10 rows of `docs/FEATURE_MATRIX.md`:
    - 160 Video / GIF fills: video crop, video from the fill picker, GIF label next to the dimensions, GIF metadata on export
    - 200 Interactive components: the Variant interactions section, animating Change to, sharing states between matching instances
-   - 228 Triggers: On drag dragging through the transition
    - 233 Smart animate: gradient and image fill blending
    - 236 State memorization: sharing interactive component and video states between matching layers
    - 237 Flows: WYSIWYG description editing, starting point badge on the canvas, preview / present / copy links to flows

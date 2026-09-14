@@ -40,6 +40,7 @@ import {
   type PlayerState,
   type PlayerStep,
 } from '@/core/prototype/player';
+import { DRAG_FINISH_AT, dragDirection, dragProgress } from '@/core/prototype/drag-transition';
 import { composeScene, frameAtPoint, layerRects, SCALING_LABELS, SCALING_MODES, screenArea, scrollOffsetOf, type DeviceScreen, type PresentedScene, type ScalingMode } from '@/core/prototype/presentation';
 import { deviceLayout, effectiveDevice, type PrototypeDevice } from '@/core/prototype/device';
 import { MOBILE_DEVICE_CATEGORIES } from '@/core/document/frame-presets';
@@ -83,6 +84,10 @@ interface Playing {
   readonly start: number;
   readonly duration: number;
   readonly easing: Easing | null;
+  /** An On drag transition follows the pointer: how far through it the drag is (0–1), instead of the time. */
+  drag?: number;
+  /** A drag let go before halfway: the transition runs back from where it was, and the player returns to `state`. */
+  readonly back?: { readonly from: number; readonly state: PlayerState };
 }
 
 interface Scrolling {
@@ -101,6 +106,8 @@ interface Press {
   /** A finger on a touch screen: dragging scrolls. */
   readonly touch: boolean;
   last: Vec2;
+  /** Dragging through an On drag transition: the way it goes, and the player before it. */
+  scrub?: { readonly direction: Vec2; readonly previous: PlayerState };
 }
 
 export interface PresentationViewProps {
@@ -164,6 +171,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
   const [screenBox, setScreenBox] = useState<Rect | null>(null);
   /** The scrolled frames and their offsets, as "name:x,y" (shown on the stage for tests and assistive tools). */
   const [scrollLabel, setScrollLabel] = useState('');
+  const [dragLabel, setDragLabel] = useState('');
   /** Instances interactive components switched, as "instance=variant" (shown on the stage for tests). */
   const [variantLabel, setVariantLabel] = useState('');
   /** Variables set while playing, as "name=value" (shown on the stage for tests). */
@@ -211,6 +219,8 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
     frame: 0,
     box: '',
     scrollLabel: '',
+    /** Whether a drag holds a transition ('dragging') or runs it back ('returning'). */
+    dragLabel: '',
   });
   const drawRef = useRef<() => void>(() => {});
 
@@ -380,7 +390,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
     drawRef.current = () => {
       const state = live.current;
       state.frame = 0;
-      const current = state.player;
+      let current = state.player;
       if (!state.renderer || !current) {
         state.renderer?.draw(null, background, []);
         return;
@@ -388,9 +398,24 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
       const now = performance.now();
       let playing = null;
       if (state.playing) {
-        const t = Math.min(1, (now - state.playing.start) / state.playing.duration);
-        if (t >= 1) state.playing = null;
-        else playing = { effect: state.playing.effect, progress: state.playing.easing ? evaluateEasing(state.playing.easing, t) : 1 };
+        const running = state.playing;
+        const elapsed = Math.min(1, (now - running.start) / running.duration);
+        // A drag holds the transition where the pointer is; a drag let go early runs it back.
+        const t = running.drag ?? (running.back ? running.back.from * (1 - elapsed) : elapsed);
+        const done = running.drag === undefined && (running.back ? t <= 0 : t >= 1);
+        if (done) {
+          state.playing = null;
+          if (running.back) {
+            current = running.back.state;
+            state.player = current;
+            setPlayer(current);
+          }
+        } else playing = { effect: running.effect, progress: running.easing ? evaluateEasing(running.easing, t) : 1 };
+        const phase = running.drag !== undefined ? 'dragging' : running.back && !done ? 'returning' : '';
+        if (phase !== state.dragLabel) {
+          state.dragLabel = phase;
+          setDragLabel(phase);
+        }
       }
       if (state.scrolling) {
         const t = Math.min(1, (now - state.scrolling.start) / state.scrolling.duration);
@@ -621,7 +646,18 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
     if (press && !press.dragged && Math.hypot(point.x - press.x, point.y - press.y) > DRAG_THRESHOLD) {
       press.dragged = true;
       const drag = findReaction(doc, press.chain, 'ON_DRAG');
+      const previous = state.player;
+      const before = state.playing;
       if (drag) run(drag.reaction, drag.nodeId);
+      // Drag moves back and forward through the transition it starts, instead of playing it.
+      const started = state.playing;
+      if (drag && previous && started && started !== before && started.effect.transition.type !== 'INSTANT' && state.player !== previous) {
+        press.scrub = { direction: dragDirection(started.effect.transition, { x: point.x - press.x, y: point.y - press.y }), previous };
+      }
+    }
+    if (press?.scrub && state.playing) {
+      state.playing.drag = dragProgress(press.scrub.direction, { x: point.x - press.x, y: point.y - press.y }, state.scene?.screen ?? { width: 0, height: 0 });
+      schedule();
     }
     if (press?.touch && press.dragged) {
       // Dragging a finger scrolls the content the other way, following it.
@@ -647,11 +683,26 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
     if (hover && current && !current.temporary && entered.includes(hover.nodeId)) apply(beginTemporary(doc, current, hover.nodeId, hover.reaction));
   };
 
+  /** Letting go of a drag through a transition: past halfway it finishes from where it is; before, it goes back to the screen it left. */
+  const releaseScrub = (press: Press) => {
+    const state = live.current;
+    const scrubbed = state.playing;
+    if (!press.scrub || scrubbed?.drag === undefined) return;
+    const t = scrubbed.drag;
+    const now = performance.now();
+    state.playing =
+      t >= DRAG_FINISH_AT
+        ? { effect: scrubbed.effect, start: now - t * scrubbed.duration, duration: scrubbed.duration, easing: scrubbed.easing }
+        : { effect: scrubbed.effect, start: now, duration: Math.max(1, t * scrubbed.duration), easing: scrubbed.easing, back: { from: t, state: press.scrub.previous } };
+    schedule();
+  };
+
   const onPointerUp = (e: ReactPointerEvent) => {
     const state = live.current;
     const press = state.press;
     state.press = null;
     if (!press) return;
+    releaseScrub(press);
     const pressed = state.player;
     if (pressed?.temporary?.trigger === 'ON_PRESS') apply(endTemporary(pressed));
     const { hit, chain } = locate(e);
@@ -822,10 +873,15 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
           data-videos={videoLabel}
           data-animated-gifs={gifLabel}
           data-overlay-origins={overlayOriginLabel}
+          data-drag={dragLabel || undefined}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          onPointerCancel={() => (live.current.press = null)}
+          onPointerCancel={() => {
+            const press = live.current.press;
+            live.current.press = null;
+            if (press) releaseScrub(press);
+          }}
           onWheel={onWheel}
         >
           <canvas ref={canvasRef} className={styles.canvas} />
