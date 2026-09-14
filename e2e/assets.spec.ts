@@ -40,6 +40,6 @@ test('the Assets tab (⌥2) lists local components, and clicking one opens its d
   await expect(page.getByText('Instance', { exact: true })).toBeVisible();
 
   // Back to the file: the layers panel shows the component and its new instance.
-  await page.getByRole('button', { name: 'File' }).click();
+  await page.getByRole('button', { name: 'File', exact: true }).click();
   await expect(page.getByRole('treeitem', { name: /Component 1/ })).toHaveCount(2);
 });

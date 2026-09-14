@@ -156,6 +156,12 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
           category: 'File',
           run: () => openInput.current?.click(),
         },
+        {
+          id: 'file.showVersionHistory',
+          label: 'Show version history',
+          category: 'File',
+          run: () => editor.state.setVersionHistoryOpen(true),
+        },
       ),
     [editor, session],
   );

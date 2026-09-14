@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { ToolId, VectorEditTool } from '@/editor/stores/editor-store';
 import { formatShortcut } from '@/editor/keymap/keymap';
 import { Icon, type IconName } from '../icons/Icon';
-import { useEditor, useEditorState } from '../hooks/useEditor';
+import { useEditor, useEditorState, useSession } from '../hooks/useEditor';
 import { IS_MAC } from '../keyboard/keyboard-controller';
 import styles from './Toolbar.module.css';
 
@@ -81,6 +81,29 @@ export function Toolbar() {
     const first = editor.commands.get(command)?.shortcuts?.[0];
     return first ? formatShortcut(first, IS_MAC) : '';
   };
+  const app = useSession();
+  const viewingVersion = useSyncExternalStore(app.session.subscribe, () => app.session.getSnapshot().viewing !== null);
+  const versionHistoryOpen = useEditorState((s) => s.versionHistoryOpen);
+
+  // Version history: Done exits it (returning from an earlier version to the file as it is now).
+  if (versionHistoryOpen || viewingVersion) {
+    return (
+      <div className={styles.toolbar} role="toolbar" aria-label="Tools">
+        <div className={styles.group}>
+          <button
+            type="button"
+            className={styles.done}
+            onClick={() => {
+              editor.state.setVersionHistoryOpen(false);
+              if (viewingVersion) void app.viewVersion(null);
+            }}
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

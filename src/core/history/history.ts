@@ -194,6 +194,8 @@ export interface HistoryOptions<Meta> {
   /** Development invariant check run after every change. */
   validate?: (store: DocumentStore) => void;
   limit?: number;
+  /** Whether the document can't be changed (e.g. while viewing an earlier version): commits are discarded and undo and redo do nothing. */
+  isReadOnly?: () => boolean;
 }
 
 /**
@@ -215,11 +217,16 @@ export class History<Meta> {
   }
 
   get canUndo(): boolean {
-    return this.undoStack.length > 0 && !this.active;
+    return this.undoStack.length > 0 && !this.active && !this.readOnly;
   }
 
   get canRedo(): boolean {
-    return this.redoStack.length > 0 && !this.active;
+    return this.redoStack.length > 0 && !this.active && !this.readOnly;
+  }
+
+  /** Whether the document can't be changed right now. */
+  get readOnly(): boolean {
+    return this.options.isReadOnly?.() ?? false;
   }
 
   get undoLabel(): string | null {
@@ -260,6 +267,11 @@ export class History<Meta> {
 
   commit(tx: Transaction): ChangeSet | null {
     this.assertActive(tx);
+    if (this.readOnly) {
+      // A read-only document discards the change (its previews revert).
+      this.cancel(tx);
+      return null;
+    }
     try {
       for (const finalize of this.options.finalizers ?? []) finalize(tx);
       this.options.validate?.(this.store);

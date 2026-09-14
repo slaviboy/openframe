@@ -16,13 +16,15 @@
  */
 
 import { createThumbnailUpdater } from './file-thumbnails';
+import { checkpointDue, VIEW_VERSION_KEY, type VersionView } from './version-history';
 import { createEmptyDocument } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
+import { serializeDocument } from '@/core/serialize/serialize';
 import { BUILTIN_COMMANDS } from '@/editor/commands/builtin';
 import { Editor } from '@/editor/editor';
 import { Observable } from '@/editor/stores/observable';
 import { ToolManager } from '@/editor/tools/tool-manager';
-import { Autosaver, LocalPersistence, StorageError, type FileRecord, type SaveStatus } from '@/platform/idb/persistence';
+import { Autosaver, LocalPersistence, StorageError, type FileRecord, type SaveStatus, type VersionInfo } from '@/platform/idb/persistence';
 import { createReplicaId } from '@/platform/replica';
 
 export const APP_VERSION = '0.1.0';
@@ -33,6 +35,8 @@ export interface SessionState {
   readonly file: FileRecord;
   readonly save: SaveStatus;
   readonly recovered: boolean;
+  /** The earlier version shown read-only instead of the file as it is now, or null. */
+  readonly viewing: VersionInfo | null;
 }
 
 export class SessionStore extends Observable<SessionState> {
@@ -51,6 +55,18 @@ export interface AppSession {
   renameFile(name: string): Promise<void>;
   /** Renders and stores the file's thumbnail now (when the rendering engine is ready). */
   updateThumbnail(): Promise<void>;
+  /** The file's version history, newest first. */
+  listVersions(): Promise<VersionInfo[]>;
+  /** Saves the file as it is now to its version history, with a title and description. */
+  saveVersion(name: string, description: string): Promise<void>;
+  /** Names or describes a version. */
+  updateVersion(id: string, patch: { name: string; description: string }): Promise<void>;
+  /** Reloads the app showing a version read-only (or, with null, the file as it is now). */
+  viewVersion(id: string | null): Promise<void>;
+  /** Restores a version (adding two autosave checkpoints) and reloads the app into the file. */
+  restoreVersion(id: string): Promise<void>;
+  /** Duplicates a version as a new local file. */
+  duplicateVersion(id: string): Promise<FileRecord>;
   dispose(): void;
 }
 
@@ -64,6 +80,7 @@ export async function bootstrap(): Promise<AppSession> {
   const persistence = await LocalPersistence.open();
   const ids = new IdGenerator(createReplicaId());
   const lastId = await persistence.getSetting<string>(LAST_FILE_KEY);
+  const view = await persistence.getSetting<VersionView | null>(VIEW_VERSION_KEY);
 
   let opened: Awaited<ReturnType<LocalPersistence['openFile']>> | null = null;
   if (lastId) {
@@ -78,10 +95,16 @@ export async function bootstrap(): Promise<AppSession> {
   let file: FileRecord;
   let recovered = false;
   let editor: Editor;
+  let viewing: VersionInfo | null = null;
   if (opened) {
     file = opened.record;
     recovered = opened.replayedBatches > 0;
-    editor = new Editor({ doc: opened.store, ids, ...(file.lastPageId ? { pageId: file.lastPageId } : {}), validate: import.meta.env.DEV });
+    // An earlier version being viewed opens read-only in place of the file.
+    const version = view?.fileId === file.id ? await persistence.openVersion(view.versionId).catch(() => null) : null;
+    viewing = version?.record ?? null;
+    editor = version
+      ? new Editor({ doc: version.store, ids, validate: import.meta.env.DEV, readOnly: true })
+      : new Editor({ doc: opened.store, ids, ...(file.lastPageId ? { pageId: file.lastPageId } : {}), validate: import.meta.env.DEV });
     if (recovered) {
       // Fold recovered journal into a fresh snapshot so the next load is fast.
       await persistence.compact(file.id, opened.store, nowIso());
@@ -92,6 +115,7 @@ export async function bootstrap(): Promise<AppSession> {
     editor = new Editor({ doc, ids, validate: import.meta.env.DEV });
   }
   await persistence.setSetting(LAST_FILE_KEY, file.id);
+  if (view && !viewing) await persistence.setSetting(VIEW_VERSION_KEY, null);
   editor.commands.register(...BUILTIN_COMMANDS);
   editor.images.storage = {
     save: (a) => persistence.putImage({ hash: a.hash, bytes: a.bytes.slice().buffer, mime: a.mime, width: a.width, height: a.height }),
@@ -107,8 +131,26 @@ export async function bootstrap(): Promise<AppSession> {
   // User fonts load before the canvas, so text shapes with them from the first frame.
   await editor.fonts.load().catch((error: unknown) => console.warn('Openframe: user fonts could not be loaded', error));
 
+  // Saves add an autosave checkpoint to the version history every 30 minutes (when the file changed).
+  const openedAt = nowIso();
+  let lastVersionAt = (await persistence.listVersions(file.id))[0]?.createdAt;
+  let checkpointing = false;
+  const checkpoint = async () => {
+    if (viewing || checkpointing || !checkpointDue(lastVersionAt, openedAt, nowIso())) return;
+    checkpointing = true;
+    try {
+      const latest = await persistence.latestVersion(file.id);
+      if (latest?.text !== serializeDocument(editor.doc)) await persistence.saveVersion(file.id, editor.doc, nowIso(), { id: crypto.randomUUID() });
+      lastVersionAt = nowIso();
+    } catch (error) {
+      console.warn('Openframe: autosave checkpoint failed', error);
+    } finally {
+      checkpointing = false;
+    }
+  };
+
   const thumbnails = createThumbnailUpdater(editor, persistence, file.id);
-  const session = new SessionStore({ file, save: { state: 'saved', at: file.updatedAt }, recovered });
+  const session = new SessionStore({ file, save: { state: 'saved', at: file.updatedAt }, recovered, viewing });
   const autosaver = new Autosaver({
     persistence,
     fileId: file.id,
@@ -117,18 +159,22 @@ export async function bootstrap(): Promise<AppSession> {
     onStatus: (save) => {
       session.update({ save });
       // The thumbnail follows the saved file.
-      if (save.state === 'saved') thumbnails.schedule();
+      if (save.state === 'saved') {
+        thumbnails.schedule();
+        void checkpoint();
+      }
     },
   });
 
   const unsubscribe = editor.history.subscribe((change) => {
-    if (change.source === 'preview') return;
+    // A version being viewed is never saved over the file.
+    if (change.source === 'preview' || viewing) return;
     autosaver.record(change.ops);
   });
 
   let lastPage = editor.pageId;
   const unsubscribePage = editor.state.subscribe(() => {
-    if (editor.pageId === lastPage) return;
+    if (editor.pageId === lastPage || viewing) return;
     lastPage = editor.pageId;
     void persistence.updateFileRecord(file.id, { lastPageId: lastPage });
   });
@@ -147,7 +193,7 @@ export async function bootstrap(): Promise<AppSession> {
     async renameFile(name: string) {
       const trimmed = name.trim();
       const current = session.getSnapshot().file;
-      if (!trimmed || trimmed === current.name) return;
+      if (viewing || !trimmed || trimmed === current.name) return;
       editor.doc.meta = { ...editor.doc.meta, name: trimmed };
       session.update({ file: { ...current, name: trimmed } });
       await persistence.updateFileRecord(current.id, { name: trimmed });
@@ -155,6 +201,34 @@ export async function bootstrap(): Promise<AppSession> {
     },
     updateThumbnail() {
       return thumbnails.now();
+    },
+    listVersions() {
+      return persistence.listVersions(file.id);
+    },
+    async saveVersion(name: string, description: string) {
+      if (viewing) return;
+      await autosaver.flush();
+      await persistence.saveVersion(file.id, editor.doc, nowIso(), { id: crypto.randomUUID(), name, description });
+      lastVersionAt = nowIso();
+    },
+    updateVersion(id: string, patch: { name: string; description: string }) {
+      return persistence.updateVersion(id, patch);
+    },
+    async viewVersion(id: string | null) {
+      await autosaver.flush();
+      await persistence.setSetting(VIEW_VERSION_KEY, id ? ({ fileId: file.id, versionId: id } satisfies VersionView) : null);
+      window.location.reload();
+    },
+    async restoreVersion(id: string) {
+      await autosaver.flush();
+      // The checkpoint of the file as it was: the file itself, not the version being viewed.
+      const current = viewing ? (await persistence.openFile(file.id)).store : editor.doc;
+      await persistence.restoreVersion(file.id, id, current, nowIso(), [crypto.randomUUID(), crypto.randomUUID()]);
+      await persistence.setSetting(VIEW_VERSION_KEY, null);
+      window.location.reload();
+    },
+    duplicateVersion(id: string) {
+      return persistence.duplicateVersion(id, ids.next().replace(':', '-'), session.getSnapshot().file.name, nowIso());
     },
     dispose() {
       unsubscribe();

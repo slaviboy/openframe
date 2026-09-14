@@ -27,6 +27,7 @@ import { AssetsPanel } from '../panels/assets/AssetsPanel';
 import { LayersPanel } from '../panels/layers/LayersPanel';
 import { PagesPanel } from '../panels/pages/PagesPanel';
 import { VariablesView } from '../panels/variables/VariablesView';
+import { VersionHistoryPanel } from '../panels/versions/VersionHistoryPanel';
 import { Menu } from '../primitives/Menu';
 import { PropertyLabelsContext } from '../primitives/property-labels';
 import { viewPrefs } from '../view/view-prefs';
@@ -60,9 +61,13 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
   const assetsOpen = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().assetsOpen);
   const variablesOpen = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().variablesOpen);
   const propertyLabels = useSyncExternalStore(viewPrefs.subscribe, () => viewPrefs.getSnapshot().propertyLabels);
+  const versionHistoryOpen = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().versionHistoryOpen);
+  const viewingVersion = useSyncExternalStore(session.session.subscribe, () => session.session.getSnapshot().viewing !== null);
+  // Version history replaces the properties panel while it is open, and while an earlier version is shown.
+  const inVersionHistory = versionHistoryOpen || viewingVersion;
 
   const showLeft = uiMode === 'full';
-  const showRight = uiMode === 'full' || (uiMode === 'minimized' && hasSelection);
+  const showRight = uiMode === 'full' || (uiMode === 'minimized' && (hasSelection || inVersionHistory));
 
   // Panels float over the canvas; tell the editor which edges they cover (rulers sit beside them).
   useLayoutEffect(() => {
@@ -152,10 +157,16 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
         )}
         {showRight && (
           <aside className={`${styles.panel} ${styles.right}`} aria-label="Properties">
-            <RightHeader />
-            <PropertyLabelsContext.Provider value={propertyLabels}>
-              <Inspector />
-            </PropertyLabelsContext.Provider>
+            {inVersionHistory ? (
+              <VersionHistoryPanel />
+            ) : (
+              <>
+                <RightHeader />
+                <PropertyLabelsContext.Provider value={propertyLabels}>
+                  <Inspector />
+                </PropertyLabelsContext.Provider>
+              </>
+            )}
           </aside>
         )}
         {uiMode !== 'hidden' && <Toolbar />}
@@ -170,6 +181,8 @@ function FileHeader() {
   const state = useSyncExternalStore(app.session.subscribe, app.session.getSnapshot);
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(state.file.name);
+  const [menuAnchor, setMenuAnchor] = useState<Box | null>(null);
+  const closeMenu = useCallback(() => setMenuAnchor(null), []);
 
   const commit = () => {
     setEditing(false);
@@ -178,7 +191,13 @@ function FileHeader() {
   };
 
   const save = state.save;
-  const statusText = save.state === 'saved' ? 'Saved locally' : save.state === 'error' ? `Not saved: ${save.error.message}` : 'Saving…';
+  const statusText = state.viewing
+    ? 'Viewing an earlier version'
+    : save.state === 'saved'
+      ? 'Saved locally'
+      : save.state === 'error'
+        ? `Not saved: ${save.error.message}`
+        : 'Saving…';
 
   return (
     <div className={styles.fileHeader}>
@@ -201,9 +220,34 @@ function FileHeader() {
           }}
         />
       ) : (
-        <button type="button" className={styles.fileName} onClick={() => setEditing(true)} title="Rename file">
-          {state.file.name}
-        </button>
+        <div className={styles.fileNameRow}>
+          <button type="button" className={styles.fileName} disabled={state.viewing !== null} onClick={() => setEditing(true)} title="Rename file">
+            {state.file.name}
+          </button>
+          <button
+            type="button"
+            className={styles.fileMenuButton}
+            aria-label="File actions"
+            aria-haspopup="menu"
+            aria-expanded={menuAnchor !== null}
+            data-menu-root=""
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setMenuAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
+            }}
+          >
+            <Icon name="chevronDown" size={16} />
+          </button>
+          {menuAnchor && (
+            <Menu
+              label="File actions"
+              entries={commandSections(app.editor, [['file.showVersionHistory'], ['file.saveLocalCopy', 'file.export']])}
+              anchor={menuAnchor}
+              placement="bottom-start"
+              onClose={closeMenu}
+            />
+          )}
+        </div>
       )}
       <span className={styles.saveStatus} data-state={save.state} role="status" aria-live="polite" data-testid="save-status">
         {statusText}

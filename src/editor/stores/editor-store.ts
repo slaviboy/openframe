@@ -61,6 +61,8 @@ export interface EditorState {
   readonly assetsOpen: boolean;
   /** The navigation bar's Variables tab is showing the variables view over the canvas. */
   readonly variablesOpen: boolean;
+  /** The right sidebar shows the file's version history. */
+  readonly versionHistoryOpen: boolean;
   /** Anchor used by the Scale panel's multiplier and dimension fields. */
   readonly scaleAnchor: ScaleAnchor;
   /** Layer whose image fill is being cropped (crop mode), or null. */
@@ -157,6 +159,7 @@ export class EditorStore extends Observable<EditorState> {
       findOpen: false,
       assetsOpen: false,
       variablesOpen: false,
+      versionHistoryOpen: false,
       scaleAnchor: 'nw',
       croppingId: null,
       cropAspect: 'FREE',
@@ -261,6 +264,10 @@ export class EditorStore extends Observable<EditorState> {
 
   setVariablesOpen(variablesOpen: boolean): void {
     this.setState({ variablesOpen });
+  }
+
+  setVersionHistoryOpen(versionHistoryOpen: boolean): void {
+    this.setState({ versionHistoryOpen });
   }
 
   openDialog(dialog: EditorDialog | null): void {

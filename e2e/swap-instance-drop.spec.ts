@@ -49,14 +49,14 @@ test('dropping a component from Assets with ⌥ swaps the instance under the poi
   };
 
   await drop(340, 340, true);
-  await page.getByRole('button', { name: 'File' }).click();
+  await page.getByRole('button', { name: 'File', exact: true }).click();
   await expect(rows(/Component 1/)).toHaveCount(1);
   await expect(rows(/Component 2/)).toHaveCount(2);
   await expect(page.getByText('Instance', { exact: true })).toBeVisible();
 
   await page.keyboard.press('Alt+2');
   await drop(700, 500, false);
-  await page.getByRole('button', { name: 'File' }).click();
+  await page.getByRole('button', { name: 'File', exact: true }).click();
   await expect(rows(/Component 2/)).toHaveCount(3);
   await expect(rows(/Component 1/)).toHaveCount(1);
 });

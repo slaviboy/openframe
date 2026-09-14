@@ -267,3 +267,34 @@
 .restoreUi:hover {
   background: var(--bg-control-hover);
 }
+
+.fileNameRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  min-width: 0;
+}
+
+.fileName:disabled {
+  color: inherit;
+  cursor: default;
+}
+
+.fileMenuButton {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--fg-secondary);
+}
+
+.fileMenuButton:hover,
+.fileMenuButton[aria-expanded='true'] {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}

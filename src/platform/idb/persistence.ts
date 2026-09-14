@@ -77,8 +77,27 @@ export interface FontRecord {
   source: 'upload' | 'local';
 }
 
+/** A saved version of a file, shown in its version history: an autosave checkpoint, or a version saved with a name. */
+export interface VersionRecord {
+  id: string;
+  fileId: string;
+  createdAt: string;
+  /** `named` versions were saved (or later named) by the user; `autosave` checkpoints were made by the app. */
+  kind: 'autosave' | 'named';
+  name?: string;
+  description?: string;
+  /** The version a restore checkpoint brought back (it sits above the checkpoint saved at the same time). */
+  restoredFrom?: string;
+  /** The serialized document. */
+  text: string;
+}
+
+/** A version without its document, for listing. */
+export type VersionInfo = Omit<VersionRecord, 'text'>;
+
 interface OpenframeDB extends DBSchema {
   files: { key: string; value: FileRecord; indexes: { updatedAt: string } };
+  versions: { key: string; value: VersionRecord; indexes: { fileId: string } };
   snapshots: { key: string; value: SnapshotRecord };
   journal: { key: number; value: JournalRecord; indexes: { fileId: string } };
   settings: { key: string; value: unknown };
@@ -87,8 +106,11 @@ interface OpenframeDB extends DBSchema {
 }
 
 export const DB_NAME = 'openframe';
-/** 1: files, snapshots, journal, settings. 2: images. 3: fonts. */
-const DB_VERSION = 3;
+/** 1: files, snapshots, journal, settings. 2: images. 3: fonts. 4: versions. */
+const DB_VERSION = 4;
+
+const withoutText = ({ text: _text, ...info }: VersionRecord): VersionInfo => info;
+const versionKind = (name: string | undefined): VersionRecord['kind'] => (name?.trim() ? 'named' : 'autosave');
 
 export class StorageError extends Error {
   constructor(
@@ -138,6 +160,7 @@ export class LocalPersistence {
           }
           if (oldVersion < 2) database.createObjectStore('images', { keyPath: 'hash' });
           if (oldVersion < 3) database.createObjectStore('fonts', { keyPath: 'id' });
+          if (oldVersion < 4) database.createObjectStore('versions', { keyPath: 'id' }).createIndex('fileId', 'fileId');
         },
       });
       return new LocalPersistence(db);
@@ -247,12 +270,97 @@ export class LocalPersistence {
   }
 
   async deleteFile(fileId: string): Promise<void> {
-    const tx = this.db.transaction(['files', 'snapshots', 'journal'], 'readwrite');
+    const tx = this.db.transaction(['files', 'snapshots', 'journal', 'versions'], 'readwrite');
     await tx.objectStore('files').delete(fileId);
     await tx.objectStore('snapshots').delete(fileId);
     const index = tx.objectStore('journal').index('fileId');
     for (let cursor = await index.openCursor(fileId); cursor; cursor = await cursor.continue()) await cursor.delete();
+    const versions = tx.objectStore('versions').index('fileId');
+    for (let cursor = await versions.openCursor(fileId); cursor; cursor = await cursor.continue()) await cursor.delete();
     await tx.done;
+  }
+
+  /** Adds the document as it is now to the file's version history: a named version when `name` is given, else an autosave checkpoint. */
+  async saveVersion(fileId: string, store: DocumentStore, now: string, info: { id: string; name?: string | undefined; description?: string | undefined }): Promise<VersionInfo> {
+    const name = info.name?.trim();
+    const description = info.description?.trim();
+    const record: VersionRecord = { id: info.id, fileId, createdAt: now, kind: versionKind(name), ...(name ? { name } : {}), ...(description ? { description } : {}), text: serializeDocument(store) };
+    try {
+      await this.db.put('versions', record);
+    } catch (error) {
+      throw classify(error);
+    }
+    return withoutText(record);
+  }
+
+  /** The file's version history, newest first (a restore checkpoint above the checkpoint saved with it). */
+  async listVersions(fileId: string): Promise<VersionInfo[]> {
+    const records = await this.db.getAllFromIndex('versions', 'fileId', fileId);
+    return records
+      .sort((a, b) => (a.createdAt === b.createdAt ? Number(b.restoredFrom !== undefined) - Number(a.restoredFrom !== undefined) : a.createdAt < b.createdAt ? 1 : -1))
+      .map(withoutText);
+  }
+
+  /** The newest version of the file (with its document), if it has any. */
+  async latestVersion(fileId: string): Promise<VersionRecord | undefined> {
+    const [latest] = await this.listVersions(fileId);
+    return latest && this.db.get('versions', latest.id);
+  }
+
+  /** A version's document. Throws StorageError('corrupt') when the version is missing or damaged. */
+  async openVersion(id: string): Promise<{ record: VersionInfo; store: DocumentStore }> {
+    const record = await this.db.get('versions', id);
+    if (!record) throw new StorageError(`Version ${id} was not found in local storage.`, 'corrupt');
+    try {
+      return { record: withoutText(record), store: deserializeDocument(record.text) };
+    } catch (error) {
+      throw new StorageError('The saved version is damaged and could not be loaded.', 'corrupt', { cause: error });
+    }
+  }
+
+  /** Names or describes a version; naming an autosave checkpoint makes it a named version (and clearing the name, a checkpoint again). */
+  async updateVersion(id: string, patch: { name: string; description: string }): Promise<void> {
+    const tx = this.db.transaction('versions', 'readwrite');
+    const existing = await tx.store.get(id);
+    if (existing) {
+      const { name: _name, description: _description, ...rest } = existing;
+      const name = patch.name.trim();
+      const description = patch.description.trim();
+      await tx.store.put({ ...rest, kind: versionKind(name), ...(name ? { name } : {}), ...(description ? { description } : {}) });
+    }
+    await tx.done;
+  }
+
+  /**
+   * Restores a version: the file becomes the version's document (keeping the file's name), and two autosave checkpoints are
+   * added at the same time — one saving the document as it was (`current`), and one for the restored version.
+   */
+  async restoreVersion(fileId: string, versionId: string, current: DocumentStore, now: string, checkpointIds: readonly [string, string]): Promise<void> {
+    const { record, store } = await this.openVersion(versionId);
+    store.meta = { ...store.meta, name: current.meta.name };
+    const text = serializeDocument(store);
+    try {
+      const tx = this.db.transaction(['versions', 'snapshots', 'journal', 'files'], 'readwrite');
+      const versions = tx.objectStore('versions');
+      await versions.put({ id: checkpointIds[0], fileId, createdAt: now, kind: 'autosave', text: serializeDocument(current) });
+      await versions.put({ id: checkpointIds[1], fileId, createdAt: now, kind: 'autosave', restoredFrom: record.id, text });
+      await tx.objectStore('snapshots').put({ fileId, text, savedAt: now });
+      const index = tx.objectStore('journal').index('fileId');
+      for (let cursor = await index.openCursor(fileId); cursor; cursor = await cursor.continue()) await cursor.delete();
+      const files = tx.objectStore('files');
+      const file = await files.get(fileId);
+      if (file) await files.put({ ...file, updatedAt: now });
+      await tx.done;
+    } catch (error) {
+      throw classify(error);
+    }
+  }
+
+  /** Duplicates a version as a new local file named "<file name> (Copy)". */
+  async duplicateVersion(versionId: string, newId: string, name: string, now: string): Promise<FileRecord> {
+    const { store } = await this.openVersion(versionId);
+    store.meta = { ...store.meta, name: `${name} (Copy)` };
+    return this.createFile(newId, store, now);
   }
 
   /** Stores an image blob (idempotent: the key is the content hash). */

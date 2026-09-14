@@ -69,6 +69,8 @@ export interface EditorOptions {
   pageId?: Id;
   /** Run structural invariants after each commit (dev/test builds). */
   validate?: boolean;
+  /** Open the document read-only (e.g. an earlier version): changes are discarded. */
+  readOnly?: boolean;
 }
 
 /**
@@ -165,8 +167,10 @@ export class Editor {
     this.state = new EditorStore(this.doc, firstPage);
     this.scene = new SceneIndex(this.doc);
     this.images.subscribe(() => this.requestRender());
+    const readOnly = options.readOnly ?? false;
     this.history = new History<EditorMeta>({
       store: this.doc,
+      isReadOnly: () => readOnly,
       captureMeta: () => ({ pageId: this.state.activePageId, selection: this.state.selection }),
       restoreMeta: (meta) => {
         if (this.doc.has(meta.pageId) && meta.pageId !== this.state.activePageId) this.state.setActivePage(meta.pageId);
