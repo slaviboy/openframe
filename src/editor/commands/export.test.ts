@@ -91,3 +91,17 @@ describe('export settings on layers', () => {
     expect(renderExports(editor, [icon])).toBeNull();
   });
 });
+
+describe('SVG exports', () => {
+  test('are written by the SVG exporter at 1x, without the rendering engine, with what they left out', () => {
+    addExportSetting(editor, [icon]);
+    updateExportSetting(editor, [icon], 0, { format: 'SVG', constraint: { type: 'SCALE', value: 3 } });
+    const [asset] = renderExports(editor, [icon])!;
+    expect(asset).toMatchObject({ path: 'icons/close.svg', type: 'image/svg+xml', skipped: [] });
+    expect(new TextDecoder().decode(asset!.bytes)).toContain('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50"');
+    expect(rendered).toEqual([]);
+
+    editor.setThumbnails(null);
+    expect(renderExports(editor, [icon])!.map((a) => a.path)).toEqual(['icons/close.svg']);
+  });
+});

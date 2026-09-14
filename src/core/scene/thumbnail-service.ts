@@ -17,7 +17,7 @@
 
 import type { ColorProfile } from '../color/color';
 import type { DocumentStore } from '../document/store';
-import type { ExportFormat } from '../export/export-settings';
+import type { RasterFormat } from '../export/export-settings';
 import type { Id } from '../ids/ids';
 import type { SceneIndex } from './scene-index';
 
@@ -33,5 +33,5 @@ export interface ThumbnailService {
    * An exported image of one layer and its children at `scale` (a slice: everything within its bounds), encoded as
    * `format`; null when there is nothing to draw.
    */
-  exportImage(store: DocumentStore, index: SceneIndex, pageId: Id, id: Id, scale: number, format: ExportFormat, colorProfile?: ColorProfile): Uint8Array | null;
+  exportImage(store: DocumentStore, index: SceneIndex, pageId: Id, id: Id, scale: number, format: RasterFormat, colorProfile?: ColorProfile): Uint8Array | null;
 }

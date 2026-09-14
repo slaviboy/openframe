@@ -36,12 +36,12 @@ export function ExportDialog({ editor, onClose }: { editor: Editor; onClose: () 
     const node = editor.doc.get(id) as SceneNode;
     const bounds = editor.scene.paintBounds(id) ?? editor.scene.worldBounds(id);
     return (node.exportSettings ?? []).map((setting, index) => {
-      const scale = bounds ? exportScale(setting.constraint, bounds.width, bounds.height) : 1;
+      const scale = bounds && setting.format !== 'SVG' ? exportScale(setting.constraint, bounds.width, bounds.height) : 1;
       return {
         key: `${id}:${index}`,
         id,
         path: exportFileName(node.name, setting),
-        detail: `${EXPORT_FORMAT_LABELS[setting.format]} · ${formatExportConstraint(setting.constraint)}${bounds ? ` · ${Math.max(1, Math.round(bounds.width * scale))} × ${Math.max(1, Math.round(bounds.height * scale))}` : ''}`,
+        detail: `${EXPORT_FORMAT_LABELS[setting.format]} · ${setting.format === 'SVG' ? '1x' : formatExportConstraint(setting.constraint)}${bounds ? ` · ${Math.max(1, Math.round(bounds.width * scale))} × ${Math.max(1, Math.round(bounds.height * scale))}` : ''}`,
       };
     });
   });

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ExportFormat } from '@/core/export/export-settings';
+import type { RasterFormat } from '@/core/export/export-settings';
 import type { Canvas, CanvasKit, ColorFilter, EmbindEnumEntity, Paint as CkPaint, ImageFilter, Path, RRect, RuntimeEffect, Shader } from 'canvaskit-wasm';
 import type { Effect } from '@/core/schema/document';
 
@@ -283,7 +283,7 @@ export class SceneRenderer {
    * transparent background, or for a slice everything within its bounds, at `scale`. JPG has no transparency, so it is
    * flattened onto white. Null when there is nothing to draw.
    */
-  exportImage(store: DocumentStore, index: SceneIndex, pageId: Id, id: Id, scale: number, format: ExportFormat, colorProfile?: ColorProfile): Uint8Array | null {
+  exportImage(store: DocumentStore, index: SceneIndex, pageId: Id, id: Id, scale: number, format: RasterFormat, colorProfile?: ColorProfile): Uint8Array | null {
     index.ensure(pageId);
     const region = store.get(id)?.type === 'SLICE';
     const bounds = region ? index.worldBounds(id) : (index.paintBounds(id) ?? index.worldBounds(id));

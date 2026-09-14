@@ -16,6 +16,7 @@
  */
 
 import { defaultExportSetting, EXPORT_MIME_TYPES, exportFileName, exportScale, uniqueFileNames, type ExportSetting } from '@/core/export/export-settings';
+import { exportSvg } from '@/core/export/svg-document';
 import type { Id } from '@/core/ids/ids';
 import { isSceneNode, type SceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
@@ -66,16 +67,20 @@ export interface ExportedAsset {
   readonly path: string;
   readonly type: string;
   readonly bytes: Uint8Array;
+  /** For SVG: what was left out (`layer name: what`) because SVG export doesn't support it. */
+  readonly skipped?: readonly string[];
 }
 
 /**
  * Renders the export configurations of layers into files, named from the layer names (made unique). A layer's size for
- * fixed-width and fixed-height scales is its painted bounds, effects included. Null while the rendering engine isn't
- * ready; configurations with nothing to draw are skipped.
+ * fixed-width and fixed-height scales is its painted bounds, effects included; SVG exports at 1x. Null while the rendering
+ * engine an image needs isn't ready; configurations with nothing to draw are skipped.
  */
 export function renderExports(editor: Editor, ids: readonly Id[], only?: ReadonlySet<string>): ExportedAsset[] | null {
   const engine = editor.thumbnails;
-  if (!engine) return null;
+  const wanted = (node: SceneNode, index: number) => !only || only.has(`${node.id}:${index}`);
+  const needsEngine = layers(editor, ids).some((node) => settingsOf(node).some((setting, index) => setting.format !== 'SVG' && wanted(node, index)));
+  if (needsEngine && !engine) return null;
   const assets: ExportedAsset[] = [];
   for (const node of layers(editor, ids)) {
     const pageId = editor.doc.pageOf(node.id);
@@ -84,7 +89,14 @@ export function renderExports(editor: Editor, ids: readonly Id[], only?: Readonl
     const bounds = editor.scene.paintBounds(node.id) ?? editor.scene.worldBounds(node.id);
     if (!bounds || bounds.width <= 0 || bounds.height <= 0) continue;
     settingsOf(node).forEach((setting, index) => {
-      if (only && !only.has(`${node.id}:${index}`)) return;
+      if (!wanted(node, index)) return;
+      if (setting.format === 'SVG') {
+        const geometry = editor.geometry;
+        const result = exportSvg(editor.doc, node.id, geometry ? { strokeOutline: (layer) => geometry.strokeOutline(layer) } : {});
+        if (result) assets.push({ nodeId: node.id, setting, path: exportFileName(node.name, setting), type: EXPORT_MIME_TYPES.SVG, bytes: new TextEncoder().encode(result.svg), skipped: result.skipped });
+        return;
+      }
+      if (!engine) return;
       const bytes = engine.exportImage(editor.doc, editor.scene, pageId, node.id, exportScale(setting.constraint, bounds.width, bounds.height), setting.format);
       if (bytes) assets.push({ nodeId: node.id, setting, path: exportFileName(node.name, setting), type: EXPORT_MIME_TYPES[setting.format], bytes });
     });

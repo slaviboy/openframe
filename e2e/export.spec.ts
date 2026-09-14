@@ -56,3 +56,29 @@ test('a layer is exported from the Export section, and from File > Export as a Z
   await dialog.getByRole('button', { name: 'Export 2 files' }).click();
   expect((await archive).suggestedFilename()).toBe('Export.zip');
 });
+
+test('a layer exports as SVG at 1x', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 500, box.y + 400, { steps: 5 });
+  await page.mouse.up();
+
+  const section = page.getByRole('region', { name: 'Export' });
+  await section.getByRole('button', { name: 'Add export' }).click();
+  await section.getByRole('combobox', { name: 'Export 1 format' }).selectOption('SVG');
+  const scale = section.getByRole('combobox', { name: 'Export 1 scale' });
+  await expect(scale).toBeDisabled();
+  await expect(scale).toHaveValue('1x');
+
+  const download = page.waitForEvent('download');
+  await section.getByRole('button', { name: 'Export Rectangle 1' }).click();
+  const svg = await download;
+  expect(svg.suggestedFilename()).toBe('Rectangle 1.svg');
+  const chunks = await (await svg.createReadStream()).toArray();
+  expect(Buffer.concat(chunks).toString('utf8').startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true);
+});

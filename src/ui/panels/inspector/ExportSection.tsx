@@ -54,7 +54,10 @@ function ScaleInput({ label, setting, onChange }: { label: string; setting: Expo
       className={primitives.textInput}
       aria-label={label}
       list={SCALE_PRESETS_ID}
-        value={draft ?? formatExportConstraint(setting.constraint)}
+      // SVG exports at 1x.
+      disabled={setting.format === 'SVG'}
+      title={setting.format === 'SVG' ? 'SVG exports at 1x' : undefined}
+        value={setting.format === 'SVG' ? '1x' : (draft ?? formatExportConstraint(setting.constraint))}
         spellCheck={false}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
@@ -97,7 +100,8 @@ export function ExportSection({ nodes }: { nodes: readonly SceneNode[] }) {
       return;
     }
     saveExports(assets, nodes.length === 1 ? baseName(nodes[0]!.name) || 'Export' : 'Export');
-    setStatus(assets.length === 1 ? `Exported ${baseName(assets[0]!.path)}` : `Exported ${assets.length} files`);
+    const left = [...new Set(assets.flatMap((asset) => asset.skipped ?? []))];
+    setStatus(`${assets.length === 1 ? `Exported ${baseName(assets[0]!.path)}` : `Exported ${assets.length} files`}${left.length > 0 ? `. Left out of the SVG: ${left.join(', ')}` : ''}`);
   };
   const togglePreview = () => {
     if (preview) {
