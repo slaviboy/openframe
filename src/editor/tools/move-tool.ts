@@ -32,7 +32,7 @@ import { canParent } from '@/core/document/containment';
 import type { DuplicateMemory } from '../editor';
 import type { Vec2 } from '@/core/math/vec';
 import { hitTestDeepest, isArtboardWithChildren, isInteractive, marqueeSelect, selectionTarget } from '@/core/scene/hit-test';
-import { connectDestinationAt, connectHandle, connectionAt, hitConnectHandle, variantDestinationAt } from '../chrome/prototype-geometry';
+import { connectDestinationAt, connectHandle, connectionAt, connectionsInScreenRect, hitConnectHandle, variantDestinationAt } from '../chrome/prototype-geometry';
 import { variantSetOf } from '@/core/prototype/reactions';
 import { addInteraction, removeConnections, setConnectionsDestination, type ConnectionRef } from '../commands/prototype';
 import { snapEqualGaps, type GapIndicator } from '@/core/scene/equal-gaps';
@@ -105,7 +105,7 @@ type Gesture =
       /** Where the moved children of an auto layout frame will land in its flow on release. */
       insertion: { readonly frameId: Id; readonly index: number } | null;
     }
-  | { kind: 'marquee'; down: PointerInfo; base: readonly Id[]; scope: Id; current: Vec2 }
+  | { kind: 'marquee'; down: PointerInfo; base: readonly Id[]; baseConnections: readonly ConnectionRef[]; scope: Id; current: Vec2 }
   /** Dragging a smart selection's spacing handle: every gap follows the pointer. */
   | { kind: 'spacing'; tx: Transaction; down: PointerInfo; last: PointerInfo; info: SmartSelectionInfo; starts: NodeStart[]; gap: number }
   /** Dragging one end point of a single selected line; the other end stays fixed. */
@@ -562,6 +562,19 @@ export class MoveTool implements Tool {
       case 'marquee': {
         g.current = p.world;
         const { editor } = this.env;
+        // Prototype tab: a marquee across noodles selects their connections (⇧ adds to them), with their hotspots.
+        const crossed = connectionsInScreenRect(editor, fromPoints(g.down.screen, p.screen), g.base).map(
+          (connection): ConnectionRef => ({ sourceId: connection.sourceId, reactionIndex: connection.reactionIndex, actionIndex: connection.actionIndex }),
+        );
+        if (crossed.length > 0) {
+          const isBase = (ref: ConnectionRef) => g.baseConnections.some((other) => other.sourceId === ref.sourceId && other.reactionIndex === ref.reactionIndex && other.actionIndex === ref.actionIndex);
+          const refs = p.shift ? [...g.baseConnections, ...crossed.filter((ref) => !isBase(ref))] : crossed;
+          editor.state.select([...new Set([...(p.shift ? g.base : []), ...refs.map((ref) => ref.sourceId)])]);
+          editor.state.selectConnections(refs);
+          editor.requestRender();
+          return;
+        }
+        editor.state.selectConnections(p.shift ? g.baseConnections : []);
         const rect = fromPoints(g.down.world, p.world);
         const hits = marqueeSelect(editor.doc, editor.scene, editor.pageId, rect, g.scope, p.mod);
         editor.state.select(p.shift ? [...new Set([...g.base, ...hits])] : hits);
@@ -748,6 +761,7 @@ export class MoveTool implements Tool {
     }
     if (g.kind === 'marquee') {
       editor.state.select(g.base);
+      editor.state.selectConnections(g.baseConnections);
       return true;
     }
     return g.kind === 'pending-move';
@@ -756,7 +770,8 @@ export class MoveTool implements Tool {
   private startMarquee(p: PointerInfo, scope: Id): void {
     const { editor } = this.env;
     if (!p.shift) editor.state.clearSelection();
-    this.gesture = { kind: 'marquee', down: p, base: [...editor.selection], scope, current: p.world };
+    const baseConnections = p.shift ? editor.state.getSnapshot().selectedConnections : [];
+    this.gesture = { kind: 'marquee', down: p, base: [...editor.selection], baseConnections, scope, current: p.world };
   }
 
   private applyMove(p: PointerInfo): void {

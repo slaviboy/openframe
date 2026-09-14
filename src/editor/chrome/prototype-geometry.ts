@@ -18,7 +18,7 @@
 import type { Id } from '@/core/ids/ids';
 import type { Rect } from '@/core/math/rect';
 import type { Vec2 } from '@/core/math/vec';
-import { distanceToNoodle, noodleBetween, visibleConnections, type Connection } from '@/core/prototype/connections';
+import { distanceToNoodle, noodleBetween, noodleCrossesRect, visibleConnections, type Connection } from '@/core/prototype/connections';
 import { topLevelFrame, variantSetOf } from '@/core/prototype/reactions';
 import { hitTestDeepest } from '@/core/scene/hit-test';
 import type { Editor } from '../editor';
@@ -74,6 +74,16 @@ export function connectionAt(editor: Editor, screen: Vec2): Connection | null {
     if (distance <= CONNECTION_HIT_PX && (!best || distance < best.distance)) best = { connection, distance };
   }
   return best?.connection ?? null;
+}
+
+/** The connections shown for `selection` whose noodles pass through a screen rectangle (a marquee), while the Prototype tab is open. */
+export function connectionsInScreenRect(editor: Editor, rect: Rect, selection: readonly Id[]): Connection[] {
+  if (editor.state.getSnapshot().rightTab !== 'prototype') return [];
+  return visibleConnections(editor.doc, editor.pageId, selection).filter((connection) => {
+    const source = screenBounds(editor, connection.sourceId);
+    const destination = screenBounds(editor, connection.destinationId);
+    return source !== null && destination !== null && noodleCrossesRect(noodleBetween(source, destination), rect);
+  });
 }
 
 /**

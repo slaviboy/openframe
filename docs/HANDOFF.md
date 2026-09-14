@@ -162,6 +162,9 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - `src/editor/clipboard/interactions.ts` encodes the selected connections' interactions for the clipboard
     - `pasteInteractions` in `src/editor/commands/prototype.ts` adds them to the selected layers
     - ClipboardController handles ⌘C / ⌘X / ⌘V for them while connections are selected
+  - Marquee-selecting connections (the commit after copying interaction details):
+    - `noodleCrossesRect` in connections.ts, and `connectionsInScreenRect` in prototype-geometry.ts
+    - the move tool's marquee selects the connections it crosses in the Prototype tab
 
 ## In progress (uncommitted)
 
@@ -172,7 +175,6 @@ This file is how work continues after a pause (for example, a usage limit). Read
 1. The smaller pending sub-items in the M10 rows:
    - dragging a manual overlay into place on the canvas
    - choosing which frame of a GIF the canvas shows
-   - marquee-selecting connections
    - responsive scaling
    - the fixed layer rules with Animate matching layers
    - scroll bars

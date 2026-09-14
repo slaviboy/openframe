@@ -135,6 +135,47 @@ export function noodlePoint(noodle: Noodle, t: number): Vec2 {
   };
 }
 
+/** Whether the segment from `a` to `b` touches a rectangle (Liang–Barsky clipping). */
+function segmentTouchesRect(a: Vec2, b: Vec2, rect: Rect): boolean {
+  const inside = (p: Vec2) => p.x >= rect.x && p.x <= rect.x + rect.width && p.y >= rect.y && p.y <= rect.y + rect.height;
+  if (inside(a) || inside(b)) return true;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  let t0 = 0;
+  let t1 = 1;
+  for (const [p, q] of [
+    [-dx, a.x - rect.x],
+    [dx, rect.x + rect.width - a.x],
+    [-dy, a.y - rect.y],
+    [dy, rect.y + rect.height - a.y],
+  ] as const) {
+    if (p === 0) {
+      if (q < 0) return false;
+      continue;
+    }
+    const t = q / p;
+    if (p < 0) {
+      if (t > t1) return false;
+      t0 = Math.max(t0, t);
+    } else {
+      if (t < t0) return false;
+      t1 = Math.min(t1, t);
+    }
+  }
+  return t0 <= t1;
+}
+
+/** Whether a noodle passes through a rectangle (a marquee): the curve is followed in short straight steps. */
+export function noodleCrossesRect(noodle: Noodle, rect: Rect, samples = 32): boolean {
+  let previous = noodle.start;
+  for (let i = 1; i <= samples; i++) {
+    const point = noodlePoint(noodle, i / samples);
+    if (segmentTouchesRect(previous, point, rect)) return true;
+    previous = point;
+  }
+  return false;
+}
+
 /** How far a point is from a noodle (sampled along the curve). */
 export function distanceToNoodle(noodle: Noodle, point: Vec2, samples = 32): number {
   let best = Infinity;
