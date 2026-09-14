@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { arcSweep, ellipsePoint, isFullTurn, type Arc } from '@/core/geometry/arc';
+import { arcSweep, ellipsePoint, isFullTurn, withinSweep, type Arc } from '@/core/geometry/arc';
 import type { Transaction } from '@/core/history/history';
 import type { Id } from '@/core/ids/ids';
 import { apply, multiply, type Matrix } from '@/core/math/matrix';
@@ -123,7 +123,8 @@ export function startArcDrag(editor: Editor, handle: ArcHandle, world: Vec2): Ar
 /**
  * Drags an arc handle to a layer-local point. The sweep handle follows the pointer around the ellipse
  * (passing the start turns a full clockwise sweep into a full counter-clockwise one); the start handle
- * turns the whole arc; the ratio handle sets the inner radius to the pointer's distance from the center.
+ * turns the whole arc; the ratio handle sets the inner radius to the pointer's distance from the center, and
+ * dragged around into the gap it switches to the other segment.
  */
 export function dragArc(tx: Transaction, handle: ArcHandle, state: ArcDragState, local: Vec2): ArcDragState {
   const node = tx.store.getOrThrow(handle.id) as EllipseNode;
@@ -143,6 +144,12 @@ export function dragArc(tx: Transaction, handle: ArcHandle, state: ArcDragState,
     const { width: w, height: h } = node.size;
     const r = Math.hypot((local.x - w / 2) / (w / 2 || 1), (local.y - h / 2) / (h / 2 || 1));
     next = { ...arc, innerRadius: Math.round(Math.min(1, r) * 100) / 100 };
+    // Dragged around from the arc into its gap, the ratio handle shows the other segment: the gap becomes the arc,
+    // starting where the old one ended and turning the same way.
+    const sweep = arcSweep(arc);
+    if (!isFullTurn(arc) && sweep !== 0 && withinSweep(arc, state.lastAngle) && !withinSweep(arc, angle)) {
+      next = { ...next, startingAngle: arc.startingAngle + sweep, endingAngle: arc.startingAngle + sweep + Math.sign(sweep) * (TAU - Math.abs(sweep)) };
+    }
   }
   tx.set(node.id, 'arcData', next);
   return { arc: next, lastAngle: angle };

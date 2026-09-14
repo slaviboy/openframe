@@ -92,4 +92,18 @@ describe('arc handles', () => {
     expect(arc()!.startingAngle).toBeCloseTo(Math.PI / 2);
     expect(arc()!.endingAngle).toBeCloseTo(2 * Math.PI);
   });
+
+  test('dragging the ratio handle around into the gap shows the other segment, and back again', () => {
+    drag([188, 100], [100, 12]);
+    // The arc runs clockwise from 0 to 3π/2; its gap is the top-right quarter. The ratio handle starts at the center.
+    tools.pointerDown(sample(100, 100));
+    tools.pointerMove(sample(140, 60));
+    expect(arc()!.startingAngle).toBeCloseTo(1.5 * Math.PI);
+    expect(arc()!.endingAngle).toBeCloseTo(2 * Math.PI);
+    expect(arc()!.innerRadius).toBe(0.57);
+    tools.pointerMove(sample(60, 140));
+    expect(arc()!.endingAngle - arc()!.startingAngle).toBeCloseTo(1.5 * Math.PI);
+    expect(Math.cos(arc()!.startingAngle)).toBeCloseTo(1);
+    tools.pointerUp(sample(60, 140));
+  });
 });
