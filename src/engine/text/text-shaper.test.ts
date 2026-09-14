@@ -158,6 +158,23 @@ describe('text shaping', () => {
     expect(shaper.offsetAt(laid, { x: laid.size.width + 5, y: 5 })).toBe(emoji.characters.length);
   });
 
+  test('icon fonts: private-use characters shape from an uploaded icon font', () => {
+    const file = (name: string) => new Uint8Array(readFileSync(require.resolve(`@fortawesome/fontawesome-free/webfonts/${name}`)));
+    const family = shaper.fontFamilyOf(file('fa-solid-900.woff2'))!;
+    expect(family).toBe('Font Awesome 7 Free');
+    shaper.registerFonts([
+      { family, style: 'Black', bytes: file('fa-solid-900.woff2'), variable: false },
+      { family, style: 'Regular', bytes: file('fa-regular-400.woff2'), variable: false },
+    ]);
+    expect(shaper.availableFonts().find((f) => f.family === family)?.styles).toEqual(['Regular', 'Black']);
+    // U+F015 (house) and U+F004 (heart): each icon is one em wide in the icon font.
+    const icons = text({ characters: String.fromCodePoint(0xf015, 0xf004), fontName: { family, style: 'Black' } });
+    expect(shaper.measure(icons, null).width).toBeCloseTo(40, 0);
+    expect(shaper.measure({ ...icons, fontName: { family, style: 'Regular' } }, null).width).toBeCloseTo(40, 0);
+    const laid = { ...icons, size: shaper.measure(icons, null) };
+    expect(shaper.caretAt(laid, 1).x).toBeCloseTo(20, 0);
+  });
+
   test('letter case changes the shaped text and max lines limits the height', () => {
     const lower = shaper.measure(text({ characters: 'hello' }), null).width;
     expect(shaper.measure(text({ characters: 'hello', textCase: 'UPPER' }), null).width).toBeGreaterThan(lower);

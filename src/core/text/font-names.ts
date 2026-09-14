@@ -148,11 +148,28 @@ export function readFontAxes(bytes: Uint8Array): FontAxis[] {
   return records.map(({ nameId, ...axis }) => ({ ...axis, name: names.get(nameId) ?? STANDARD_AXIS_NAMES[axis.tag] ?? axis.tag }));
 }
 
-/** A style name from a font file name ("Roboto-SemiBoldItalic.woff2" → "Semi Bold Italic"), or Regular. */
+/** CSS weight numbers as style names. */
+const WEIGHT_NAMES: Readonly<Record<string, string>> = {
+  '100': 'Thin',
+  '200': 'Extra Light',
+  '300': 'Light',
+  '400': 'Regular',
+  '500': 'Medium',
+  '600': 'Semi Bold',
+  '700': 'Bold',
+  '800': 'Extra Bold',
+  '900': 'Black',
+};
+
+/**
+ * A style name from a font file name ("Roboto-SemiBoldItalic.woff2" → "Semi Bold Italic"), or
+ * Regular. Web font files often end in a weight number ("fa-solid-900"), which becomes its name.
+ */
 export function styleFromFileName(fileName: string): string {
   const base = fileName.replace(/\.[^.]+$/, '');
   const dash = base.lastIndexOf('-');
   const part = dash >= 0 ? base.slice(dash + 1) : '';
   const words = part.replace(/([a-z])([A-Z])/g, '$1 $2').trim();
-  return words === '' ? 'Regular' : words;
+  if (words === '') return 'Regular';
+  return WEIGHT_NAMES[words] ?? words;
 }

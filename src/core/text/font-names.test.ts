@@ -81,5 +81,7 @@ describe('font file names', () => {
     expect(styleFromFileName('Roboto-SemiBoldItalic.woff2')).toBe('Semi Bold Italic');
     expect(styleFromFileName('Lato-Bold.ttf')).toBe('Bold');
     expect(styleFromFileName('Montserrat.otf')).toBe('Regular');
+    expect(styleFromFileName('fa-solid-900.woff2')).toBe('Black');
+    expect(styleFromFileName('fa-regular-400.woff2')).toBe('Regular');
   });
 });
