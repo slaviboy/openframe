@@ -28,8 +28,7 @@ import {
   PaintSchema,
   StrokeAlignSchema,
   StrokeJoinSchema,
-  type SceneNode,
-} from '@/core/schema/document';
+  type SceneNode, LayoutGuideSchema } from '@/core/schema/document';
 import { parseUntrustedJson } from '@/core/serialize/safe-json';
 import { canonicalStringify } from '@/core/serialize/serialize';
 import { selectedSceneNodes } from '../commands/selection-helpers';
@@ -68,8 +67,9 @@ const PropertiesPayloadSchema = z.discriminatedUnion('kind', [
   z.object({ ...header, kind: z.literal('all'), properties: LayerPropertiesSchema }),
   z.object({ ...header, kind: z.literal('paint'), field: z.enum(['fills', 'strokes']), paint: PaintSchema }),
   z.object({ ...header, kind: z.literal('effect'), effect: EffectSchema }),
+  z.object({ ...header, kind: z.literal('layoutGuide'), guide: LayoutGuideSchema }),
 ]);
-/** Clipboard content for properties: all of a layer's properties, or one fill, stroke or effect row. */
+/** Clipboard content for properties: all of a layer's properties, or one fill, stroke, effect or layout guide row. */
 export type PropertiesPayload = z.infer<typeof PropertiesPayloadSchema>;
 
 const orNull = <T>(value: T | undefined): T | null => (value === undefined ? null : value);
@@ -147,10 +147,14 @@ export function allPropertiesPayload(editor: Editor): PropertiesPayload | null {
   return { format: PROPERTIES_FORMAT, version: 1, copiedAt: Date.now(), kind: 'all', properties: layerProperties(nodes[0]!) };
 }
 
-/** One fill, stroke or effect row of the (first) selected layer, as shown in the properties panel. */
-export function rowPropertyPayload(editor: Editor, field: 'fills' | 'strokes' | 'effects', index: number): PropertiesPayload | null {
+/** One fill, stroke, effect or layout guide row of the (first) selected layer, as shown in the properties panel. */
+export function rowPropertyPayload(editor: Editor, field: 'fills' | 'strokes' | 'effects' | 'layoutGuides', index: number): PropertiesPayload | null {
   const node = selectedLayers(editor)[0];
   if (!node) return null;
+  if (field === 'layoutGuides') {
+    const guide = node.type === 'FRAME' ? node.layoutGuides?.[index] : undefined;
+    return guide ? { format: PROPERTIES_FORMAT, version: 1, copiedAt: Date.now(), kind: 'layoutGuide', guide } : null;
+  }
   if (field === 'effects') {
     const effect = node.effects?.[index];
     return effect ? { format: PROPERTIES_FORMAT, version: 1, copiedAt: Date.now(), kind: 'effect', effect } : null;
@@ -161,15 +165,19 @@ export function rowPropertyPayload(editor: Editor, field: 'fills' | 'strokes' | 
 
 /**
  * Pastes properties onto every selected layer as one undo step: all properties replace the
- * supported ones; a copied fill, stroke or effect is added on top of the layer's list.
+ * supported ones; a copied fill, stroke or effect is added on top of the layer's list, and a copied
+ * layout guide is added to every selected frame.
  */
 export function pasteProperties(editor: Editor, payload: PropertiesPayload): boolean {
   const nodes = selectedLayers(editor);
   if (nodes.length === 0) return false;
-  const label = payload.kind === 'all' ? 'Paste properties' : payload.kind === 'effect' ? 'Paste effect' : payload.field === 'fills' ? 'Paste fill' : 'Paste stroke';
+  const label = payload.kind === 'all' ? 'Paste properties' : payload.kind === 'effect' ? 'Paste effect' : payload.kind === 'layoutGuide' ? 'Paste layout guide' : payload.field === 'fills' ? 'Paste fill' : 'Paste stroke';
   editor.history.run(label, (tx) => {
     for (const node of nodes) {
       if (payload.kind === 'all') applyProperties(tx, node, payload.properties);
+      else if (payload.kind === 'layoutGuide') {
+        if (node.type === 'FRAME') tx.set(node.id, 'layoutGuides', [...(node.layoutGuides ?? []), payload.guide]);
+      }
       else if (payload.kind === 'effect') {
         // A pasted effect is skipped on layers that already have as many of its type as allowed.
         if (canAddEffect(node.effects ?? [], payload.effect.type)) tx.set(node.id, 'effects', [...(node.effects ?? []), payload.effect]);
@@ -181,7 +189,7 @@ export function pasteProperties(editor: Editor, payload: PropertiesPayload): boo
 }
 
 export function encodePropertiesHtml(payload: PropertiesPayload): string {
-  const label = payload.kind === 'all' ? 'Layer properties' : payload.kind === 'effect' ? 'Effect' : payload.field === 'fills' ? 'Fill' : 'Stroke';
+  const label = payload.kind === 'all' ? 'Layer properties' : payload.kind === 'effect' ? 'Effect' : payload.kind === 'layoutGuide' ? 'Layout guide' : payload.field === 'fills' ? 'Fill' : 'Stroke';
   return `<meta charset="utf-8"><div ${HTML_MARKER}="v1:${toBase64(canonicalStringify(payload))}">${label}</div>`;
 }
 

@@ -16,10 +16,11 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { createEmptyDocument, keyOnTop, makeEllipse, makeLine, makeRectangle, solid } from '@/core/document/factory';
+import { createEmptyDocument, keyOnTop, makeEllipse, makeFrame, makeLine, makeRectangle, solid } from '@/core/document/factory';
+import { defaultLayoutGuide } from '@/core/layout/layout-guides';
 import { defaultEffect } from '@/core/effects/effects';
 import { IdGenerator } from '@/core/ids/ids';
-import type { EllipseNode, LineNode, RectangleNode } from '@/core/schema/document';
+import type { EllipseNode, FrameNode, LineNode, RectangleNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { ClipboardError } from './payload';
 import { allPropertiesPayload, decodePropertiesHtml, encodePropertiesHtml, pasteProperties, rowPropertyPayload } from './properties';
@@ -112,5 +113,29 @@ describe('copy and paste properties', () => {
     // Copy properties needs exactly one layer.
     editor.state.select([rect, ellipse]);
     expect(allPropertiesPayload(editor)).toBeNull();
+  });
+});
+
+describe('layout guide rows', () => {
+  test('a copied layout guide is added to every selected frame', () => {
+    const [a, b] = editor.history.run('frames', (tx) => {
+      const parent = () => ({ id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) });
+      const first = editor.ids.next();
+      tx.create({ ...makeFrame({ id: first, parent: parent(), name: 'A', x: 0, y: 200, width: 100, height: 100 }), layoutGuides: [defaultLayoutGuide('COLUMNS')] });
+      const second = editor.ids.next();
+      tx.create(makeFrame({ id: second, parent: parent(), name: 'B', x: 200, y: 200, width: 100, height: 100 }));
+      return [first, second] as const;
+    });
+    editor.state.select([a]);
+    const payload = rowPropertyPayload(editor, 'layoutGuides', 0);
+    expect(payload).toMatchObject({ kind: 'layoutGuide', guide: defaultLayoutGuide('COLUMNS') });
+    expect(decodePropertiesHtml(encodePropertiesHtml(payload!))).toEqual(payload);
+
+    // Frames get the guide; other layers are left alone.
+    editor.state.select([b, rect]);
+    expect(rowPropertyPayload(editor, 'layoutGuides', 5)).toBeNull();
+    expect(pasteProperties(editor, payload!)).toBe(true);
+    expect((editor.doc.getOrThrow(b) as FrameNode).layoutGuides).toEqual([defaultLayoutGuide('COLUMNS')]);
+    expect(editor.doc.getOrThrow(rect)).not.toHaveProperty('layoutGuides');
   });
 });

@@ -94,7 +94,7 @@ export class ClipboardController {
     const row = e.target instanceof Element ? e.target.closest<HTMLElement>('[data-copy-property]') : null;
     if (row && e.clipboardData) {
       const [field, index] = (row.dataset['copyProperty'] ?? '').split(':');
-      const payload = field === 'fills' || field === 'strokes' || field === 'effects' ? rowPropertyPayload(this.editor, field, Number(index)) : null;
+      const payload = field === 'fills' || field === 'strokes' || field === 'effects' || field === 'layoutGuides' ? rowPropertyPayload(this.editor, field, Number(index)) : null;
       if (payload) {
         e.clipboardData.setData('text/html', encodePropertiesHtml(payload));
         e.clipboardData.setData('text/plain', payload.kind === 'effect' ? 'Effect' : payload.kind === 'paint' ? 'Paint' : 'Properties');

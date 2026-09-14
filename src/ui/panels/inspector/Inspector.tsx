@@ -1408,7 +1408,7 @@ function LayoutGuideSection({ nodes }: { nodes: SceneNode[] }) {
             const stretch = guide.alignment === 'STRETCH';
             return (
               <Fragment key={index}>
-                <li className={styles.paintRow} data-hidden={!guide.visible || undefined}>
+                <li className={styles.paintRow} data-hidden={!guide.visible || undefined} tabIndex={-1} data-copy-property={`layoutGuides:${index}`} onClick={(e) => e.currentTarget.focus()}>
                   <span />
                   <select
                     className={`${primitives.select} ${gradientStyles.type}`}
