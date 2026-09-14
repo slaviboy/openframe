@@ -60,6 +60,8 @@ import gradientStyles from './Gradient.module.css';
 import { gradientCss } from './gradient-css';
 import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
 import { canCreateComponent, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
+import { localComponents } from '@/editor/commands/insert-instance';
+import { swapInstanceFor } from '@/editor/commands/swap-instance';
 import { canResetOverrides, resetSelectedOverrides } from '@/editor/commands/reset-overrides';
 import { eraserWeight, vectorEditPaint } from '@/editor/interactions/vector-edit';
 import { invert, applyLinear } from '@/core/math/matrix';
@@ -870,9 +872,16 @@ function ComponentSection({ node }: { node: SceneNode }) {
     </a>
   ) : null;
   if (main.id !== node.id) {
-    if (!description && !docs) return null;
+    // The instance menu: swap this instance for another component of the file.
     return (
       <Section title="Component">
+        <select className={primitives.select} aria-label="Swap instance" value={main.id} onChange={(e) => swapInstanceFor(editor, node.id, e.target.value)}>
+          {localComponents(editor).map((component) => (
+            <option key={component.id} value={component.id}>
+              {component.name}
+            </option>
+          ))}
+        </select>
         {description && <p className={styles.hint}>{description}</p>}
         {docs}
       </Section>

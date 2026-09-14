@@ -66,13 +66,24 @@ function instanceLayer(node: SceneNode, id: Id, parent: SceneNode['parent'], lin
   return copy as unknown as SceneNode;
 }
 
-/** Creates an instance of a main component under `parent`, mirroring its layers, and returns its id. */
-export function instantiate(tx: Transaction, mainId: Id, parent: Id, key: string, nextId: () => Id): Id {
+/**
+ * Creates an instance of a main component under `parent`, mirroring its layers, and returns its id.
+ * `root` can give the instance frame a fixed id and fields of its own (such as its placement).
+ */
+export function instantiate(
+  tx: Transaction,
+  mainId: Id,
+  parent: Id,
+  key: string,
+  nextId: () => Id,
+  root: { readonly id?: Id; readonly fields?: Readonly<Record<string, unknown>> } = {},
+): Id {
   const store = tx.store;
-  const clone = (sourceId: Id, parentRef: SceneNode['parent'], root: boolean): Id => {
+  const clone = (sourceId: Id, parentRef: SceneNode['parent'], isRoot: boolean): Id => {
     const source = store.getOrThrow(sourceId) as SceneNode;
-    const id = nextId();
-    tx.create(instanceLayer(source, id, parentRef, root ? { mainId } : { source: sourceId }));
+    const id = isRoot && root.id !== undefined ? root.id : nextId();
+    const layer = instanceLayer(source, id, parentRef, isRoot ? { mainId } : { source: sourceId });
+    tx.create(isRoot && root.fields ? ({ ...layer, ...root.fields } as SceneNode) : layer);
     for (const childId of store.children(sourceId)) {
       const child = store.get(childId);
       if (child && isSceneNode(child)) clone(childId, { id, key: child.parent.key }, false);
@@ -80,6 +91,39 @@ export function instantiate(tx: Transaction, mainId: Id, parent: Id, key: string
     return id;
   };
   return clone(mainId, { id: parent, key }, true);
+}
+
+/**
+ * Swap instance: rebuilds an instance from another main component under the same id, keeping its own
+ * placement. Changes made on the instance are kept on the layers of the new component with the same name
+ * and type (The reference preserves overrides by layer name); the instance frame keeps its own changes too.
+ */
+export function swapInstance(tx: Transaction, instanceId: Id, mainId: Id, nextId: () => Id): boolean {
+  const store = tx.store;
+  const instance = store.get(instanceId);
+  const main = store.get(mainId);
+  if (!instance || !isSceneNode(instance) || !isInstance(instance) || !main || !isSceneNode(main) || !isMainComponent(main)) return false;
+  if (instance.type === 'FRAME' && instance.instance?.mainId === mainId) return false;
+  const overriddenValues = (layer: SceneNode) => Object.fromEntries((layer.overrides ?? []).map((name) => [name, field(layer, name)]));
+  const kept = new Map<string, Record<string, unknown>>();
+  for (const id of store.descendants(instanceId, false)) {
+    const layer = store.get(id);
+    const key = layer && isSceneNode(layer) ? `${layer.type}\0${layer.name}` : '';
+    if (layer && isSceneNode(layer) && layer.overrides && !kept.has(key)) kept.set(key, overriddenValues(layer));
+  }
+  const rootChanges = overriddenValues(instance);
+  const placement = Object.fromEntries([...ROOT_PLACEMENT].filter((name) => field(instance, name) !== undefined).map((name) => [name, field(instance, name)]));
+  const parent = instance.parent;
+  tx.delete(instanceId);
+  instantiate(tx, mainId, parent.id, parent.key, nextId, { id: instanceId, fields: placement });
+  // Restoring the kept changes records them as overrides again (the sync finalizer sees these edits).
+  for (const [name, value] of Object.entries(rootChanges)) tx.set(instanceId, name, value);
+  for (const id of store.descendants(instanceId, false)) {
+    const layer = store.get(id);
+    const changes = layer && isSceneNode(layer) ? kept.get(`${layer.type}\0${layer.name}`) : undefined;
+    if (changes) for (const [name, value] of Object.entries(changes)) tx.set(id, name, value);
+  }
+  return true;
 }
 
 /** Pasted copies of a main component's layers become an instance of it (while it is still in the document). */
