@@ -17,14 +17,15 @@
 
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { presentParams } from './app/present';
 import { registerServiceWorker } from './platform/sw-register';
 import { App } from './ui/App';
+import { PresentApp } from './ui/present/PresentApp';
 import './ui/global.css';
 
 registerServiceWorker();
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+// Presentation view opens in its own tab, with the file and page in the address.
+const present = presentParams(window.location.search);
+
+createRoot(document.getElementById('root')!).render(<StrictMode>{present ? <PresentApp params={present} /> : <App />}</StrictMode>);

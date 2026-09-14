@@ -328,6 +328,9 @@ function RightHeader() {
       </div>
       <MultiEditTextButton />
       <MultiEditVariantsButton />
+      <button type="button" className={styles.zoomButton} title="Present (opens a new tab)" onClick={() => editor.commands.run('view.present')}>
+        Present
+      </button>
       <button
         type="button"
         className={styles.zoomButton}

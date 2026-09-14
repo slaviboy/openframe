@@ -46,27 +46,24 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - `flowStartingPoints` on the page and `overlay` on layers
     - `src/core/prototype/flows.ts`, plus the flow and overlay commands in `src/editor/commands/prototype.ts` (a new connection auto-creates a flow)
     - the Flows, Flow starting point and Overlay sections in `PrototypePanel`
+  - Presentation view (the commit after the flows commit):
+    - `src/core/prototype/presentation.ts`
+    - `src/app/present.ts`: the `?present=1&file=&page=&node=` URL
+    - `src/ui/present/` (`PresentationRenderer`, `PresentationView`, `PresentApp`)
+    - Present (Mod+Alt+Enter) opens it in a new tab
 
 ## In progress (uncommitted)
 
-1. **Presentation view.** Written but not yet typechecked or tested:
-   - `src/core/prototype/presentation.ts` and `presentation.test.ts`: scaling, transition offsets, scene composition, hit mapping
-   - `src/app/present.ts`: the `?present=1&file=&page=&node=` URL, a read-only session, and `presentFile`, which opens a new tab
-   - `src/ui/present/`: `PresentationRenderer` (cached frame images), `PresentationView` (input, timers, keys, flows sidebar, options, footer) and `PresentApp`
-   - `src/main.tsx`: routes to `PresentApp` when the URL has `?present`
-   - `src/ui/App.tsx`: the `view.present` command (Mod+Alt+Enter)
-   - `src/ui/shell/EditorShell.tsx`: the Present button in the right header
-   - `e2e/presentation.spec.ts`
+1. **Connection noodles on the canvas.** Written but not yet tested; waits for the presentation commit:
+   - `src/core/prototype/connections.ts` and `connections.test.ts`: connections on a page, visible connections for a selection, noodle geometry, hit distance
+   - `src/editor/chrome/overlay-renderer.ts`: `drawPrototypeChrome` draws the noodles and flow tags while the Prototype tab is open
+   - `e2e/prototype-connections.spec.ts`: samples the overlay canvas pixels
 
-   Next steps:
-   - Run `npm run check` and fix errors.
-   - Run `npx playwright test e2e/presentation.spec.ts --project=chromium`.
-   - Update the matrix rows (Presentation view, Present offline in M9, Transitions, Triggers, Actions).
-   - Run the full E2E gate, then commit.
+   Next steps: run `npm run check` and the spec, update the matrix row "View prototype connections", run the gate, commit. Then drag the + handle to a destination and click a noodle to select its interaction.
 
 ## Next (M10, in order)
 
-1. Connection noodles on the canvas and dragging + to a destination; the flow starting point and overlay badges on the canvas.
+1. Dragging + to a destination; clicking a noodle; the overlay badge on the canvas.
 2. Smart animate: interpolate matching layers by name and hierarchy (currently it dissolves).
 3. Scroll overflow (horizontal, vertical, both), fixed and sticky layers, and state memorization of scroll position.
 4. Inline preview (⇧Space) and follow prototype.

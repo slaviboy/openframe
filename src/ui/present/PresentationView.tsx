@@ -1,0 +1,497 @@
+/*
+ * Copyright (C) 2026 Stanislav Georgiev
+ * https://github.com/slaviboy
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
+import type { PresentationSession } from '@/app/present';
+import { evaluateEasing, type Easing } from '@/core/anim/easing';
+import type { Id } from '@/core/ids/ids';
+import type { Rect } from '@/core/math/rect';
+import { flowsOf, overlaySettings } from '@/core/prototype/flows';
+import {
+  beginTemporary,
+  delayedReactions,
+  endTemporary,
+  findReaction,
+  hitTest,
+  hotspots,
+  keyReaction,
+  presentableFrames,
+  runReaction,
+  shownFrames,
+  startPlayer,
+  stepScreen,
+  type PlayerEffect,
+  type PlayerState,
+  type PlayerStep,
+} from '@/core/prototype/player';
+import { composeScene, frameAtPoint, layerRects, maxScrollY, SCALING_LABELS, SCALING_MODES, scrollOffsetOf, type PresentedScene, type ScalingMode } from '@/core/prototype/presentation';
+import { toEasing, transitionDurationMs } from '@/core/prototype/reactions';
+import type { Reaction, SceneNode } from '@/core/schema/document';
+import { Menu, type MenuEntry } from '../primitives/Menu';
+import type { Box } from '../primitives/position';
+import { PresentationRenderer } from './presentation-renderer';
+import styles from './PresentationView.module.css';
+
+/** How long hotspot hints show after a click that misses every hotspot. */
+const HINT_MS = 600;
+/** How far the pointer moves while pressed before it's a drag. */
+const DRAG_THRESHOLD = 5;
+const MODIFIER_CODES: ReadonlySet<string> = new Set(['ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'MetaLeft', 'MetaRight']);
+const CLOSE_OVERLAY: Reaction = { trigger: { type: 'ON_CLICK' }, actions: [{ type: 'CLOSE' }] };
+
+interface Playing {
+  readonly effect: Extract<PlayerEffect, { type: 'transition' }>;
+  readonly start: number;
+  readonly duration: number;
+  readonly easing: Easing | null;
+}
+
+interface Scrolling {
+  readonly from: number;
+  readonly to: number;
+  readonly start: number;
+  readonly duration: number;
+  readonly easing: Easing | null;
+}
+
+interface Press {
+  readonly chain: readonly Id[];
+  readonly x: number;
+  readonly y: number;
+  dragged: boolean;
+}
+
+/**
+ * Presentation view: plays the prototype of a page. Hotspots respond to their triggers, After delay and Keyboard
+ * interactions run, and transitions animate. The toolbar shows and hides the flows sidebar and holds the options
+ * (hotspot hints and scaling) and fullscreen; the footer moves between screens and restarts the flow (R).
+ */
+export function PresentationView({ session, startNodeId }: { session: PresentationSession; startNodeId: Id | null }) {
+  const { editor } = session;
+  const doc = editor.doc;
+  const pageId = editor.pageId;
+  const flows = useMemo(() => flowsOf(doc, pageId), [doc, pageId]);
+  const screens = useMemo(() => presentableFrames(doc, pageId), [doc, pageId]);
+  const background = useMemo(() => {
+    const page = doc.get(pageId);
+    return page?.type === 'PAGE' ? page.backgroundColor : { r: 0.12, g: 0.12, b: 0.12, a: 1 };
+  }, [doc, pageId]);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [start, setStart] = useState<Id | null>(startNodeId ?? flows[0]?.nodeId ?? null);
+  const [player, setPlayer] = useState<PlayerState | null>(() => startPlayer(doc, pageId, startNodeId ?? flows[0]?.nodeId ?? null));
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [scaling, setScaling] = useState<ScalingMode>('FIT');
+  const [showHints, setShowHints] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<Box | null>(null);
+  const [screenBox, setScreenBox] = useState<Rect | null>(null);
+  const closeMenu = useCallback(() => setMenuAnchor(null), []);
+
+  // Mutable playback state the draw loop and input handlers share.
+  const live = useRef({
+    player,
+    renderer: null as PresentationRenderer | null,
+    viewport: { width: 0, height: 0 },
+    playing: null as Playing | null,
+    scrollY: 0,
+    scrolling: null as Scrolling | null,
+    hintRects: [] as Rect[],
+    hintsUntil: 0,
+    press: null as Press | null,
+    hoverChain: [] as readonly Id[],
+    scene: null as PresentedScene | null,
+    scaling,
+    showHints,
+    frame: 0,
+    box: '',
+  });
+  const drawRef = useRef<() => void>(() => {});
+
+  const schedule = useCallback(() => {
+    const state = live.current;
+    if (!state.frame) state.frame = requestAnimationFrame(() => drawRef.current());
+  }, []);
+
+  /** Applies a step of the player: its state, and its effects (transitions, scrolling, links). */
+  const apply = useCallback(
+    (step: PlayerStep) => {
+      const state = live.current;
+      const now = performance.now();
+      for (const effect of step.effects) {
+        if (effect.type === 'transition') {
+          const duration = transitionDurationMs(effect.transition);
+          state.playing = duration > 0 ? { effect, start: now, duration, easing: effect.transition.type === 'INSTANT' ? null : toEasing(effect.transition.easing) } : null;
+          if (!effect.overlay) {
+            state.scrollY = 0;
+            state.scrolling = null;
+          }
+        } else if (effect.type === 'openUrl') {
+          window.open(effect.url, '_blank', 'noopener,noreferrer');
+        } else if (effect.type === 'scrollTo' && step.state) {
+          const offset = scrollOffsetOf(editor.scene, step.state.frameId, effect.nodeId);
+          const node = doc.get(step.state.frameId) as SceneNode | undefined;
+          if (offset !== null && node) {
+            const to = Math.min(Math.max(0, offset), maxScrollY(state.scaling, state.viewport, node.size));
+            const duration = transitionDurationMs(effect.transition);
+            state.scrolling = duration > 0 && effect.transition.type !== 'INSTANT' ? { from: state.scrollY, to, start: now, duration, easing: toEasing(effect.transition.easing) } : null;
+            if (!state.scrolling) state.scrollY = to;
+          }
+        }
+      }
+      state.player = step.state;
+      setPlayer(step.state);
+      schedule();
+    },
+    [doc, editor, schedule],
+  );
+
+  const run = useCallback(
+    (reaction: Reaction) => {
+      const current = live.current.player;
+      if (current) apply(runReaction(doc, current, reaction));
+    },
+    [apply, doc],
+  );
+
+  const restartAt = useCallback(
+    (nodeId: Id | null) => {
+      const next = startPlayer(doc, pageId, nodeId);
+      const state = live.current;
+      state.playing = null;
+      state.scrolling = null;
+      state.scrollY = 0;
+      setStart(nodeId);
+      if (next) apply({ state: next, effects: [] });
+    },
+    [apply, doc, pageId],
+  );
+
+  const step = useCallback(
+    (delta: 1 | -1) => {
+      const current = live.current.player;
+      const next = current && stepScreen(doc, current, delta);
+      if (next) apply(next);
+    },
+    [apply, doc],
+  );
+
+  const toggleFullscreen = useCallback(() => {
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    else void document.documentElement.requestFullscreen?.().catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    const state = live.current;
+    state.scaling = scaling;
+    state.showHints = showHints;
+    schedule();
+  }, [scaling, showHints, schedule]);
+
+  useEffect(() => {
+    drawRef.current = () => {
+      const state = live.current;
+      state.frame = 0;
+      const current = state.player;
+      if (!state.renderer || !current) {
+        state.renderer?.draw(null, background, []);
+        return;
+      }
+      const now = performance.now();
+      let playing = null;
+      if (state.playing) {
+        const t = Math.min(1, (now - state.playing.start) / state.playing.duration);
+        if (t >= 1) state.playing = null;
+        else playing = { effect: state.playing.effect, progress: state.playing.easing ? evaluateEasing(state.playing.easing, t) : 1 };
+      }
+      if (state.scrolling) {
+        const t = Math.min(1, (now - state.scrolling.start) / state.scrolling.duration);
+        const progress = state.scrolling.easing ? evaluateEasing(state.scrolling.easing, t) : 1;
+        state.scrollY = state.scrolling.from + (state.scrolling.to - state.scrolling.from) * progress;
+        if (t >= 1) state.scrolling = null;
+      }
+      const scene = composeScene(doc, current, state.viewport, state.scaling, state.scrollY, playing);
+      state.scene = scene;
+      state.renderer.draw(scene, background, now < state.hintsUntil ? state.hintRects : []);
+      const box = `${scene.screen.x},${scene.screen.y},${scene.screen.width},${scene.screen.height}`;
+      if (box !== state.box) {
+        state.box = box;
+        setScreenBox({ x: scene.screen.x, y: scene.screen.y, width: scene.screen.width, height: scene.screen.height });
+      }
+      if (state.playing || state.scrolling || now < state.hintsUntil + 50) schedule();
+    };
+  });
+
+  // The rendering engine, sized to the stage.
+  useEffect(() => {
+    const container = containerRef.current!;
+    const canvas = canvasRef.current!;
+    const state = live.current;
+    const renderer = new PresentationRenderer(editor, canvas, schedule);
+    let disposed = false;
+    const resize = () => {
+      const rect = container.getBoundingClientRect();
+      state.viewport = { width: rect.width, height: rect.height };
+      renderer.resize(rect.width, rect.height, window.devicePixelRatio || 1);
+      schedule();
+    };
+    const observer = new ResizeObserver(resize);
+    renderer.load().then(
+      () => {
+        if (disposed) return;
+        state.renderer = renderer;
+        observer.observe(container);
+        resize();
+        setReady(true);
+      },
+      (reason: unknown) => {
+        console.warn(reason);
+        if (!disposed) setError('The rendering engine failed to load.');
+      },
+    );
+    return () => {
+      disposed = true;
+      observer.disconnect();
+      if (state.frame) cancelAnimationFrame(state.frame);
+      state.frame = 0;
+      state.renderer = null;
+      renderer.dispose();
+    };
+  }, [editor, schedule]);
+
+  // After delay interactions of the frames shown run once their delay passes.
+  const shownKey = player ? shownFrames(player).join('|') : '';
+  useEffect(() => {
+    const current = live.current.player;
+    if (!current || !shownKey) return;
+    const timers = delayedReactions(doc, current).map(({ reaction, timeout }) => window.setTimeout(() => run(reaction), timeout));
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [doc, run, shownKey]);
+
+  // Keyboard interactions, and R (restart), ← and → (screens) and F (fullscreen).
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'BUTTON' || target.tagName === 'INPUT' || target.closest('[role="menu"]'))) return;
+      if (MODIFIER_CODES.has(e.code) || e.repeat) return;
+      const current = live.current.player;
+      if (!current) return;
+      const keys = [e.ctrlKey && 'Control', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Meta', e.code].filter((key): key is string => typeof key === 'string');
+      const found = keyReaction(doc, current, keys);
+      if (found) {
+        e.preventDefault();
+        run(found.reaction);
+        return;
+      }
+      if (keys.length !== 1) return;
+      if (e.code === 'KeyR') restartAt(start);
+      else if (e.code === 'ArrowRight') step(1);
+      else if (e.code === 'ArrowLeft') step(-1);
+      else if (e.code === 'KeyF') toggleFullscreen();
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [doc, restartAt, run, start, step, toggleFullscreen]);
+
+  const locate = (e: ReactPointerEvent) => {
+    const state = live.current;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const point = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const hit = state.scene && state.player ? frameAtPoint(state.scene, state.player, point) : null;
+    return { point, hit, chain: hit ? hitTest(doc, editor.scene, hit.frameId, hit.local) : [] };
+  };
+
+  const onPointerDown = (e: ReactPointerEvent) => {
+    if (e.button !== 0 || !live.current.player) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const { point, chain } = locate(e);
+    live.current.press = { chain, x: point.x, y: point.y, dragged: false };
+    const down = findReaction(doc, chain, 'MOUSE_DOWN');
+    if (down) run(down.reaction);
+    const pressing = findReaction(doc, chain, 'ON_PRESS');
+    const current = live.current.player;
+    if (pressing && current) apply(beginTemporary(doc, current, pressing.nodeId, pressing.reaction));
+  };
+
+  const onPointerMove = (e: ReactPointerEvent) => {
+    const state = live.current;
+    const { point, chain } = locate(e);
+    const press = state.press;
+    if (press && !press.dragged && Math.hypot(point.x - press.x, point.y - press.y) > DRAG_THRESHOLD) {
+      press.dragged = true;
+      const drag = findReaction(doc, press.chain, 'ON_DRAG');
+      if (drag) run(drag.reaction);
+    }
+    const previous = state.hoverChain;
+    if (previous.length === chain.length && previous.every((id, i) => id === chain[i])) return;
+    state.hoverChain = chain;
+    for (const id of previous.filter((candidate) => !chain.includes(candidate))) {
+      const current = state.player;
+      if (current?.temporary?.trigger === 'ON_HOVER' && current.temporary.nodeId === id) apply(endTemporary(current));
+      const leave = findReaction(doc, [id], 'MOUSE_LEAVE');
+      if (leave) run(leave.reaction);
+    }
+    const entered = chain.filter((candidate) => !previous.includes(candidate));
+    for (const id of entered) {
+      const enter = findReaction(doc, [id], 'MOUSE_ENTER');
+      if (enter) run(enter.reaction);
+    }
+    const hover = findReaction(doc, chain, 'ON_HOVER');
+    const current = state.player;
+    if (hover && current && !current.temporary && entered.includes(hover.nodeId)) apply(beginTemporary(doc, current, hover.nodeId, hover.reaction));
+  };
+
+  const onPointerUp = (e: ReactPointerEvent) => {
+    const state = live.current;
+    const press = state.press;
+    state.press = null;
+    if (!press) return;
+    const pressed = state.player;
+    if (pressed?.temporary?.trigger === 'ON_PRESS') apply(endTemporary(pressed));
+    const { hit, chain } = locate(e);
+    const up = findReaction(doc, chain, 'MOUSE_UP');
+    if (up) run(up.reaction);
+    if (press.dragged) return;
+    const click = findReaction(doc, chain, 'ON_CLICK');
+    if (click) {
+      run(click.reaction);
+      return;
+    }
+    const current = state.player;
+    const top = current?.overlays.at(-1);
+    if (current && top && hit?.frameId !== top && overlaySettings(doc.get(top) as SceneNode | undefined).closeOnClickOutside) {
+      apply(runReaction(doc, current, CLOSE_OVERLAY));
+      return;
+    }
+    // A click that misses every hotspot shows where they are.
+    if (current && state.showHints && state.scene) {
+      const scene = state.scene;
+      state.hintRects = shownFrames(current).flatMap((frameId) => layerRects(editor.scene, scene, frameId, hotspots(doc, frameId)));
+      state.hintsUntil = performance.now() + HINT_MS;
+      schedule();
+    }
+  };
+
+  const onWheel = (e: ReactWheelEvent) => {
+    const state = live.current;
+    const current = state.player;
+    const node = current ? (doc.get(current.frameId) as SceneNode | undefined) : undefined;
+    if (!node || !state.scene) return;
+    const limit = maxScrollY(state.scaling, state.viewport, node.size);
+    if (limit <= 0) return;
+    state.scrolling = null;
+    state.scrollY = Math.min(limit, Math.max(0, state.scrollY + e.deltaY / state.scene.screen.scale));
+    schedule();
+  };
+
+  const screenIndex = player ? screens.indexOf(player.frameId) : -1;
+  const nameOf = (id: Id) => doc.get(id)?.name ?? '';
+  const menuEntries: MenuEntry[] = [
+    { kind: 'item', id: 'hints', label: 'Show hints on click', checked: showHints, onSelect: () => setShowHints((on) => !on) },
+    { kind: 'separator', id: 'scaling-separator' },
+    ...SCALING_MODES.map((mode): MenuEntry => ({ kind: 'item', id: mode, label: SCALING_LABELS[mode], checked: scaling === mode, onSelect: () => setScaling(mode) })),
+  ];
+
+  return (
+    <div className={styles.root}>
+      <header className={styles.toolbar}>
+        <button type="button" className={styles.button} aria-pressed={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>
+          Flows
+        </button>
+        <span className={styles.title}>
+          {session.fileName}
+          {player && <span className={styles.screenName}>{nameOf(player.frameId)}</span>}
+        </span>
+        <button
+          type="button"
+          className={styles.button}
+          aria-haspopup="menu"
+          aria-expanded={menuAnchor !== null}
+          data-menu-root=""
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setMenuAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
+          }}
+        >
+          Options
+        </button>
+        <button type="button" className={styles.button} onClick={toggleFullscreen}>
+          Fullscreen
+        </button>
+      </header>
+      <div className={styles.body}>
+        {sidebarOpen && (
+          <aside className={styles.sidebar} aria-label="Flows">
+            {flows.length === 0 ? (
+              <p className={styles.muted}>This page has no flows.</p>
+            ) : (
+              <ul className={styles.flows}>
+                {flows.map((flow) => (
+                  <li key={flow.nodeId}>
+                    <button type="button" className={styles.flow} aria-current={start === flow.nodeId ? 'true' : undefined} onClick={() => restartAt(flow.nodeId)}>
+                      <span className={styles.flowName}>{flow.name}</span>
+                      {flow.description && <span className={styles.muted}>{flow.description}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </aside>
+        )}
+        <div
+          ref={containerRef}
+          className={styles.stage}
+          data-testid="presentation"
+          data-ready={ready || undefined}
+          data-screen={player ? nameOf(player.frameId) : undefined}
+          data-overlays={player ? player.overlays.map(nameOf).join(',') : undefined}
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={() => (live.current.press = null)}
+          onWheel={onWheel}
+        >
+          <canvas ref={canvasRef} className={styles.canvas} />
+          {screenBox && <div className={styles.screenBox} data-testid="presentation-screen" style={{ left: screenBox.x, top: screenBox.y, width: screenBox.width, height: screenBox.height }} />}
+          {!player && <p className={styles.message}>Add a frame to this page to present it.</p>}
+          {error && (
+            <p className={styles.message} role="alert">
+              {error}
+            </p>
+          )}
+        </div>
+      </div>
+      <footer className={styles.footer}>
+        <button type="button" className={styles.button} aria-label="Previous screen" disabled={screenIndex <= 0} onClick={() => step(-1)}>
+          ←
+        </button>
+        <span role="status">{screenIndex >= 0 ? `${screenIndex + 1} / ${screens.length}` : ''}</span>
+        <button type="button" className={styles.button} aria-label="Next screen" disabled={screenIndex < 0 || screenIndex >= screens.length - 1} onClick={() => step(1)}>
+          →
+        </button>
+        <button type="button" className={styles.button} onClick={() => restartAt(start)}>
+          Restart
+        </button>
+      </footer>
+      {menuAnchor && <Menu label="Options" entries={menuEntries} anchor={menuAnchor} placement="bottom-start" onClose={closeMenu} />}
+    </div>
+  );
+}

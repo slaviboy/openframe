@@ -18,6 +18,7 @@
 import { FileBrowserDialog } from './dialogs/FileBrowserDialog';
 import { isPackageFile, openFromDisk, openLocalFile, saveLocalCopy, saveResultNotice, saveToDisk } from '@/app/local-files';
 import { canOpenFromDisk } from '@/platform/disk-file';
+import { presentFile } from '@/app/present';
 import { PackageError } from '@/platform/package';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { bootstrap, type AppSession } from '@/app/bootstrap';
@@ -190,6 +191,13 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
               },
               () => setNotice('The file could not be saved.'),
             ),
+        },
+        {
+          id: 'view.present',
+          label: 'Present',
+          category: 'View',
+          shortcuts: ['Mod+Alt+Enter'],
+          run: () => presentFile(session),
         },
         {
           id: 'file.showVersionHistory',
