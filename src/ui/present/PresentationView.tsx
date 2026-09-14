@@ -78,17 +78,32 @@ interface Press {
   dragged: boolean;
 }
 
+export interface PresentationViewProps {
+  readonly session: PresentationSession;
+  readonly startNodeId: Id | null;
+  /**
+   * Inline preview in the editor: compact chrome, keys only while the preview has focus, following edits to the
+   * document and the frame selected on the canvas.
+   */
+  readonly inline?: { readonly onClose: () => void; readonly onOpenPresentation: (frameId: Id | null) => void } | undefined;
+}
+
 /**
  * Presentation view: plays the prototype of a page. Hotspots respond to their triggers, After delay and Keyboard
  * interactions run, and transitions animate. The toolbar shows and hides the flows sidebar and holds the options
  * (hotspot hints and scaling) and fullscreen; the footer moves between screens and restarts the flow (R).
  */
-export function PresentationView({ session, startNodeId }: { session: PresentationSession; startNodeId: Id | null }) {
+export function PresentationView({ session, startNodeId, inline }: PresentationViewProps) {
   const { editor } = session;
+  const inlineMode = inline !== undefined;
   const doc = editor.doc;
   const pageId = editor.pageId;
-  const flows = useMemo(() => flowsOf(doc, pageId), [doc, pageId]);
-  const screens = useMemo(() => presentableFrames(doc, pageId), [doc, pageId]);
+  // Read each render: the inline preview follows edits to the document.
+  const [, setRevision] = useState(0);
+  const flows = flowsOf(doc, pageId);
+  const screens = presentableFrames(doc, pageId);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [follow, setFollow] = useState(false);
   const background = useMemo(() => {
     const page = doc.get(pageId);
     return page?.type === 'PAGE' ? page.backgroundColor : { r: 0.12, g: 0.12, b: 0.12, a: 1 };
@@ -107,7 +122,7 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
   const [screenBox, setScreenBox] = useState<Rect | null>(null);
   /** The scrolled frames and their offsets, as "name:x,y" (shown on the stage for tests and assistive tools). */
   const [scrollLabel, setScrollLabel] = useState('');
-  const closeMenu = useCallback(() => setMenuAnchor(null), []);
+  const closeMenu = () => setMenuAnchor(null);
 
   // Mutable playback state the draw loop and input handlers share.
   const live = useRef({
@@ -127,6 +142,7 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
     scene: null as PresentedScene | null,
     scaling,
     showHints,
+    follow,
     frame: 0,
     box: '',
     scrollLabel: '',
@@ -179,6 +195,8 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
           }
         }
       }
+      // Follow prototype: the canvas selection follows the screen the preview shows.
+      if (state.follow && step.state && step.state.frameId !== state.player?.frameId) editor.state.select([step.state.frameId]);
       state.player = step.state;
       setPlayer(step.state);
       schedule();
@@ -225,8 +243,33 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
     const state = live.current;
     state.scaling = scaling;
     state.showHints = showHints;
+    state.follow = follow;
     schedule();
-  }, [scaling, showHints, schedule]);
+  }, [scaling, showHints, follow, schedule]);
+
+  // Inline preview: edits redraw the frames, and selecting another frame on the canvas jumps to it.
+  useEffect(() => {
+    if (!inlineMode) return;
+    const offHistory = editor.history.subscribe((change) => {
+      if (change.source === 'preview') return;
+      live.current.renderer?.refresh();
+      const current = live.current.player;
+      if (current && !doc.has(current.frameId)) restartAt(null);
+      setRevision((revision) => revision + 1);
+    });
+    let lastFrame: Id | null = null;
+    const offState = editor.state.subscribe(() => {
+      const selected = editor.selection[0];
+      const frame = selected ? topLevelFrame(doc, selected) : null;
+      if (!frame || frame === lastFrame) return;
+      lastFrame = frame;
+      if (live.current.player?.frameId !== frame) restartAt(frame);
+    });
+    return () => {
+      offHistory();
+      offState();
+    };
+  }, [inlineMode, editor, doc, restartAt]);
 
   useEffect(() => {
     drawRef.current = () => {
@@ -282,7 +325,8 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
     const container = containerRef.current!;
     const canvas = canvasRef.current!;
     const state = live.current;
-    const renderer = new PresentationRenderer(editor, canvas, schedule);
+    // Inline, the editor keeps its own text layout.
+    const renderer = new PresentationRenderer(editor, canvas, schedule, !inlineMode);
     let disposed = false;
     const resize = () => {
       const rect = container.getBoundingClientRect();
@@ -312,7 +356,7 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
       state.renderer = null;
       renderer.dispose();
     };
-  }, [editor, schedule]);
+  }, [editor, schedule, inlineMode]);
 
   // After delay interactions of the frames shown run once their delay passes.
   const shownKey = player ? shownFrames(player).join('|') : '';
@@ -323,7 +367,7 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [doc, run, shownKey]);
 
-  // Keyboard interactions, and R (restart), ← and → (screens) and F (fullscreen).
+  // Keyboard interactions, and R (restart), ← and → (screens) and F (fullscreen). Inline, only while the preview has focus.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -335,6 +379,7 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
       const found = keyReaction(doc, current, keys);
       if (found) {
         e.preventDefault();
+        e.stopPropagation();
         run(found.reaction);
         return;
       }
@@ -342,13 +387,16 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
       if (e.code === 'KeyR') restartAt(start);
       else if (e.code === 'ArrowRight') step(1);
       else if (e.code === 'ArrowLeft') step(-1);
-      else if (e.code === 'KeyF') toggleFullscreen();
+      else if (e.code === 'KeyF' && !inlineMode) toggleFullscreen();
       else return;
       e.preventDefault();
+      // Inline, the keys don't reach the editor's shortcuts.
+      e.stopPropagation();
     };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [doc, restartAt, run, start, step, toggleFullscreen]);
+    const target: HTMLElement | Window | null = inlineMode ? rootRef.current : window;
+    target?.addEventListener('keydown', onKeyDown as EventListener);
+    return () => target?.removeEventListener('keydown', onKeyDown as EventListener);
+  }, [doc, restartAt, run, start, step, toggleFullscreen, inlineMode]);
 
   /** The shown frame and the layers under a pointer, hit tested where scrolled content is. */
   const locate = (e: { readonly currentTarget: Element; readonly clientX: number; readonly clientY: number }) => {
@@ -465,13 +513,44 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
   const nameOf = (id: Id) => doc.get(id)?.name ?? '';
   const menuEntries: MenuEntry[] = [
     { kind: 'item', id: 'hints', label: 'Show hints on click', checked: showHints, onSelect: () => setShowHints((on) => !on) },
+    ...(inlineMode ? [{ kind: 'item', id: 'follow', label: 'Follow prototype', checked: follow, onSelect: () => setFollow((on) => !on) } satisfies MenuEntry] : []),
     { kind: 'separator', id: 'scaling-separator' },
     ...SCALING_MODES.map((mode): MenuEntry => ({ kind: 'item', id: mode, label: SCALING_LABELS[mode], checked: scaling === mode, onSelect: () => setScaling(mode) })),
   ];
+  const optionsButton = (
+    <button
+      type="button"
+      className={styles.button}
+      aria-haspopup="menu"
+      aria-expanded={menuAnchor !== null}
+      data-menu-root=""
+      onClick={(e) => {
+        const r = e.currentTarget.getBoundingClientRect();
+        setMenuAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
+      }}
+    >
+      Options
+    </button>
+  );
 
   return (
-    <div className={styles.root}>
-      <header className={styles.toolbar}>
+    <div ref={rootRef} className={inlineMode ? styles.inlineRoot : styles.root} {...(inlineMode ? { role: 'region', 'aria-label': 'Preview', tabIndex: 0 } : {})}>
+      {inline && (
+        <header className={styles.toolbar}>
+          <span className={styles.title}>{player ? nameOf(player.frameId) : 'Preview'}</span>
+          <button type="button" className={styles.button} onClick={() => restartAt(start)}>
+            Restart
+          </button>
+          {optionsButton}
+          <button type="button" className={styles.button} aria-label="Open in presentation view" title="Open in presentation view" onClick={() => inline.onOpenPresentation(player?.frameId ?? null)}>
+            ↗
+          </button>
+          <button type="button" className={styles.button} aria-label="Close preview" title="Close preview" onClick={inline.onClose}>
+            ✕
+          </button>
+        </header>
+      )}
+      {!inline && <header className={styles.toolbar}>
         <button type="button" className={styles.button} aria-pressed={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)}>
           Flows
         </button>
@@ -479,25 +558,13 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
           {session.fileName}
           {player && <span className={styles.screenName}>{nameOf(player.frameId)}</span>}
         </span>
-        <button
-          type="button"
-          className={styles.button}
-          aria-haspopup="menu"
-          aria-expanded={menuAnchor !== null}
-          data-menu-root=""
-          onClick={(e) => {
-            const r = e.currentTarget.getBoundingClientRect();
-            setMenuAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
-          }}
-        >
-          Options
-        </button>
+        {optionsButton}
         <button type="button" className={styles.button} onClick={toggleFullscreen}>
           Fullscreen
         </button>
-      </header>
+      </header>}
       <div className={styles.body}>
-        {sidebarOpen && (
+        {sidebarOpen && !inlineMode && (
           <aside className={styles.sidebar} aria-label="Flows">
             {flows.length === 0 ? (
               <p className={styles.muted}>This page has no flows.</p>
@@ -547,9 +614,11 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
         <button type="button" className={styles.button} aria-label="Next screen" disabled={screenIndex < 0 || screenIndex >= screens.length - 1} onClick={() => step(1)}>
           →
         </button>
-        <button type="button" className={styles.button} onClick={() => restartAt(start)}>
-          Restart
-        </button>
+        {!inlineMode && (
+          <button type="button" className={styles.button} onClick={() => restartAt(start)}>
+            Restart
+          </button>
+        )}
       </footer>
       {menuAnchor && <Menu label="Options" entries={menuEntries} anchor={menuAnchor} placement="bottom-start" onClose={closeMenu} />}
     </div>

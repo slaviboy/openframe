@@ -29,6 +29,7 @@ import { PagesPanel } from '../panels/pages/PagesPanel';
 import { VariablesView } from '../panels/variables/VariablesView';
 import { VersionHistoryPanel } from '../panels/versions/VersionHistoryPanel';
 import { PrototypePanel } from '../panels/prototype/PrototypePanel';
+import { InlinePreview } from '../present/InlinePreview';
 import { Menu } from '../primitives/Menu';
 import { PropertyLabelsContext } from '../primitives/property-labels';
 import { viewPrefs } from '../view/view-prefs';
@@ -64,6 +65,7 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
   const propertyLabels = useSyncExternalStore(viewPrefs.subscribe, () => viewPrefs.getSnapshot().propertyLabels);
   const versionHistoryOpen = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().versionHistoryOpen);
   const rightTab = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().rightTab);
+  const inlinePreviewOpen = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().inlinePreviewOpen);
   const viewingVersion = useSyncExternalStore(session.session.subscribe, () => session.session.getSnapshot().viewing !== null);
   // Version history replaces the properties panel while it is open, and while an earlier version is shown.
   const inVersionHistory = versionHistoryOpen || viewingVersion;
@@ -176,6 +178,7 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
           </aside>
         )}
         {uiMode !== 'hidden' && <Toolbar />}
+        {inlinePreviewOpen && uiMode !== 'hidden' && <InlinePreview />}
         {variablesOpen && uiMode !== 'hidden' && <VariablesView onClose={() => editorState.setVariablesOpen(false)} />}
       </div>
     </SessionContext.Provider>
@@ -328,6 +331,9 @@ function RightHeader() {
       </div>
       <MultiEditTextButton />
       <MultiEditVariantsButton />
+      <button type="button" className={styles.zoomButton} title="Preview (⇧Space)" onClick={() => editor.commands.run('view.inlinePreview')}>
+        Preview
+      </button>
       <button type="button" className={styles.zoomButton} title="Present (opens a new tab)" onClick={() => editor.commands.run('view.present')}>
         Present
       </button>

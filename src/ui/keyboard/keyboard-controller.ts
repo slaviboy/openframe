@@ -85,7 +85,8 @@ export class KeyboardController {
     if (isEditableTarget(e.target)) return;
 
     if (e.defaultPrevented) return;
-    if (e.code === 'Space') {
+    // Space holds the Hand tool; ⇧Space is a shortcut (Preview).
+    if (e.code === 'Space' && !e.shiftKey) {
       if (isActivatableTarget(e.target)) return;
       e.preventDefault();
       if (!this.spaceDown && !e.repeat) {

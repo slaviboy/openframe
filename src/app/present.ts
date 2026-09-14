@@ -89,10 +89,10 @@ export async function openPresentation(params: PresentParams): Promise<Presentat
  * Present: opens presentation view in a new tab, starting at the selected layer's top-level frame (or the page's first
  * flow). The file is saved first, so the new tab shows every edit.
  */
-export function presentFile(session: AppSession): void {
+export function presentFile(session: AppSession, startId?: Id | null): void {
   const { editor } = session;
   const selected = editor.selection[0];
-  const nodeId = selected ? topLevelFrame(editor.doc, selected) : null;
+  const nodeId = startId ?? (selected ? topLevelFrame(editor.doc, selected) : null);
   const url = presentUrl(window.location.href, { fileId: session.session.getSnapshot().file.id, pageId: editor.pageId, nodeId });
   // The tab opens while the click still counts as the user's (so it isn't blocked), and loads once the file is saved.
   const tab = window.open('', '_blank');

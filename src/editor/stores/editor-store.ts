@@ -72,6 +72,8 @@ export interface EditorState {
   readonly variablesOpen: boolean;
   /** The right sidebar shows the file's version history. */
   readonly versionHistoryOpen: boolean;
+  /** The inline preview (⇧Space) plays the prototype in a window over the canvas. */
+  readonly inlinePreviewOpen: boolean;
   /** Anchor used by the Scale panel's multiplier and dimension fields. */
   readonly scaleAnchor: ScaleAnchor;
   /** Layer whose image fill is being cropped (crop mode), or null. */
@@ -170,6 +172,7 @@ export class EditorStore extends Observable<EditorState> {
       assetsOpen: false,
       variablesOpen: false,
       versionHistoryOpen: false,
+      inlinePreviewOpen: false,
       scaleAnchor: 'nw',
       croppingId: null,
       cropAspect: 'FREE',
@@ -278,6 +281,10 @@ export class EditorStore extends Observable<EditorState> {
 
   setVersionHistoryOpen(versionHistoryOpen: boolean): void {
     this.setState({ versionHistoryOpen });
+  }
+
+  setInlinePreviewOpen(inlinePreviewOpen: boolean): void {
+    this.setState({ inlinePreviewOpen });
   }
 
   openDialog(dialog: EditorDialog | null): void {

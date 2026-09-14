@@ -663,6 +663,14 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     checked: (e) => e.state.getSnapshot().rightTab === 'prototype',
     run: (e) => e.state.setRightTab(e.state.getSnapshot().rightTab === 'prototype' ? 'design' : 'prototype'),
   },
+  {
+    id: 'view.inlinePreview',
+    label: 'Preview',
+    category: 'View',
+    shortcuts: ['Shift+Space'],
+    checked: (e) => e.state.getSnapshot().inlinePreviewOpen,
+    run: (e) => e.state.setInlinePreviewOpen(!e.state.getSnapshot().inlinePreviewOpen),
+  },
   // Variable width has no shortcut: it is picked from the secondary toolbar.
   {
     id: 'vector.toolWidth',

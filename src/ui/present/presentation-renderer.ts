@@ -60,7 +60,14 @@ export class PresentationRenderer {
     private readonly canvas: HTMLCanvasElement,
     /** Called when what is drawn changed (images or fonts arrived). */
     private readonly onInvalidate: () => void,
+    /** Whether this renderer sets the editor's text layout (presentation view's own editor), or leaves the editor's (inline preview). */
+    private readonly ownsTextLayout = true,
   ) {}
+
+  /** Drops the cached frame images, after the document changed (inline preview follows edits). */
+  refresh(): void {
+    this.invalidate();
+  }
 
   async load(): Promise<void> {
     const [ck, fonts] = await Promise.all([loadCanvasKit(), loadBundledFonts()]);
@@ -70,7 +77,7 @@ export class PresentationRenderer {
     this.shaper = new TextShaper(ck, fonts);
     this.shaper.registerFonts(this.editor.fonts.list());
     this.renderer.setTextShaper(this.shaper);
-    this.editor.setTextLayout(this.shaper);
+    if (this.ownsTextLayout) this.editor.setTextLayout(this.shaper);
     this.paint = new ck.Paint();
     this.paint.setAntiAlias(true);
     this.cleanups.push(this.editor.images.subscribe(() => this.invalidate()));

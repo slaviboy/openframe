@@ -69,15 +69,15 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - clicking a noodle selects its connection and opens its interaction
     - dragging selected connections changes their destination, or removes them on empty canvas
     - ⇧E toggles the Prototype tab
+  - Inline preview (the commit after selecting connections):
+    - ⇧Space or Preview opens `InlinePreview`, `PresentationView` with `inline`
+    - it follows edits and the canvas selection, has Follow prototype, and keeps its keys while focused
 
 ## In progress (uncommitted)
 
-1. **Inline preview.** Starting:
-   - ⇧Space or Preview opens a resizable in-editor window that plays the prototype live from the editor's document
-   - it jumps to the frame selected on the canvas
-   - its keys (← → R) only act while it has focus
-   - the overflow menu has scaling options, Follow prototype, and Open in presentation view; it closes with X
-   - it reuses `PresentationView` with an `inline` variant, and the renderer must not replace the editor's text layout
+1. **Device and background settings.** Starting: the prototype settings in the Prototype tab with nothing selected (device, orientation, background color), used by presentation view and inline preview.
+
+**Known flake to investigate:** WebKit's `e2e/presentation.spec.ts` once logged `StorageError: Browser storage is unavailable` when the presentation tab opened IndexedDB while the editor tab held it. It passed on retry.
 
 ## Next (M10, in order)
 
@@ -89,4 +89,4 @@ This file is how work continues after a pause (for example, a usage limit). Read
 7. Video fills with video triggers and actions (M10 video row).
 8. Accessible prototypes, manual overlay positions, rich-text flow descriptions, gamepad triggers.
 
-After M10, continue with M11–M15 per `docs/FEATURE_MATRIX.md`: the rows marked Planned or In progress, in milestone order.
+**Stop after M10.** When every M10 row is finished and committed, stop and report to the user. Don't start M11 until the user says to continue. After that, M11–M15 follow `docs/FEATURE_MATRIX.md` (the rows marked Planned or In progress) in milestone order.

@@ -154,3 +154,27 @@
   margin: 0;
   color: rgb(255 255 255 / 70%);
 }
+
+/* Inline preview: the same player in a window over the editor's canvas. */
+.inlineRoot {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #1e1e1e;
+  color: #fff;
+  font: 12px/1.4 var(--font-ui, system-ui, sans-serif);
+  outline: none;
+}
+
+.inlineRoot:focus-visible {
+  box-shadow: inset 0 0 0 2px #0d99ff;
+}
+
+.inlineRoot .toolbar,
+.inlineRoot .footer {
+  gap: 4px;
+  padding: 4px 8px;
+}
