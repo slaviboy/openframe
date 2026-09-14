@@ -79,10 +79,14 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - `prototypeDevice` and `prototypeBackground` on the page, and `src/core/prototype/device.ts`
     - the Prototype settings section
     - presentation view plays inside the device, drawn with its own body
+  - Interactive components (the commit after device settings):
+    - the `CHANGE_TO` action between variants, which instances inherit
+    - presentation view switches instances in a runtime copy (`src/editor/prototype-runtime.ts`)
+    - drag to connect onto variants
 
 ## In progress (uncommitted)
 
-1. **Interactive components.** Starting: Change to actions between variants of a component set, interactions on variants that instances inherit, and the player swapping an instance's variant (with its state memorized).
+1. **WebKit storage flake.** Being fixed: `openPresentation` retries opening IndexedDB when WebKit reports it unavailable while the editor tab holds it (`src/app/present.ts`).
 
 **Known flake to investigate:** WebKit's `e2e/presentation.spec.ts` once logged `StorageError: Browser storage is unavailable` when the presentation tab opened IndexedDB while the editor tab held it. It passed on retry.
 
@@ -91,7 +95,7 @@ This file is how work continues after a pause (for example, a usage limit). Read
 1. The overlay badge on the canvas; dragging to scroll on touch; nested sticky layers.
 2. State memorization of scroll position; Animate matching layers on the moving transitions.
 4. Device and background settings; the prototype settings panel with nothing selected.
-5. Interactive components (Change to), connections from main components, sections as destinations.
+5. Connections from main components (instances inherit them), sections as destinations.
 6. Set variable, set variable mode, conditionals and expressions in actions (the evaluator exists in `src/core/prototype/expressions.ts`).
 7. Video fills with video triggers and actions (M10 video row).
 8. Accessible prototypes, manual overlay positions, rich-text flow descriptions, gamepad triggers.

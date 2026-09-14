@@ -41,13 +41,13 @@ function startFlowForConnection(tx: Transaction, nodeId: Id, reaction: Reaction,
  * Adds an interaction to each layer (in bulk for several): its first free trigger navigates to `destinationId`
  * instantly. One undo step; false when there are no layers.
  */
-export function addInteraction(editor: Editor, ids: readonly Id[], destinationId: Id | null = null): boolean {
+export function addInteraction(editor: Editor, ids: readonly Id[], destinationId: Id | null = null, navigation: 'NAVIGATE' | 'CHANGE_TO' = 'NAVIGATE'): boolean {
   const targets = layers(editor, ids);
   if (targets.length === 0) return false;
   editor.history.run('Add interaction', (tx) =>
     targets.forEach((node) => {
       const current = reactionsOf(tx.store.get(node.id) as SceneNode);
-      const reaction = makeReaction(current, destinationId);
+      const reaction = makeReaction(current, destinationId, navigation);
       startFlowForConnection(tx, node.id, reaction, current.length);
       tx.set(node.id, 'reactions', [...current, reaction]);
     }),

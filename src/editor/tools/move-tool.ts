@@ -32,7 +32,8 @@ import { canParent } from '@/core/document/containment';
 import type { DuplicateMemory } from '../editor';
 import type { Vec2 } from '@/core/math/vec';
 import { hitTestDeepest, isArtboardWithChildren, isInteractive, marqueeSelect, selectionTarget } from '@/core/scene/hit-test';
-import { connectDestinationAt, connectHandle, connectionAt, hitConnectHandle } from '../chrome/prototype-geometry';
+import { connectDestinationAt, connectHandle, connectionAt, hitConnectHandle, variantDestinationAt } from '../chrome/prototype-geometry';
+import { variantSetOf } from '@/core/prototype/reactions';
 import { addInteraction, removeConnections, setConnectionsDestination, type ConnectionRef } from '../commands/prototype';
 import { snapEqualGaps, type GapIndicator } from '@/core/scene/equal-gaps';
 import { measureBetween, type MeasureLine } from '@/core/scene/measure';
@@ -597,7 +598,8 @@ export class MoveTool implements Tool {
         return;
       case 'connect':
         g.current = p;
-        g.destination = connectDestinationAt(this.env.editor, g.sourceIds, p.world);
+        // From a variant, another variant of its set is a Change to destination; otherwise a top-level frame.
+        g.destination = variantDestinationAt(this.env.editor, g.sourceIds, p.world) ?? connectDestinationAt(this.env.editor, g.sourceIds, p.world);
         this.env.editor.requestRender();
         return;
       case 'connection': {
@@ -678,7 +680,10 @@ export class MoveTool implements Tool {
         break;
       case 'connect':
         // Dropped on a frame: each source gets an interaction navigating to it.
-        if (g.destination) addInteraction(editor, g.sourceIds, g.destination);
+        if (g.destination) {
+          const changeTo = editor.doc.parentOf(g.destination) === variantSetOf(editor.doc, g.sourceIds[0]!);
+          addInteraction(editor, g.sourceIds, g.destination, changeTo ? 'CHANGE_TO' : 'NAVIGATE');
+        }
         editor.requestRender();
         break;
       case 'connection':

@@ -187,7 +187,7 @@ function ActionFields({ editor, hotspotId, action, suffix, onChange, onRemove }:
     <div className={styles.action} role="group" aria-label={`Action${suffix} settings`}>
       <div className={styles.row}>
         <select className={primitives.select} aria-label={`Action${suffix}`} value={kind} onKeyDown={stopKeys} onChange={(e) => changeKind(e.target.value as ActionKind)}>
-          {ACTION_KINDS.map((option) => (
+          {ACTION_KINDS.filter((option) => option !== 'CHANGE_TO' || kind === 'CHANGE_TO' || destinationCandidates(editor.doc, hotspotId, 'CHANGE_TO').length > 0).map((option) => (
             <option key={option} value={option}>
               {ACTION_LABELS[option]}
             </option>

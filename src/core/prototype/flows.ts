@@ -110,7 +110,7 @@ export function frameConnected(store: DocumentStore, pageId: Id, frameId: Id, ex
     if (connected || (except && except.nodeId === nodeId && except.index === index)) return;
     const source = topLevelFrame(store, nodeId);
     for (const action of reaction.actions) {
-      if (action.type !== 'NODE' || action.navigation === 'SCROLL_TO' || !action.destinationId) continue;
+      if (action.type !== 'NODE' || action.navigation === 'SCROLL_TO' || action.navigation === 'CHANGE_TO' || !action.destinationId) continue;
       const destination = topLevelFrame(store, action.destinationId);
       if (!destination || destination === source) continue;
       if (source === frameId || destination === frameId) connected = true;
@@ -130,7 +130,7 @@ export function flowForNewConnection(store: DocumentStore, nodeId: Id, reaction:
   const page = pageId ? store.get(pageId) : undefined;
   if (!pageId || page?.type !== 'PAGE') return null;
   const destinations = reaction.actions
-    .map((action) => (action.type === 'NODE' && action.navigation !== 'SCROLL_TO' && action.destinationId ? topLevelFrame(store, action.destinationId) : null))
+    .map((action) => (action.type === 'NODE' && action.navigation !== 'SCROLL_TO' && action.navigation !== 'CHANGE_TO' && action.destinationId ? topLevelFrame(store, action.destinationId) : null))
     .filter((id): id is Id => id !== null && id !== source);
   if (destinations.length === 0) return null;
   const except = { nodeId, index };

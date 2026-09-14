@@ -126,7 +126,8 @@ export type PrototypeTrigger = z.infer<typeof PrototypeTriggerSchema>;
 export const PrototypeActionSchema = z.union([
   z.object({
     type: z.literal('NODE'),
-    navigation: z.enum(['NAVIGATE', 'OVERLAY', 'SWAP', 'SCROLL_TO']),
+    /** CHANGE_TO (interactive components) switches the instance the hotspot is in to the destination variant. */
+    navigation: z.enum(['NAVIGATE', 'OVERLAY', 'SWAP', 'SCROLL_TO', 'CHANGE_TO']),
     /** The destination layer; null until one is chosen. */
     destinationId: IdSchema.nullable(),
     transition: PrototypeTransitionSchema,

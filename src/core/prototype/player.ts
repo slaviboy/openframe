@@ -44,6 +44,8 @@ export type PlayerEffect =
   | { readonly type: 'transition'; readonly from: Id | null; readonly to: Id; readonly overlay: boolean; readonly transition: PrototypeTransition; readonly resetScroll?: boolean }
   | { readonly type: 'closeOverlay'; readonly id: Id }
   | { readonly type: 'scrollTo'; readonly nodeId: Id; readonly transition: PrototypeTransition }
+  /** Interactive components: switch an instance to another variant of its component set. */
+  | { readonly type: 'changeTo'; readonly instanceId: Id; readonly variantId: Id; readonly transition: PrototypeTransition }
   | { readonly type: 'openUrl'; readonly url: string };
 
 export interface PlayerStep {
@@ -80,7 +82,7 @@ function destinationsOn(store: DocumentStore, pageId: Id): Set<Id> {
   const visit = (id: Id) => {
     for (const reaction of sceneNode(store, id)?.reactions ?? []) {
       for (const action of reaction.actions) {
-        if (action.type === 'NODE' && action.destinationId && action.navigation !== 'SCROLL_TO') {
+        if (action.type === 'NODE' && action.destinationId && action.navigation !== 'SCROLL_TO' && action.navigation !== 'CHANGE_TO') {
           const frame = topLevelFrame(store, action.destinationId);
           if (frame) out.add(frame);
         }
@@ -153,7 +155,19 @@ export function findReaction(store: DocumentStore, chain: readonly Id[], type: T
 
 const SAFE_LINK = /^(https?:|mailto:)/i;
 
-function runAction(store: DocumentStore, state: PlayerState, action: PrototypeAction, effects: PlayerEffect[]): PlayerState {
+/** The instance a Change to from a hotspot switches: the nearest instance around it made from a variant of the destination's component set. */
+export function instanceToChange(store: DocumentStore, hotspotId: Id, variantId: Id): Id | null {
+  const setId = store.parentOf(variantId);
+  if (setId === null) return null;
+  for (let current: Id | null = hotspotId; current !== null; current = store.parentOf(current)) {
+    const node = sceneNode(store, current);
+    if (!node) return null;
+    if (node.type === 'FRAME' && node.instance && store.parentOf(node.instance.mainId) === setId) return current;
+  }
+  return null;
+}
+
+function runAction(store: DocumentStore, state: PlayerState, action: PrototypeAction, effects: PlayerEffect[], hotspotId: Id | null): PlayerState {
   switch (action.type) {
     case 'URL':
       if (SAFE_LINK.test(action.url.trim())) effects.push({ type: 'openUrl', url: action.url.trim() });
@@ -173,6 +187,11 @@ function runAction(store: DocumentStore, state: PlayerState, action: PrototypeAc
     case 'NODE': {
       const destination = action.destinationId;
       if (!destination || !sceneNode(store, destination)) return state;
+      if (action.navigation === 'CHANGE_TO') {
+        const instanceId = hotspotId ? instanceToChange(store, hotspotId, destination) : null;
+        if (instanceId) effects.push({ type: 'changeTo', instanceId, variantId: destination, transition: action.transition });
+        return state;
+      }
       if (action.navigation === 'SCROLL_TO') {
         effects.push({ type: 'scrollTo', nodeId: destination, transition: action.transition });
         return state;
@@ -200,11 +219,11 @@ function runAction(store: DocumentStore, state: PlayerState, action: PrototypeAc
   }
 }
 
-/** Runs an interaction's actions in order. */
-export function runReaction(store: DocumentStore, state: PlayerState, reaction: Reaction): PlayerStep {
+/** Runs an interaction's actions in order; `hotspotId` is the layer it is on (Change to switches the instance around it). */
+export function runReaction(store: DocumentStore, state: PlayerState, reaction: Reaction, hotspotId: Id | null = null): PlayerStep {
   const effects: PlayerEffect[] = [];
   let next = state;
-  for (const action of reaction.actions) next = runAction(store, next, action, effects);
+  for (const action of reaction.actions) next = runAction(store, next, action, effects, hotspotId);
   return { state: next, effects };
 }
 
@@ -215,7 +234,7 @@ export function runReaction(store: DocumentStore, state: PlayerState, reaction: 
 export function beginTemporary(store: DocumentStore, state: PlayerState, nodeId: Id, reaction: Reaction): PlayerStep {
   const trigger = reaction.trigger.type;
   if (state.temporary || (trigger !== 'ON_HOVER' && trigger !== 'ON_PRESS')) return { state, effects: [] };
-  const step = runReaction(store, state, reaction);
+  const step = runReaction(store, state, reaction, nodeId);
   return { state: { ...step.state, temporary: { nodeId, trigger, restore: state } }, effects: step.effects };
 }
 

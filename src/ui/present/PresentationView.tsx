@@ -57,6 +57,7 @@ import { toEasing, topLevelFrame, transitionDurationMs } from '@/core/prototype/
 import { clampScroll, scrolledFrameStore, scrollFrameOf, scrollLimits, wheelScrollTarget } from '@/core/prototype/scroll';
 import type { Vec2 } from '@/core/math/vec';
 import { SceneIndex } from '@/core/scene/scene-index';
+import { changeVariant, type RuntimeDocument } from '@/editor/prototype-runtime';
 import type { Reaction, SceneNode } from '@/core/schema/document';
 import { Menu, type MenuEntry } from '../primitives/Menu';
 import type { Box } from '../primitives/position';
@@ -110,7 +111,10 @@ export interface PresentationViewProps {
 export function PresentationView({ session, startNodeId, inline }: PresentationViewProps) {
   const { editor } = session;
   const inlineMode = inline !== undefined;
-  const doc = editor.doc;
+  // Interactive components play in a copy of the document with the variants they switched to.
+  const [runtime, setRuntime] = useState<RuntimeDocument | null>(null);
+  const doc = runtime?.doc ?? editor.doc;
+  const sceneIndex = runtime?.index ?? editor.scene;
   const pageId = editor.pageId;
   // Read each render: the inline preview follows edits to the document.
   const [, setRevision] = useState(0);
@@ -139,6 +143,8 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
   const [screenBox, setScreenBox] = useState<Rect | null>(null);
   /** The scrolled frames and their offsets, as "name:x,y" (shown on the stage for tests and assistive tools). */
   const [scrollLabel, setScrollLabel] = useState('');
+  /** Instances interactive components switched, as "instance=variant" (shown on the stage for tests). */
+  const [variantLabel, setVariantLabel] = useState('');
   const closeMenu = () => setMenuAnchor(null);
 
   // Mutable playback state the draw loop and input handlers share.
@@ -161,6 +167,10 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     showHints,
     follow,
     device: null as DevicePreset | null,
+    runtime: null as RuntimeDocument | null,
+    /** Instances interactive components switched, and the variant each shows. */
+    variantChanges: new Map<Id, Id>(),
+    variantLabel: '',
     deviceScaling: null as ScalingMode | null,
     frame: 0,
     box: '',
@@ -189,22 +199,31 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
           if (effect.resetScroll) {
             for (const id of [...state.frameScroll.keys()]) if (topLevelFrame(doc, id) === effect.to) state.frameScroll.delete(id);
           }
+        } else if (effect.type === 'changeTo') {
+          // Interactive components: the instance switches variant in the prototype's copy of the document (the file isn't changed).
+          const next = changeVariant(state.runtime?.doc ?? editor.doc, pageId, effect.instanceId, effect.variantId, editor.textLayout);
+          if (next) {
+            state.variantChanges.set(effect.instanceId, effect.variantId);
+            state.runtime = next;
+            state.renderer?.setDocument(next);
+            setRuntime(next);
+          }
         } else if (effect.type === 'openUrl') {
           window.open(effect.url, '_blank', 'noopener,noreferrer');
         } else if (effect.type === 'scrollTo' && scrollFrameOf(doc, effect.nodeId)) {
           // Scroll to a layer in a scrolling frame: that frame scrolls to bring it to its top-left.
           const frameId = scrollFrameOf(doc, effect.nodeId)!;
-          const frameBounds = editor.scene.worldBounds(frameId);
-          const nodeBounds = editor.scene.worldBounds(effect.nodeId);
+          const frameBounds = sceneIndex.worldBounds(frameId);
+          const nodeBounds = sceneIndex.worldBounds(effect.nodeId);
           if (frameBounds && nodeBounds) {
-            const to = clampScroll({ x: nodeBounds.x - frameBounds.x, y: nodeBounds.y - frameBounds.y }, scrollLimits(doc, editor.scene, frameId));
+            const to = clampScroll({ x: nodeBounds.x - frameBounds.x, y: nodeBounds.y - frameBounds.y }, scrollLimits(doc, sceneIndex, frameId));
             const from = state.frameScroll.get(frameId) ?? { x: 0, y: 0 };
             const duration = transitionDurationMs(effect.transition);
             if (duration > 0 && effect.transition.type !== 'INSTANT') state.nestedScrolling = { frameId, from, to, start: now, duration, easing: toEasing(effect.transition.easing) };
             else state.frameScroll.set(frameId, to);
           }
         } else if (effect.type === 'scrollTo' && step.state) {
-          const offset = scrollOffsetOf(editor.scene, step.state.frameId, effect.nodeId);
+          const offset = scrollOffsetOf(sceneIndex, step.state.frameId, effect.nodeId);
           const node = doc.get(step.state.frameId) as SceneNode | undefined;
           if (offset !== null && node) {
             const to = Math.min(Math.max(0, offset), screenScrollLimit(state, node.size));
@@ -220,13 +239,13 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
       setPlayer(step.state);
       schedule();
     },
-    [doc, editor, schedule],
+    [doc, editor, pageId, sceneIndex, schedule],
   );
 
   const run = useCallback(
-    (reaction: Reaction) => {
+    (reaction: Reaction, hotspotId: Id | null = null) => {
       const current = live.current.player;
-      if (current) apply(runReaction(doc, current, reaction));
+      if (current) apply(runReaction(doc, current, reaction, hotspotId));
     },
     [apply, doc],
   );
@@ -238,6 +257,13 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
       state.playing = null;
       state.scrolling = null;
       state.scrollY = 0;
+      // Restarting resets interactive components to their variants in the file.
+      if (state.runtime) {
+        state.runtime = null;
+        state.variantChanges.clear();
+        state.renderer?.setDocument(null);
+        setRuntime(null);
+      }
       setStart(nodeId);
       if (next) apply({ state: next, effects: [] });
     },
@@ -273,7 +299,11 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     if (!inlineMode) return;
     const offHistory = editor.history.subscribe((change) => {
       if (change.source === 'preview') return;
-      live.current.renderer?.refresh();
+      // Edits start interactive components over from the file.
+      live.current.runtime = null;
+      live.current.variantChanges.clear();
+      setRuntime(null);
+      live.current.renderer?.setDocument(null);
       const current = live.current.player;
       if (current && !doc.has(current.frameId)) restartAt(null);
       setRevision((revision) => revision + 1);
@@ -332,6 +362,11 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
         state.scrollLabel = label;
         setScrollLabel(label);
       }
+      const variants = [...state.variantChanges].map(([instance, variant]) => `${doc.get(instance)?.name ?? instance}=${editor.doc.get(variant)?.name ?? variant}`).join(';');
+      if (variants !== state.variantLabel) {
+        state.variantLabel = variants;
+        setVariantLabel(variants);
+      }
       const box = `${scene.screen.x},${scene.screen.y},${scene.screen.width},${scene.screen.height}`;
       if (box !== state.box) {
         state.box = box;
@@ -384,7 +419,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
   useEffect(() => {
     const current = live.current.player;
     if (!current || !shownKey) return;
-    const timers = delayedReactions(doc, current).map(({ reaction, timeout }) => window.setTimeout(() => run(reaction), timeout));
+    const timers = delayedReactions(doc, current).map(({ nodeId, reaction, timeout }) => window.setTimeout(() => run(reaction, nodeId), timeout));
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [doc, run, shownKey]);
 
@@ -401,7 +436,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
       if (found) {
         e.preventDefault();
         e.stopPropagation();
-        run(found.reaction);
+        run(found.reaction, found.nodeId);
         return;
       }
       if (keys.length !== 1) return;
@@ -427,7 +462,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     const hit = state.scene && state.player ? frameAtPoint(state.scene, state.player, point) : null;
     if (!hit) return { point, hit, chain: [] as Id[] };
     const scrolled = [...state.frameScroll].some(([id, offset]) => (offset.x !== 0 || offset.y !== 0) && topLevelFrame(doc, id) === hit.frameId);
-    if (!scrolled) return { point, hit, chain: hitTest(doc, editor.scene, hit.frameId, hit.local) };
+    if (!scrolled) return { point, hit, chain: hitTest(doc, sceneIndex, hit.frameId, hit.local) };
     const store = scrolledFrameStore(doc, hit.frameId, state.frameScroll);
     const index = new SceneIndex(store);
     index.ensure(pageId);
@@ -440,7 +475,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     const { point, chain } = locate(e);
     live.current.press = { chain, x: point.x, y: point.y, dragged: false };
     const down = findReaction(doc, chain, 'MOUSE_DOWN');
-    if (down) run(down.reaction);
+    if (down) run(down.reaction, down.nodeId);
     const pressing = findReaction(doc, chain, 'ON_PRESS');
     const current = live.current.player;
     if (pressing && current) apply(beginTemporary(doc, current, pressing.nodeId, pressing.reaction));
@@ -453,7 +488,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     if (press && !press.dragged && Math.hypot(point.x - press.x, point.y - press.y) > DRAG_THRESHOLD) {
       press.dragged = true;
       const drag = findReaction(doc, press.chain, 'ON_DRAG');
-      if (drag) run(drag.reaction);
+      if (drag) run(drag.reaction, drag.nodeId);
     }
     const previous = state.hoverChain;
     if (previous.length === chain.length && previous.every((id, i) => id === chain[i])) return;
@@ -462,12 +497,12 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
       const current = state.player;
       if (current?.temporary?.trigger === 'ON_HOVER' && current.temporary.nodeId === id) apply(endTemporary(current));
       const leave = findReaction(doc, [id], 'MOUSE_LEAVE');
-      if (leave) run(leave.reaction);
+      if (leave) run(leave.reaction, leave.nodeId);
     }
     const entered = chain.filter((candidate) => !previous.includes(candidate));
     for (const id of entered) {
       const enter = findReaction(doc, [id], 'MOUSE_ENTER');
-      if (enter) run(enter.reaction);
+      if (enter) run(enter.reaction, enter.nodeId);
     }
     const hover = findReaction(doc, chain, 'ON_HOVER');
     const current = state.player;
@@ -483,11 +518,11 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     if (pressed?.temporary?.trigger === 'ON_PRESS') apply(endTemporary(pressed));
     const { hit, chain } = locate(e);
     const up = findReaction(doc, chain, 'MOUSE_UP');
-    if (up) run(up.reaction);
+    if (up) run(up.reaction, up.nodeId);
     if (press.dragged) return;
     const click = findReaction(doc, chain, 'ON_CLICK');
     if (click) {
-      run(click.reaction);
+      run(click.reaction, click.nodeId);
       return;
     }
     const current = state.player;
@@ -499,7 +534,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     // A click that misses every hotspot shows where they are.
     if (current && state.showHints && state.scene) {
       const scene = state.scene;
-      state.hintRects = shownFrames(current).flatMap((frameId) => layerRects(editor.scene, scene, frameId, hotspots(doc, frameId)));
+      state.hintRects = shownFrames(current).flatMap((frameId) => layerRects(sceneIndex, scene, frameId, hotspots(doc, frameId)));
       state.hintsUntil = performance.now() + HINT_MS;
       schedule();
     }
@@ -512,11 +547,11 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     // The deepest frame under the pointer that scrolls, and has room to move that way, scrolls.
     const { hit, chain } = locate(e);
     const delta = { x: e.deltaX / state.scene.screen.scale, y: e.deltaY / state.scene.screen.scale };
-    const target = hit ? wheelScrollTarget(doc, editor.scene, chain, delta, state.frameScroll) : null;
+    const target = hit ? wheelScrollTarget(doc, sceneIndex, chain, delta, state.frameScroll) : null;
     if (target) {
       const offset = state.frameScroll.get(target) ?? { x: 0, y: 0 };
       state.nestedScrolling = null;
-      state.frameScroll.set(target, clampScroll({ x: offset.x + delta.x, y: offset.y + delta.y }, scrollLimits(doc, editor.scene, target)));
+      state.frameScroll.set(target, clampScroll({ x: offset.x + delta.x, y: offset.y + delta.y }, scrollLimits(doc, sceneIndex, target)));
       schedule();
       return;
     }
@@ -612,6 +647,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
           data-overlays={player ? player.overlays.map(nameOf).join(',') : undefined}
           data-scroll={scrollLabel}
           data-device={device?.preset.name}
+          data-variants={variantLabel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

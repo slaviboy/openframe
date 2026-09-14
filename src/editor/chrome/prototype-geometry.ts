@@ -19,7 +19,7 @@ import type { Id } from '@/core/ids/ids';
 import type { Rect } from '@/core/math/rect';
 import type { Vec2 } from '@/core/math/vec';
 import { distanceToNoodle, noodleBetween, visibleConnections, type Connection } from '@/core/prototype/connections';
-import { topLevelFrame } from '@/core/prototype/reactions';
+import { topLevelFrame, variantSetOf } from '@/core/prototype/reactions';
 import { hitTestDeepest } from '@/core/scene/hit-test';
 import type { Editor } from '../editor';
 import { worldToScreen } from '../viewport/viewport';
@@ -74,6 +74,23 @@ export function connectionAt(editor: Editor, screen: Vec2): Connection | null {
     if (distance <= CONNECTION_HIT_PX && (!best || distance < best.distance)) best = { connection, distance };
   }
   return best?.connection ?? null;
+}
+
+/**
+ * The variant a connection dragged from layers in a variant (or in an instance of one) would change to at a world point:
+ * another variant of that component set; null elsewhere.
+ */
+export function variantDestinationAt(editor: Editor, sourceIds: readonly Id[], world: Vec2): Id | null {
+  const sets = new Set(sourceIds.map((id) => variantSetOf(editor.doc, id)));
+  const setId = sets.size === 1 ? [...sets][0] : null;
+  if (!setId) return null;
+  const hit = hitTestDeepest(editor.doc, editor.scene, editor.pageId, world, { tolerance: 0 });
+  for (let id = hit; id !== null; id = editor.doc.parentOf(id)) {
+    if (editor.doc.parentOf(id) !== setId) continue;
+    const own = sourceIds.some((source) => source === id || editor.doc.isAncestor(id, source));
+    return own ? null : id;
+  }
+  return null;
 }
 
 /** The top-level frame a connection dragged from the sources would end on at a world point (not their own frame). */

@@ -17,6 +17,7 @@
 
 import { bezierPreset, springDurationMs, springPreset, type Easing } from '../anim/easing';
 import type { DocumentStore } from '../document/store';
+import { isComponentSet, variantsOf } from '../document/variants';
 import type { Id } from '../ids/ids';
 import type { PrototypeAction, PrototypeEasing, PrototypeTransition, PrototypeTrigger, Reaction } from '../schema/document';
 
@@ -45,7 +46,7 @@ export const TRIGGER_LABELS: Readonly<Record<TriggerType, string>> = {
 /** Triggers a layer can have any number of; it can have each other trigger once. */
 export const REPEATABLE_TRIGGERS: ReadonlySet<TriggerType> = new Set(['ON_KEY_DOWN', 'ON_DRAG']);
 
-export const ACTION_KINDS: readonly ActionKind[] = ['NAVIGATE', 'BACK', 'SCROLL_TO', 'URL', 'OVERLAY', 'SWAP', 'CLOSE'];
+export const ACTION_KINDS: readonly ActionKind[] = ['NAVIGATE', 'BACK', 'SCROLL_TO', 'URL', 'OVERLAY', 'SWAP', 'CLOSE', 'CHANGE_TO'];
 
 export const ACTION_LABELS: Readonly<Record<ActionKind, string>> = {
   NAVIGATE: 'Navigate to',
@@ -55,7 +56,31 @@ export const ACTION_LABELS: Readonly<Record<ActionKind, string>> = {
   OVERLAY: 'Open overlay',
   SWAP: 'Swap overlay',
   CLOSE: 'Close overlay',
+  CHANGE_TO: 'Change to',
 };
+
+/**
+ * The component set whose variants a Change to from a layer switches between: the set of the variant the layer is in,
+ * or of the variant the nearest instance around it was made from; null when neither applies.
+ */
+export function variantSetOf(store: DocumentStore, id: Id): Id | null {
+  const setOf = (variantId: Id): Id | null => {
+    const setId = store.parentOf(variantId);
+    const set = setId === null ? undefined : store.get(setId);
+    return set && 'transform' in set && isComponentSet(set) ? setId : null;
+  };
+  for (let current: Id | null = id; current !== null; current = store.parentOf(current)) {
+    const node = store.get(current);
+    if (!node || !('transform' in node)) return null;
+    if (node.type === 'FRAME' && node.instance) {
+      const set = setOf(node.instance.mainId);
+      if (set) return set;
+    }
+    const set = setOf(current);
+    if (set) return set;
+  }
+  return null;
+}
 
 export const TRANSITION_TYPES: readonly TransitionType[] = ['INSTANT', 'DISSOLVE', 'SMART_ANIMATE', 'MOVE_IN', 'MOVE_OUT', 'PUSH', 'SLIDE_IN', 'SLIDE_OUT'];
 
@@ -119,8 +144,8 @@ export function nextTrigger(reactions: readonly Reaction[]): PrototypeTrigger {
 }
 
 /** A new interaction: On click navigates to the destination instantly. */
-export function makeReaction(reactions: readonly Reaction[], destinationId: Id | null = null): Reaction {
-  return { trigger: nextTrigger(reactions), actions: [{ type: 'NODE', navigation: 'NAVIGATE', destinationId, transition: { type: 'INSTANT' } }] };
+export function makeReaction(reactions: readonly Reaction[], destinationId: Id | null = null, navigation: Extract<PrototypeAction, { type: 'NODE' }>['navigation'] = 'NAVIGATE'): Reaction {
+  return { trigger: nextTrigger(reactions), actions: [{ type: 'NODE', navigation, destinationId, transition: { type: 'INSTANT' } }] };
 }
 
 export const actionKind = (action: PrototypeAction): ActionKind => (action.type === 'NODE' ? action.navigation : action.type);
@@ -237,6 +262,11 @@ function pageOf(store: DocumentStore, id: Id): Id | null {
  * other actions with a destination, the other top-level frames on its page.
  */
 export function destinationCandidates(store: DocumentStore, hotspotId: Id, kind: ActionKind): Id[] {
+  if (kind === 'CHANGE_TO') {
+    // Change to: the variants of the component set the hotspot's variant (or instance) belongs to.
+    const setId = variantSetOf(store, hotspotId);
+    return setId ? variantsOf(store, setId).map((variant) => variant.id) : [];
+  }
   const own = topLevelFrame(store, hotspotId);
   if (kind === 'SCROLL_TO') {
     if (!own) return [];

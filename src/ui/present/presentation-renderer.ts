@@ -22,6 +22,7 @@ import type { Rect } from '@/core/math/rect';
 import type { DocumentStore } from '@/core/document/store';
 import type { PresentedScene } from '@/core/prototype/presentation';
 import { smartAnimateStore } from '@/core/prototype/smart-animate';
+import type { RuntimeDocument } from '@/editor/prototype-runtime';
 import { topLevelFrame } from '@/core/prototype/reactions';
 import { scrolledFrameStore } from '@/core/prototype/scroll';
 import type { Vec2 } from '@/core/math/vec';
@@ -51,6 +52,22 @@ export class PresentationRenderer {
   private readonly frames = new Map<string, CkImage | null>();
   /** The last image of each frame with scrolled content, and the scroll it shows. */
   private readonly scrolled = new Map<Id, { readonly key: string; readonly image: CkImage | null }>();
+  /** The document interactive components switched variants in, drawn instead of the editor's; null for the editor's. */
+  private runtime: RuntimeDocument | null = null;
+
+  private get doc(): DocumentStore {
+    return this.runtime?.doc ?? this.editor.doc;
+  }
+
+  private get index(): SceneIndex {
+    return this.runtime?.index ?? this.editor.scene;
+  }
+
+  /** Draws another document from now on (null for the editor's own). */
+  setDocument(runtime: RuntimeDocument | null): void {
+    this.runtime = runtime;
+    this.invalidate();
+  }
   private size = { width: 0, height: 0, dpr: 1 };
   private disposed = false;
   private readonly cleanups: (() => void)[] = [];
@@ -162,20 +179,20 @@ export class PresentationRenderer {
     if (!this.ck || !this.renderer) return null;
     const key = `${frameId}:${scale.toFixed(4)}:${this.size.dpr}`;
     if (this.frames.has(key)) return this.frames.get(key)!;
-    const image = this.renderFrame(this.editor.doc, this.editor.scene, frameId, scale);
+    const image = this.renderFrame(this.doc, this.index, frameId, scale);
     this.frames.set(key, image);
     return image;
   }
 
   /** A frame with its scrolling frames scrolled; null when none of them is scrolled (the cached image applies). */
   private scrolledFrameImage(frameId: Id, scale: number, scroll: ReadonlyMap<Id, Vec2>): CkImage | null {
-    const own = [...scroll].filter(([id, offset]) => (offset.x !== 0 || offset.y !== 0) && topLevelFrame(this.editor.doc, id) === frameId);
+    const own = [...scroll].filter(([id, offset]) => (offset.x !== 0 || offset.y !== 0) && topLevelFrame(this.doc, id) === frameId);
     if (own.length === 0 || !this.ck || !this.renderer) return null;
     const key = `${scale.toFixed(4)}:${this.size.dpr}:${own.map(([id, offset]) => `${id}=${offset.x},${offset.y}`).join(';')}`;
     const cached = this.scrolled.get(frameId);
     if (cached?.key === key) return cached.image;
     cached?.image?.delete();
-    const store = scrolledFrameStore(this.editor.doc, frameId, scroll);
+    const store = scrolledFrameStore(this.doc, frameId, scroll);
     const index = new SceneIndex(store);
     index.ensure(this.editor.pageId);
     const image = this.renderFrame(store, index, frameId, scale);
@@ -186,7 +203,7 @@ export class PresentationRenderer {
   /** The destination of a smart animate transition, `progress` of the way from the frame left (not cached). */
   private smartFrameImage(fromFrame: Id, toFrame: Id, progress: number, scale: number): CkImage | null {
     if (!this.ck || !this.renderer) return null;
-    const store = smartAnimateStore(this.editor.doc, fromFrame, toFrame, progress);
+    const store = smartAnimateStore(this.doc, fromFrame, toFrame, progress);
     const index = new SceneIndex(store);
     index.ensure(this.editor.pageId);
     return this.renderFrame(store, index, toFrame, scale);
