@@ -23,7 +23,8 @@ import type { SceneIndex } from '../scene/scene-index';
 import type { Color, PrototypeTransition, SceneNode, Size } from '../schema/document';
 import { overlayOrigin, overlaySettings } from './flows';
 import { canSmartAnimate } from './smart-animate';
-import type { PlayerEffect, PlayerState } from './player';
+import type { OverlayAnchor, PlayerEffect, PlayerState } from './player';
+import { topLevelFrame } from './reactions';
 
 /** How presentation view scales the screen to the window. */
 export type ScalingMode = 'ACTUAL' | 'FIT_WIDTH' | 'FIT' | 'FILL';
@@ -159,6 +160,33 @@ export interface PresentedScene {
   readonly clip?: { readonly rect: Rect; readonly radius: number };
 }
 
+/** A layer's top-left in its top-level frame (in the frame's units, leaving rotation aside), with that frame. */
+export function positionInFrame(store: DocumentStore, nodeId: Id): { readonly frameId: Id; readonly x: number; readonly y: number } | null {
+  const frameId = topLevelFrame(store, nodeId);
+  if (!frameId) return null;
+  let x = 0;
+  let y = 0;
+  for (let id: Id | null = nodeId; id !== null && id !== frameId; id = store.parentOf(id)) {
+    const node = store.get(id) as SceneNode | undefined;
+    if (!node || !('transform' in node)) return null;
+    x += node.transform[4];
+    y += node.transform[5];
+  }
+  return { frameId, x, y };
+}
+
+/**
+ * A manually positioned overlay's top-left in window pixels: its offset from the hotspot that opened it, where that
+ * hotspot shows (on the screen, or in an overlay placed before it). Null when the hotspot isn't shown.
+ */
+function manualOverlayOrigin(store: DocumentStore, anchor: OverlayAnchor | undefined, placed: ReadonlyMap<Id, Vec2>, scale: number): Vec2 | null {
+  if (!anchor) return null;
+  const at = positionInFrame(store, anchor.hotspotId);
+  const base = at ? placed.get(at.frameId) : undefined;
+  if (!at || !base) return null;
+  return { x: base.x + (at.x + anchor.offset.x) * scale, y: base.y + (at.y + anchor.offset.y) * scale };
+}
+
 const sizeOf = (store: DocumentStore, id: Id): Size => (store.get(id) as SceneNode | undefined)?.size ?? { width: 0, height: 0 };
 
 /**
@@ -210,14 +238,18 @@ export function composeScene(store: DocumentStore, state: PlayerState, viewport:
   }
 
   const overlayTransition = playing?.effect.overlay ? playing : null;
+  // Where the screen and each overlay drawn so far sit: manually positioned overlays follow hotspots in them.
+  const placed = new Map<Id, Vec2>([[state.frameId, { x, y }]]);
   for (const overlayId of state.overlays) {
     const node = store.get(overlayId) as SceneNode | undefined;
     if (!node) continue;
     const settings = overlaySettings(node);
     const size = { width: node.size.width * scale, height: node.size.height * scale };
+    const manual = settings.position === 'MANUAL' ? manualOverlayOrigin(store, state.overlayAnchors?.[overlayId], placed, scale) : null;
     const origin = overlayOrigin(settings.position, inView, size);
-    const left = x + origin.x;
-    const upper = top + origin.y;
+    const left = manual ? manual.x : x + origin.x;
+    const upper = manual ? manual.y : top + origin.y;
+    placed.set(overlayId, { x: left, y: upper });
     const animating = overlayTransition?.effect.to === overlayId ? overlayTransition : null;
     const offsets = animating ? transitionOffsets(animating.effect.transition, animating.progress, size) : null;
     if (settings.background) {

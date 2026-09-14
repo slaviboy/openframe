@@ -248,6 +248,27 @@ function ActionFields({ editor, hotspotId, action, suffix, onChange, onRemove }:
               <option value={action.destinationId}>{editor.doc.get(action.destinationId)!.name}</option>
             )}
           </select>
+          {(action.navigation === 'OVERLAY' || action.navigation === 'SWAP') && action.destinationId && overlaySettings(editor.doc.get(action.destinationId) as SceneNode | undefined).position === 'MANUAL' && (
+            <>
+              <p className={inspector.hint}>The overlay is positioned manually: its top-left, relative to this layer&apos;s top-left.</p>
+              <div className={styles.grid}>
+                <CommitNumber
+                  label={`Overlay X${suffix}`}
+                  value={action.overlayRelativePosition?.x ?? 0}
+                  min={-100_000}
+                  max={100_000}
+                  onCommit={(x) => onChange({ ...action, overlayRelativePosition: { x, y: action.overlayRelativePosition?.y ?? 0 } })}
+                />
+                <CommitNumber
+                  label={`Overlay Y${suffix}`}
+                  value={action.overlayRelativePosition?.y ?? 0}
+                  min={-100_000}
+                  max={100_000}
+                  onCommit={(y) => onChange({ ...action, overlayRelativePosition: { x: action.overlayRelativePosition?.x ?? 0, y } })}
+                />
+              </div>
+            </>
+          )}
           <TransitionFields transition={action.transition} suffix={suffix} scroll={action.navigation === 'SCROLL_TO'} onChange={(transition) => onChange({ ...action, transition })} />
           {action.navigation !== 'SCROLL_TO' && (
             <label className={inspector.checkbox}>
@@ -830,6 +851,7 @@ function OverlaySection({ node }: { node: SceneNode }) {
             </option>
           ))}
         </select>
+        {settings.position === 'MANUAL' && <p className={inspector.hint}>Each interaction that opens this overlay sets where it shows, relative to the layer it is on.</p>}
         <label className={inspector.checkbox}>
           <input type="checkbox" checked={settings.closeOnClickOutside} onChange={(e) => change({ closeOnClickOutside: e.target.checked })} />
           Close when clicking outside

@@ -158,6 +158,8 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
   const [videoLabel, setVideoLabel] = useState('');
   /** How many animated GIFs of the frames shown are playing (shown on the stage for tests). */
   const [gifLabel, setGifLabel] = useState('0');
+  /** Where the overlays shown sit, as "name:x,y" relative to the screen's top-left in its units (shown on the stage for tests). */
+  const [overlayOriginLabel, setOverlayOriginLabel] = useState('');
   const closeMenu = () => setMenuAnchor(null);
 
   // Mutable playback state the draw loop and input handlers share.
@@ -187,6 +189,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     variableLabel: '',
     videoLabel: '',
     gifLabel: '0',
+    overlayOriginLabel: '',
     deviceScaling: null as ScalingMode | null,
     frame: 0,
     box: '',
@@ -378,6 +381,17 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
       }
       const scene = composeScene(doc, current, state.viewport, state.deviceScaling ?? state.scaling, state.scrollY, playing, deviceScreenIn(state.device, state.viewport));
       state.scene = scene;
+      const origins = scene.items
+        .flatMap((item) =>
+          item.kind === 'frame' && current.overlays.includes(item.frameId)
+            ? [`${doc.get(item.frameId)?.name ?? item.frameId}:${Math.round((item.x - scene.screen.x) / scene.screen.scale)},${Math.round((item.y - scene.screen.y) / scene.screen.scale)}`]
+            : [],
+        )
+        .join(';');
+      if (origins !== state.overlayOriginLabel) {
+        state.overlayOriginLabel = origins;
+        setOverlayOriginLabel(origins);
+      }
       // The videos of the frames shown play, and the view keeps drawing while they do.
       const videos = state.renderer.syncVideos(shownFrames(current));
       state.renderer.draw(scene, background, now < state.hintsUntil ? state.hintRects : [], state.frameScroll);
@@ -729,6 +743,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
           data-variables={variableLabel}
           data-videos={videoLabel}
           data-animated-gifs={gifLabel}
+          data-overlay-origins={overlayOriginLabel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

@@ -170,6 +170,8 @@ export const PrototypeActionSchema: z.ZodType<PrototypeAction> = z.union([
     resetScrollPosition: z.boolean().optional(),
     /** State management: restart the destination's videos from the beginning, in their original play state. */
     resetVideoPosition: z.boolean().optional(),
+    /** Open or swap an overlay positioned manually: the overlay's top-left relative to the hotspot's top-left. */
+    overlayRelativePosition: z.object({ x: z.number().finite(), y: z.number().finite() }).optional(),
   }),
   z.object({ type: z.enum(['BACK', 'CLOSE']) }),
   z.object({ type: z.literal('URL'), url: z.string().max(4096) }),
@@ -182,6 +184,7 @@ export type PrototypeAction =
       transition: PrototypeTransition;
       resetScrollPosition?: boolean | undefined;
       resetVideoPosition?: boolean | undefined;
+      overlayRelativePosition?: { x: number; y: number } | undefined;
     }
   | { type: 'BACK' | 'CLOSE' }
   | { type: 'URL'; url: string }
@@ -208,7 +211,8 @@ export type FlowStartingPoint = z.infer<typeof FlowStartingPointSchema>;
 
 /** How a frame shows when an interaction opens it as an overlay (set on the overlay, not the connection). */
 export const OverlaySettingsSchema = z.object({
-  position: z.enum(['CENTER', 'TOP_LEFT', 'TOP_CENTER', 'TOP_RIGHT', 'BOTTOM_LEFT', 'BOTTOM_CENTER', 'BOTTOM_RIGHT']),
+  /** MANUAL: where each interaction opening the overlay places it, relative to the layer it is on. */
+  position: z.enum(['CENTER', 'TOP_LEFT', 'TOP_CENTER', 'TOP_RIGHT', 'BOTTOM_LEFT', 'BOTTOM_CENTER', 'BOTTOM_RIGHT', 'MANUAL']),
   /** Close when clicking outside the overlay. */
   closeOnClickOutside: z.boolean(),
   /** The background added behind the overlay (its alpha is the opacity); null for none. */

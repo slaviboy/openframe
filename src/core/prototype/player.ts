@@ -38,10 +38,18 @@ export interface PlayerState {
   readonly overlays: readonly Id[];
   /** Sections as destinations: the frame of each section visited last, by section id. */
   readonly sectionVisits?: Readonly<Record<Id, Id>> | undefined;
+  /** Overlays positioned manually: the hotspot each was opened from, and the overlay's offset from it. */
+  readonly overlayAnchors?: Readonly<Record<Id, OverlayAnchor>> | undefined;
   /** Variables set and modes switched by interactions while playing. Absent until one is. */
   readonly variables?: PrototypeVariables;
   /** While hovering or pressing: the state to return to when the pointer leaves the hotspot or is released. */
   readonly temporary: { readonly nodeId: Id; readonly trigger: 'ON_HOVER' | 'ON_PRESS'; readonly restore: PlayerState } | null;
+}
+
+/** Where a manually positioned overlay sits: `offset` from the top-left of the hotspot that opened it. */
+export interface OverlayAnchor {
+  readonly hotspotId: Id;
+  readonly offset: Vec2;
 }
 
 export type PlayerEffect =
@@ -263,15 +271,18 @@ function runAction(store: DocumentStore, state: PlayerState, action: PrototypeAc
       if (!frame) return state;
       // State management: the destination's scroll position, and its videos, start over.
       const reset = { ...(action.resetScrollPosition ? { resetScroll: true } : {}), ...(action.resetVideoPosition ? { resetVideo: true } : {}) };
+      // An overlay positioned manually sits relative to the hotspot that opened it.
+      const anchors = (overlayId: Id) =>
+        sceneNode(store, overlayId)?.overlay?.position === 'MANUAL' && hotspotId ? { ...state.overlayAnchors, [overlayId]: { hotspotId, offset: action.overlayRelativePosition ?? { x: 0, y: 0 } } } : state.overlayAnchors;
       if (action.navigation === 'OVERLAY') {
         if (state.overlays.includes(frame) || frame === state.frameId) return state;
         effects.push({ type: 'transition', from: null, to: frame, overlay: true, transition: action.transition, ...reset });
-        return { ...state, overlays: [...state.overlays, frame] };
+        return { ...state, overlays: [...state.overlays, frame], overlayAnchors: anchors(frame) };
       }
       if (action.navigation === 'SWAP' && state.overlays.length > 0) {
         // The new overlay replaces the top one; swaps aren't recorded in the history.
         effects.push({ type: 'transition', from: state.overlays.at(-1)!, to: frame, overlay: true, transition: action.transition, ...reset });
-        return { ...state, overlays: [...state.overlays.slice(0, -1), frame] };
+        return { ...state, overlays: [...state.overlays.slice(0, -1), frame], overlayAnchors: anchors(frame) };
       }
       if (frame === state.frameId && state.overlays.length === 0) return state;
       effects.push({ type: 'transition', from: state.frameId, to: frame, overlay: false, transition: action.transition, ...reset });

@@ -131,9 +131,15 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - `FlowDescription` (src/ui/present) renders it
     - `DescriptionEditor` in PrototypePanel.tsx is the Description panel
 
+  - Manual overlay positions (the commit after flow descriptions):
+    - the `MANUAL` overlay position and `overlayRelativePosition` on Open/Swap overlay actions
+    - `overlayAnchors` in PlayerState
+    - `positionInFrame` / `manualOverlayOrigin` in presentation.ts
+    - the stage shows `data-overlay-origins`
+
 ## In progress (uncommitted)
 
-1. **Manual overlay positions, accessible prototypes, gamepad triggers.**
+1. **Accessible prototypes, gamepad triggers.**
 
 ## Next (M10, in order)
 

@@ -33,6 +33,7 @@ export const OVERLAY_POSITION_LABELS: Readonly<Record<OverlaySettings['position'
   BOTTOM_LEFT: 'Bottom left',
   BOTTOM_CENTER: 'Bottom center',
   BOTTOM_RIGHT: 'Bottom right',
+  MANUAL: 'Manual',
 };
 
 /** The page's flows whose starting points are still top-level frames on it. */
