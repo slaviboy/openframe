@@ -611,14 +611,16 @@ export const PageNodeSchema = z.object({
   /** Prototype flows on the page: their starting points, in order. Absent when the page has none. */
   flowStartingPoints: z.array(FlowStartingPointSchema).max(256).optional(),
   /**
-   * The device prototypes on the page play in: a device preset (by id) in portrait or landscape (`CCW_90`), a custom
-   * size that fits the window, or the full presentation. Absent means no device.
+   * The device prototypes on the page play in: a device preset (by id) in portrait or landscape (`CCW_90`), with its
+   * model (the color of its body, black when absent), a custom size that fits the window, or the full presentation.
+   * Absent means no device.
    */
   prototypeDevice: z
     .object({
       type: z.enum(['PRESET', 'CUSTOM', 'PRESENTATION', 'NONE']),
       presetId: z.string().max(100).optional(),
       rotation: z.enum(['NONE', 'CCW_90']),
+      model: z.enum(['BLACK', 'SILVER', 'GOLD', 'BLUE']).optional(),
     })
     .optional(),
   /** The color behind prototypes on the page in presentation view. Absent means the page's canvas color. */

@@ -75,7 +75,7 @@ import {
 import type { DocumentStore } from '@/core/document/store';
 import { canonicalStringify } from '@/core/serialize/serialize';
 import { DEVICE_CATEGORIES, presetsIn } from '@/core/document/frame-presets';
-import { effectiveDevice } from '@/core/prototype/device';
+import { DEVICE_MODEL_LABELS, DEVICE_MODELS, effectiveDevice, type DeviceModel } from '@/core/prototype/device';
 import { parseExpression } from '@/core/prototype/expressions';
 import { collectionVariables, isVariableCollection, localCollections } from '@/core/variables/document';
 import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
@@ -767,7 +767,7 @@ function PrototypeSettingsSection() {
               const next = e.target.value;
               // None is stored too, so a matching frame preset doesn't pick a device again.
               if (next === 'NONE' || next === 'CUSTOM' || next === 'PRESENTATION') setPrototypeDevice(editor, pageId, { type: next, rotation: 'NONE' });
-              else setPrototypeDevice(editor, pageId, { type: 'PRESET', presetId: next, rotation });
+              else setPrototypeDevice(editor, pageId, { type: 'PRESET', presetId: next, rotation, ...(device.kind === 'PRESET' ? { model: device.model } : {}) });
             }}
           >
             <option value="NONE">None</option>
@@ -785,19 +785,37 @@ function PrototypeSettingsSection() {
           </select>
         </label>
         {device.kind === 'PRESET' && (
-          <label className={styles.field}>
-            <span className={styles.fieldLabel}>Orientation</span>
-            <select
-              className={primitives.select}
-              aria-label="Orientation"
-              value={rotation}
-              onKeyDown={stopKeys}
-              onChange={(e) => setPrototypeDevice(editor, pageId, { type: 'PRESET', presetId: device.preset.id, rotation: e.target.value as 'NONE' | 'CCW_90' })}
-            >
-              <option value="NONE">Portrait</option>
-              <option value="CCW_90">Landscape</option>
-            </select>
-          </label>
+          <>
+            <label className={styles.field}>
+              <span className={styles.fieldLabel}>Orientation</span>
+              <select
+                className={primitives.select}
+                aria-label="Orientation"
+                value={rotation}
+                onKeyDown={stopKeys}
+                onChange={(e) => setPrototypeDevice(editor, pageId, { type: 'PRESET', presetId: device.preset.id, rotation: e.target.value as 'NONE' | 'CCW_90', model: device.model })}
+              >
+                <option value="NONE">Portrait</option>
+                <option value="CCW_90">Landscape</option>
+              </select>
+            </label>
+            <label className={styles.field}>
+              <span className={styles.fieldLabel}>Model</span>
+              <select
+                className={primitives.select}
+                aria-label="Model"
+                value={device.model}
+                onKeyDown={stopKeys}
+                onChange={(e) => setPrototypeDevice(editor, pageId, { type: 'PRESET', presetId: device.preset.id, rotation, model: e.target.value as DeviceModel })}
+              >
+                {DEVICE_MODELS.map((model) => (
+                  <option key={model} value={model}>
+                    {DEVICE_MODEL_LABELS[model]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
         )}
         <label className={styles.field}>
           <span className={styles.fieldLabel}>Background</span>

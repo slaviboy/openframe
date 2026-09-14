@@ -235,10 +235,21 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - `frameSizes` in `RuntimeChanges`: `buildRuntime` sets the frames' sizes in its scratch editor, whose constraints and auto layout finalizers lay the layers out
     - PresentationView's `responsiveRef` rebuilds the runtime when the stage, the screen, the scaling or the device changes (keyed by frame and size); restart clears the key
     - a `useEffect` on `runtime` schedules a draw: a draw asked for while a new runtime was being set still used the old `doc` (Chromium and Firefox showed the unscaled frame)
+  - Device models (the commit after Responsive scaling):
+    - `model` on the page's `prototypeDevice` (Black, Silver, Gold, Blue) and on the resolved preset device (`effectiveDevice`, black by default)
+    - `DEVICE_MODELS`, `DEVICE_MODEL_LABELS` and `deviceBodyColors` in `src/core/prototype/device.ts`; `DeviceScreen` and the scene's device item carry `bodyColor` / `edgeColor`, which the renderer paints
+    - the Model select in Prototype settings; the stage's `data-device-model` is for tests
+    - gate reruns with files both staged and unstaged: `git stash` would disturb the staged part, so save `git diff` to a patch, `git checkout --` those paths (the index stays), rerun, then `git apply` the patch
 
 ## In progress (uncommitted)
 
-1. **The smaller pending sub-items in the M10 rows** (see Next).
+1. **The device switcher (rows 240 and 242): written, not committed.** The code is in the working tree:
+   - `src/core/prototype/device.ts`: `DeviceFit`, `DEVICE_FITS`, `DEVICE_FIT_LABELS`, and `deviceLayout(device, viewport, margin, { fit, frame })` (Fit device on screen, Zoom device to fill screen, Show device at 100%; without the frame, no bezel)
+   - `src/core/prototype/presentation.ts` and `src/ui/present/presentation-renderer.ts`: `frame` on `DeviceScreen` and on the scene's device item; the body is painted only while the frame shows
+   - `src/ui/present/PresentationView.tsx`: session-only `deviceChoice`, `deviceFit` and `deviceFrame` (the file keeps its device); `shownPreset` and `shownDevice`; `devicePreset` in live state; the Switch device footer menu (similar devices, the fits, Show device frame); Z moves through the fits; `data-device-fit` and `data-device-frame`
+   - tests: `src/core/prototype/device.test.ts` (fit, fill, 100%, bare screen), `src/core/prototype/presentation.test.ts` (`frame` flag), `e2e/presentation-device-switcher.spec.ts` (new, untracked)
+   - status: typecheck passed before the last rework, and lint then warned that `device` changed every render; the rework keeps `device` as the page's device and the switcher's choice in `shownPreset`. **Nothing has been run since the rework**: run `npm run check`, then the device specs in all three browsers (`e2e/presentation-device-switcher.spec.ts`, `e2e/prototype-device.spec.ts`), then the full gate
+   - then: rows 240 (device frames) and 242 (the device switcher) in the matrix, this list, and a commit
 
 ## Next (M10, in order)
 
@@ -247,7 +258,51 @@ This file is how work continues after a pause (for example, a usage limit). Read
    - 200 Interactive components: the Variant interactions section, animating Change to
    - 239 Variables: extended collections' modes, library variables, variable picker in expressions
    - 240 Presentation view: device frames, comments, sharing links
-   - 242 Device settings: device models and the device switcher
+   - 242 Device settings: the device switcher
    - 244 Accessible prototypes: the Accessibility settings dialog
 
 **Stop after M10.** When every M10 row is finished and committed, stop and report to the user. Don't start M11 until the user says to continue. After that, M11–M15 follow `docs/FEATURE_MATRIX.md` (the rows marked Planned or In progress) in milestone order.
+
+## What's left, by milestone
+
+To continue in a new session, tell the assistant: *Read `docs/HANDOFF.md`, check `git status` and `git log --oneline -15`, then continue with "In progress (uncommitted)" and the M10 list below. Stop after M10.* The rows are in `docs/FEATURE_MATRIX.md` (Milestone and Status columns).
+
+**M10 (prototyping): rows still In progress**
+- 160 Video / GIF fills: video crop; adding a video from the fill picker; a GIF label next to the dimensions; GIF metadata on export
+- 200 Interactive components: the Variant interactions section; animating Change to (it is instant)
+- 239 Variables in prototypes: modes of extended collections; a variable picker in expressions; library variables (needs accounts and a server: record as not possible offline)
+- 240 Presentation view: device frames (Show device frame and device scaling, in the uncommitted switcher above); comments and sharing links, including the Hide UI link (not possible offline: record as such)
+- 242 Device settings: the device switcher (uncommitted, above)
+- 244 Accessible prototypes: the Accessibility settings dialog
+
+**M11 (Draw mode): all Planned**
+- Mode switcher Draw / Design / Motion / Dev (⇧D), shared with M12 and M13
+- Draw mode UI: its toolbar, streamlined sliders, large layer thumbnails
+- Pencil and brush tools with a secondary toolbar; ⌘-click samples a stroke
+- Brushes with dynamic strokes (frequency, wiggle, smoothen); custom stretch and scatter brushes
+- Text on a path
+- Transforms: radial and linear repeat, apply transforms
+
+**M12 (Motion mode)**
+- Timeline panel: play (Space), auto-keyframe, current time, duration (2000 ms by default), ms/s, loop, once or ping-pong
+- Ruler, playhead and zoom; layer tracks (selected and component colors); scaling and moving tracks
+- Keyframes: add, select, move (⇧ snaps), delete, and the diamond buttons in the inspector
+- Easing presets, hold, custom bezier, springs, saving as variables (In progress: the easing and spring solvers from M10 are shared)
+- Variable types for Motion: timing and easing (the M8 / M12 row, In progress)
+- Preset animation styles (e.g. spin) and composite styles
+- Motion path editing; path trim animation; anchor point (⌥R)
+- Animated components
+- Animated export: MP4, WebM, GIF, SVG (fps, size, quality, loop), marked Browser limitation in the matrix
+
+**M13 (Dev Mode): Planned, except copy as code**
+- Dev Mode toggle (⇧D), the left sidebar (ready for dev, pages with badges, layers), frame pager
+- Inspect panel: header, status, box model, List / Code, layout and style code blocks, colors, typography, styles
+- Code generation: CSS (px / rem), SwiftUI, UIKit (px / pt), Compose, Android XML (px / dp / sp); unit scale
+- Copy as code (Copy as PNG and SVG are done, in M9)
+- Redlines on hover and ⌥-hover; saved measurements (⇧M)
+- Annotations (⇧T): categories, live properties, filter
+- Statuses: ready for dev, completed, changed (automatic); the ready-for-dev view and focus view
+- Compare changes: side by side, overlay, property and code diff
+- Variables in Dev Mode (details, suggested variables, variables table)
+- Assets section (automatic icon detection, downloads) and export; dev resources (links on layers)
+- Component playground; animation handoff code (CSS / React / JSON)

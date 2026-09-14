@@ -35,6 +35,11 @@ test('prototype settings: a frame preset picks its device, which can be changed 
   await settings.getByRole('combobox', { name: 'Device' }).selectOption({ label: 'iPhone 16 Pro' });
   await settings.getByLabel('Prototype background').fill('#336699');
   await expect(settings.getByRole('combobox', { name: 'Device' })).toHaveValue('phone-iphone-16-pro');
+  // Its model is the color of the device's body.
+  const model = settings.getByRole('combobox', { name: 'Model' });
+  await expect(model).toHaveValue('BLACK');
+  await model.selectOption({ label: 'Gold' });
+  await expect(model).toHaveValue('GOLD');
   await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
 
   const popup = page.waitForEvent('popup');
@@ -43,6 +48,7 @@ test('prototype settings: a frame preset picks its device, which can be changed 
   const stage = present.getByTestId('presentation');
   await expect(stage).toHaveAttribute('data-ready', 'true');
   await expect(stage).toHaveAttribute('data-device', 'iPhone 16 Pro');
+  await expect(stage).toHaveAttribute('data-device-model', 'GOLD');
   // The screen fills the device's width: the frame shows at the device screen's proportions.
   const screen = (await present.getByTestId('presentation-screen').boundingBox())!;
   expect(screen.width / screen.height).toBeCloseTo(393 / 852, 1);
@@ -51,4 +57,5 @@ test('prototype settings: a frame preset picks its device, which can be changed 
   // Custom size shows no device.
   await settings.getByRole('combobox', { name: 'Device' }).selectOption({ label: 'Custom size (Fit)' });
   await expect(settings.getByRole('combobox', { name: 'Orientation' })).toHaveCount(0);
+  await expect(settings.getByRole('combobox', { name: 'Model' })).toHaveCount(0);
 });

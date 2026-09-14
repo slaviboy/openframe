@@ -108,11 +108,13 @@ describe('presentation layout', () => {
   });
 
   test('in a device, the screen fills the device screen and everything is clipped to it', () => {
-    const device = { name: 'Phone', body: { x: 90, y: 40, width: 220, height: 420 }, bodyRadius: 30, screen: { x: 100, y: 50, width: 200, height: 400 }, screenRadius: 20 };
+    const black = { r: 0, g: 0, b: 0, a: 1 };
+    const grey = { r: 0.5, g: 0.5, b: 0.5, a: 1 };
+    const device = { name: 'Phone', body: { x: 90, y: 40, width: 220, height: 420 }, bodyRadius: 30, screen: { x: 100, y: 50, width: 200, height: 400 }, screenRadius: 20, bodyColor: black, edgeColor: grey };
     const scene = composeScene(store, state(), { width: 400, height: 500 }, 'ACTUAL', 0, null, device);
     // Home is 400 × 300: at the device's 200 width it scales to 0.5 (200 × 150), centered in the 400-tall screen.
     expect(scene.screen).toEqual({ x: 100, y: 175, width: 200, height: 150, scale: 0.5 });
-    expect(scene.items[0]).toEqual({ kind: 'device', body: device.body, bodyRadius: 30, screen: device.screen, screenRadius: 20 });
+    expect(scene.items[0]).toEqual({ kind: 'device', body: device.body, bodyRadius: 30, screen: device.screen, screenRadius: 20, bodyColor: black, edgeColor: grey });
     expect(scene.items[1]).toMatchObject({ kind: 'frame', frameId: 'home', x: 100, y: 175, scale: 0.5 });
     expect(scene.clip).toEqual({ rect: device.screen, radius: 20 });
     expect(frameAtPoint(scene, state(), { x: 110, y: 185 })).toEqual({ frameId: 'home', local: { x: 20, y: 20 } });

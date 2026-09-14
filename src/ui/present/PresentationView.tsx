@@ -43,14 +43,18 @@ import {
 import { DRAG_FINISH_AT, dragDirection, dragProgress } from '@/core/prototype/drag-transition';
 import { sharedVariants, sharedVideos } from '@/core/prototype/state-sharing';
 import { composeScene, frameAtPoint, layerRects, responsiveSize, SCALING_LABELS, SCALING_MODES, screenArea, scrollOffsetOf, type DeviceScreen, type PresentedScene, type ScalingMode } from '@/core/prototype/presentation';
-import { deviceLayout, deviceOuterSize, deviceScreenSize, effectiveDevice, type PrototypeDevice } from '@/core/prototype/device';
+import { deviceBodyColors, deviceLayout, deviceOuterSize, deviceScreenSize, effectiveDevice, type PrototypeDevice } from '@/core/prototype/device';
 import { MOBILE_DEVICE_CATEGORIES } from '@/core/document/frame-presets';
 import type { Size } from '@/core/schema/document';
 
 type DevicePreset = Extract<PrototypeDevice, { kind: 'PRESET' }>;
 
 /** The device laid out in the window, if the prototype plays in one. */
-const deviceScreenIn = (device: DevicePreset | null, viewport: Size): DeviceScreen | null => (device ? { name: device.preset.name, ...deviceLayout(device, viewport) } : null);
+const deviceScreenIn = (device: DevicePreset | null, viewport: Size): DeviceScreen | null => {
+  if (!device) return null;
+  const colors = deviceBodyColors(device.model);
+  return { name: device.preset.name, ...deviceLayout(device, viewport), bodyColor: colors.body, edgeColor: colors.edge };
+};
 
 /** How far a screen of `size` scrolls in the window or its device. */
 function screenScrollLimit(state: { readonly viewport: Size; readonly scaling: ScalingMode; readonly deviceScaling: ScalingMode | null; readonly device: DevicePreset | null }, size: Size): number {
@@ -983,6 +987,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
           data-overlays={player ? player.overlays.map(nameOf).join(',') : undefined}
           data-scroll={scrollLabel}
           data-device={device?.preset.name}
+          data-device-model={device?.model}
           data-variants={variantLabel}
           data-variables={variableLabel}
           data-videos={videoLabel}

@@ -21,7 +21,7 @@ import { presetById } from '../document/frame-presets';
 import type { DocumentStore } from '../document/store';
 import { History } from '../history/history';
 import { IdGenerator } from '../ids/ids';
-import { deviceLayout, deviceOuterSize, deviceScreenSize, effectiveDevice } from './device';
+import { DEVICE_MODELS, deviceBodyColors, deviceLayout, deviceOuterSize, deviceScreenSize, effectiveDevice } from './device';
 
 let store: DocumentStore;
 let page: string;
@@ -57,7 +57,7 @@ describe('prototype device', () => {
   });
 
   test('the device fits in the window with its screen inside the bezel', () => {
-    const device = { kind: 'PRESET', preset: presetById('phone-iphone-16')!, landscape: false, explicit: true } as const;
+    const device = { kind: 'PRESET', preset: presetById('phone-iphone-16')!, landscape: false, model: 'BLACK', explicit: true } as const;
     const layout = deviceLayout(device, { width: 1000, height: 1000 }, 50);
     expect(layout.body.height).toBeCloseTo(900);
     expect(layout.body.x).toBeCloseTo((1000 - layout.body.width) / 2);
@@ -77,5 +77,16 @@ describe('a device at 100%', () => {
     const layout = deviceLayout(device, { width: outer.width + 48, height: outer.height + 48 });
     expect(layout.screen.width).toBeCloseTo(852, 9);
     expect(layout.screen.height).toBeCloseTo(393, 9);
+  });
+});
+
+describe('device models', () => {
+  test('a preset device has a model, black unless the page setting names another, and each model colors the body', () => {
+    addFrame('phone', 393, 852);
+    expect(effectiveDevice(store, page)).toMatchObject({ kind: 'PRESET', model: 'BLACK' });
+    history.run('Device', (tx) => tx.set(page, 'prototypeDevice', { type: 'PRESET', presetId: 'phone-iphone-16-pro', rotation: 'NONE', model: 'GOLD' }));
+    expect(effectiveDevice(store, page)).toMatchObject({ kind: 'PRESET', preset: { name: 'iPhone 16 Pro' }, model: 'GOLD' });
+    const bodies = new Set(DEVICE_MODELS.map((model) => JSON.stringify(deviceBodyColors(model).body)));
+    expect(bodies.size).toBe(DEVICE_MODELS.length);
   });
 });

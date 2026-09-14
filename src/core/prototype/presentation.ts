@@ -145,7 +145,7 @@ export type PresentedItem =
   /** An overlay's background, over the screen. */
   | { readonly kind: 'dim'; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly color: Color }
   /** The device the prototype plays in: its body and its screen (window pixels, with corner radii). */
-  | { readonly kind: 'device'; readonly body: Rect; readonly bodyRadius: number; readonly screen: Rect; readonly screenRadius: number };
+  | { readonly kind: 'device'; readonly body: Rect; readonly bodyRadius: number; readonly screen: Rect; readonly screenRadius: number; readonly bodyColor: Color; readonly edgeColor: Color };
 
 /** A device laid out in the window: its name, body and screen. */
 export interface DeviceScreen {
@@ -154,6 +154,9 @@ export interface DeviceScreen {
   readonly bodyRadius: number;
   readonly screen: Rect;
   readonly screenRadius: number;
+  /** Its model's colors: the body, and the edge around it. */
+  readonly bodyColor: Color;
+  readonly edgeColor: Color;
 }
 
 /** The screen's scale and the area it shows in: the device's screen (the frame filling its width), or the window. */
@@ -284,7 +287,7 @@ export function composeScene(store: DocumentStore, state: PlayerState, viewport:
   const inScreen = items.map((item): PresentedItem => (item.kind === 'device' ? item : { ...item, x: item.x + ox, y: item.y + oy }));
   return {
     screen: { x: x + ox, y: y + oy, width, height, scale },
-    items: [{ kind: 'device', body: device.body, bodyRadius: device.bodyRadius, screen: device.screen, screenRadius: device.screenRadius }, ...inScreen],
+    items: [{ kind: 'device', body: device.body, bodyRadius: device.bodyRadius, screen: device.screen, screenRadius: device.screenRadius, bodyColor: device.bodyColor, edgeColor: device.edgeColor }, ...inScreen],
     clip: { rect: device.screen, radius: device.screenRadius },
   };
 }
