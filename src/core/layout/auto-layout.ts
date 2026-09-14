@@ -147,6 +147,8 @@ function layoutFrame(tx: Transaction, frameId: Id, layout: TextLayoutService | n
         horizontalSizing: axisAligned || h !== 'FILL' ? h : 'FIXED',
         verticalSizing: axisAligned || v !== 'FILL' ? v : 'FIXED',
         mainInset: padding ? (horizontal ? padding.left + padding.right : padding.top + padding.bottom) : 0,
+        // Text baseline alignment measures unrotated text layers' first baselines.
+        baseline: frame.counterAxisAlignItems === 'BASELINE' && child.type === 'TEXT' && axisAligned ? (layout?.firstBaseline?.(child) ?? undefined) : undefined,
         // Limits apply to the layer's own box, so rotated layers aren't limited.
         ...(axisAligned ? { minWidth: child.minWidth, maxWidth: child.maxWidth, minHeight: child.minHeight, maxHeight: child.maxHeight } : {}),
       };

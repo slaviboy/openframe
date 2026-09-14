@@ -105,4 +105,12 @@ describe('flow layout', () => {
     ]);
     expect(r.height).toBe(35);
   });
+
+  test('baseline alignment lines up text baselines; other items sit on their bottom edge', () => {
+    const r = layoutFlow(container({ counterAlign: 'BASELINE', verticalSizing: 'HUG' }), [item(20, 20, { baseline: 15 }), item(20, 40, { baseline: 30 }), item(20, 10)]);
+    expect(r.items.map((b) => b.y)).toEqual([15, 0, 20]);
+    expect(r.height).toBe(40);
+    // Vertical flows align to the start.
+    expect(layoutFlow(container({ direction: 'VERTICAL', counterAlign: 'BASELINE' }), [item(20, 20, { baseline: 15 })]).items[0]!.x).toBe(0);
+  });
 });

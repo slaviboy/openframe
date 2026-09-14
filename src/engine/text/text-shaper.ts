@@ -686,6 +686,13 @@ export class TextShaper implements TextLayoutService {
     return block;
   }
 
+  firstBaseline(node: TextNode): number | null {
+    const block = this.layout(node);
+    const first = block.paragraphs.find((p) => !p.hidden);
+    const line = first?.paragraph.getLineMetrics()[0];
+    return first && line ? round2(block.dy + first.top + line.baseline) : null;
+  }
+
   measure(node: TextNode, width: number | null): Size {
     const block = this.stack(node, width);
     deleteBlock(block);

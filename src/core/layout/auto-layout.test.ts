@@ -17,7 +17,8 @@
 
 import { describe, expect, test } from 'vitest';
 import { constraintsFinalizer } from '../document/constraints';
-import { BLACK, createEmptyDocument, keyOnTop, makeFrame, makeRectangle, solid } from '../document/factory';
+import { BLACK, createEmptyDocument, keyOnTop, makeFrame, makeRectangle, makeText, solid } from '../document/factory';
+import type { TextLayoutService } from '../text/text-layout';
 import { History } from '../history/history';
 import { IdGenerator } from '../ids/ids';
 import type { FrameNode, SceneNode } from '../schema/document';
@@ -198,5 +199,25 @@ describe('auto layout', () => {
     expect(node(kids[0]!).gridColumnSpan).toBeUndefined();
     expect(node<FrameNode>(frame)).toMatchObject({ layoutMode: 'HORIZONTAL', itemSpacing: 10 });
     expect(box(kids[2]!).x).toBe(120);
+  });
+
+  test('text baseline alignment uses the text layout service', () => {
+    const ids = new IdGenerator('b');
+    const store = createEmptyDocument({ name: 'D', now: 'n', appVersion: 't', ids });
+    const layout = { measure: (n: SceneNode) => n.size, firstBaseline: (n: { fontSize: number }) => n.fontSize * 0.8 } as unknown as TextLayoutService;
+    const history = new History<null>({ store, captureMeta: () => null, restoreMeta: () => undefined, finalizers: [createAutoLayoutFinalizer(() => layout)] });
+    const page = store.pages()[0]!;
+    const [frame, small, big, rect] = [ids.next(), ids.next(), ids.next(), ids.next()];
+    history.run('create', (tx) => {
+      tx.create({ ...makeFrame({ id: frame, parent: { id: page, key: keyOnTop(store, page) }, name: 'F', x: 0, y: 0, width: 10, height: 10 }), layoutMode: 'HORIZONTAL', layoutSizingHorizontal: 'HUG', layoutSizingVertical: 'HUG', counterAxisAlignItems: 'BASELINE' });
+      const text = (id: string, fontSize: number) => ({ ...makeText({ id, parent: { id: frame, key: keyOnTop(store, frame) }, name: id, x: 0, y: 0, width: 40, height: fontSize * 1.2 }), fontSize, textAutoResize: 'NONE' as const });
+      tx.create(text(small, 10));
+      tx.create(text(big, 30));
+      tx.create(makeRectangle({ id: rect, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'R', x: 0, y: 0, width: 10, height: 10 }));
+    });
+    const y = (id: string) => (store.getOrThrow(id) as SceneNode).transform[5];
+    // Baselines at 8 and 24: the small text moves down 16; the rectangle's bottom sits on the baseline.
+    expect([y(small), y(big), y(rect)]).toEqual([16, 0, 14]);
+    expect((store.getOrThrow(frame) as SceneNode).size.height).toBe(36);
   });
 });

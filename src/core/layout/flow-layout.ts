@@ -21,7 +21,8 @@ export type FlowDirection = 'HORIZONTAL' | 'VERTICAL';
 export type Sizing = 'FIXED' | 'HUG' | 'FILL';
 /** Distribution along the flow: packed to a side with a fixed gap, or an Auto gap (between, around, evenly). */
 export type PrimaryAlign = 'MIN' | 'CENTER' | 'MAX' | 'SPACE_BETWEEN' | 'SPACE_AROUND' | 'SPACE_EVENLY';
-export type CounterAlign = 'MIN' | 'CENTER' | 'MAX';
+/** Across the flow; `BASELINE` lines up text baselines in horizontal flows (start in vertical ones). */
+export type CounterAlign = 'MIN' | 'CENTER' | 'MAX' | 'BASELINE';
 
 export interface Padding {
   readonly top: number;
@@ -62,6 +63,8 @@ export interface FlowItem extends SizeLimits {
    * content area (border-box), so an item with more padding ends up that much larger.
    */
   readonly mainInset?: number | undefined;
+  /** Distance from the item's top to its first text baseline; items without text use their bottom edge. */
+  readonly baseline?: number | undefined;
   readonly horizontalSizing: Sizing;
   readonly verticalSizing: Sizing;
 }
@@ -178,7 +181,14 @@ export function layoutFlow(container: FlowContainer, items: readonly FlowItem[])
   innerMain = containerMain - padMainStart - padMainEnd;
 
   // Across the flow: each line is as thick as its tallest non-fill item (or its fill items when that's all it has).
+  const baselineAligned = horizontal && container.counterAlign === 'BASELINE';
+  const baselineOf = (i: number) => items[i]!.baseline ?? cross[i]!;
+  const topBaseline = (line: readonly number[]) => Math.max(0, ...line.map(baselineOf));
   const lineThickness = lines.map((line) => {
+    if (baselineAligned) {
+      const top = topBaseline(line);
+      return Math.max(0, ...line.map((i) => top - baselineOf(i) + cross[i]!));
+    }
     const fixed = line.filter((i) => crossSizing(items[i]!) !== 'FILL').map((i) => cross[i]!);
     return Math.max(0, ...(fixed.length > 0 ? fixed : line.map((i) => cross[i]!)));
   });
@@ -214,7 +224,7 @@ export function layoutFlow(container: FlowContainer, items: readonly FlowItem[])
     }
     let position = padMainStart + lead;
     for (const i of line) {
-      const offset = lineStart + alignOffset(thickness - cross[i]!, container.counterAlign);
+      const offset = lineStart + (baselineAligned ? topBaseline(line) - baselineOf(i) : alignOffset(thickness - cross[i]!, container.counterAlign));
       boxes[i] = horizontal
         ? { x: position, y: offset, width: main[i]!, height: cross[i]! }
         : { x: offset, y: position, width: cross[i]!, height: main[i]! };

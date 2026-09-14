@@ -45,6 +45,8 @@ export interface FontFamilyInfo {
 export interface TextLayoutService {
   /** The size the text needs: its natural size when `width` is null, else wrapped to `width`. */
   measure(node: TextNode, width: number | null): Size;
+  /** Distance from the layer's top to its first line's alphabetic baseline (after vertical alignment); null without lines. */
+  firstBaseline?(node: TextNode): number | null;
   /** The caret offset nearest to a point. */
   offsetAt(node: TextNode, point: Vec2): number;
   caretAt(node: TextNode, offset: number): TextCaretBox;

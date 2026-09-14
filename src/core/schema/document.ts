@@ -430,7 +430,7 @@ export const FrameNodeSchema = z.object({
   /** Packing along the flow, or an Auto gap (`SPACE_*`). Absent means start. */
   primaryAxisAlignItems: z.enum(['CENTER', 'MAX', 'SPACE_BETWEEN', 'SPACE_AROUND', 'SPACE_EVENLY']).optional(),
   /** Alignment across the flow. Absent means start. */
-  counterAxisAlignItems: z.enum(['CENTER', 'MAX']).optional(),
+  counterAxisAlignItems: z.enum(['CENTER', 'MAX', 'BASELINE']).optional(),
   /** Canvas stacking: the first child is drawn on top. Absent means the last child is on top. */
   itemReverseZIndex: z.literal(true).optional(),
   /** Inside strokes are excluded from the layout. Absent means they take up room like padding. */

@@ -261,6 +261,13 @@ export function AutoLayoutFields({ frames }: { frames: FrameNode[] }) {
       run(autoGap ? 'Fixed gap' : 'Auto gap', (tx, f) => tx.set(f.id, 'primaryAxisAlignItems', autoGap ? undefined : 'SPACE_BETWEEN'));
       return;
     }
+    if (key === 'b') {
+      e.preventDefault();
+      e.stopPropagation();
+      const on = counter !== 'BASELINE';
+      run(on ? 'Align text baselines' : 'Don’t align text baselines', (tx, f) => tx.set(f.id, 'counterAxisAlignItems', on ? 'BASELINE' : undefined));
+      return;
+    }
     const index = (value: string | undefined) => Math.max(0, (STEPS as readonly string[]).indexOf(value ?? 'MIN'));
     const primaryIndex = autoGap ? 0 : index(primary);
     const counterIndex = index(counter);
@@ -403,6 +410,19 @@ export function AutoLayoutFields({ frames }: { frames: FrameNode[] }) {
             <option value="INCLUDED">Included in layout</option>
             <option value="EXCLUDED">Excluded from layout</option>
           </select>
+          {horizontal && (
+            <label className={styles.checkbox}>
+              <input
+                type="checkbox"
+                checked={counter === 'BASELINE'}
+                onChange={(e) => {
+                  const on = e.target.checked;
+                  run(on ? 'Align text baselines' : 'Don’t align text baselines', (tx, f) => tx.set(f.id, 'counterAxisAlignItems', on ? 'BASELINE' : undefined));
+                }}
+              />
+              Text baseline alignment
+            </label>
+          )}
         </div>
       )}
     </>
