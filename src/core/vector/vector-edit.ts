@@ -68,6 +68,47 @@ export function deleteVertices(network: VectorNetwork, indices: readonly number[
   return { vertices: network.vertices.filter((_, i) => !removed.has(i)), segments, regions };
 }
 
+/** A segment traced from its end to its start. */
+const reversed = (s: VectorSegment): VectorSegment => ({ start: s.end, end: s.start, tangentStart: s.tangentEnd, tangentEnd: s.tangentStart });
+
+/**
+ * Delete and heal (⇧Delete): removes vertices and joins the path across each one. The two segments of
+ * a vertex joining exactly two become one segment between their far ends that keeps the outer handle
+ * directions, lengthened in proportion to the joined length; region loops keep the joined segment.
+ * Other vertices (endpoints, junctions) are deleted with their segments, as `deleteVertices` does.
+ */
+export function healVertices(network: VectorNetwork, indices: readonly number[]): VectorNetwork {
+  let result = network;
+  // From the highest index down, so the indices still to process are unchanged by each removal.
+  for (const v of [...new Set(indices)].sort((a, b) => b - a)) {
+    const touching = result.segments.flatMap((s, i) => (s.start === v || s.end === v ? [i] : []));
+    const [a, b] = touching;
+    if (touching.length !== 2 || a === undefined || b === undefined) {
+      result = deleteVertices(result, [v]);
+      continue;
+    }
+    // Orient the first segment to end at the vertex and the second to start there.
+    const first = result.segments[a]!.end === v ? result.segments[a]! : reversed(result.segments[a]!);
+    const second = result.segments[b]!.start === v ? result.segments[b]! : reversed(result.segments[b]!);
+    if (first.start === v || second.end === v || first.start === second.end) {
+      result = deleteVertices(result, [v]);
+      continue;
+    }
+    const [p, m, q] = [result.vertices[first.start]!, result.vertices[v]!, result.vertices[second.end]!];
+    const lengthA = Math.hypot(m.x - p.x, m.y - p.y);
+    const lengthB = Math.hypot(q.x - m.x, q.y - m.y);
+    const total = lengthA + lengthB;
+    const scale = (t: Vec2, length: number): Vec2 => (length > 0 ? { x: (t.x * total) / length, y: (t.y * total) / length } : t);
+    const joined: VectorSegment = { start: first.start, end: second.end, tangentStart: scale(first.tangentStart, lengthA), tangentEnd: scale(second.tangentEnd, lengthB) };
+    const segments = [...result.segments];
+    segments[a] = joined;
+    const regions = result.regions.map((region) => ({ ...region, loops: region.loops.map((loop) => loop.filter((i) => i !== b)) }));
+    // The vertex now touches only the second segment, which deleteVertices removes (renumbering the rest).
+    result = deleteVertices({ vertices: result.vertices, segments, regions }, [v]);
+  }
+  return result;
+}
+
 /**
  * Adds a vertex on a segment at parameter `t` (0–1), splitting it into two segments that trace the
  * same curve (de Casteljau). Region loops that used the segment use both halves, in the direction the

@@ -20,7 +20,7 @@ import type { Id } from '@/core/ids/ids';
 import { apply, applyLinear, invert } from '@/core/math/matrix';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
 import type { Transform, VectorNode } from '@/core/schema/document';
-import { deleteVertices, moveVertices, nearestOnSegments, splitSegment } from '@/core/vector/vector-edit';
+import { deleteVertices, healVertices, moveVertices, nearestOnSegments, splitSegment } from '@/core/vector/vector-edit';
 import type { VectorNetwork } from '@/core/vector/vector-network';
 import type { Editor } from '../editor';
 import { refitVector } from '../tools/vector-draw';
@@ -62,6 +62,16 @@ export function deleteSelectedPoints(editor: Editor): boolean {
   const node = editedVector(editor);
   if (!state || !node || state.vertices.length === 0) return false;
   editor.history.run('Delete points', (tx) => refitVector(tx, node.id, deleteVertices(node.vectorNetwork, state.vertices)));
+  editor.state.setVectorEdit({ nodeId: node.id, vertices: [] });
+  return true;
+}
+
+/** ⇧Delete: deletes the selected points and heals the path across them. */
+export function healSelectedPoints(editor: Editor): boolean {
+  const state = editor.state.getSnapshot().vectorEdit;
+  const node = editedVector(editor);
+  if (!state || !node || state.vertices.length === 0) return false;
+  editor.history.run('Delete and heal points', (tx) => refitVector(tx, node.id, healVertices(node.vectorNetwork, state.vertices)));
   editor.state.setVectorEdit({ nodeId: node.id, vertices: [] });
   return true;
 }

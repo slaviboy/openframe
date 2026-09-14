@@ -30,7 +30,7 @@ import { layersWithSame, matchingLayers } from './select-similar';
 import { canTidyUp, tidyUpSelection } from './tidy';
 import { canToggleMask, toggleMask } from './masks';
 import { canFlatten, flattenSelection } from './flatten';
-import { beginVectorEdit, canBeginVectorEdit, deleteSelectedPoints, endVectorEdit } from '../interactions/vector-edit';
+import { beginVectorEdit, canBeginVectorEdit, deleteSelectedPoints, healSelectedPoints, endVectorEdit } from '../interactions/vector-edit';
 import { isInFlow, moveInFlow } from '@/core/layout/flow-order';
 import { addAutoLayout, canAddAutoLayout, canRemoveAutoLayout, removeAutoLayout, suggestAutoLayoutForSelection } from './auto-layout';
 import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/core/color/color-profile';
@@ -484,6 +484,15 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     palette: false,
     enabled: (e) => e.state.getSnapshot().vectorEdit !== null,
     run: (e) => endVectorEdit(e),
+  },
+  {
+    id: 'vector.healPoints',
+    label: 'Delete and heal points',
+    category: 'Edit',
+    shortcuts: ['Shift+Delete'],
+    palette: false,
+    enabled: (e) => (e.state.getSnapshot().vectorEdit?.vertices.length ?? 0) > 0,
+    run: (e) => healSelectedPoints(e),
   },
   {
     id: 'vector.deletePoints',
