@@ -298,6 +298,19 @@ function ActionFields({ editor, hotspotId, action, suffix, onChange, onRemove }:
               Reset video state
             </label>
           )}
+          {action.navigation !== 'SCROLL_TO' && action.navigation !== 'CHANGE_TO' && (
+            <label className={inspector.checkbox}>
+              <input
+                type="checkbox"
+                checked={action.resetInteractiveComponents ?? false}
+                onChange={(e) => {
+                  const { resetInteractiveComponents: _reset, ...rest } = action;
+                  onChange(e.target.checked ? { ...rest, resetInteractiveComponents: true } : rest);
+                }}
+              />
+              Reset component state
+            </label>
+          )}
         </>
       )}
     </div>

@@ -234,6 +234,14 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
             for (const [id, offset] of sharedScrollOffsets(doc, sceneIndex, effect.from, effect.to, state.frameScroll)) state.frameScroll.set(id, offset);
           }
           if (effect.resetVideo) state.renderer?.resetVideos(effect.to);
+          if (effect.resetComponents) {
+            // Reset component state: the destination's interactive components go back to their variants in the file.
+            for (const instanceId of [...state.variantChanges.keys()]) {
+              if (topLevelFrame(editor.doc, instanceId) !== effect.to) continue;
+              state.variantChanges.delete(instanceId);
+              rebuild = true;
+            }
+          }
         } else if (effect.type === 'media') {
           state.renderer?.controlVideo(effect.nodeId, effect.action, effect.amount);
         } else if (effect.type === 'changeTo') {

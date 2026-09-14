@@ -172,6 +172,8 @@ export const PrototypeActionSchema: z.ZodType<PrototypeAction> = z.union([
     resetVideoPosition: z.boolean().optional(),
     /** Open or swap an overlay positioned manually: the overlay's top-left relative to the hotspot's top-left. */
     overlayRelativePosition: z.object({ x: z.number().finite(), y: z.number().finite() }).optional(),
+    /** State management: interactive components in the destination go back to the variants set on the canvas. */
+    resetInteractiveComponents: z.boolean().optional(),
   }),
   z.object({ type: z.enum(['BACK', 'CLOSE']) }),
   z.object({ type: z.literal('URL'), url: z.string().max(4096) }),
@@ -185,6 +187,7 @@ export type PrototypeAction =
       resetScrollPosition?: boolean | undefined;
       resetVideoPosition?: boolean | undefined;
       overlayRelativePosition?: { x: number; y: number } | undefined;
+      resetInteractiveComponents?: boolean | undefined;
     }
   | { type: 'BACK' | 'CLOSE' }
   | { type: 'URL'; url: string }

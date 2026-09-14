@@ -19,8 +19,8 @@ import { describe, expect, test } from 'vitest';
 import { isOverridable } from './instance-fields';
 
 describe('instance overrides', () => {
-  test('text, fill, stroke, effect and name changes can be kept on an instance', () => {
-    for (const field of ['name', 'visible', 'fills', 'strokes', 'effects', 'characters', 'fontSize', 'layoutGuides']) expect(isOverridable(field)).toBe(true);
+  test('text, fill, stroke, effect, name and prototype interaction changes can be kept on an instance', () => {
+    for (const field of ['name', 'visible', 'fills', 'strokes', 'effects', 'characters', 'fontSize', 'layoutGuides', 'reactions']) expect(isOverridable(field)).toBe(true);
   });
 
   test('position, size, order, constraints and layout follow the main component', () => {

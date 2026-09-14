@@ -364,7 +364,6 @@ function RenameInput({ initial, onDone }: { initial: string; onDone: (value: str
   );
 }
 
-/** The variable modes set on a layer: the mode's name, or how many modes (listed on hover). Kept out of the row's accessible name. */
 /** GIF: a layer whose image fill is an animated GIF (kept out of the row's accessible name). */
 function GifTag({ node }: { node: SceneNode }) {
   const paint = 'fills' in node ? node.fills.find((p) => p.type === 'IMAGE' && p.visible && p.imageHash !== undefined) : undefined;
@@ -377,6 +376,7 @@ function GifTag({ node }: { node: SceneNode }) {
   );
 }
 
+/** The variable modes set on a layer: the mode's name, or how many modes (listed on hover). Kept out of the row's accessible name. */
 function ModeTag({ node }: { node: SceneNode }) {
   const editor = useEditor();
   const tags = Object.entries(node.explicitVariableModes ?? {}).flatMap(([collectionId, modeId]) => {

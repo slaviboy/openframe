@@ -146,6 +146,11 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - `accessibleContent` in `src/core/prototype/accessibility.ts` maps a screen to sections, links, buttons, images and text
     - `AccessibleContent` and `SkipToContent` (src/ui/present) render it over the canvas
     - Options has "Adapt content for screen readers"
+  - Reset component state (the commit after accessible prototypes):
+    - `resetInteractiveComponents` on navigation actions
+    - becomes `resetComponents` on the transition effect
+    - PresentationView drops the destination's switched variants and rebuilds the runtime
+    - `reactions` is now in `OVERRIDABLE_FIELDS`: interactions added on an instance used to be reverted by instance sync
 
 ## In progress (uncommitted)
 
@@ -157,7 +162,6 @@ This file is how work continues after a pause (for example, a usage limit). Read
    - lists and inline links in accessible text layers
    - dragging a manual overlay into place on the canvas
    - choosing which frame of a GIF the canvas shows
-   - reset component state
    - copy/paste interactions
    - marquee-selecting connections
    - responsive scaling

@@ -54,7 +54,7 @@ export interface OverlayAnchor {
 
 export type PlayerEffect =
   /** Show `to` (a screen, or an overlay above the screen) coming from `from`, with the transition. */
-  | { readonly type: 'transition'; readonly from: Id | null; readonly to: Id; readonly overlay: boolean; readonly transition: PrototypeTransition; readonly resetScroll?: boolean; readonly resetVideo?: boolean }
+  | { readonly type: 'transition'; readonly from: Id | null; readonly to: Id; readonly overlay: boolean; readonly transition: PrototypeTransition; readonly resetScroll?: boolean; readonly resetVideo?: boolean; readonly resetComponents?: boolean }
   /** A video action on the video of a layer's video fill (`amount`: seconds to jump by, or the time to set). */
   | { readonly type: 'media'; readonly nodeId: Id; readonly action: Extract<PrototypeAction, { type: 'UPDATE_MEDIA_RUNTIME' }>['mediaAction']; readonly amount: number }
   | { readonly type: 'closeOverlay'; readonly id: Id }
@@ -269,8 +269,12 @@ function runAction(store: DocumentStore, state: PlayerState, action: PrototypeAc
       }
       const frame = screenFor(store, state, destination);
       if (!frame) return state;
-      // State management: the destination's scroll position, and its videos, start over.
-      const reset = { ...(action.resetScrollPosition ? { resetScroll: true } : {}), ...(action.resetVideoPosition ? { resetVideo: true } : {}) };
+      // State management: the destination's scroll position, its videos and its interactive components start over.
+      const reset = {
+        ...(action.resetScrollPosition ? { resetScroll: true } : {}),
+        ...(action.resetVideoPosition ? { resetVideo: true } : {}),
+        ...(action.resetInteractiveComponents ? { resetComponents: true } : {}),
+      };
       // An overlay positioned manually sits relative to the hotspot that opened it.
       const anchors = (overlayId: Id) =>
         sceneNode(store, overlayId)?.overlay?.position === 'MANUAL' && hotspotId ? { ...state.overlayAnchors, [overlayId]: { hotspotId, offset: action.overlayRelativePosition ?? { x: 0, y: 0 } } } : state.overlayAnchors;

@@ -17,9 +17,9 @@
 
 /**
  * Fields a layer inside a component instance may change (The reference's supported overrides): the layer name
- * and visibility, fill, stroke and effect properties, layout guides, and text properties. Every other
- * field — position, size, order, constraints, auto layout placement, masking, text box resizing —
- * follows the main component.
+ * and visibility, fill, stroke and effect properties, layout guides, text properties, and prototype
+ * interactions. Every other field — position, size, order, constraints, auto layout placement, masking,
+ * text box resizing — follows the main component.
  */
 export const OVERRIDABLE_FIELDS: ReadonlySet<string> = new Set([
   // Layer
@@ -71,6 +71,8 @@ export const OVERRIDABLE_FIELDS: ReadonlySet<string> = new Set([
   'fontVariations',
   'textDirection',
   'leadingTrim',
+  // Prototype: interactions changed on an instance are its own; unchanged ones follow the main component.
+  'reactions',
 ]);
 
 /** Whether an instance layer may keep its own value for a field instead of following the main component. */
