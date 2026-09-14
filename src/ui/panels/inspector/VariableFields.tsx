@@ -21,6 +21,7 @@ import { isSceneNode, type Paint, type SceneNode, type VariableNode } from '@/co
 import { isVariable, localCollections, resolveForLayer, variableLookup, VARIANT_BINDING_PREFIX, type BindableField, type VariablePaintField } from '@/core/variables/document';
 import type { ResolvedValue } from '@/core/variables/resolve';
 import { bindVariable, bindVariantVariable, setExplicitVariableMode, unbindPaintVariable, unbindVariable, unbindVariantVariable, variablesFor, variantVariablesFor } from '@/editor/commands/variables';
+import { bindPropertyDefaultVariable, propertyDefaultVariables, unbindPropertyDefaultVariable } from '@/editor/commands/component-properties';
 import type { Editor } from '@/editor/editor';
 import dialogStyles from '../../dialogs/Dialog.module.css';
 import { useEditor } from '../../hooks/useEditor';
@@ -287,6 +288,66 @@ export function VisibilityControl({ nodes }: { nodes: readonly SceneNode[] }) {
         </span>
       )}
       {picking && <VariablePicker ids={ids} field="visible" onClose={() => setPicking(false)} />}
+    </>
+  );
+}
+
+/**
+ * Apply variable, for a boolean or text component property's default value: a variable the default follows (in the
+ * component's variable modes). A bound default shows its variable, with Detach variable.
+ */
+export function PropertyDefaultVariableButton({ ownerId, name }: { ownerId: Id; name: string }) {
+  const editor = useEditor();
+  const [picking, setPicking] = useState(false);
+  const owner = editor.doc.get(ownerId);
+  const definition = owner?.type === 'FRAME' ? owner.componentPropertyDefinitions?.[name] : undefined;
+  const alias = definition && (definition.type === 'BOOLEAN' || definition.type === 'TEXT') ? definition.boundVariables?.defaultValue : undefined;
+  const variable = alias ? editor.doc.get(alias.id) : undefined;
+  const candidates = picking ? propertyDefaultVariables(editor, ownerId, name) : [];
+  return (
+    <>
+      {isVariable(variable) ? (
+        <span className={styles.boundPaint} role="group" aria-label={`Default value of ${name} variable`}>
+          <span className={styles.boundName}>{variable.name}</span>
+          <IconButton icon="detach" label={`Detach variable from ${name}`} onClick={() => unbindPropertyDefaultVariable(editor, ownerId, name)} />
+        </span>
+      ) : (
+        <IconButton icon="variables" label={`Apply variable to ${name}`} onClick={() => setPicking(true)} />
+      )}
+      {picking && (
+        <Dialog
+          title="Apply variable"
+          onClose={() => setPicking(false)}
+          footer={
+            <button type="button" className={dialogStyles.secondary} onClick={() => setPicking(false)}>
+              Close
+            </button>
+          }
+        >
+          {candidates.length === 0 ? (
+            <p>No variables of a type this property takes. Create one in the variables view.</p>
+          ) : (
+            <ul className={findStyles.results} aria-label="Variables">
+              {candidates.map((candidate) => (
+                <li key={candidate.id}>
+                  <button
+                    type="button"
+                    className={findStyles.result}
+                    title={candidate.description}
+                    onClick={() => {
+                      bindPropertyDefaultVariable(editor, ownerId, name, candidate.id);
+                      setPicking(false);
+                    }}
+                  >
+                    {candidate.name}
+                    <span className={styles.hint}> {formatValue(resolveForLayer(editor.doc, variableLookup(editor.doc), ownerId, candidate.id))}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Dialog>
+      )}
     </>
   );
 }

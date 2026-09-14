@@ -447,8 +447,9 @@ export const GridTrackSchema = z.discriminatedUnion('type', [
  * instance swap properties which component a nested instance is (with preferred components to swap to).
  */
 export const ComponentPropertyDefinitionSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('BOOLEAN'), defaultValue: z.boolean() }),
-  z.object({ type: z.literal('TEXT'), defaultValue: z.string().max(1_000_000) }),
+  // Boolean and text properties' default values can follow a variable (resolved in the component's variable modes).
+  z.object({ type: z.literal('BOOLEAN'), defaultValue: z.boolean(), boundVariables: z.object({ defaultValue: VariableAliasSchema }).optional() }),
+  z.object({ type: z.literal('TEXT'), defaultValue: z.string().max(1_000_000), boundVariables: z.object({ defaultValue: VariableAliasSchema }).optional() }),
   z.object({ type: z.literal('INSTANCE_SWAP'), defaultValue: IdSchema, preferredValues: z.array(IdSchema).max(1000).optional() }),
   // A slot: a frame in the component whose content instances can change (no default value; the frame's layers are the default content).
   z.object({

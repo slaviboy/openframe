@@ -125,7 +125,7 @@ const VERTICAL_CONSTRAINTS: readonly (readonly [Constraint, string])[] = [
 ];
 import { ImageSettings, ImageSwatch } from './ImageSettings';
 import { AppliedStyle, LocalStylesSection, StyleButton } from './StylesPanel';
-import { BoundPaint, sharedBoundVariable, VariableBindingControl, VariableModeButton, VariableNumberField, VariantVariableButton, VisibilityControl } from './VariableFields';
+import { BoundPaint, PropertyDefaultVariableButton, sharedBoundVariable, VariableBindingControl, VariableModeButton, VariableNumberField, VariantVariableButton, VisibilityControl } from './VariableFields';
 import { PatternSettings } from './PatternSettings';
 import { PAINT_BLEND_OPTIONS } from './blend-modes';
 import { ColorControl } from './ColorControl';
@@ -1469,7 +1469,8 @@ function ComponentPropertyRows({ ownerId, creating, onCreated }: { ownerId: stri
             />
           ) : (
             <span className={styles.hint} onDoubleClick={() => setRenaming(name)}>
-              {name}
+              {name}{' '}
+              {(definition.type === 'BOOLEAN' || definition.type === 'TEXT') && <PropertyDefaultVariableButton ownerId={ownerId} name={name} />}
             </span>
           )}
           {definition.type === 'SLOT' ? (

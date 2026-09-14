@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
+import { boundLayers, ownerComponents } from '../document/component-properties';
 import { swapInstance } from '../document/instances';
 import type { DocumentStore } from '../document/store';
 import { componentSetProperties, isComponentSet, parseVariantName, variantFor } from '../document/variants';
 import type { Transaction } from '../history/history';
 import { ROOT_ID, type Id } from '../ids/ids';
-import { hasGeometry, isSceneNode, type Node, type Paint, type SceneNode, type VariableCollectionNode, type VariableNode } from '../schema/document';
+import { hasGeometry, isSceneNode, type ComponentPropertyDefinition, type Node, type Paint, type SceneNode, type VariableCollectionNode, type VariableNode } from '../schema/document';
 import { defaultModeId, extensionChain, resolveVariable, type CollectionData, type ResolvedValue, type VariableData, type VariableLookup, type VariableType } from './resolve';
 
 /** Layer properties a variable can be bound to (paint colors bind on the paint itself). */
@@ -270,6 +271,72 @@ export function bindingWrites(store: DocumentStore, lookup: VariableLookup, node
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
+/** A variable value as a component property's default: booleans (or "true"/"false" strings) for boolean properties, strings or numbers for text properties. */
+function propertyDefaultValue(type: 'BOOLEAN' | 'TEXT', value: ResolvedValue | null): boolean | string | undefined {
+  if (value === null) return undefined;
+  if (type === 'BOOLEAN') return typeof value === 'boolean' ? value : value === 'true' ? true : value === 'false' ? false : undefined;
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : undefined;
+}
+
+/** Instance copies (at any depth) of a layer that still follow it for a field, from a map of copies by their source. */
+function followingCopies(copiesBySource: ReadonlyMap<Id, readonly SceneNode[]>, layerId: Id, field: string): Id[] {
+  const out: Id[] = [];
+  const queue = [layerId];
+  while (queue.length > 0) {
+    for (const copy of copiesBySource.get(queue.shift()!) ?? []) {
+      if ((copy.overrides ?? []).includes(field)) continue;
+      out.push(copy.id);
+      queue.push(copy.id);
+    }
+  }
+  return out;
+}
+
+/**
+ * Keeps the default values of a main component's (or component set's) boolean and text properties bound to variables in
+ * step with them, in the owner's variable modes: the bound layers take the new default, and so do their copies in
+ * instances that haven't changed them (the component finalizer has already run). Bindings to deleted variables are removed.
+ */
+function applyPropertyDefaultBindings(store: DocumentStore, lookup: VariableLookup, owner: SceneNode, setOwn: (id: Id, field: string, value: unknown) => void): void {
+  if (owner.type !== 'FRAME' || !owner.componentPropertyDefinitions) return;
+  const definitions = owner.componentPropertyDefinitions;
+  const next: Record<string, ComponentPropertyDefinition> = { ...definitions };
+  let changed = false;
+  const updates: Array<{ readonly name: string; readonly field: 'visible' | 'characters'; readonly value: boolean | string }> = [];
+  for (const [name, definition] of Object.entries(definitions)) {
+    if ((definition.type !== 'BOOLEAN' && definition.type !== 'TEXT') || !definition.boundVariables) continue;
+    const variableId = definition.boundVariables.defaultValue.id;
+    if (!lookup.variable(variableId)) {
+      next[name] = Object.fromEntries(Object.entries(definition).filter(([key]) => key !== 'boundVariables')) as ComponentPropertyDefinition;
+      changed = true;
+      continue;
+    }
+    const value = propertyDefaultValue(definition.type, resolveForLayer(store, lookup, owner.id, variableId));
+    if (value === undefined || value === definition.defaultValue) continue;
+    next[name] = { ...definition, defaultValue: value } as ComponentPropertyDefinition;
+    changed = true;
+    updates.push({ name, field: definition.type === 'BOOLEAN' ? 'visible' : 'characters', value });
+  }
+  if (!changed) return;
+  setOwn(owner.id, 'componentPropertyDefinitions', next);
+  if (updates.length === 0) return;
+  const copiesBySource = new Map<Id, SceneNode[]>();
+  for (const node of store.nodes()) if (isSceneNode(node) && node.source !== undefined) copiesBySource.set(node.source, [...(copiesBySource.get(node.source) ?? []), node]);
+  for (const update of updates) {
+    for (const main of ownerComponents(store, owner)) {
+      for (const { id, field } of boundLayers(store, main.id, update.name)) {
+        if (field !== update.field) continue;
+        for (const target of [id, ...followingCopies(copiesBySource, id, field)]) {
+          const before = rec(store.get(target))[field];
+          setOwn(target, field, update.value);
+          // Replacing the text drops the style runs of the old text.
+          if (field === 'characters' && before !== update.value && rec(store.get(target)).styleRuns !== undefined) setOwn(target, 'styleRuns', undefined);
+        }
+      }
+    }
+  }
+}
+
 /** The prefix of a variant property's key in an instance's `boundVariables` (`variant:Size`). */
 export const VARIANT_BINDING_PREFIX = 'variant:';
 
@@ -382,7 +449,7 @@ function variableFinalizer(tx: Transaction, nextId: () => Id): void {
       everything = true;
       continue;
     }
-    if (op.field === 'explicitVariableModes' || op.field === 'parent' || op.field === 'boundVariables') {
+    if (op.field === 'explicitVariableModes' || op.field === 'parent' || op.field === 'boundVariables' || op.field === 'componentPropertyDefinitions') {
       roots.add(op.id);
       continue;
     }
@@ -460,6 +527,7 @@ function variableFinalizer(tx: Transaction, nextId: () => Id): void {
     }
     node = store.get(id) as SceneNode;
     for (const [field, value] of bindingWrites(store, lookup, node)) setOwn(id, field, value);
+    applyPropertyDefaultBindings(store, lookup, node, setOwn);
     if (node.type === 'FRAME' && node.instance && applyVariantBindings(tx, lookup, node, createdInstances.has(id), nextId, setOwn)) {
       // The instance was rebuilt from another variant: its layers take their bound values too.
       for (const child of store.descendants(id, false)) {

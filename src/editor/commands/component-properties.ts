@@ -15,6 +15,9 @@
  * limitations under the License.
  */
 
+import type { VariableNode } from '@/core/schema/document';
+import { collectionVariables, localCollections } from '@/core/variables/document';
+import type { VariableType } from '@/core/variables/resolve';
 import {
   bindingOwner,
   boundLayers,
@@ -356,5 +359,41 @@ export function canDeleteSlotContents(editor: Editor, id: Id): boolean {
 export function deleteSlotContents(editor: Editor, id: Id): boolean {
   if (!canDeleteSlotContents(editor, id)) return false;
   editor.history.run('Delete contents', (tx) => [...tx.store.children(id)].forEach((child) => tx.delete(child)));
+  return true;
+}
+
+/** The variables a component property's default value can follow: booleans (or strings) for boolean properties, strings or numbers for text properties. */
+export function propertyDefaultVariables(editor: Editor, ownerId: Id, name: string): VariableNode[] {
+  const definition = propertyDefinitions(sceneNode(editor, ownerId) ?? null)[name];
+  const types: readonly VariableType[] = definition?.type === 'BOOLEAN' ? ['BOOLEAN', 'STRING'] : definition?.type === 'TEXT' ? ['STRING', 'FLOAT'] : [];
+  return localCollections(editor.doc)
+    .flatMap((collection) => collectionVariables(editor.doc, collection.id))
+    .filter((variable) => types.includes(variable.resolvedType));
+}
+
+/**
+ * Applies a variable to a boolean or text property's default value: the default follows the variable in the component's
+ * variable modes, and the layers bound to the property (and instances that haven't changed them) follow it. One undo step.
+ */
+export function bindPropertyDefaultVariable(editor: Editor, ownerId: Id, name: string, variableId: Id): boolean {
+  const owner = sceneNode(editor, ownerId);
+  const definitions = owner ? propertyDefinitions(owner) : {};
+  const definition = definitions[name];
+  if (!owner || !definition || (definition.type !== 'BOOLEAN' && definition.type !== 'TEXT')) return false;
+  if (!propertyDefaultVariables(editor, ownerId, name).some((variable) => variable.id === variableId)) return false;
+  editor.history.run('Apply variable', (tx) =>
+    setDefinitions(tx, ownerId, { ...definitions, [name]: { ...definition, boundVariables: { defaultValue: { type: 'VARIABLE_ALIAS', id: variableId } } } }),
+  );
+  return true;
+}
+
+/** Detaches the variable of a property's default value; the property keeps its current default. One undo step. */
+export function unbindPropertyDefaultVariable(editor: Editor, ownerId: Id, name: string): boolean {
+  const owner = sceneNode(editor, ownerId);
+  const definitions = owner ? propertyDefinitions(owner) : {};
+  const definition = definitions[name];
+  if (!owner || !definition || (definition.type !== 'BOOLEAN' && definition.type !== 'TEXT') || !definition.boundVariables) return false;
+  const detached = definition.type === 'BOOLEAN' ? { type: 'BOOLEAN' as const, defaultValue: definition.defaultValue } : { type: 'TEXT' as const, defaultValue: definition.defaultValue };
+  editor.history.run('Detach variable', (tx) => setDefinitions(tx, ownerId, { ...definitions, [name]: detached }));
   return true;
 }
