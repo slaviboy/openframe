@@ -204,6 +204,11 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - gradients resample both stop lists with `colorAt`; a solid meeting a gradient becomes a one-color gradient
     - any other change cross-fades, with the old paint's opacity chosen so the pair's alpha follows the blend
     - fill lists of different lengths still show the destination's
+  - Sharing interactive component and video states (the commit after gradient and image fills):
+    - `sharedVariants` / `sharedVideos` in `src/core/prototype/state-sharing.ts` (frames share states as for scroll: same parent, `namesShareState`)
+    - PresentationView's `apply` sets the shared variants in `variantChanges` unless the action resets component state
+    - it calls `PresentationRenderer.shareVideo` unless the action resets video state
+    - `shareVideo` keeps a pending share until the destination video's element exists, then marks it shown so autoplay leaves it alone
 
 ## In progress (uncommitted)
 
@@ -214,7 +219,6 @@ This file is how work continues after a pause (for example, a usage limit). Read
 1. The pending sub-items left in the M10 rows of `docs/FEATURE_MATRIX.md`:
    - 160 Video / GIF fills: video crop, video from the fill picker, GIF label next to the dimensions, GIF metadata on export
    - 200 Interactive components: the Variant interactions section, animating Change to, sharing states between matching instances
-   - 236 State memorization: sharing interactive component and video states between matching layers
    - 237 Flows: WYSIWYG description editing, starting point badge on the canvas, preview / present / copy links to flows
    - 239 Variables: extended collections' modes, library variables, variable picker in expressions
    - 240 Presentation view: responsive scaling, device frames, comments, sharing links

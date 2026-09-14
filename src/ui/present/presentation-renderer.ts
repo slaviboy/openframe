@@ -75,6 +75,8 @@ export class PresentationRenderer {
   private readonly videos = new Map<string, { readonly element: HTMLVideoElement; readonly url: string }>();
   /** The videos of the frames shown at the last sync. */
   private shownVideos = new Set<string>();
+  /** State sharing waiting for a video's element: the time and play state it takes, by video hash. */
+  private readonly pendingShares = new Map<string, { readonly time: number; readonly playing: boolean; readonly muted: boolean }>();
   /** Whether each frame holds video fills. */
   private readonly videoFrames = new Map<Id, boolean>();
   /** Video frames made for the frame being rendered, deleted once it is. */
@@ -323,6 +325,7 @@ export class PresentationRenderer {
     document.body.append(element);
     const video = { element, url };
     this.videos.set(hash, video);
+    this.applyShare(hash);
     return video;
   }
 
@@ -422,6 +425,34 @@ export class PresentationRenderer {
       // The next sync starts it again when it autoplays.
       this.shownVideos.delete(fill.paint.videoHash);
     }
+  }
+
+  /**
+   * State sharing: a video takes the time and play state of another, and keeps them rather than autoplaying — as soon as
+   * its element exists (its bytes may still be loading).
+   */
+  shareVideo(fromHash: string, toHash: string): void {
+    const source = this.videos.get(fromHash);
+    if (!source) return;
+    const { element } = source;
+    this.pendingShares.set(toHash, { time: element.currentTime, playing: !element.paused && !element.ended, muted: element.muted });
+    if (this.videos.has(toHash)) this.applyShare(toHash);
+    else this.videoFor(toHash);
+  }
+
+  /** Gives a video the state shared with it, if any. */
+  private applyShare(hash: string): void {
+    const shared = this.pendingShares.get(hash);
+    const video = this.videos.get(hash);
+    if (!shared || !video) return;
+    this.pendingShares.delete(hash);
+    const end = Number.isFinite(video.element.duration) ? video.element.duration : Number.MAX_SAFE_INTEGER;
+    video.element.currentTime = Math.min(end, shared.time);
+    if (shared.playing) this.play(video.element, shared.muted);
+    else video.element.pause();
+    // Counted as shown already, so autoplay leaves it as it is.
+    this.shownVideos.add(hash);
+    this.onInvalidate();
   }
 
   private play(element: HTMLVideoElement, muted: boolean): void {

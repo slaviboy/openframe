@@ -41,6 +41,7 @@ import {
   type PlayerStep,
 } from '@/core/prototype/player';
 import { DRAG_FINISH_AT, dragDirection, dragProgress } from '@/core/prototype/drag-transition';
+import { sharedVariants, sharedVideos } from '@/core/prototype/state-sharing';
 import { composeScene, frameAtPoint, layerRects, SCALING_LABELS, SCALING_MODES, screenArea, scrollOffsetOf, type DeviceScreen, type PresentedScene, type ScalingMode } from '@/core/prototype/presentation';
 import { deviceLayout, effectiveDevice, type PrototypeDevice } from '@/core/prototype/device';
 import { MOBILE_DEVICE_CATEGORIES } from '@/core/document/frame-presets';
@@ -257,6 +258,17 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
               state.variantChanges.delete(instanceId);
               rebuild = true;
             }
+          }
+          if (effect.from && !effect.overlay) {
+            // State sharing: a matching destination's interactive components and videos take the states of the frame left.
+            if (!effect.resetComponents) {
+              for (const [instanceId, variantId] of sharedVariants(editor.doc, effect.from, effect.to, state.variantChanges)) {
+                if (state.variantChanges.get(instanceId) === variantId) continue;
+                state.variantChanges.set(instanceId, variantId);
+                rebuild = true;
+              }
+            }
+            if (!effect.resetVideo) for (const pair of sharedVideos(doc, effect.from, effect.to)) state.renderer?.shareVideo(pair.from, pair.to);
           }
         } else if (effect.type === 'media') {
           state.renderer?.controlVideo(effect.nodeId, effect.action, effect.amount);
