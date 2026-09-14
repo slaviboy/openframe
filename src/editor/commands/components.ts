@@ -33,7 +33,7 @@ export function canCreateComponent(editor: Editor): boolean {
 }
 
 /**
- * Create component (⌥⌘K): a single selected frame becomes a component itself; any other selection is
+ * Create component (⌥⌘K): a single selected frame (not an instance) becomes a component itself; any other selection is
  * nested in a new component frame (without a fill) named "Component". The component is selected; one
  * undo step.
  */
@@ -41,7 +41,8 @@ export function createComponent(editor: Editor): Id | null {
   if (!canCreateComponent(editor)) return null;
   const ids = selectedSceneNodes(editor);
   const only = ids.length === 1 ? (editor.doc.get(ids[0]!) as SceneNode) : null;
-  if (only?.type === 'FRAME') {
+  // An instance is nested in a new component rather than becoming one itself.
+  if (only?.type === 'FRAME' && !only.instance) {
     editor.history.run('Create component', (tx) => tx.set(only.id, 'component', {}));
     editor.state.select([only.id]);
     return only.id;

@@ -21,6 +21,7 @@ import { IdGenerator } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { BUILTIN_COMMANDS } from './builtin';
+import { insertInstance } from './insert-instance';
 import { canCreateComponent, canCreateMultipleComponents, isComponent, isSafeLink, setComponentConfiguration } from './components';
 
 let editor: Editor;
@@ -123,5 +124,23 @@ describe('create multiple components', () => {
     expect(node(a).parent.id).toBe(editor.pageId);
     expect(node(b).parent.id).toBe(editor.pageId);
     expect((node(frame) as { component?: unknown }).component).toBeUndefined();
+  });
+});
+
+describe('create component from an instance', () => {
+  test('a selected instance is nested in a new component instead of becoming one', () => {
+    editor.state.select([a]);
+    editor.commands.run('object.createComponent');
+    const main = editor.selection[0]!;
+    const instance = insertInstance(editor, main)!;
+    editor.state.select([instance]);
+    expect(canCreateComponent(editor)).toBe(true);
+    editor.commands.run('object.createComponent');
+    const outer = node(editor.selection[0]!);
+    expect(outer.id).not.toBe(instance);
+    expect(outer).toMatchObject({ type: 'FRAME', component: {} });
+    expect(editor.doc.children(outer.id)).toEqual([instance]);
+    expect(node(instance)).toMatchObject({ instance: { mainId: main } });
+    expect((node(instance) as { component?: unknown }).component).toBeUndefined();
   });
 });
