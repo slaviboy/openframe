@@ -17,6 +17,7 @@
 
 import type { Transaction } from '@/core/history/history';
 import { applyAutoLayout, clearAutoLayout, isAutoLayoutFrame } from '@/core/layout/auto-layout';
+import { suggestAutoLayout } from '@/core/layout/suggest-auto-layout';
 import type { Sizing } from '@/core/layout/flow-layout';
 import type { SceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
@@ -109,4 +110,25 @@ export function setIgnoreAutoLayout(tx: Transaction, node: SceneNode, on: boolea
     if (current.layoutSizingHorizontal === 'FILL') tx.set(node.id, 'layoutSizingHorizontal', undefined);
     if (current.layoutSizingVertical === 'FILL') tx.set(node.id, 'layoutSizingVertical', undefined);
   }
+}
+
+/**
+ * Suggest auto layout (⌃⇧A): selected frames, and the frames inside them, get as much auto layout as
+ * their arrangement allows, with rows or columns wrapped in new frames; any other selection is first
+ * wrapped in a fill-less frame. One undo step.
+ */
+export function suggestAutoLayoutForSelection(editor: Editor): void {
+  const nodes = selectedNodes(editor);
+  if (nodes.length === 0 || !canAddAutoLayout(editor)) return;
+  if (nodes.every((n) => n.type === 'FRAME' && !isAutoLayoutFrame(n))) {
+    editor.history.run('Suggest auto layout', (tx) => nodes.forEach((n) => suggestAutoLayout(tx, n.id, () => editor.ids.next())));
+    return;
+  }
+  wrapSelection(editor, 'FRAME', {
+    label: 'Suggest auto layout',
+    after: (tx, frameId) => {
+      tx.set(frameId, 'fills', []);
+      suggestAutoLayout(tx, frameId, () => editor.ids.next());
+    },
+  });
 }

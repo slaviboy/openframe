@@ -85,6 +85,10 @@ test('main menu works with the mouse and the keyboard', async ({ page }) => {
   await page.keyboard.press('v');
   await page.keyboard.press('ArrowRight');
   await expect(page.getByRole('menu', { name: 'View' })).toBeVisible();
+  // The submenu takes focus (with its first item active) right after it appears; Enter before that goes nowhere.
+  const viewMenu = page.getByRole('menu', { name: 'View' });
+  await expect(viewMenu).toBeFocused();
+  await expect(viewMenu.getByRole('menuitem').first()).toHaveAttribute('data-active', 'true');
   await page.keyboard.press('Enter');
   await expect(page.getByRole('dialog', { name: 'Command palette' })).toBeVisible();
 });

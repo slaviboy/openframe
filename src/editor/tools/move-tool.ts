@@ -23,7 +23,7 @@ import { fromPoints, transformRect, unionAll, type Rect } from '@/core/math/rect
 import { edgeValues, guidesFor, snapBounds, snapValue, type SnapGuide } from '@/core/scene/snapping';
 import { isLayoutGuideRect, SNAP_THRESHOLD_PX, snapCandidatesFor } from '../interactions/snap-candidates';
 import { adoptCoveredLayers, duplicateNodes } from '../commands/structure';
-import { setLayoutSizing } from '../commands/auto-layout';
+import { setIgnoreAutoLayout, setLayoutSizing } from '../commands/auto-layout';
 import { applySpacing, captureSpacingStarts, smartSelectionInfo, spacingHandleAt, type SmartSelectionInfo } from '../commands/smart-selection';
 import { canParent } from '@/core/document/containment';
 import type { DuplicateMemory } from '../editor';
@@ -466,9 +466,17 @@ export class MoveTool implements Tool {
       }
       case 'move':
         this.adoptIntoSections(g.tx, g.starts);
+        // ⌃ while dropping layers into an auto layout frame adds them with Ignore auto layout.
+        if (p.ctrl) {
+          for (const s of g.starts) {
+            const parent = g.tx.store.parentOf(s.id);
+            if (parent && this.enteredParent(g.tx, s.id) && isAutoLayoutFrame(g.tx.store.get(parent))) setIgnoreAutoLayout(g.tx, g.tx.store.getOrThrow(s.id) as SceneNode, true);
+          }
+        }
         if (g.insertion) {
           const { frameId, index } = g.insertion;
-          moveToFlowIndex(g.tx, frameId, g.starts.map((s) => s.id).filter((id) => g.tx.store.parentOf(id) === frameId), index);
+          const inFlow = (id: Id) => g.tx.store.parentOf(id) === frameId && (g.tx.store.get(id) as SceneNode | undefined)?.layoutPositioning !== 'ABSOLUTE';
+          moveToFlowIndex(g.tx, frameId, g.starts.map((s) => s.id).filter(inFlow), index);
         }
         editor.history.commit(g.tx);
         if (g.duplicated) editor.duplicateMemory = g.duplicated;
@@ -574,7 +582,8 @@ export class MoveTool implements Tool {
     const parents = new Set(g.starts.map((s) => store.parentOf(s.id)));
     const [parent] = parents;
     g.insertion = null;
-    if (parents.size === 1 && parent && isAutoLayoutFrame(store.get(parent)) && g.starts.every((s) => (store.get(s.id) as SceneNode | undefined)?.layoutPositioning !== 'ABSOLUTE')) {
+    const ignoring = p.ctrl && g.starts.some((s) => this.enteredParent(g.tx, s.id));
+    if (!ignoring && parents.size === 1 && parent && isAutoLayoutFrame(store.get(parent)) && g.starts.every((s) => (store.get(s.id) as SceneNode | undefined)?.layoutPositioning !== 'ABSOLUTE')) {
       const local = editor.scene.toLocal(parent, p.world);
       if (local) g.insertion = { frameId: parent, index: flowInsertionIndex(store, parent, local, new Set(g.starts.map((s) => s.id))) };
     }
@@ -595,6 +604,11 @@ export class MoveTool implements Tool {
    * Moves dragged layers into the frame or section under the pointer (or out to the page),
    * preserving world position. Dragged sections only drop into other sections.
    */
+  /** Whether a layer being moved now has a different parent than when the gesture began. */
+  private enteredParent(tx: Transaction, id: Id): boolean {
+    return tx.ops.some((op) => op.kind === 'set' && op.id === id && op.field === 'parent' && (op.prev as { id: Id } | undefined)?.id !== tx.store.parentOf(id));
+  }
+
   private reparentUnderPointer(tx: Transaction, starts: NodeStart[], p: PointerInfo): void {
     const { editor } = this.env;
     const store = editor.doc;

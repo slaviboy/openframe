@@ -41,6 +41,8 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
     { name: 'firefox', use: { ...devices['Desktop Firefox'] }, grepInvert: /@chromium-only/ },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] }, grepInvert: /@chromium-only/ },
+    // WebKit sometimes fails to load CanvasKit's wasm after a reload ("… due to access control checks"),
+    // a WebKit/Playwright race unrelated to the app. One retry reports those tests as flaky instead of failed.
+    { name: 'webkit', use: { ...devices['Desktop Safari'] }, grepInvert: /@chromium-only/, retries: 1 },
   ],
 });

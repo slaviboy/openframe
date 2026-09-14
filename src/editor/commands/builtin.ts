@@ -30,7 +30,7 @@ import { layersWithSame, matchingLayers } from './select-similar';
 import { canTidyUp, tidyUpSelection } from './tidy';
 import { canToggleMask, toggleMask } from './masks';
 import { isInFlow, moveInFlow } from '@/core/layout/flow-order';
-import { addAutoLayout, canAddAutoLayout, canRemoveAutoLayout, removeAutoLayout } from './auto-layout';
+import { addAutoLayout, canAddAutoLayout, canRemoveAutoLayout, removeAutoLayout, suggestAutoLayoutForSelection } from './auto-layout';
 import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/core/color/color-profile';
 import { beginCrop, cropTarget, endCrop } from '../interactions/crop';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
@@ -776,5 +776,14 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     shortcuts: ['Shift+2'],
     enabled: hasSelection,
     run: (e) => e.zoomToRect(e.selectionBounds()),
+  },
+  // Registered after Select inverse: off macOS, Ctrl+Shift+A is ⌘⇧A's Select inverse, and suggest uses Ctrl+Alt+Shift+A.
+  {
+    id: 'layout.suggestAutoLayout',
+    label: 'Suggest auto layout',
+    category: 'Object',
+    shortcuts: ['Ctrl+Shift+A', 'Ctrl+Alt+Shift+A'],
+    enabled: canAddAutoLayout,
+    run: (e) => suggestAutoLayoutForSelection(e),
   },
 ];
