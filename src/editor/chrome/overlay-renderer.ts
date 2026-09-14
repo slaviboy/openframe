@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { pointsFrame } from '../interactions/vector-points-frame';
 import { chainPointAt, strokeChain } from '@/core/vector/vector-width';
 import { WIDTH_KNOB_MIN_PX } from '../interactions/vector-edit';
 import { selectedHandles } from '../interactions/vector-handles';
@@ -687,6 +688,12 @@ function drawVectorEdit(ctx: CanvasRenderingContext2D, input: OverlayInput): voi
     ctx.fillStyle = theme.handleFill;
     ctx.fill();
     ctx.stroke();
+  }
+  // The bounding box of the selected points, with its corner handles.
+  const pointsBox = pointsFrame(editor);
+  if (pointsBox) {
+    strokeQuad(ctx, screenQuad(editor, pointsBox.frame), theme.selection, 1);
+    drawHandles(ctx, editor, pointsBox.frame, theme);
   }
   const selected = new Set(state.vertices);
   const size = 7;

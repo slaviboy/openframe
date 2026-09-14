@@ -18,6 +18,7 @@
 import type { Transaction } from '@/core/history/history';
 import type { Id } from '@/core/ids/ids';
 import { apply, applyLinear, invert, type Matrix } from '@/core/math/matrix';
+import type { Rect } from '@/core/math/rect';
 import type { Vec2 } from '@/core/math/vec';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
 import { DEFAULT_SHAPE_FILL, solid } from '@/core/document/factory';
@@ -27,6 +28,7 @@ import { bendVertex, oppositeEnd, setTangent, tangentAt, type SegmentEnd } from 
 import { keyBetween } from '@/core/ids/fractional-index';
 import { matrixOf } from '@/core/scene/scene-index';
 import { cutAlongLine, splitComponents } from '@/core/vector/vector-divide';
+import { rotatePoints, scalePoints } from '@/core/vector/vector-transform-points';
 import { eraseNetwork } from '@/core/vector/vector-erase';
 import { addWidthPoint, chainPointAt, nearestOnChain, snapPosition, strokeChain, widthAt, type StrokeChain, type WidthPoint } from '@/core/vector/vector-width';
 import { regionAt, setRegionFills } from '@/core/vector/vector-paint';
@@ -38,7 +40,10 @@ import { refitVector } from '../tools/vector-draw';
 import type { CursorKind, PointerInfo, Tool } from '../tools/types';
 import type { VectorEditTool } from '../stores/editor-store';
 import { worldToScreen } from '../viewport/viewport';
+import { hitHandle as hitFrameHandle, hitRotationCorner } from '../chrome/selection-geometry';
+import { computeResize, type HandleId } from './transform';
 import { hitHandle } from './vector-handles';
+import { pointsFrame } from './vector-points-frame';
 
 /** Vector edit mode can start on a single selected, unlocked vector layer. */
 export function canBeginVectorEdit(editor: Editor): boolean {
@@ -193,6 +198,21 @@ interface CutDrag {
   current: PointerInfo;
 }
 
+/** Resizing or rotating the selected points with their bounding box. */
+type BoxDrag = {
+  readonly tx: Transaction;
+  readonly start: VectorNetwork;
+  readonly startTransform: Transform;
+  /** World to layer space when the drag started. */
+  readonly inverse: Matrix;
+  /** The box around the points, in layer space. */
+  readonly box: Rect;
+  readonly vertices: readonly number[];
+  readonly startLocal: Vec2;
+  readonly down: PointerInfo;
+  moved: boolean;
+} & ({ readonly kind: 'resize'; readonly handle: HandleId } | { readonly kind: 'rotate' });
+
 interface PointDrag {
   tx: Transaction;
   start: VectorNetwork;
@@ -209,6 +229,8 @@ interface PointDrag {
  * With the Lasso (Q), a drag draws an outline that selects the points inside it (Shift adds); a click clears.
  * With Cut (X), clicking a point or a path breaks the path there, leaving its ends selected; dragging across paths
  * cuts them along the line, and the pieces that come apart move to layers of their own.
+ * With two or more points selected, their bounding box resizes them (Shift keeps proportions, Alt resizes from the
+ * center) or, dragged from just outside a corner, rotates them (Shift snaps to 15°).
  * With Bend, pressing on a point (or a path, adding a point) and dragging pulls out mirrored handles.
  * The handles of selected points can be dragged; handles that mirrored each other keep mirroring.
  * With Paint (⇧B), clicking a closed region fills it with the paint, or removes a fill that already matches it; a drag paints every region it crosses.
@@ -224,6 +246,7 @@ export class VectorEditController implements Tool {
   private erasing: EraseDrag | null = null;
   private widthDrag: WidthDrag | null = null;
   private cutDrag: CutDrag | null = null;
+  private boxDrag: BoxDrag | null = null;
   private widthHover: Vec2 | null = null;
   private hover: { readonly region: number; readonly remove: boolean } | null = null;
 
@@ -233,7 +256,7 @@ export class VectorEditController implements Tool {
   ) {}
 
   get active(): boolean {
-    return this.drag !== null || this.lasso !== null || this.handle !== null || this.painting !== null || this.erasing !== null || this.widthDrag !== null || this.cutDrag !== null;
+    return this.drag !== null || this.lasso !== null || this.handle !== null || this.painting !== null || this.erasing !== null || this.widthDrag !== null || this.cutDrag !== null || this.boxDrag !== null;
   }
 
   /** Screen outline of the lasso being drawn, for the overlay. */
@@ -393,6 +416,28 @@ export class VectorEditController implements Tool {
       editor.state.setVectorEdit({ ...state, vertices: result.vertices });
       return;
     }
+    // The selected points' box: points under the pointer come first, so they stay easy to drag.
+    const points = hit === -1 && (state.tool ?? 'move') === 'move' ? pointsFrame(editor) : null;
+    if (points) {
+      const frameHandle = hitFrameHandle(editor, points.frame, p.screen, this.tolerancePx);
+      const corner = frameHandle ? null : hitRotationCorner(editor, points.frame, p.screen, this.tolerancePx);
+      const boxInverse = invert(toWorld);
+      if ((frameHandle || corner) && boxInverse) {
+        const common = {
+          tx: editor.history.begin(frameHandle ? 'Resize points' : 'Rotate points'),
+          start: node.vectorNetwork,
+          startTransform: node.transform,
+          inverse: boxInverse,
+          box: points.box,
+          vertices: state.vertices,
+          startLocal: apply(boxInverse, p.world),
+          down: p,
+          moved: false,
+        };
+        this.boxDrag = frameHandle ? { ...common, kind: 'resize', handle: frameHandle } : { ...common, kind: 'rotate' };
+        return;
+      }
+    }
     if (hit !== -1) {
       const selected = p.shift ? (state.vertices.includes(hit) ? state.vertices.filter((i) => i !== hit) : [...state.vertices, hit]) : state.vertices.includes(hit) ? state.vertices : [hit];
       editor.state.setVectorEdit({ ...state, nodeId: node.id, vertices: selected });
@@ -418,6 +463,10 @@ export class VectorEditController implements Tool {
   }
 
   pointerMove(p: PointerInfo): void {
+    if (this.boxDrag) {
+      this.dragBox(this.boxDrag, p);
+      return;
+    }
     if (this.cutDrag) {
       this.cutDrag.current = p;
       if (this.cutMoved(this.cutDrag)) this.editor.requestRender();
@@ -473,6 +522,13 @@ export class VectorEditController implements Tool {
   }
 
   pointerUp(): void {
+    const boxDrag = this.boxDrag;
+    if (boxDrag) {
+      this.boxDrag = null;
+      if (boxDrag.moved) this.editor.history.commit(boxDrag.tx);
+      else this.editor.history.cancel(boxDrag.tx);
+      return;
+    }
     const cutDrag = this.cutDrag;
     if (cutDrag) {
       if (this.cutMoved(cutDrag)) {
@@ -524,6 +580,28 @@ export class VectorEditController implements Tool {
     this.drag = null;
     if (d.moved) this.editor.history.commit(d.tx);
     else this.editor.history.cancel(d.tx);
+  }
+
+  /** Resizes the selected points with their box (Shift keeps proportions, Alt from the center) or rotates them about its center (Shift snaps to 15°). */
+  private dragBox(g: BoxDrag, p: PointerInfo): void {
+    const state = this.editor.state.getSnapshot().vectorEdit;
+    if (!state) return;
+    if (!g.moved && Math.hypot(p.screen.x - g.down.screen.x, p.screen.y - g.down.screen.y) < 3) return;
+    g.moved = true;
+    const local = apply(g.inverse, p.world);
+    let network: VectorNetwork;
+    if (g.kind === 'resize') {
+      const edges = computeResize({ box: g.box, handle: g.handle, pointer: local, start: g.startLocal, keepAspect: p.shift, fromCenter: p.alt });
+      network = scalePoints(g.start, g.vertices, g.box, edges);
+    } else {
+      const pivot = { x: g.box.x + g.box.width / 2, y: g.box.y + g.box.height / 2 };
+      let angle = Math.atan2(local.y - pivot.y, local.x - pivot.x) - Math.atan2(g.startLocal.y - pivot.y, g.startLocal.x - pivot.x);
+      if (p.shift) angle = Math.round(angle / (Math.PI / 12)) * (Math.PI / 12);
+      network = rotatePoints(g.start, g.vertices, pivot, angle);
+    }
+    refitVector(g.tx, state.nodeId, network, g.startTransform);
+    g.tx.flushPreview();
+    this.editor.requestRender();
   }
 
   private cutMoved(g: CutDrag): boolean {
@@ -696,6 +774,11 @@ export class VectorEditController implements Tool {
   }
 
   cancel(): boolean {
+    if (this.boxDrag) {
+      this.editor.history.cancel(this.boxDrag.tx);
+      this.boxDrag = null;
+      return true;
+    }
     if (this.cutDrag) {
       this.cutDrag = null;
       this.editor.requestRender();
