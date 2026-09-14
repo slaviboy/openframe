@@ -32,6 +32,8 @@ import { canParent } from '@/core/document/containment';
 import type { DuplicateMemory } from '../editor';
 import type { Vec2 } from '@/core/math/vec';
 import { hitTestDeepest, isArtboardWithChildren, isInteractive, marqueeSelect, selectionTarget } from '@/core/scene/hit-test';
+import { connectDestinationAt, connectHandle, hitConnectHandle } from '../chrome/prototype-geometry';
+import { addInteraction } from '../commands/prototype';
 import { snapEqualGaps, type GapIndicator } from '@/core/scene/equal-gaps';
 import { measureBetween, type MeasureLine } from '@/core/scene/measure';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
@@ -181,7 +183,9 @@ type Gesture =
       index: number;
       startLength: number;
       toWorld: Matrix;
-    };
+    }
+  /** Prototype tab: dragging the selection's + to a destination frame connects the selection to it. */
+  | { kind: 'connect'; sourceIds: readonly Id[]; start: Vec2; current: PointerInfo; destination: Id | null };
 
 /**
  * Move tool (V): selection, dragging, marquee selection, and resizing via handles.
@@ -296,6 +300,12 @@ export class MoveTool implements Tool {
   }
 
   /** Current marquee in world space (for the overlay), or null. */
+  /** The connection being dragged from the + handle: where it starts and the pointer (screen), and the frame under it. */
+  get connectDrag(): { readonly start: Vec2; readonly end: Vec2; readonly destination: Id | null } | null {
+    const g = this.gesture;
+    return g.kind === 'connect' ? { start: g.start, end: g.current.screen, destination: g.destination } : null;
+  }
+
   get marquee(): Rect | null {
     if (this.gesture.kind !== 'marquee') return null;
     return fromPoints(this.gesture.down.world, this.gesture.current);
@@ -304,7 +314,7 @@ export class MoveTool implements Tool {
   cursor(): CursorKind {
     if (this.gesture.kind === 'resize') return handleCursor(this.gesture.frame, this.gesture.handle);
     if (this.gesture.kind === 'rotate') return rotateCursor(this.gesture.frame, this.gesture.corner);
-    if (this.gesture.kind === 'line-end') return 'crosshair';
+    if (this.gesture.kind === 'line-end' || this.gesture.kind === 'connect') return 'crosshair';
     if (this.gesture.kind === 'grid-track') return this.gesture.axis === 'column' ? 'ew-resize' : 'ns-resize';
     if (this.gesture.kind === 'layout-handle') return isUprightHandle(this.gesture.handle, this.gesture.direction) ? 'ew-resize' : 'ns-resize';
     if (this.gesture.kind === 'spacing') return this.gesture.info.selection.axis === 'x' ? 'ew-resize' : 'ns-resize';
@@ -315,6 +325,13 @@ export class MoveTool implements Tool {
     if (p.button !== 0) return;
     const { editor } = this.env;
     const frame = selectionFrame(editor);
+    // Prototype tab: the + on the selection's edge starts a connection (it covers the resize handle there).
+    const connect = this.id === 'move' ? connectHandle(editor) : null;
+    if (connect && hitConnectHandle(editor, p.screen)) {
+      editor.scene.ensure(editor.pageId);
+      this.gesture = { kind: 'connect', sourceIds: connect.sourceIds, start: connect.center, current: p, destination: null };
+      return;
+    }
     if (frame && !p.shift) {
       const handle = hitHandle(editor, frame, p.screen, this.env.hitTolerancePx);
       if (handle && this.id === 'move' && frame.nodeId && isLineFrame(editor, frame)) {
@@ -558,6 +575,11 @@ export class MoveTool implements Tool {
         g.last = p;
         this.applyLayoutHandle(p);
         return;
+      case 'connect':
+        g.current = p;
+        g.destination = connectDestinationAt(this.env.editor, g.sourceIds, p.world);
+        this.env.editor.requestRender();
+        return;
       case 'spacing': {
         g.last = p;
         const delta = g.info.selection.axis === 'x' ? p.world.x - g.down.world.x : p.world.y - g.down.world.y;
@@ -623,6 +645,11 @@ export class MoveTool implements Tool {
         break;
       case 'grid-track':
         editor.history.commit(g.tx);
+        break;
+      case 'connect':
+        // Dropped on a frame: each source gets an interaction navigating to it.
+        if (g.destination) addInteraction(editor, g.sourceIds, g.destination);
+        editor.requestRender();
         break;
       case 'layout-handle':
         // A click without dragging opens a field to type the value instead.

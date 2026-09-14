@@ -253,6 +253,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
         editor,
         theme: themeRef.current === 'dark' ? DARK_CHROME : LIGHT_CHROME,
         marquee: tools.moveTool.marquee ?? tools.textTool.draftRect,
+        connectDrag: tools.moveTool.connectDrag,
         textEdit: editor.state.getSnapshot().textEdit ? { caretVisible } : null,
         rotation: tools.moveTool.rotationLabel,
         radiusHandles: tools.moveTool.radiusHandleView,

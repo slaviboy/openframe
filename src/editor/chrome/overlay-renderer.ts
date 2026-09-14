@@ -58,6 +58,7 @@ import { variantsOf } from '@/core/document/variants';
 import { slotIndicators } from '@/core/document/component-properties';
 import { noodleBetween, visibleConnections, type Noodle } from '@/core/prototype/connections';
 import { flowsOf } from '@/core/prototype/flows';
+import { CONNECT_HANDLE_SIZE, connectHandle, screenBounds } from './prototype-geometry';
 
 export interface OverlayInput {
   readonly editor: Editor;
@@ -102,6 +103,8 @@ export interface OverlayInput {
   readonly hoveredGuide?: GuideRef | null;
   /** Outline every mask on the page (View › Mask outlines). */
   readonly maskOutlines?: boolean;
+  /** A connection being dragged from the + handle (screen points), and the frame it would connect to. */
+  readonly connectDrag?: { readonly start: Vec2; readonly end: Vec2; readonly destination: Id | null } | null;
   /** Eyedropper loupe: the sampled color at a canvas point. */
   readonly eyedropper?: { readonly screen: Vec2; readonly color: Color } | null;
   readonly width: number;
@@ -174,6 +177,40 @@ function drawPrototypeChrome(ctx: CanvasRenderingContext2D, input: OverlayInput,
     ctx.arc(noodle.start.x, noodle.start.y, 3, 0, Math.PI * 2);
     ctx.fill();
     drawArrowhead(ctx, noodle);
+  }
+
+  const drag = input.connectDrag;
+  if (drag) {
+    // The frame the connection would end on, outlined; the noodle follows the pointer.
+    const target = drag.destination ? screenBounds(editor, drag.destination) : null;
+    if (target) {
+      ctx.lineWidth = 2;
+      ctx.strokeRect(Math.round(target.x) + 0.5, Math.round(target.y) + 0.5, Math.round(target.width), Math.round(target.height));
+    }
+    const noodle = noodleBetween({ x: drag.start.x, y: drag.start.y, width: 0, height: 0 }, target ?? { x: drag.end.x, y: drag.end.y, width: 0, height: 0 });
+    ctx.beginPath();
+    ctx.moveTo(noodle.start.x, noodle.start.y);
+    ctx.bezierCurveTo(noodle.c1.x, noodle.c1.y, noodle.c2.x, noodle.c2.y, noodle.end.x, noodle.end.y);
+    ctx.stroke();
+    drawArrowhead(ctx, noodle);
+    return;
+  }
+  // The + handle on the selection's edge starts a new connection.
+  const handle = connectHandle(editor);
+  if (handle) {
+    const { x, y } = handle.center;
+    ctx.beginPath();
+    ctx.arc(x, y, CONNECT_HANDLE_SIZE / 2, 0, Math.PI * 2);
+    ctx.fillStyle = PROTOTYPE_COLOR;
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x - 4, y);
+    ctx.lineTo(x + 4, y);
+    ctx.moveTo(x, y - 4);
+    ctx.lineTo(x, y + 4);
+    ctx.stroke();
   }
 }
 

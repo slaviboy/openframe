@@ -54,20 +54,26 @@ This file is how work continues after a pause (for example, a usage limit). Read
   - Connection noodles (the commit after presentation view):
     - `src/core/prototype/connections.ts`
     - `drawPrototypeChrome` in `overlay-renderer.ts` draws the noodles and flow tags while the Prototype tab is open
+  - Drag to connect (the commit after connection noodles):
+    - the + handle on the selection's right edge (`src/editor/chrome/prototype-geometry.ts`)
+    - the move tool's `connect` gesture adds interactions on drop
 
 ## In progress (uncommitted)
 
-1. **Dragging the + to connect.** In progress:
-   - `src/editor/chrome/prototype-geometry.ts`: the + handle on the selection's right edge while the Prototype tab is open, its hit test, and the destination under the pointer
-   - `src/editor/tools/move-tool.ts`: the `connect` gesture, which adds interactions on drop, and the `connectDrag` getter
-   - `e2e/prototype-connect-drag.spec.ts`
+1. **Smart animate.** Written; being checked:
+   - `src/core/prototype/smart-animate.ts` and its test: `matchLayers` (name path), `canSmartAnimate` (shadows and shape changes dissolve), `smartAnimateStore` (a scratch document of the blended destination)
+   - `src/core/prototype/presentation.ts`: items with `smart` for Smart animate screens and overlay swaps
+   - `src/ui/present/presentation-renderer.ts`: renders smart items fresh with `smartFrameImage`
 
-   Still to do: draw the + handle and the drag noodle in `overlay-renderer.ts` (pass `connectDrag` from `CanvasHost`), run the checks and the spec, update the matrix, run the gate, commit.
+   Next steps:
+   - Run `npm run check` and a presentation E2E test with a Smart animate interaction.
+   - Update the matrix rows (Smart animate matching, Transitions).
+   - Run the gate and commit.
+   - Then "Animate matching layers" for directional transitions (currently they ignore it).
 
 ## Next (M10, in order)
 
 1. Clicking a noodle to select its interaction, and dragging its end to another destination; the overlay badge on the canvas.
-2. Smart animate: interpolate matching layers by name and hierarchy (currently it dissolves).
 3. Scroll overflow (horizontal, vertical, both), fixed and sticky layers, and state memorization of scroll position.
 4. Inline preview (⇧Space) and follow prototype.
 5. Device and background settings; the prototype settings panel with nothing selected.
