@@ -381,3 +381,21 @@
   color: inherit;
   font: inherit;
 }
+
+/* An export configuration: scale, suffix, format and Remove. */
+.exportRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto auto;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.exportPreview {
+  max-width: 100%;
+  max-height: 200px;
+  margin-top: var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: repeating-conic-gradient(var(--border) 0 25%, transparent 0 50%) 0 0 / 12px 12px;
+  object-fit: contain;
+}

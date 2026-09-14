@@ -125,6 +125,7 @@ const VERTICAL_CONSTRAINTS: readonly (readonly [Constraint, string])[] = [
 ];
 import { ImageSettings, ImageSwatch } from './ImageSettings';
 import { AppliedStyle, LocalStylesSection, StyleButton } from './StylesPanel';
+import { ExportSection } from './ExportSection';
 import { BoundPaint, PropertyDefaultVariableButton, sharedBoundVariable, VariableBindingControl, VariableModeButton, VariableNumberField, VariantVariableButton, VisibilityControl } from './VariableFields';
 import { PatternSettings } from './PatternSettings';
 import { PAINT_BLEND_OPTIONS } from './blend-modes';
@@ -965,6 +966,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       <SelectionColorsSection nodes={nodes} />
       {!allSlices && <EffectsSection nodes={nodes} />}
       {frames.length === nodes.length && <LayoutGuideSection nodes={frames} />}
+      <ExportSection nodes={nodes} />
     </>
   );
 }

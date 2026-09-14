@@ -575,6 +575,13 @@ const TEXT_FORMAT_COMMANDS: CommandDefinition[] = [
 
 export const BUILTIN_COMMANDS: CommandDefinition[] = [
   ...COLOR_PROFILE_COMMANDS,
+  {
+    id: 'file.export',
+    label: 'Export…',
+    category: 'File',
+    shortcuts: ['Mod+Shift+E'],
+    run: (e) => e.state.openDialog('export'),
+  },
   // Vector edit mode, registered first: Return and Delete act on the vector's points while it is being edited.
   // V, Q, X, ⇧B and ⇧E pick the secondary toolbar's Move, Lasso, Cut, Paint and Eraser while editing, before the main tools' shortcuts.
   {

@@ -32,6 +32,7 @@ export const OVERRIDABLE_FIELDS: ReadonlySet<string> = new Set([
   'effectStyleId',
   'boundVariables',
   'explicitVariableModes',
+  'exportSettings',
   // Fill and stroke
   'fills',
   'strokes',

@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { ExportFormat } from '@/core/export/export-settings';
 import type { Canvas, CanvasKit, ColorFilter, EmbindEnumEntity, Paint as CkPaint, ImageFilter, Path, RRect, RuntimeEffect, Shader } from 'canvaskit-wasm';
 import type { Effect } from '@/core/schema/document';
 
@@ -274,6 +275,47 @@ export class SceneRenderer {
       }
     } finally {
       surface.delete();
+    }
+  }
+
+  /**
+   * An exported image (ThumbnailService): one layer and its children within its painted bounds (effects included) on a
+   * transparent background, or for a slice everything within its bounds, at `scale`. JPG has no transparency, so it is
+   * flattened onto white. Null when there is nothing to draw.
+   */
+  exportImage(store: DocumentStore, index: SceneIndex, pageId: Id, id: Id, scale: number, format: ExportFormat, colorProfile?: ColorProfile): Uint8Array | null {
+    index.ensure(pageId);
+    const region = store.get(id)?.type === 'SLICE';
+    const bounds = region ? index.worldBounds(id) : (index.paintBounds(id) ?? index.worldBounds(id));
+    if (!bounds || bounds.width <= 0 || bounds.height <= 0 || !(scale > 0)) return null;
+    const width = Math.max(1, Math.round(bounds.width * scale));
+    const height = Math.max(1, Math.round(bounds.height * scale));
+    const surface = this.ck.MakeSurface(width, height);
+    if (!surface) return null;
+    const flat = format === 'JPG' ? this.ck.MakeSurface(width, height) : null;
+    try {
+      const view = { x: bounds.x, y: bounds.y, zoom: scale, width, height, dpr: 1 };
+      this.render(surface.getCanvas(), store, index, pageId, view, { ...(region ? {} : { only: id }), ...(colorProfile ? { colorProfile } : {}) });
+      surface.flush();
+      const drawn = surface.makeImageSnapshot();
+      try {
+        if (!flat) return drawn.encodeToBytes(format === 'WEBP' ? this.ck.ImageFormat.WEBP : this.ck.ImageFormat.PNG, 100);
+        const canvas = flat.getCanvas();
+        canvas.clear(this.ck.WHITE);
+        canvas.drawImage(drawn, 0, 0, null);
+        flat.flush();
+        const flattened = flat.makeImageSnapshot();
+        try {
+          return flattened.encodeToBytes(this.ck.ImageFormat.JPEG, 92);
+        } finally {
+          flattened.delete();
+        }
+      } finally {
+        drawn.delete();
+      }
+    } finally {
+      surface.delete();
+      flat?.delete();
     }
   }
 

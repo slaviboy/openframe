@@ -26,6 +26,7 @@
  * Adding a new optional field or a new union member is backwards compatible and does
  * not require a version bump. Renaming/removing fields or changing semantics does.
  */
+import { EXPORT_FORMATS } from '../export/export-settings';
 import { z } from 'zod';
 import { IMAGE_HASH_PATTERN } from '../image/hash';
 
@@ -70,6 +71,21 @@ export const BlendModeSchema = z.enum([
   'COLOR',
   'LUMINOSITY',
 ]);
+
+/** How big an export is: a multiple of the layer's size, or a fixed width or height in pixels (keeping the aspect ratio). */
+export const ExportConstraintSchema = z.object({
+  type: z.enum(['SCALE', 'WIDTH', 'HEIGHT']),
+  value: z.number().positive().max(100_000),
+});
+export type ExportConstraint = z.infer<typeof ExportConstraintSchema>;
+
+/** One export configuration of a layer (the Export section): format, file name suffix and size. */
+export const ExportSettingSchema = z.object({
+  format: z.enum(EXPORT_FORMATS),
+  suffix: z.string().max(200),
+  constraint: ExportConstraintSchema,
+});
+export type ExportSetting = z.infer<typeof ExportSettingSchema>;
 
 /** A reference to a variable: a variable's value that follows another variable, or a property bound to a variable. */
 export const VariableAliasSchema = z.object({ type: z.literal('VARIABLE_ALIAS'), id: IdSchema });
@@ -312,6 +328,8 @@ const SceneFields = {
   boundVariables: BoundVariablesSchema.optional(),
   /** Variable modes set on this layer, by collection id; its children inherit them unless they set their own. */
   explicitVariableModes: ExplicitVariableModesSchema.optional(),
+  /** Export configurations (the Export section), in order. Absent when the layer has none. */
+  exportSettings: z.array(ExportSettingSchema).max(64).optional(),
   /** Inside a main component or variant: the component properties (by name) this layer's visibility and text, or for a nested instance its component, follow. */
   componentPropertyReferences: z
     .object({

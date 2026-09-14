@@ -49,6 +49,7 @@ import { instanceSlotOf } from '@/core/document/instances';
 import { slotLimitWarning } from '@/core/document/component-properties';
 import type { ChangeSet } from '@/core/history/history';
 import { AddInstancesDialog } from './dialogs/AddInstancesDialog';
+import { ExportDialog } from './dialogs/ExportDialog';
 
 type LoadState = { kind: 'loading' } | { kind: 'ready'; session: AppSession } | { kind: 'error'; message: string };
 
@@ -306,6 +307,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
       {editorState.addInstancesSlotId && <AddInstancesDialog editor={editor} slotId={editorState.addInstancesSlotId} onClose={() => editor.state.openAddInstances(null)} />}
       {editorState.dialog === 'batchRename' && <BatchRenameDialog editor={editor} onClose={closeDialog} />}
       {editorState.dialog === 'nudgeAmount' && <NudgeDialog onClose={closeDialog} />}
+      {editorState.dialog === 'export' && <ExportDialog editor={editor} onClose={closeDialog} />}
       {editorState.tool === 'image' && <PlaceImageHint tools={tools} />}
       {editorState.tool === 'pickLayer' && <ToolHint text="Click a layer to use as the pattern source · Esc to cancel" />}
       {editorState.tool === 'eyedropper' && <ToolHint text="Click to apply a color from the canvas · Esc to cancel" />}
