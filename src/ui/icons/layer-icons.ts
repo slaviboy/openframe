@@ -38,6 +38,7 @@ export const LAYER_TYPE_ICONS: Record<SceneNode['type'], IconName> = {
 export function layerIcon(node: SceneNode): IconName {
   if (node.isMask) return 'mask';
   if (node.type === 'FRAME' && node.component) return 'component';
+  if (node.type === 'FRAME' && node.instance) return 'instance';
   if (node.type === 'RECTANGLE' && node.fills.some((p) => p.type === 'IMAGE' && p.visible)) return 'image';
   return LAYER_TYPE_ICONS[node.type];
 }

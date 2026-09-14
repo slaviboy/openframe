@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { isMainComponent, pastedInstanceLayer } from '@/core/document/instances';
 import { canParent } from '@/core/document/containment';
 import { sortByPaintOrder } from '@/core/document/order';
 import type { DocumentStore } from '@/core/document/store';
@@ -179,19 +180,32 @@ function insert(tx: Transaction, editor: Editor, payload: ClipboardPayload, pare
   const rootKeys = keysBetween(lo, hi, payload.roots.length);
   const created: Id[] = [];
 
+  // A pasted main component that is still in this document becomes an instance of it.
+  const instanceRoots = new Set(payload.roots.filter((rootId) => isMainComponent(byId.get(rootId)) && isMainComponent(tx.store.get(rootId) as SceneNode | undefined)));
+  const inInstance = (node: SceneNode): boolean => {
+    for (let cur = node; ; cur = byId.get(cur.parent.id)!) {
+      if (instanceRoots.has(cur.id)) return true;
+      if (roots.has(cur.id)) return false;
+    }
+  };
+
   payload.roots.forEach((rootId, i) => {
     const node = byId.get(rootId)!;
     const world = multiply(shift, matrixOf(payload.worldTransforms[rootId]!));
     const local = roundTransform(multiply(parentInv, world));
     const newId = idMap.get(rootId)!;
-    tx.create({ ...node, id: newId, parent: { id: parent, key: rootKeys[i]! }, transform: toTransform(local) });
+    const parentRef = { id: parent, key: rootKeys[i]! };
+    const copy = instanceRoots.has(rootId) ? pastedInstanceLayer(node, newId, parentRef, true) : { ...node, id: newId, parent: parentRef };
+    tx.create({ ...copy, transform: toTransform(local) });
     created.push(newId);
   });
 
   // Descendants in depth order so every parent exists before its children.
   const descendants = payload.nodes.filter((n) => !roots.has(n.id)).sort((a, b) => depth(a) - depth(b));
   for (const node of descendants) {
-    tx.create({ ...node, id: idMap.get(node.id)!, parent: { id: idMap.get(node.parent.id)!, key: node.parent.key } });
+    const id = idMap.get(node.id)!;
+    const parentRef = { id: idMap.get(node.parent.id)!, key: node.parent.key };
+    tx.create(inInstance(node) ? pastedInstanceLayer(node, id, parentRef, false) : { ...node, id, parent: parentRef });
   }
   return created;
 }

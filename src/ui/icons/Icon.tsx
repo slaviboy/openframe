@@ -28,6 +28,7 @@ const PATHS = {
   ),
   frame: <path d="M9 5v14M15 5v14M5 9h14M5 15h14" />,
   component: <path d="M12 4.5l2.5 2.5L12 9.5 9.5 7zm0 10l2.5 2.5-2.5 2.5-2.5-2.5zM7 9.5l2.5 2.5L7 14.5 4.5 12zm10 0l2.5 2.5-2.5 2.5-2.5-2.5z" />,
+  instance: <path d="M12 5l7 7-7 7-7-7z" />,
   scale: <path d="M6.5 17.5v-6h6v6zM12.5 11.5l5-5M13.5 6.5h4v4" />,
   section: <path d="M5.5 10V6.5h6V10M5.5 10h13v7.5h-13z" />,
   slice: <path d="m6.5 17.5 11-11M13 17.5h4.5V13" />,

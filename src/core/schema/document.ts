@@ -322,6 +322,10 @@ const SceneFields = {
   isMask: z.boolean().optional(),
   /** How a mask reveals content; absent means ALPHA. */
   maskType: z.enum(['ALPHA', 'VECTOR', 'LUMINANCE']).optional(),
+  /** Inside a component instance: the layer of the main component this layer mirrors. */
+  source: IdSchema.optional(),
+  /** Inside a component instance: fields changed on this layer, kept when the main component changes. */
+  overrides: z.array(z.string().max(100)).max(200).optional(),
 };
 
 export const StrokeJoinSchema = z.enum(['MITER', 'BEVEL', 'ROUND']);
@@ -419,6 +423,8 @@ export const FrameNodeSchema = z.object({
       link: z.string().max(2_000).optional(),
     })
     .optional(),
+  /** Present when the frame is an instance of a main component. */
+  instance: z.object({ mainId: IdSchema }).optional(),
   /** Frame guides (for frames directly on the page or in a section). Absent when none. */
   guides: GuidesField,
   /** Layout guides, drawn over the frame's contents. Absent when none. */

@@ -503,7 +503,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
 
   const single = nodes.length === 1 ? nodes[0]! : null;
   const types = new Set(nodes.map((n) => n.type));
-  const typeLabel = types.size === 1 ? (single?.type === 'FRAME' && single.component ? 'Component' : TYPE_LABELS[nodes[0]!.type]) : 'Mixed';
+  const typeLabel = types.size === 1 ? (single?.type === 'FRAME' && single.component ? 'Component' : single?.type === 'FRAME' && single.instance ? 'Instance' : TYPE_LABELS[nodes[0]!.type]) : 'Mixed';
 
   // Multi-selection X/Y are the selection bounds in world space; single is parent-relative.
   const bounds = single ? null : editor.selectionBounds(nodes.map((n) => n.id));
