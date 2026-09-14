@@ -21,7 +21,7 @@ import { apply, applyLinear, invert } from '@/core/math/matrix';
 import type { Vec2 } from '@/core/math/vec';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
 import type { Transform, VectorNode } from '@/core/schema/document';
-import { deleteVertices, healVertices, moveVertices, nearestOnSegments, splitSegment } from '@/core/vector/vector-edit';
+import { cutVertex, deleteVertices, healVertices, moveVertices, nearestOnSegments, splitSegment } from '@/core/vector/vector-edit';
 import type { VectorNetwork } from '@/core/vector/vector-network';
 import type { Editor } from '../editor';
 import { refitVector } from '../tools/vector-draw';
@@ -117,6 +117,7 @@ interface PointDrag {
  * point to select it (Shift adds or removes), drag selected points to move them, double-click a path
  * to add a point, click inside the layer to clear the point selection, and click elsewhere to leave.
  * With the Lasso (Q), a drag draws an outline that selects the points inside it (Shift adds); a click clears.
+ * With Cut (X), clicking a point or a path breaks the path there, leaving its ends selected.
  */
 export class VectorEditController implements Tool {
   readonly id = 'move' as const;
@@ -160,6 +161,22 @@ export class VectorEditController implements Tool {
       const s = worldToScreen(v, apply(toWorld, vertex));
       return Math.abs(s.x - p.screen.x) <= this.tolerancePx && Math.abs(s.y - p.screen.y) <= this.tolerancePx;
     });
+    if (state.tool === 'cut') {
+      const inverseCut = invert(toWorld);
+      const localCut = inverseCut ? apply(inverseCut, p.world) : null;
+      const nearest = hit === -1 && localCut ? nearestOnSegments(node.vectorNetwork, localCut) : null;
+      const onPath = nearest && nearest.distance * Math.hypot(toWorld.a, toWorld.b) * v.zoom <= this.tolerancePx ? nearest : null;
+      if (hit === -1 && !onPath) {
+        editor.state.setVectorEdit({ ...state, vertices: [] });
+        return;
+      }
+      // On a path, the cut goes through a point added there first.
+      const split = onPath ? splitSegment(node.vectorNetwork, onPath.segment, onPath.t) : null;
+      const result = cutVertex(split ? split.network : node.vectorNetwork, split ? split.vertex : hit);
+      if (result.vertices.length > 1) editor.history.run('Cut path', (tx) => refitVector(tx, node.id, result.network));
+      editor.state.setVectorEdit({ ...state, vertices: result.vertices });
+      return;
+    }
     if (hit !== -1) {
       const selected = p.shift ? (state.vertices.includes(hit) ? state.vertices.filter((i) => i !== hit) : [...state.vertices, hit]) : state.vertices.includes(hit) ? state.vertices : [hit];
       editor.state.setVectorEdit({ ...state, nodeId: node.id, vertices: selected });

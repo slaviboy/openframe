@@ -61,6 +61,7 @@ const GROUPS: readonly (readonly ToolItem[])[] = [
 const VECTOR_TOOLS: readonly { readonly tool: VectorEditTool; readonly label: string; readonly icon: IconName; readonly command: string }[] = [
   { tool: 'move', label: 'Move', icon: 'move', command: 'vector.toolMove' },
   { tool: 'lasso', label: 'Lasso', icon: 'lasso', command: 'vector.toolLasso' },
+  { tool: 'cut', label: 'Cut', icon: 'cut', command: 'vector.toolCut' },
 ];
 
 /** Floating bottom toolbar. Each group remembers the last tool picked from its dropdown; vector edit mode shows its secondary toolbar instead. */

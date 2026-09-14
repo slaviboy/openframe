@@ -68,6 +68,35 @@ export function deleteVertices(network: VectorNetwork, indices: readonly number[
   return { vertices: network.vertices.filter((_, i) => !removed.has(i)), segments, regions };
 }
 
+/**
+ * Cut (X): breaks the path at a vertex. Each segment end there except the first gets its own copy of the
+ * vertex, so the segments no longer connect; regions whose loops used those segments lose their fill.
+ * Returns the network and the vertices at the cut (the vertex and its copies).
+ */
+export function cutVertex(network: VectorNetwork, vertex: number): { network: VectorNetwork; vertices: number[] } {
+  const ends: { segment: number; side: 'start' | 'end' }[] = [];
+  network.segments.forEach((s, i) => {
+    if (s.start === vertex) ends.push({ segment: i, side: 'start' });
+    if (s.end === vertex) ends.push({ segment: i, side: 'end' });
+  });
+  if (ends.length < 2) return { network, vertices: [vertex] };
+  const vertices = [...network.vertices];
+  const segments = [...network.segments];
+  const created = [vertex];
+  for (const { segment, side } of ends.slice(1)) {
+    const copy = vertices.push({ ...network.vertices[vertex]! }) - 1;
+    created.push(copy);
+    const s = segments[segment]!;
+    segments[segment] = side === 'start' ? { ...s, start: copy } : { ...s, end: copy };
+  }
+  const cut = new Set(ends.map((e) => e.segment));
+  const regions = network.regions.flatMap((region) => {
+    const loops = region.loops.filter((loop) => !loop.some((i) => cut.has(i)));
+    return loops.length > 0 ? [{ ...region, loops }] : [];
+  });
+  return { network: { vertices, segments, regions }, vertices: created };
+}
+
 /** A segment traced from its end to its start. */
 const reversed = (s: VectorSegment): VectorSegment => ({ start: s.end, end: s.start, tangentStart: s.tangentEnd, tangentEnd: s.tangentStart });
 
