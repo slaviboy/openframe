@@ -167,7 +167,7 @@ export class Editor {
       // Constraints and text sizes settle before auto layout measures its children; groups hug the result.
       finalizers: [createComponentFinalizer(() => this.ids.next()), vectorFinalizer, constraintsFinalizer, createTextFinalizer(() => this.textLayout), createAutoLayoutFinalizer(() => this.textLayout), groupFinalizer],
       // Constraints and auto layout follow resize drags live.
-      previewFinalizers: [vectorFinalizer, constraintsFinalizer, createAutoLayoutFinalizer(() => this.textLayout, { preview: true })],
+      previewFinalizers: [createComponentFinalizer(() => this.ids.next()), vectorFinalizer, constraintsFinalizer, createAutoLayoutFinalizer(() => this.textLayout, { preview: true })],
       ...(options.validate ? { validate: assertDocumentInvariants } : {}),
     });
     // The scene index must learn about every change before anything renders or hit-tests.

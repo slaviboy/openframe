@@ -290,6 +290,9 @@ export function hasOverrides(store: DocumentStore, ids: readonly Id[]): boolean 
   });
 }
 
+/** Per transaction, the `id field` values the component finalizer copied, so later runs (previews, the commit) don't take them for edits. */
+const copiedValues = new WeakMap<Transaction, Set<string>>();
+
 /** A change the component finalizer passes on: an edit of the transaction, or a copy of one on a linked layer. */
 interface Change {
   readonly id: Id;
@@ -372,14 +375,27 @@ function syncStructure(tx: Transaction, nextId: () => Id, linked: (id: Id) => Li
       tx.delete(copy.id);
     }
   };
+  // Previews during a drag run this again, so a copy that already exists is kept.
   const createCopies = (id: Id): void => {
     const node = store.get(id);
     if (!node || !isSceneNode(node)) return;
     for (const parentCopy of copiesOf(node.parent.id)) {
       if (!store.get(parentCopy.id)) continue;
-      const copyId = nextId();
-      cloneNestedCopy(tx, id, { id: parentCopy.id, key: node.parent.key }, nextId, copyId);
+      const existing = store.children(parentCopy.id).find((childId) => (store.get(childId) as SceneNode | undefined)?.source === id);
+      const copyId = existing ?? nextId();
+      if (existing === undefined) cloneNestedCopy(tx, id, { id: parentCopy.id, key: node.parent.key }, nextId, copyId);
       createCopies(copyId);
+    }
+  };
+  // Copies left under a parent that no longer copies the layer's parent (after it moved out or elsewhere).
+  const deleteStrayCopies = (id: Id): void => {
+    const node = store.get(id);
+    const parentCopies = new Set(node && isSceneNode(node) && mainRootOf(node.parent.id) !== null ? copiesOf(node.parent.id).map((c) => c.id) : []);
+    for (const copy of copiesOf(id)) {
+      const current = store.get(copy.id);
+      if (!current || !isSceneNode(current) || parentCopies.has(current.parent.id)) continue;
+      deleteCopies(copy.id);
+      tx.delete(copy.id);
     }
   };
   const moveCopies = (id: Id, sourceRoot: Id): void => {
@@ -411,11 +427,9 @@ function syncStructure(tx: Transaction, nextId: () => Id, linked: (id: Id) => Li
       if (!prev || !next) continue;
       const from = mainRootOf(prev.id);
       const to = mainRootOf(next.id);
-      if (from !== null && from === to) moveCopies(op.id, from);
-      else {
-        if (from !== null) deleteCopies(op.id);
-        if (to !== null) createCopies(op.id);
-      }
+      if (to !== null && from === to) moveCopies(op.id, to);
+      deleteStrayCopies(op.id);
+      if (to !== null) createCopies(op.id);
     }
   }
 }
@@ -442,12 +456,18 @@ export function createComponentFinalizer(nextId: () => Id): Finalizer {
       syncStructure(tx, nextId, linked);
       links = null;
     }
-    const changes: Change[] = tx.ops.flatMap((op) => (op.kind === 'set' && !LINK_FIELDS.has(op.field) ? [{ id: op.id, field: op.field, value: op.value, prev: op.prev, edit: true }] : []));
+    const copied = copiedValues.get(tx) ?? new Set<string>();
+    copiedValues.set(tx, copied);
+    const changes: Change[] = tx.ops.flatMap((op) =>
+      op.kind === 'set' && !LINK_FIELDS.has(op.field) && !copied.has(`${op.id} ${op.field}`) ? [{ id: op.id, field: op.field, value: op.value, prev: op.prev, edit: true }] : [],
+    );
     if (changes.length === 0) return;
     const copy = (target: SceneNode, name: string, value: unknown) => {
       const prev = field(target, name);
       if (same(prev, value)) return;
       tx.set(target.id, name, value);
+
+      copied.add(`${target.id}\0${name}`);
       changes.push({ id: target.id, field: name, value, prev, edit: false });
     };
     for (let i = 0; i < changes.length; i++) {
@@ -484,7 +504,9 @@ export function createComponentFinalizer(nextId: () => Id): Finalizer {
           // Instances keep their own placement and, for a variant, the component set's name; a resize reaches
           // the instances that still had the previous size.
           if (ROOT_PLACEMENT.has(change.field) || (change.field === 'name' && componentSetOf(store, change.id))) continue;
-          if (change.field === 'size' && !same(field(current, 'size'), change.prev)) continue;
+          // (An instance that followed earlier in this transaction, during a drag, keeps following.)
+
+          if (change.field === 'size' && !copied.has(`${current.id}\0size`) && !same(field(current, 'size'), change.prev)) continue;
         }
         copy(current, change.field, change.value);
       }
