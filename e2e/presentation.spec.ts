@@ -69,3 +69,49 @@ test('Present opens presentation view in a new tab that plays the prototype', as
   await present.getByRole('button', { name: 'Flows' }).click();
   await expect(present.getByRole('complementary', { name: 'Flows' })).toContainText('Flow 1');
 });
+
+test('a Smart animate interaction plays between matching frames', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await drawFrame(page, 350, 200, 'Frame 1');
+  await drawFrame(page, 650, 200, 'Frame 2');
+  // A rectangle named Card in each frame, at different places and sizes: the layers match.
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  for (const [x, w] of [
+    [360, 40],
+    [700, 80],
+  ] as const) {
+    await page.keyboard.press('r');
+    await page.mouse.move(box.x + x, box.y + 230);
+    await page.mouse.down();
+    await page.mouse.move(box.x + x + w, box.y + 270, { steps: 4 });
+    await page.mouse.up();
+    await page.keyboard.press('Enter');
+    await page.keyboard.press('ControlOrMeta+r');
+    await page.keyboard.type('Card');
+    await page.keyboard.press('Enter');
+  }
+  await expect(page.getByRole('treeitem', { name: 'Card' })).toHaveCount(2);
+
+  await page.getByRole('treeitem', { name: 'Frame 1' }).click();
+  await page.getByRole('tab', { name: 'Prototype' }).click();
+  const panel = page.getByRole('tabpanel', { name: 'Prototype' });
+  await panel.getByRole('button', { name: 'Add interaction' }).click();
+  await panel.getByRole('combobox', { name: 'Destination', exact: true }).selectOption({ label: 'Frame 2' });
+  await panel.getByRole('combobox', { name: 'Animation', exact: true }).selectOption({ label: 'Smart animate' });
+  await panel.getByLabel('Duration (ms)', { exact: true }).fill('600');
+  await panel.getByLabel('Duration (ms)', { exact: true }).press('Enter');
+  await page.getByRole('treeitem', { name: 'Frame 1' }).click();
+
+  const popup = page.waitForEvent('popup');
+  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  const present = await popup;
+  const stage = present.getByTestId('presentation');
+  await expect(stage).toHaveAttribute('data-ready', 'true');
+  const screen = (await present.getByTestId('presentation-screen').boundingBox())!;
+  await present.mouse.click(screen.x + screen.width - 10, screen.y + screen.height - 10);
+  await expect(stage).toHaveAttribute('data-screen', 'Frame 2');
+  // Let the transition play through its blended frames.
+  await present.waitForTimeout(800);
+  await expect(stage).toHaveAttribute('data-screen', 'Frame 2');
+});

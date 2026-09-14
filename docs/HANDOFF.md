@@ -57,29 +57,33 @@ This file is how work continues after a pause (for example, a usage limit). Read
   - Drag to connect (the commit after connection noodles):
     - the + handle on the selection's right edge (`src/editor/chrome/prototype-geometry.ts`)
     - the move tool's `connect` gesture adds interactions on drop
+  - Smart animate (the commit after drag to connect):
+    - `src/core/prototype/smart-animate.ts` matches layers and blends them
+    - presentation view renders the blended frames each tick
 
 ## In progress (uncommitted)
 
-1. **Smart animate.** Written; being checked:
-   - `src/core/prototype/smart-animate.ts` and its test: `matchLayers` (name path), `canSmartAnimate` (shadows and shape changes dissolve), `smartAnimateStore` (a scratch document of the blended destination)
-   - `src/core/prototype/presentation.ts`: items with `smart` for Smart animate screens and overlay swaps
-   - `src/ui/present/presentation-renderer.ts`: renders smart items fresh with `smartFrameImage`
+1. **Scroll overflow.** In progress:
+   - `overflowDirection` and `scrollBehavior` on layers (`src/core/schema/document.ts`)
+   - `src/core/prototype/scroll.ts` and its test: limits, the content-too-small warning, the wheel target, and `scrolledFrameStore` (fixed layers on top, sticky layers at the top)
+   - `setOverflowDirection` and `setScrollBehavior` in `src/editor/commands/prototype.ts`
+   - the Scroll behavior section in `PrototypePanel.tsx`
 
-   Next steps:
-   - Run `npm run check` and a presentation E2E test with a Smart animate interaction.
-   - Update the matrix rows (Smart animate matching, Transitions).
-   - Run the gate and commit.
-   - Then "Animate matching layers" for directional transitions (currently they ignore it).
+   Still to do:
+   - In presentation view, keep scroll offsets per frame, scroll the target frame on wheel, and render the scrolled frame from `scrolledFrameStore`.
+   - Make Scroll to scroll the destination's scrolling frame.
+   - Write an E2E test, update the matrix row, run the gate, commit.
+   - Nested sticky layers and preserving scroll position come after.
 
 ## Next (M10, in order)
 
 1. Clicking a noodle to select its interaction, and dragging its end to another destination; the overlay badge on the canvas.
-3. Scroll overflow (horizontal, vertical, both), fixed and sticky layers, and state memorization of scroll position.
-4. Inline preview (⇧Space) and follow prototype.
-5. Device and background settings; the prototype settings panel with nothing selected.
-6. Interactive components (Change to), connections from main components, sections as destinations.
-7. Set variable, set variable mode, conditionals and expressions in actions (the evaluator exists in `src/core/prototype/expressions.ts`).
-8. Video fills with video triggers and actions (M10 video row).
-9. View prototype connections, accessible prototypes, manual overlay positions, rich-text flow descriptions, gamepad triggers.
+2. State memorization of scroll position; Animate matching layers on the moving transitions.
+3. Inline preview (⇧Space) and follow prototype.
+4. Device and background settings; the prototype settings panel with nothing selected.
+5. Interactive components (Change to), connections from main components, sections as destinations.
+6. Set variable, set variable mode, conditionals and expressions in actions (the evaluator exists in `src/core/prototype/expressions.ts`).
+7. Video fills with video triggers and actions (M10 video row).
+8. Accessible prototypes, manual overlay positions, rich-text flow descriptions, gamepad triggers.
 
 After M10, continue with M11–M15 per `docs/FEATURE_MATRIX.md`: the rows marked Planned or In progress, in milestone order.

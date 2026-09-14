@@ -98,4 +98,10 @@ describe('presentation layout', () => {
     expect(tall.screen).toMatchObject({ y: -500, height: 2000 });
     expect(scrollOffsetOf(index, 'home', 'button')).toBe(40);
   });
+
+  test('smart animate draws the destination blended from the frame left, in place of both frames', () => {
+    const effect = { type: 'transition', from: 'home', to: 'about', overlay: false, transition: { type: 'SMART_ANIMATE', easing: { type: 'LINEAR' }, duration: 300 } } as const;
+    const scene = composeScene(store, state({ frameId: 'about' }), { width: 800, height: 600 }, 'FIT', 0, { effect, progress: 0.5 });
+    expect(scene.items).toEqual([{ kind: 'frame', frameId: 'about', x: 200, y: 150, width: 400, height: 300, scale: 1, alpha: 1, smart: { from: 'home', progress: 0.5 } }]);
+  });
 });

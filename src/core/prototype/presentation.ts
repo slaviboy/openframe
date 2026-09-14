@@ -22,6 +22,7 @@ import type { Vec2 } from '../math/vec';
 import type { SceneIndex } from '../scene/scene-index';
 import type { Color, PrototypeTransition, SceneNode, Size } from '../schema/document';
 import { overlayOrigin, overlaySettings } from './flows';
+import { canSmartAnimate } from './smart-animate';
 import type { PlayerEffect, PlayerState } from './player';
 
 /** How presentation view scales the screen to the window. */
@@ -113,7 +114,18 @@ export interface PlayingTransition {
 
 export type PresentedItem =
   /** A frame drawn at `scale`, its top-left at (x, y) in window pixels. */
-  | { readonly kind: 'frame'; readonly frameId: Id; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly scale: number; readonly alpha: number }
+  | {
+      readonly kind: 'frame';
+      readonly frameId: Id;
+      readonly x: number;
+      readonly y: number;
+      readonly width: number;
+      readonly height: number;
+      readonly scale: number;
+      readonly alpha: number;
+      /** Smart animate: the frame is drawn `progress` of the way from the frame left, its matching layers blended. */
+      readonly smart?: { readonly from: Id; readonly progress: number };
+    }
   /** An overlay's background, over the screen. */
   | { readonly kind: 'dim'; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly color: Color };
 
@@ -141,13 +153,16 @@ export function composeScene(store: DocumentStore, state: PlayerState, viewport:
   const y = fits ? top : -scrollY * scale;
   const inView = { width, height: fits ? height : viewport.height };
   const items: PresentedItem[] = [];
-  const place = (frameId: Id, left: number, upper: number, offset: LayerOffset) => {
+  const place = (frameId: Id, left: number, upper: number, offset: LayerOffset, smart?: { from: Id; progress: number }) => {
     const size = sizeOf(store, frameId);
-    items.push({ kind: 'frame', frameId, x: left + offset.dx, y: upper + offset.dy, width: size.width * scale, height: size.height * scale, scale, alpha: offset.alpha });
+    items.push({ kind: 'frame', frameId, x: left + offset.dx, y: upper + offset.dy, width: size.width * scale, height: size.height * scale, scale, alpha: offset.alpha, ...(smart ? { smart } : {}) });
   };
+  const smartAnimates = (playingTransition: PlayingTransition, from: Id, to: Id) => playingTransition.effect.transition.type === 'SMART_ANIMATE' && canSmartAnimate(store, from, to);
 
   const screenTransition = playing && !playing.effect.overlay && playing.effect.from && store.has(playing.effect.from) ? playing : null;
-  if (screenTransition) {
+  if (screenTransition && smartAnimates(screenTransition, screenTransition.effect.from!, state.frameId)) {
+    place(state.frameId, x, y, STILL, { from: screenTransition.effect.from!, progress: screenTransition.progress });
+  } else if (screenTransition) {
     const from = screenTransition.effect.from!;
     const offsets = transitionOffsets(screenTransition.effect.transition, screenTransition.progress, inView);
     const fromSize = sizeOf(store, from);
@@ -183,6 +198,11 @@ export function composeScene(store: DocumentStore, state: PlayerState, viewport:
       items.push({ kind: 'dim', x, y: top, width: inView.width, height: inView.height, color: { ...settings.background, a: settings.background.a * fade } });
     }
     const swappedOut = animating?.effect.from && store.has(animating.effect.from) ? animating.effect.from : null;
+    // Swapping overlays can smart animate between them (opening one can't).
+    if (swappedOut && animating && smartAnimates(animating, swappedOut, overlayId)) {
+      place(overlayId, left, upper, STILL, { from: swappedOut, progress: animating.progress });
+      continue;
+    }
     if (swappedOut && offsets && offsets.toOnTop) place(swappedOut, left, upper, offsets.from);
     place(overlayId, left, upper, offsets ? offsets.to : STILL);
     if (swappedOut && offsets && !offsets.toOnTop) place(swappedOut, left, upper, offsets.from);

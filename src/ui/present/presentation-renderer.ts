@@ -19,7 +19,10 @@ import type { CanvasKit, Image as CkImage, Paint, Surface } from 'canvaskit-wasm
 import { documentColorProfile } from '@/core/color/color-profile';
 import type { Id } from '@/core/ids/ids';
 import type { Rect } from '@/core/math/rect';
+import type { DocumentStore } from '@/core/document/store';
 import type { PresentedScene } from '@/core/prototype/presentation';
+import { smartAnimateStore } from '@/core/prototype/smart-animate';
+import { SceneIndex } from '@/core/scene/scene-index';
 import type { Color, SceneNode } from '@/core/schema/document';
 import { cjkScriptFor, containsCjk } from '@/core/text/cjk';
 import { containsEmoji } from '@/core/text/emoji';
@@ -118,31 +121,43 @@ export class PresentationRenderer {
     this.surface = this.ck.MakeWebGLCanvasSurface(this.canvas, colorSpace) ?? this.ck.MakeSWCanvasSurface(this.canvas);
   }
 
-  /** A frame rendered at a scale (cached until images or fonts change). */
-  private frameImage(frameId: Id, scale: number): CkImage | null {
+  /** A frame of a document rendered at a scale into an image. */
+  private renderFrame(store: DocumentStore, index: SceneIndex, frameId: Id, scale: number): CkImage | null {
     const { ck, renderer, editor } = this;
     if (!ck || !renderer) return null;
+    const node = store.get(frameId) as SceneNode | undefined;
+    const origin = index.worldBounds(frameId);
+    if (!node || !origin) return null;
+    const width = node.size.width * scale;
+    const height = node.size.height * scale;
+    const surface = ck.MakeSurface(Math.max(1, Math.ceil(width * this.size.dpr)), Math.max(1, Math.ceil(height * this.size.dpr)));
+    if (!surface) return null;
+    try {
+      renderer.render(surface.getCanvas(), store, index, editor.pageId, { x: origin.x, y: origin.y, zoom: scale, width, height, dpr: this.size.dpr }, { only: frameId, colorProfile: documentColorProfile(editor.doc) });
+      surface.flush();
+      return surface.makeImageSnapshot();
+    } finally {
+      surface.delete();
+    }
+  }
+
+  /** A frame rendered at a scale (cached until images or fonts change). */
+  private frameImage(frameId: Id, scale: number): CkImage | null {
+    if (!this.ck || !this.renderer) return null;
     const key = `${frameId}:${scale.toFixed(4)}:${this.size.dpr}`;
     if (this.frames.has(key)) return this.frames.get(key)!;
-    const node = editor.doc.get(frameId) as SceneNode | undefined;
-    const origin = editor.scene.worldBounds(frameId);
-    let image: CkImage | null = null;
-    if (node && origin) {
-      const width = node.size.width * scale;
-      const height = node.size.height * scale;
-      const surface = ck.MakeSurface(Math.max(1, Math.ceil(width * this.size.dpr)), Math.max(1, Math.ceil(height * this.size.dpr)));
-      if (surface) {
-        try {
-          renderer.render(surface.getCanvas(), editor.doc, editor.scene, editor.pageId, { x: origin.x, y: origin.y, zoom: scale, width, height, dpr: this.size.dpr }, { only: frameId, colorProfile: documentColorProfile(editor.doc) });
-          surface.flush();
-          image = surface.makeImageSnapshot();
-        } finally {
-          surface.delete();
-        }
-      }
-    }
+    const image = this.renderFrame(this.editor.doc, this.editor.scene, frameId, scale);
     this.frames.set(key, image);
     return image;
+  }
+
+  /** The destination of a smart animate transition, `progress` of the way from the frame left (not cached). */
+  private smartFrameImage(fromFrame: Id, toFrame: Id, progress: number, scale: number): CkImage | null {
+    if (!this.ck || !this.renderer) return null;
+    const store = smartAnimateStore(this.editor.doc, fromFrame, toFrame, progress);
+    const index = new SceneIndex(store);
+    index.ensure(this.editor.pageId);
+    return this.renderFrame(store, index, toFrame, scale);
   }
 
   draw(scene: PresentedScene | null, background: Color, hints: readonly Rect[]): void {
@@ -160,10 +175,13 @@ export class PresentationRenderer {
         continue;
       }
       if (item.alpha <= 0) continue;
-      const image = this.frameImage(item.frameId, item.scale);
+      // A smart animate frame changes every tick, so it is drawn fresh rather than cached.
+      const live = item.smart ? this.smartFrameImage(item.smart.from, item.frameId, item.smart.progress, item.scale) : null;
+      const image = live ?? this.frameImage(item.frameId, item.scale);
       if (!image) continue;
       paint.setColor(ck.Color4f(0, 0, 0, Math.min(1, item.alpha)));
       canvas.drawImageRect(image, ck.XYWHRect(0, 0, image.width(), image.height()), ck.XYWHRect(item.x, item.y, item.width, item.height), paint);
+      live?.delete();
     }
     for (const rect of hints) {
       paint.setStyle(ck.PaintStyle.Fill);
