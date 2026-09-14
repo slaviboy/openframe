@@ -82,6 +82,23 @@
   gap: var(--space-1);
 }
 
+/* The handle an action is dragged by (or moved with ↑ / ↓). */
+.dragHandle {
+  flex: none;
+  padding: 0 var(--space-0-5, 2px);
+  border: 0;
+  background: none;
+  color: var(--fg-secondary);
+  cursor: grab;
+  letter-spacing: -2px;
+}
+
+/* A place an action being dragged would go: before this action, or at the end of a list. */
+.action[data-drop-target],
+.textButton[data-drop-target] {
+  box-shadow: 0 -2px 0 var(--accent, #0d99ff);
+}
+
 .row > select {
   flex: 1;
   min-width: 0;

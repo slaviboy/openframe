@@ -154,6 +154,10 @@ This file is how work continues after a pause (for example, a usage limit). Read
   - Lists and links in accessible text (the commit after Reset component state):
     - `textBlocks` in accessibility.ts turns a text layer into paragraphs, nested lists and links
     - `AccessibleContent` renders them as `p`, `ul`/`ol` and `a`
+  - Reordering actions (the commit after lists and links in accessible text):
+    - `src/core/prototype/action-paths.ts` moves actions by path, into and out of Conditional blocks
+    - each action's handle in the Prototype tab drags it (dropping before an action or on an Add … action button), and ↑ / ↓ move it
+    - else-if isn't built: the docs mirror describes Conditionals as if/else only
 
 ## In progress (uncommitted)
 
@@ -167,7 +171,6 @@ This file is how work continues after a pause (for example, a usage limit). Read
    - copy/paste interactions
    - marquee-selecting connections
    - responsive scaling
-   - reordering actions and else-if
    - the fixed layer rules with Animate matching layers
    - scroll bars
 

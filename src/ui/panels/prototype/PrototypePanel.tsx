@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
+import { moveAction, type ActionPath } from '@/core/prototype/action-paths';
 import { formatDescription, type DescriptionFormat } from '@/core/prototype/description';
 import { gamepadCode, gamepadLabel } from '@/core/prototype/gamepad';
 import { FlowDescription } from '../../present/FlowDescription';
@@ -188,7 +189,54 @@ function TransitionFields({ transition, suffix, scroll, onChange }: { transition
   );
 }
 
-function ActionFields({ editor, hotspotId, action, suffix, onChange, onRemove }: { editor: Editor; hotspotId: Id; action: PrototypeAction; suffix: string; onChange: (action: PrototypeAction) => void; onRemove: (() => void) | null }) {
+/** Drag data for moving an action: its path. */
+const ACTION_DRAG_TYPE = 'application/x-openframe-action';
+
+/** Drop handlers for a place actions can be moved to (`to`): dropping moves the dragged action there. */
+function actionDropTarget(to: ActionPath, onMove: (from: ActionPath, to: ActionPath) => void) {
+  const dragging = (e: DragEvent) => e.dataTransfer.types.includes(ACTION_DRAG_TYPE);
+  return {
+    onDragOver: (e: DragEvent) => {
+      if (!dragging(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.dataTransfer.dropEffect = 'move';
+      (e.currentTarget as HTMLElement).dataset['dropTarget'] = '';
+    },
+    onDragLeave: (e: DragEvent) => {
+      delete (e.currentTarget as HTMLElement).dataset['dropTarget'];
+    },
+    onDrop: (e: DragEvent) => {
+      delete (e.currentTarget as HTMLElement).dataset['dropTarget'];
+      if (!dragging(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      onMove(JSON.parse(e.dataTransfer.getData(ACTION_DRAG_TYPE)) as ActionPath, to);
+    },
+  };
+}
+
+function ActionFields({
+  editor,
+  hotspotId,
+  action,
+  suffix,
+  path,
+  onChange,
+  onRemove,
+  onMove,
+}: {
+  editor: Editor;
+  hotspotId: Id;
+  action: PrototypeAction;
+  suffix: string;
+  /** Where the action is in its interaction. */
+  path: ActionPath;
+  onChange: (action: PrototypeAction) => void;
+  onRemove: (() => void) | null;
+  /** Moves an action (dragged, or with the arrow keys on its handle). */
+  onMove: (from: ActionPath, to: ActionPath) => void;
+}) {
   const kind = actionKind(action);
   const candidates = action.type === 'NODE' ? destinationCandidates(editor.doc, hotspotId, kind) : [];
   const changeKind = (next: ActionKind) => {
@@ -197,8 +245,31 @@ function ActionFields({ editor, hotspotId, action, suffix, onChange, onRemove }:
     onChange(made.type === 'NODE' && made.destinationId && !destinationCandidates(editor.doc, hotspotId, next).includes(made.destinationId) ? { ...made, destinationId: null } : made);
   };
   return (
-    <div className={styles.action} role="group" aria-label={`Action${suffix} settings`}>
+    <div className={styles.action} role="group" aria-label={`Action${suffix} settings`} {...actionDropTarget(path, onMove)}>
       <div className={styles.row}>
+        {/* Actions run top to bottom: drag the handle to reorder them (or into a Conditional), or press ↑ / ↓ on it. */}
+        <button
+          type="button"
+          className={styles.dragHandle}
+          draggable
+          aria-label={`Move action${suffix}`}
+          onDragStart={(e) => {
+            e.dataTransfer.setData(ACTION_DRAG_TYPE, JSON.stringify(path));
+            e.dataTransfer.effectAllowed = 'move';
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+            e.preventDefault();
+            e.stopPropagation();
+            const index = path.at(-1)!;
+            const parent = path.slice(0, -1);
+            // Before the previous action, or before the one after the next.
+            if (e.key === 'ArrowUp' && index > 0) onMove(path, [...parent, index - 1]);
+            if (e.key === 'ArrowDown') onMove(path, [...parent, index + 2]);
+          }}
+        >
+          ⋮⋮
+        </button>
         <select className={primitives.select} aria-label={`Action${suffix}`} value={kind} onKeyDown={stopKeys} onChange={(e) => changeKind(e.target.value as ActionKind)}>
           {ACTION_KINDS.filter(
             (option) =>
@@ -235,7 +306,7 @@ function ActionFields({ editor, hotspotId, action, suffix, onChange, onRemove }:
       )}
       {action.type === 'SET_VARIABLE' && <SetVariableFields editor={editor} action={action} suffix={suffix} onChange={onChange} />}
       {action.type === 'SET_VARIABLE_MODE' && <SetVariableModeFields editor={editor} action={action} suffix={suffix} onChange={onChange} />}
-      {action.type === 'CONDITIONAL' && <ConditionalFields editor={editor} hotspotId={hotspotId} action={action} suffix={suffix} onChange={onChange} />}
+      {action.type === 'CONDITIONAL' && <ConditionalFields editor={editor} hotspotId={hotspotId} action={action} suffix={suffix} path={path} onChange={onChange} onMove={onMove} />}
       {action.type === 'UPDATE_MEDIA_RUNTIME' && <MediaActionFields editor={editor} hotspotId={hotspotId} action={action} suffix={suffix} onChange={onChange} />}
       {action.type === 'NODE' && (
         <>
@@ -460,7 +531,23 @@ function SetVariableModeFields({ editor, action, suffix, onChange }: { editor: E
 }
 
 /** Conditional: the If condition and its actions, and the Else actions that run when it doesn't hold. */
-function ConditionalFields({ editor, hotspotId, action, suffix, onChange }: { editor: Editor; hotspotId: Id; action: Extract<PrototypeAction, { type: 'CONDITIONAL' }>; suffix: string; onChange: (action: PrototypeAction) => void }) {
+function ConditionalFields({
+  editor,
+  hotspotId,
+  action,
+  suffix,
+  path,
+  onChange,
+  onMove,
+}: {
+  editor: Editor;
+  hotspotId: Id;
+  action: Extract<PrototypeAction, { type: 'CONDITIONAL' }>;
+  suffix: string;
+  path: ActionPath;
+  onChange: (action: PrototypeAction) => void;
+  onMove: (from: ActionPath, to: ActionPath) => void;
+}) {
   const setBlock = (index: number, block: (typeof action.blocks)[number]) => onChange({ ...action, blocks: action.blocks.map((existing, i) => (i === index ? block : existing)) });
   return (
     <div className={styles.conditional}>
@@ -483,11 +570,20 @@ function ConditionalFields({ editor, hotspotId, action, suffix, onChange }: { ed
                 hotspotId={hotspotId}
                 action={nested}
                 suffix={`${suffix} ${branch} ${i + 1}`}
+                path={[...path, index, i]}
                 onChange={(next) => setBlock(index, { ...block, actions: block.actions.map((existing, j) => (j === i ? next : existing)) })}
                 onRemove={() => setBlock(index, { ...block, actions: block.actions.filter((_, j) => j !== i) })}
+                onMove={onMove}
               />
             ))}
-            <button type="button" className={styles.textButton} disabled={block.actions.length >= 32} onClick={() => setBlock(index, { ...block, actions: [...block.actions, makeAction('NAVIGATE')] })}>
+            {/* Dropping an action on the button moves it to the end of this block. */}
+            <button
+              type="button"
+              className={styles.textButton}
+              disabled={block.actions.length >= 32}
+              onClick={() => setBlock(index, { ...block, actions: [...block.actions, makeAction('NAVIGATE')] })}
+              {...actionDropTarget([...path, index, block.actions.length], onMove)}
+            >
               {branch === 'if' ? 'Add if action' : 'Add else action'}
             </button>
           </div>
@@ -502,6 +598,11 @@ function InteractionDetails({ ids, hotspotId, reactions, index }: { ids: readonl
   const editor = useEditor();
   const reaction = reactions[index]!;
   const change = (next: Reaction) => updateInteraction(editor, ids, index, next);
+  const moveActions = (from: ActionPath, to: ActionPath) => {
+    const actions = moveAction(reaction.actions, from, to);
+    // An interaction keeps at least one action of its own.
+    if (actions && actions.length > 0) change({ ...reaction, actions });
+  };
   const { trigger } = reaction;
   // While the Key field has focus, a gamepad button pressed becomes the trigger.
   const [keyFocused, setKeyFocused] = useState(false);
@@ -545,11 +646,19 @@ function InteractionDetails({ ids, hotspotId, reactions, index }: { ids: readonl
           hotspotId={hotspotId}
           action={action}
           suffix={i === 0 ? '' : ` ${i + 1}`}
+          path={[i]}
           onChange={(next) => change({ ...reaction, actions: reaction.actions.map((existing, j) => (j === i ? next : existing)) })}
           onRemove={reaction.actions.length > 1 ? () => change({ ...reaction, actions: reaction.actions.filter((_, j) => j !== i) }) : null}
+          onMove={moveActions}
         />
       ))}
-      <button type="button" className={styles.textButton} disabled={reaction.actions.length >= 32} onClick={() => change({ ...reaction, actions: [...reaction.actions, makeAction('NAVIGATE')] })}>
+      <button
+        type="button"
+        className={styles.textButton}
+        disabled={reaction.actions.length >= 32}
+        onClick={() => change({ ...reaction, actions: [...reaction.actions, makeAction('NAVIGATE')] })}
+        {...actionDropTarget([reaction.actions.length], moveActions)}
+      >
         Add action
       </button>
     </div>
