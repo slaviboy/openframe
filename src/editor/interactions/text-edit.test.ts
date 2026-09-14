@@ -107,6 +107,25 @@ describe('lists while editing', () => {
   });
 });
 
+describe('refitting text to fonts that loaded later', () => {
+  test('auto-sized boxes take their new size without an undo step', () => {
+    editor.state.setTool('text');
+    click(100, 100);
+    insertText(editor, 'abc');
+    endTextEdit(editor);
+    expect(texts()[0]!.size).toEqual({ width: 30, height: 20 });
+    const undoLabel = editor.history.undoLabel;
+    // The same text now measures wider, as when its glyphs arrive with a font.
+    editor.setTextLayout({ ...layout, measure: (node) => ({ width: node.characters.length * 25, height: 20 }) });
+    editor.refitText();
+    expect(texts()[0]!.size).toEqual({ width: 75, height: 20 });
+    expect(editor.history.undoLabel).toBe(undoLabel);
+    // Undo still undoes the user's own last step.
+    editor.history.undo();
+    expect(texts()).toHaveLength(0);
+  });
+});
+
 describe('multi-edit text', () => {
   test('Return with several text layers selected edits them together; undo restores each; empty layers go at the end', () => {
     editor.state.setTool('text');

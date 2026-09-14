@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { isCjkSubsetFamily } from '@/core/text/cjk';
+
 /** The font family offered to users for the bundled font. */
 export const BUNDLED_FAMILY = 'Inter';
 
@@ -40,4 +42,4 @@ export const EMOJI_FAMILY = `${BUNDLED_FAMILY} (noto-color-emoji)`;
 export const EMOJI_FONT_FILE = { file: 'noto-color-emoji-emoji-400-normal.woff2', package: '@fontsource/noto-color-emoji' } as const;
 
 /** Whether a registered family is an internal fallback subset rather than a font users pick. */
-export const isFallbackFamily = (family: string): boolean => family.startsWith(`${BUNDLED_FAMILY} (`);
+export const isFallbackFamily = (family: string): boolean => family.startsWith(`${BUNDLED_FAMILY} (`) || isCjkSubsetFamily(family);

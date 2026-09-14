@@ -20,11 +20,12 @@ import { fileURLToPath, URL } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { serviceWorkerPlugin } from './scripts/vite-plugin-sw';
+import { cjkSubsetsPlugin } from './scripts/vite-plugin-cjk';
 
 export default defineConfig({
   // Relative URLs: the build works from any path (Live Server serving dist/, GitHub Pages at /Artboard/).
   base: './',
-  plugins: [react(), serviceWorkerPlugin()],
+  plugins: [react(), serviceWorkerPlugin(), cjkSubsetsPlugin(new URL('.', import.meta.url))],
   // The reference help-center mirror lives next to the app; it is not part of the build.
   server: { watch: { ignored: ['**/docs-mirror/**'] } },
   resolve: {

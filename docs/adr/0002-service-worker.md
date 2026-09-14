@@ -25,7 +25,7 @@ The service worker must never swap the running build out from under an editing s
 1. Emits the worker as `/sw.js`.
 2. In `generateBundle`, replaces the placeholders with two lists:
    - the install precache: every emitted file plus the app shell, manifest and icons, except deferred assets;
-   - the deferred list: large lazily loaded assets (currently the color emoji font chunk, `emoji-font-data-*.js`).
+   - the deferred list: large lazily loaded assets, currently the color emoji font chunk (`emoji-font-data-*.js`, 7.6 MB) and the 454 Noto Sans SC/TC/JP/KR subset chunks (`noto-sans-<script>-<n>-wght-normal-*.js`, 23.3 MB in total).
 3. Stamps a version derived from the content hash of both lists and the code.
 
 Deferred assets are cached after the app has started. Once the canvas is ready, the page calls `precacheDeferredAssets()`, which posts `PRECACHE_DEFERRED`. The worker then adds each missing deferred file to the current cache, one at a time; a failure is retried on the next start, and the normal cache-first fetch also caches the file when first used. This keeps the first install from downloading the 7.6 MB emoji chunk alongside the 8.2 MB CanvasKit wasm, while the app still works offline after one online start.

@@ -35,6 +35,8 @@ import { apply } from '@/core/math/matrix';
 import { pastedUrl } from '@/core/text/links';
 import { containsEmoji } from '@/core/text/emoji';
 import { loadEmojiFont } from '@/engine/text/bundled-fonts';
+import { loadCjkSubsets } from '@/engine/text/cjk-fonts';
+import { cjkScriptFor, containsCjk } from '@/core/text/cjk';
 import { viewPrefs } from '../view/view-prefs';
 import { emojiSuggest } from './emoji-suggest';
 import { precacheDeferredAssets } from '@/platform/sw-register';
@@ -176,6 +178,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
     let shaper: TextShaper | null = null;
     let unsubscribeFonts = () => {};
     let unsubscribeEmoji = () => {};
+    let unsubscribeCjk = () => {};
     let unsubscribeSpelling = () => {};
     const textInput = textInputRef.current!;
     // Caret blink phase while editing text; restarts visible whenever the selection changes.
@@ -297,6 +300,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
           for (const font of added) registered.add(font.id);
           shaper.registerFonts(added);
           addFontFaces(added);
+          editor.refitText();
           editor.requestRender();
         };
         registerUserFonts();
@@ -312,6 +316,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
               .then((font) => {
                 if (disposed || !shaper) return;
                 shaper.registerFallbackFonts([font]);
+                editor.refitText();
                 editor.requestRender();
               })
               .catch((error: unknown) => console.error(error));
@@ -321,6 +326,24 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
         };
         unsubscribeEmoji = editor.history.subscribe(loadEmojiWhenUsed);
         loadEmojiWhenUsed();
+        // CJK characters shape with the bundled Noto Sans SC/TC/JP/KR, loading only the subsets the text needs.
+        const requestedCjk = new Set<string>();
+        const loadCjkWhenUsed = () => {
+          for (const node of editor.doc.nodes()) {
+            if (node.type !== 'TEXT' || !containsCjk(node.characters)) continue;
+            loadCjkSubsets(cjkScriptFor(node.characters, node.fontName.family), node.characters, requestedCjk)
+              .then((fonts) => {
+                if (disposed || !shaper || fonts.length === 0) return;
+                shaper.registerCjkSubsets(fonts);
+                // Auto-sized boxes measured before the characters had glyphs fit them now.
+                editor.refitText();
+                editor.requestRender();
+              })
+              .catch((error: unknown) => console.error(error));
+          }
+        };
+        unsubscribeCjk = editor.history.subscribe(loadCjkWhenUsed);
+        loadCjkWhenUsed();
         // Spelling: the dictionary loads the first time text is edited with Check spelling on, and follows the preference.
         const syncSpelling = () => {
           const wanted = viewPrefs.getSnapshot().spellCheck && editor.state.getSnapshot().textEdit !== null;
@@ -679,6 +702,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, maskOutlin
       editor.setTextLayout(null);
       unsubscribeFonts();
       unsubscribeEmoji();
+      unsubscribeCjk();
       unsubscribeSpelling();
       editor.setSpellChecker(null);
       renderer?.dispose();

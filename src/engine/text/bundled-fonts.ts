@@ -19,7 +19,7 @@ import { BUNDLED_FONT_FILES, EMOJI_FAMILY } from './font-files';
 import type { FontSource } from './text-shaper';
 
 /** Decodes a base64 `data:` URL into its bytes (no request is made). */
-function decodeDataUrl(url: string): Uint8Array {
+export function decodeDataUrl(url: string): Uint8Array {
   const base64 = url.slice(url.indexOf(',') + 1);
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);

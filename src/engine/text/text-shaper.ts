@@ -24,6 +24,7 @@ import { FEATURE_PROBE_TEXT, isDefaultOnFeature, PROBED_FEATURES, toFontFeatures
 import { readFontAxes, type FontAxis } from '@/core/text/font-names';
 import { BUNDLED_FONT_AXES, mergeAxes, variationSettings } from '@/core/text/font-variations';
 import { resolveDirection } from '@/core/text/direction';
+import { CJK_FAMILIES, cjkScriptFor, containsCjk } from '@/core/text/cjk';
 import { balancedWidth, prettyWidth } from '@/core/text/wrap-style';
 import { fallbackUnderlineMetrics, underlineLine, wavySegments, type UnderlineMetrics } from '@/core/text/underline';
 import { parseFontStyle, VARIABLE_FONT_STYLES } from '@/core/text/font-style';
@@ -137,6 +138,8 @@ export class TextShaper implements TextLayoutService {
   private readonly familyAxes = new Map<string, readonly FontAxis[]>();
   /** One typeface per family, for its underline metrics. */
   private readonly typefaces = new Map<string, Typeface>();
+  /** Registered Noto Sans CJK subsets: fallbacks added only to text of their script. */
+  private readonly cjkSubsets = new Set<string>();
   private readonly underlineCache = new Map<string, UnderlineMetrics>();
 
   constructor(
@@ -161,6 +164,13 @@ export class TextShaper implements TextLayoutService {
    * weight upright and italic; user families list the styles registered for them.
    */
   availableFonts(): readonly FontFamilyInfo[] {
+    const registered = this.registeredFonts();
+    // The bundled Noto Sans CJK families, whose characters load on demand.
+    const cjk = CJK_FAMILIES.filter((family) => !registered.some((f) => f.family === family)).map((family) => ({ family, styles: VARIABLE_FONT_STYLES, variable: true }));
+    return [...registered, ...cjk];
+  }
+
+  private registeredFonts(): readonly FontFamilyInfo[] {
     return this.families
       .filter((family) => !isFallbackFamily(family))
       .map((family) => {
@@ -227,6 +237,7 @@ export class TextShaper implements TextLayoutService {
 
   /** Variation axes of a family: the bundled Inter's weight axis, or those read from a user family's files. */
   fontAxes(family: string): readonly FontAxis[] {
+    if (CJK_FAMILIES.includes(family) && !this.userFamilies.has(family)) return BUNDLED_FONT_AXES;
     if (isFallbackFamily(family) || !this.families.includes(family)) return [];
     return this.userFamilies.has(family) ? (this.familyAxes.get(family) ?? []) : BUNDLED_FONT_AXES;
   }
@@ -240,6 +251,26 @@ export class TextShaper implements TextLayoutService {
     }
     this.featureSupport.clear();
     this.clearCache();
+  }
+
+  /** Registers Noto Sans CJK subsets (loaded for the characters in use); cached layouts are dropped. */
+  registerCjkSubsets(fonts: readonly FontSource[]): void {
+    for (const font of fonts) {
+      if (this.cjkSubsets.has(font.family)) continue;
+      this.provider.registerFont(font.bytes, font.family);
+      this.cjkSubsets.add(font.family);
+    }
+    this.clearCache();
+  }
+
+  /**
+   * The CJK subset families a layer's text falls back to: the registered subsets of its script. They
+   * aren't in every run's fallback list, since a long list makes layout slow.
+   */
+  private cjkFallbacksFor(node: TextNode): readonly string[] {
+    if (this.cjkSubsets.size === 0 || !containsCjk(node.characters)) return [];
+    const prefix = `Noto Sans ${cjkScriptFor(node.characters, node.fontName.family)} (`;
+    return [...this.cjkSubsets].filter((family) => family.startsWith(prefix));
   }
 
   private rememberTypeface(family: string, bytes: ArrayBuffer | Uint8Array): void {
@@ -401,7 +432,7 @@ export class TextShaper implements TextLayoutService {
     this.layouts.clear();
   }
 
-  private textStyle(style: RunStyle, decorationColor?: Float32Array): TextStyle {
+  private textStyle(style: RunStyle, decorationColor?: Float32Array, extraFamilies: readonly string[] = []): TextStyle {
     const ck = this.ck;
     const { weight, italic } = parseFontStyle(style.fontName.style);
     const weights: EmbindEnumEntity[] = [
@@ -419,7 +450,7 @@ export class TextShaper implements TextLayoutService {
     return new ck.TextStyle({
       color: ck.BLACK,
       // Other registered families follow as fallbacks for characters the font lacks.
-      fontFamilies: [style.fontName.family, ...this.families.filter((f) => f !== style.fontName.family)],
+      fontFamilies: [style.fontName.family, ...this.families.filter((f) => f !== style.fontName.family), ...extraFamilies],
       fontSize: style.fontSize,
       fontStyle: { weight: weights[Math.min(8, Math.max(0, Math.round(weight / 100) - 1))]!, slant: italic ? ck.FontSlant.Italic : ck.FontSlant.Upright },
       fontVariations: variationSettings(weight, style.fontVariations),
@@ -453,8 +484,9 @@ export class TextShaper implements TextLayoutService {
     const align = { LEFT: ck.TextAlign.Left, CENTER: ck.TextAlign.Center, RIGHT: ck.TextAlign.Right, JUSTIFIED: ck.TextAlign.Justify }[node.textAlignHorizontal];
     // An empty paragraph takes the style of the character before it (what typing there would get).
     const emptyStyle = textStyleAt(node, paragraphStyleOffset(range));
+    const cjk = this.cjkFallbacksFor(node);
     const style = new ck.ParagraphStyle({
-      textStyle: this.textStyle(range.end > range.start ? textStyleAt(node, range.start) : emptyStyle),
+      textStyle: this.textStyle(range.end > range.start ? textStyleAt(node, range.start) : emptyStyle, undefined, cjk),
       textAlign: align,
       // The base direction for bidi reordering of the paragraph's runs.
       textDirection: rtl ? ck.TextDirection.RTL : ck.TextDirection.LTR,
@@ -466,7 +498,7 @@ export class TextShaper implements TextLayoutService {
     const builder = ck.ParagraphBuilder.MakeFromFontProvider(style, this.provider);
     if (indent > 0) builder.addPlaceholder(indent, 0, ck.PlaceholderAlignment.Baseline, ck.TextBaseline.Alphabetic, 0);
     const add = (segment: TextSegment, text: string) => {
-      const textStyle = this.textStyle(segment, painter?.decorationColor?.(segment));
+      const textStyle = this.textStyle(segment, painter?.decorationColor?.(segment), cjk);
       // Painters may reuse one paint object: pushing copies it into the run.
       if (painter) builder.pushPaintStyle(textStyle, painter.paint(segment), painter.background);
       else builder.pushStyle(textStyle);

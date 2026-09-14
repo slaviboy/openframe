@@ -39,9 +39,10 @@ export function serviceWorkerPlugin(): Plugin {
       const sw = bundle['sw.js'];
       if (!sw || sw.type !== 'chunk') throw new Error('openframe-sw: sw.js chunk missing');
       const files = Object.keys(bundle).filter((name) => name !== 'sw.js' && !name.endsWith('.map'));
-      // Large lazily loaded assets (the color emoji font) are cached after the app has started rather
-      // than at install, so the install doesn't download them while the page loads the CanvasKit wasm.
-      const isDeferred = (name: string) => /(^|\/)emoji-font-data-[^/]*\.js$/.test(name);
+      // Large lazily loaded assets (the color emoji font and the Noto Sans CJK subsets) are cached after
+      // the app has started rather than at install, so the install doesn't download them while the page
+      // loads the CanvasKit wasm.
+      const isDeferred = (name: string) => /(^|\/)(emoji-font-data|noto-sans-(sc|tc|jp|kr)-\d+-wght-normal)-[^/]*\.js$/.test(name);
       // Paths are relative to the service worker's scope (the app's base path).
       const precache = [...new Set(['./', 'index.html', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', ...files.filter((f) => !isDeferred(f))])].sort();
       const deferred = files.filter(isDeferred).sort();

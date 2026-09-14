@@ -23,6 +23,7 @@ import { makeText } from '@/core/document/factory';
 import type { TextNode } from '@/core/schema/document';
 import { BUNDLED_FONT_FILES, EMOJI_FAMILY, EMOJI_FONT_FILE } from './font-files';
 import { TextShaper } from './text-shaper';
+import { loadCjkSubsets } from './cjk-fonts';
 
 const require = createRequire(import.meta.url);
 let shaper: TextShaper;
@@ -255,6 +256,27 @@ describe('text shaping', () => {
     // Centered text and paragraphs without an opening quote don't hang.
     expect(shaper.caretAt({ ...hanging, textAlignHorizontal: 'CENTER' }, 0).x).toBeGreaterThan(0);
     expect(shaper.caretAt({ ...hanging, characters: 'Plain words' }, 0).x).toBeCloseTo(0, 0);
+  });
+
+  test('CJK text shapes with the Noto subsets its characters need, listed as pickable families', async () => {
+    expect(shaper.availableFonts().map((f) => f.family)).toEqual(expect.arrayContaining(['Noto Sans SC', 'Noto Sans TC', 'Noto Sans JP', 'Noto Sans KR']));
+    expect(shaper.fontAxes('Noto Sans JP')).toEqual([{ tag: 'wght', name: 'Weight', min: 100, default: 400, max: 900, hidden: false }]);
+    const sample = 'こんにちは、世界。日本語';
+    const node = text({ characters: sample });
+    const before = shaper.measure(node, null).width;
+    const fonts = await loadCjkSubsets('JP', sample, new Set());
+    expect(fonts.length).toBeGreaterThan(0);
+    expect(fonts.length).toBeLessThan(20);
+    shaper.registerCjkSubsets(fonts);
+    expect(shaper.availableFonts().map((f) => f.family)).not.toContain(fonts[0]!.family);
+    const after = shaper.measure(node, null).width;
+    expect(after).not.toBeCloseTo(before, 0);
+    // Each CJK character is about one em wide in Noto Sans JP.
+    expect(after).toBeGreaterThan(sample.length * 20 * 0.8);
+    // Requested subsets aren't loaded twice.
+    const requested = new Set<string>();
+    await loadCjkSubsets('JP', sample, requested);
+    expect(await loadCjkSubsets('JP', sample, requested)).toEqual([]);
   });
 
   test('letter case changes the shaped text and max lines limits the height', () => {

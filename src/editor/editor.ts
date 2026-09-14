@@ -24,7 +24,7 @@ import { unionAll, type Rect } from '@/core/math/rect';
 import { SceneIndex } from '@/core/scene/scene-index';
 import type { TextLayoutService } from '@/core/text/text-layout';
 import type { SpellChecker } from '@/core/text/spelling';
-import { createTextFinalizer } from '@/core/text/text-resize';
+import { createTextFinalizer, fitTextBox } from '@/core/text/text-resize';
 import type { Color, Transform } from '@/core/schema/document';
 import type { Vec2 } from '@/core/math/vec';
 import { CommandRegistry } from './commands/registry';
@@ -100,6 +100,22 @@ export class Editor {
   setSpellChecker(checker: SpellChecker | null): void {
     this.spelling = checker;
     this.requestRender();
+  }
+
+  /**
+   * Refits auto-sized text layers after fonts became available (bundled fallbacks or user fonts
+   * loaded later), without an undo step: the user didn't change anything.
+   */
+  refitText(): void {
+    const layout = this.textLayout;
+    if (!layout || this.history.inTransaction) return;
+    this.history.run(
+      'Fit text to fonts',
+      (tx) => {
+        for (const node of this.doc.nodes()) if (node.type === 'TEXT') fitTextBox(tx, node, layout);
+      },
+      { undoable: false },
+    );
   }
 
   /** Installs (or removes, with null) the canvas pixel reader used by the eyedropper. */

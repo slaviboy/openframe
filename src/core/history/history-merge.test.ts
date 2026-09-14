@@ -30,6 +30,25 @@ function setup() {
   return { store, history, id };
 }
 
+describe('changes without an undo step', () => {
+  test('undoable: false applies and broadcasts the change but records no step and keeps redo', () => {
+    const { store, history, id } = setup();
+    history.run('rename', (tx) => tx.set(id, 'name', 'A'));
+    history.undo();
+    expect(history.canRedo).toBe(true);
+    const sources: string[] = [];
+    history.subscribe((change) => sources.push(change.source));
+    history.run('fit', (tx) => tx.set(id, 'opacity', 0.5), { undoable: false });
+    expect(store.getOrThrow(id)).toMatchObject({ opacity: 0.5 });
+    expect(sources).toEqual(['commit']);
+    expect(history.undoLabel).toBe('create');
+    expect(history.canRedo).toBe(true);
+    // The next ordinary commit records normally.
+    history.run('rename again', (tx) => tx.set(id, 'name', 'B'));
+    expect(history.undoLabel).toBe('rename again');
+  });
+});
+
 describe('history merging', () => {
   test('commits with the same merge key become one undo step', () => {
     const { store, history, id } = setup();

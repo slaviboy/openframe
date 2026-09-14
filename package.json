@@ -23,6 +23,10 @@
   "dependencies": {
     "@fontsource-variable/noto-sans-arabic": "^5.3.0",
     "@fontsource-variable/noto-sans-hebrew": "^5.3.0",
+    "@fontsource-variable/noto-sans-jp": "^5.3.0",
+    "@fontsource-variable/noto-sans-kr": "^5.3.0",
+    "@fontsource-variable/noto-sans-sc": "^5.3.0",
+    "@fontsource-variable/noto-sans-tc": "^5.3.0",
     "@fontsource/noto-color-emoji": "^5.3.1",
     "canvaskit-wasm": "0.42.0",
     "dictionary-en": "^4.0.0",
