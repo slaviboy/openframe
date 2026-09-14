@@ -200,7 +200,28 @@ export class PresentationRenderer {
     canvas.save();
     canvas.scale(this.size.dpr, this.size.dpr);
     paint.setStyle(ck.PaintStyle.Fill);
+    let clipped = false;
     for (const item of scene?.items ?? []) {
+      if (item.kind === 'device') {
+        // The device: a dark body with a thin edge, and its screen.
+        const body = ck.RRectXY(ck.XYWHRect(item.body.x, item.body.y, item.body.width, item.body.height), item.bodyRadius, item.bodyRadius);
+        paint.setColor(ck.Color4f(0.08, 0.08, 0.09, 1));
+        canvas.drawRRect(body, paint);
+        paint.setStyle(ck.PaintStyle.Stroke);
+        paint.setStrokeWidth(1.5);
+        paint.setColor(ck.Color4f(0.36, 0.36, 0.4, 1));
+        canvas.drawRRect(body, paint);
+        paint.setStyle(ck.PaintStyle.Fill);
+        paint.setColor(ck.Color4f(0, 0, 0, 1));
+        canvas.drawRRect(ck.RRectXY(ck.XYWHRect(item.screen.x, item.screen.y, item.screen.width, item.screen.height), item.screenRadius, item.screenRadius), paint);
+        continue;
+      }
+      if (!clipped && scene?.clip) {
+        const { rect, radius } = scene.clip;
+        canvas.save();
+        canvas.clipRRect(ck.RRectXY(ck.XYWHRect(rect.x, rect.y, rect.width, rect.height), radius, radius), ck.ClipOp.Intersect, true);
+        clipped = true;
+      }
       if (item.kind === 'dim') {
         paint.setColor(ck.Color4f(item.color.r, item.color.g, item.color.b, item.color.a));
         canvas.drawRect(ck.XYWHRect(item.x, item.y, item.width, item.height), paint);
@@ -215,6 +236,7 @@ export class PresentationRenderer {
       canvas.drawImageRect(image, ck.XYWHRect(0, 0, image.width(), image.height()), ck.XYWHRect(item.x, item.y, item.width, item.height), paint);
       live?.delete();
     }
+    if (clipped) canvas.restore();
     for (const rect of hints) {
       paint.setStyle(ck.PaintStyle.Fill);
       paint.setColor(ck.Color4f(HINT_COLOR.r, HINT_COLOR.g, HINT_COLOR.b, 0.15));

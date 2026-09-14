@@ -75,20 +75,14 @@ This file is how work continues after a pause (for example, a usage limit). Read
   - Frame presets (the commit after inline preview, Frames row):
     - the `src/core/document/frame-presets.ts` catalog
     - the Frame tool's preset list, and the Frame preset dropdown
+  - Device and background settings (the commit after frame presets):
+    - `prototypeDevice` and `prototypeBackground` on the page, and `src/core/prototype/device.ts`
+    - the Prototype settings section
+    - presentation view plays inside the device, drawn with its own body
 
 ## In progress (uncommitted)
 
-1. **Device and background settings.** Started, uncommitted, and builds on the committed frame presets:
-   - `prototypeDevice` and `prototypeBackground` on the page (`src/core/schema/document.ts`)
-   - `setPrototypeDevice` and `setPrototypeBackground` in `src/editor/commands/prototype.ts`
-
-   Still to do:
-   - `effectiveDevice`: the explicit setting, or the device preset matching the first frame's size
-   - a device layout in `composeScene` (device body, screen clip, scaling the frame to the device width)
-   - the renderer drawing the device body and clip
-   - using the background color in `PresentationView`, with mobile devices only inline
-   - a Prototype settings section in `PrototypePanel` with nothing selected (Device, Orientation, Background)
-   - tests, the matrix row, the gate, commit
+1. **Interactive components.** Starting: Change to actions between variants of a component set, interactions on variants that instances inherit, and the player swapping an instance's variant (with its state memorized).
 
 **Known flake to investigate:** WebKit's `e2e/presentation.spec.ts` once logged `StorageError: Browser storage is unavailable` when the presentation tab opened IndexedDB while the editor tab held it. It passed on retry.
 

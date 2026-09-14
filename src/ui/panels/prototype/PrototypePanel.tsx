@@ -47,7 +47,9 @@ import {
 import { DEFAULT_OVERLAY_BACKGROUND, flowsOf, isOverlayDestination, OVERLAY_POSITION_LABELS, overlaySettings } from '@/core/prototype/flows';
 import { topLevelFrame } from '@/core/prototype/reactions';
 import type { Color, OverlaySettings, PrototypeAction, PrototypeEasing, PrototypeTransition, Reaction, SceneNode } from '@/core/schema/document';
-import { addFlowStartingPoint, addInteraction, removeFlowStartingPoint, removeInteraction, setOverflowDirection, setOverlaySettings, setScrollBehavior, updateFlowStartingPoint, updateInteraction } from '@/editor/commands/prototype';
+import { addFlowStartingPoint, addInteraction, removeFlowStartingPoint, removeInteraction, setOverflowDirection, setOverlaySettings, setPrototypeBackground, setPrototypeDevice, setScrollBehavior, updateFlowStartingPoint, updateInteraction } from '@/editor/commands/prototype';
+import { DEVICE_CATEGORIES, presetsIn } from '@/core/document/frame-presets';
+import { effectiveDevice } from '@/core/prototype/device';
 import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
 import { needsBiggerContent, OVERFLOW_DIRECTIONS, OVERFLOW_LABELS, overflowOf, SCROLL_BEHAVIOR_LABELS, SCROLL_BEHAVIORS, scrollFrameOf, type OverflowDirection, type ScrollBehavior } from '@/core/prototype/scroll';
 import type { Editor } from '@/editor/editor';
@@ -316,6 +318,78 @@ function CommitText({ label, value, multiline = false, onCommit }: { label: stri
   return multiline ? <textarea {...props} rows={3} placeholder="Description" /> : <input {...props} />;
 }
 
+/**
+ * With nothing selected: the prototype settings of the page. Device (a device preset — the one matching the first
+ * screen when none is set — a custom size, the presentation, or none), its orientation, and the background color
+ * presentation view shows behind the prototype.
+ */
+function PrototypeSettingsSection() {
+  const editor = useEditor();
+  const pageId = useEditorState((s) => s.activePageId);
+  const page = editor.doc.get(pageId);
+  if (page?.type !== 'PAGE') return null;
+  const device = effectiveDevice(editor.doc, pageId);
+  const value = device.kind === 'PRESET' ? device.preset.id : device.kind;
+  const rotation = device.kind === 'PRESET' && device.landscape ? 'CCW_90' : 'NONE';
+  const background = page.prototypeBackground ?? page.backgroundColor;
+  return (
+    <section className={inspector.section} aria-label="Prototype settings">
+      <header className={inspector.sectionHeader}>
+        <h3 className={inspector.sectionTitle}>Prototype settings</h3>
+      </header>
+      <div className={inspector.sectionBody}>
+        <label className={styles.field}>
+          <span className={styles.fieldLabel}>Device</span>
+          <select
+            className={primitives.select}
+            aria-label="Device"
+            value={value}
+            onKeyDown={stopKeys}
+            onChange={(e) => {
+              const next = e.target.value;
+              // None is stored too, so a matching frame preset doesn't pick a device again.
+              if (next === 'NONE' || next === 'CUSTOM' || next === 'PRESENTATION') setPrototypeDevice(editor, pageId, { type: next, rotation: 'NONE' });
+              else setPrototypeDevice(editor, pageId, { type: 'PRESET', presetId: next, rotation });
+            }}
+          >
+            <option value="NONE">None</option>
+            <option value="CUSTOM">Custom size (Fit)</option>
+            <option value="PRESENTATION">Presentation (Full)</option>
+            {[...DEVICE_CATEGORIES].map((category) => (
+              <optgroup key={category} label={category}>
+                {presetsIn(category).map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+        {device.kind === 'PRESET' && (
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>Orientation</span>
+            <select
+              className={primitives.select}
+              aria-label="Orientation"
+              value={rotation}
+              onKeyDown={stopKeys}
+              onChange={(e) => setPrototypeDevice(editor, pageId, { type: 'PRESET', presetId: device.preset.id, rotation: e.target.value as 'NONE' | 'CCW_90' })}
+            >
+              <option value="NONE">Portrait</option>
+              <option value="CCW_90">Landscape</option>
+            </select>
+          </label>
+        )}
+        <label className={styles.field}>
+          <span className={styles.fieldLabel}>Background</span>
+          <input className={styles.color} type="color" aria-label="Prototype background" value={colorHex(background)} onChange={(e) => setPrototypeBackground(editor, pageId, hexColor(e.target.value, 1))} />
+        </label>
+      </div>
+    </section>
+  );
+}
+
 /** With nothing selected: the page's flows, each with a button selecting its starting frame. */
 function FlowsSection() {
   const editor = useEditor();
@@ -496,6 +570,7 @@ export function PrototypePanel() {
   if (nodes.length === 0) {
     return (
       <div className={styles.panel} role="tabpanel" aria-label="Prototype">
+        <PrototypeSettingsSection />
         <FlowsSection />
       </div>
     );

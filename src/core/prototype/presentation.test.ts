@@ -99,6 +99,17 @@ describe('presentation layout', () => {
     expect(scrollOffsetOf(index, 'home', 'button')).toBe(40);
   });
 
+  test('in a device, the screen fills the device screen and everything is clipped to it', () => {
+    const device = { name: 'Phone', body: { x: 90, y: 40, width: 220, height: 420 }, bodyRadius: 30, screen: { x: 100, y: 50, width: 200, height: 400 }, screenRadius: 20 };
+    const scene = composeScene(store, state(), { width: 400, height: 500 }, 'ACTUAL', 0, null, device);
+    // Home is 400 × 300: at the device's 200 width it scales to 0.5 (200 × 150), centered in the 400-tall screen.
+    expect(scene.screen).toEqual({ x: 100, y: 175, width: 200, height: 150, scale: 0.5 });
+    expect(scene.items[0]).toEqual({ kind: 'device', body: device.body, bodyRadius: 30, screen: device.screen, screenRadius: 20 });
+    expect(scene.items[1]).toMatchObject({ kind: 'frame', frameId: 'home', x: 100, y: 175, scale: 0.5 });
+    expect(scene.clip).toEqual({ rect: device.screen, radius: 20 });
+    expect(frameAtPoint(scene, state(), { x: 110, y: 185 })).toEqual({ frameId: 'home', local: { x: 20, y: 20 } });
+  });
+
   test('smart animate draws the destination blended from the frame left, in place of both frames', () => {
     const effect = { type: 'transition', from: 'home', to: 'about', overlay: false, transition: { type: 'SMART_ANIMATE', easing: { type: 'LINEAR' }, duration: 300 } } as const;
     const scene = composeScene(store, state({ frameId: 'about' }), { width: 800, height: 600 }, 'FIT', 0, { effect, progress: 0.5 });

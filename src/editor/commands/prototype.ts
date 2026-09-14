@@ -182,6 +182,20 @@ export function removeFlowStartingPoint(editor: Editor, frameId: Id): boolean {
   return true;
 }
 
+/** Sets the device prototypes on a page play in (null for none). One undo step. */
+export function setPrototypeDevice(editor: Editor, pageId: Id, device: PageNode['prototypeDevice'] | null): boolean {
+  if (editor.doc.get(pageId)?.type !== 'PAGE') return false;
+  editor.history.run('Change prototype device', (tx) => tx.set(pageId, 'prototypeDevice', device ?? undefined));
+  return true;
+}
+
+/** Sets the color behind prototypes on a page in presentation view (null for the canvas color). One undo step. */
+export function setPrototypeBackground(editor: Editor, pageId: Id, color: PageNode['prototypeBackground'] | null): boolean {
+  if (editor.doc.get(pageId)?.type !== 'PAGE') return false;
+  editor.history.run('Change prototype background', (tx) => tx.set(pageId, 'prototypeBackground', color ?? undefined));
+  return true;
+}
+
 /** Sets frames' scroll overflow (No scrolling clears it). One undo step; false when none of the layers is a frame. */
 export function setOverflowDirection(editor: Editor, ids: readonly Id[], direction: NonNullable<SceneNode['overflowDirection']>): boolean {
   const frames = layers(editor, ids).filter((node) => node.type === 'FRAME');

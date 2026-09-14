@@ -127,13 +127,32 @@ export type PresentedItem =
       readonly smart?: { readonly from: Id; readonly progress: number };
     }
   /** An overlay's background, over the screen. */
-  | { readonly kind: 'dim'; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly color: Color };
+  | { readonly kind: 'dim'; readonly x: number; readonly y: number; readonly width: number; readonly height: number; readonly color: Color }
+  /** The device the prototype plays in: its body and its screen (window pixels, with corner radii). */
+  | { readonly kind: 'device'; readonly body: Rect; readonly bodyRadius: number; readonly screen: Rect; readonly screenRadius: number };
+
+/** A device laid out in the window: its name, body and screen. */
+export interface DeviceScreen {
+  readonly name: string;
+  readonly body: Rect;
+  readonly bodyRadius: number;
+  readonly screen: Rect;
+  readonly screenRadius: number;
+}
+
+/** The screen's scale and the area it shows in: the device's screen (the frame filling its width), or the window. */
+export function screenArea(scaling: ScalingMode, viewport: Size, frame: Size, device: DeviceScreen | null): { readonly scale: number; readonly area: Size } {
+  if (!device) return { scale: screenScale(scaling, viewport, frame), area: viewport };
+  return { scale: device.screen.width / Math.max(1, frame.width), area: { width: device.screen.width, height: device.screen.height } };
+}
 
 export interface PresentedScene {
   /** The screen's rectangle in the window (taller than the window when it scrolls) and its scale. */
   readonly screen: Rect & { readonly scale: number };
   /** What to draw, bottom to top. */
   readonly items: readonly PresentedItem[];
+  /** In a device: the screen the frames are clipped to. */
+  readonly clip?: { readonly rect: Rect; readonly radius: number };
 }
 
 const sizeOf = (store: DocumentStore, id: Id): Size => (store.get(id) as SceneNode | undefined)?.size ?? { width: 0, height: 0 };
@@ -142,16 +161,17 @@ const sizeOf = (store: DocumentStore, id: Id): Size => (store.get(id) as SceneNo
  * What presentation view draws: the screen centered in the window (scrolled when taller), overlays at their positions
  * over the part of the screen in view, with their backgrounds, and the frames of a transition that is playing.
  */
-export function composeScene(store: DocumentStore, state: PlayerState, viewport: Size, scaling: ScalingMode, scrollY: number, playing: PlayingTransition | null): PresentedScene {
+export function composeScene(store: DocumentStore, state: PlayerState, viewport: Size, scaling: ScalingMode, scrollY: number, playing: PlayingTransition | null, device: DeviceScreen | null = null): PresentedScene {
   const frame = sizeOf(store, state.frameId);
-  const scale = screenScale(scaling, viewport, frame);
+  // In a device, the screen fills the device's width (and scrolls when taller); otherwise it scales to the window.
+  const { scale, area } = screenArea(scaling, viewport, frame, device);
   const width = frame.width * scale;
   const height = frame.height * scale;
-  const x = (viewport.width - width) / 2;
-  const fits = height <= viewport.height;
-  const top = fits ? (viewport.height - height) / 2 : 0;
+  const x = (area.width - width) / 2;
+  const fits = height <= area.height;
+  const top = fits ? (area.height - height) / 2 : 0;
   const y = fits ? top : -scrollY * scale;
-  const inView = { width, height: fits ? height : viewport.height };
+  const inView = { width, height: fits ? height : area.height };
   const items: PresentedItem[] = [];
   const place = (frameId: Id, left: number, upper: number, offset: LayerOffset, smart?: { from: Id; progress: number }) => {
     const size = sizeOf(store, frameId);
@@ -166,8 +186,8 @@ export function composeScene(store: DocumentStore, state: PlayerState, viewport:
     const from = screenTransition.effect.from!;
     const offsets = transitionOffsets(screenTransition.effect.transition, screenTransition.progress, inView);
     const fromSize = sizeOf(store, from);
-    const fromLeft = (viewport.width - fromSize.width * scale) / 2;
-    const fromTop = fromSize.height * scale <= viewport.height ? (viewport.height - fromSize.height * scale) / 2 : 0;
+    const fromLeft = (area.width - fromSize.width * scale) / 2;
+    const fromTop = fromSize.height * scale <= area.height ? (area.height - fromSize.height * scale) / 2 : 0;
     const drawFrom = () => place(from, fromLeft, fromTop, offsets.from);
     const drawTo = () => place(state.frameId, x, y, offsets.to);
     if (offsets.toOnTop) {
@@ -207,7 +227,15 @@ export function composeScene(store: DocumentStore, state: PlayerState, viewport:
     place(overlayId, left, upper, offsets ? offsets.to : STILL);
     if (swappedOut && offsets && !offsets.toOnTop) place(swappedOut, left, upper, offsets.from);
   }
-  return { screen: { x, y, width, height, scale }, items };
+  if (!device) return { screen: { x, y, width, height, scale }, items };
+  // In a device, everything sits in its screen, drawn over the device body and clipped to the screen.
+  const { x: ox, y: oy } = device.screen;
+  const inScreen = items.map((item): PresentedItem => (item.kind === 'device' ? item : { ...item, x: item.x + ox, y: item.y + oy }));
+  return {
+    screen: { x: x + ox, y: y + oy, width, height, scale },
+    items: [{ kind: 'device', body: device.body, bodyRadius: device.bodyRadius, screen: device.screen, screenRadius: device.screenRadius }, ...inScreen],
+    clip: { rect: device.screen, radius: device.screenRadius },
+  };
 }
 
 /** The shown frame under a window point (the topmost: overlays over the screen), with the point in the frame's coordinates. */

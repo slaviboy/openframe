@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import type { PresentationSession } from '@/app/present';
 import { evaluateEasing, type Easing } from '@/core/anim/easing';
 import type { Id } from '@/core/ids/ids';
@@ -38,7 +38,21 @@ import {
   type PlayerState,
   type PlayerStep,
 } from '@/core/prototype/player';
-import { composeScene, frameAtPoint, layerRects, maxScrollY, SCALING_LABELS, SCALING_MODES, scrollOffsetOf, type PresentedScene, type ScalingMode } from '@/core/prototype/presentation';
+import { composeScene, frameAtPoint, layerRects, SCALING_LABELS, SCALING_MODES, screenArea, scrollOffsetOf, type DeviceScreen, type PresentedScene, type ScalingMode } from '@/core/prototype/presentation';
+import { deviceLayout, effectiveDevice, type PrototypeDevice } from '@/core/prototype/device';
+import { MOBILE_DEVICE_CATEGORIES } from '@/core/document/frame-presets';
+import type { Size } from '@/core/schema/document';
+
+type DevicePreset = Extract<PrototypeDevice, { kind: 'PRESET' }>;
+
+/** The device laid out in the window, if the prototype plays in one. */
+const deviceScreenIn = (device: DevicePreset | null, viewport: Size): DeviceScreen | null => (device ? { name: device.preset.name, ...deviceLayout(device, viewport) } : null);
+
+/** How far a screen of `size` scrolls in the window or its device. */
+function screenScrollLimit(state: { readonly viewport: Size; readonly scaling: ScalingMode; readonly deviceScaling: ScalingMode | null; readonly device: DevicePreset | null }, size: Size): number {
+  const { scale, area } = screenArea(state.deviceScaling ?? state.scaling, state.viewport, size, deviceScreenIn(state.device, state.viewport));
+  return Math.max(0, size.height * scale - area.height) / scale;
+}
 import { toEasing, topLevelFrame, transitionDurationMs } from '@/core/prototype/reactions';
 import { clampScroll, scrolledFrameStore, scrollFrameOf, scrollLimits, wheelScrollTarget } from '@/core/prototype/scroll';
 import type { Vec2 } from '@/core/math/vec';
@@ -104,10 +118,13 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
   const screens = presentableFrames(doc, pageId);
   const rootRef = useRef<HTMLDivElement>(null);
   const [follow, setFollow] = useState(false);
-  const background = useMemo(() => {
-    const page = doc.get(pageId);
-    return page?.type === 'PAGE' ? page.backgroundColor : { r: 0.12, g: 0.12, b: 0.12, a: 1 };
-  }, [doc, pageId]);
+  const page = doc.get(pageId);
+  // The prototype settings: the background behind the prototype, and the device it plays in (inline, only phones, tablets and watches).
+  const background = page?.type === 'PAGE' ? (page.prototypeBackground ?? page.backgroundColor) : { r: 0.12, g: 0.12, b: 0.12, a: 1 };
+  const resolvedDevice = effectiveDevice(doc, pageId);
+  const device = resolvedDevice.kind === 'PRESET' && (!inlineMode || MOBILE_DEVICE_CATEGORIES.has(resolvedDevice.preset.category)) ? resolvedDevice : null;
+  // Custom size and Presentation fit the prototype to the window.
+  const deviceScaling: ScalingMode | null = !inlineMode && (resolvedDevice.kind === 'CUSTOM' || resolvedDevice.kind === 'PRESENTATION') ? 'FILL' : null;
 
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -143,6 +160,8 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     scaling,
     showHints,
     follow,
+    device: null as DevicePreset | null,
+    deviceScaling: null as ScalingMode | null,
     frame: 0,
     box: '',
     scrollLabel: '',
@@ -188,7 +207,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
           const offset = scrollOffsetOf(editor.scene, step.state.frameId, effect.nodeId);
           const node = doc.get(step.state.frameId) as SceneNode | undefined;
           if (offset !== null && node) {
-            const to = Math.min(Math.max(0, offset), maxScrollY(state.scaling, state.viewport, node.size));
+            const to = Math.min(Math.max(0, offset), screenScrollLimit(state, node.size));
             const duration = transitionDurationMs(effect.transition);
             state.scrolling = duration > 0 && effect.transition.type !== 'INSTANT' ? { from: state.scrollY, to, start: now, duration, easing: toEasing(effect.transition.easing) } : null;
             if (!state.scrolling) state.scrollY = to;
@@ -244,8 +263,10 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     state.scaling = scaling;
     state.showHints = showHints;
     state.follow = follow;
+    state.device = device;
+    state.deviceScaling = deviceScaling;
     schedule();
-  }, [scaling, showHints, follow, schedule]);
+  }, [scaling, showHints, follow, device, deviceScaling, schedule]);
 
   // Inline preview: edits redraw the frames, and selecting another frame on the canvas jumps to it.
   useEffect(() => {
@@ -300,7 +321,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
         state.frameScroll.set(nested.frameId, { x: nested.from.x + (nested.to.x - nested.from.x) * progress, y: nested.from.y + (nested.to.y - nested.from.y) * progress });
         if (t >= 1) state.nestedScrolling = null;
       }
-      const scene = composeScene(doc, current, state.viewport, state.scaling, state.scrollY, playing);
+      const scene = composeScene(doc, current, state.viewport, state.deviceScaling ?? state.scaling, state.scrollY, playing, deviceScreenIn(state.device, state.viewport));
       state.scene = scene;
       state.renderer.draw(scene, background, now < state.hintsUntil ? state.hintRects : [], state.frameScroll);
       const label = [...state.frameScroll]
@@ -502,7 +523,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     // Otherwise a screen taller than the window scrolls.
     const node = doc.get(current.frameId) as SceneNode | undefined;
     if (!node) return;
-    const limit = maxScrollY(state.scaling, state.viewport, node.size);
+    const limit = screenScrollLimit(state, node.size);
     if (limit <= 0) return;
     state.scrolling = null;
     state.scrollY = Math.min(limit, Math.max(0, state.scrollY + e.deltaY / state.scene.screen.scale));
@@ -590,6 +611,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
           data-screen={player ? nameOf(player.frameId) : undefined}
           data-overlays={player ? player.overlays.map(nameOf).join(',') : undefined}
           data-scroll={scrollLabel}
+          data-device={device?.preset.name}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
