@@ -51,6 +51,10 @@ const GROUPS: readonly (readonly ToolItem[])[] = [
     { tool: 'image', label: 'Place image', icon: 'image', command: 'tools.image' },
   ],
   [{ tool: 'text', label: 'Text', icon: 'text', command: 'tools.text' }],
+  [
+    { tool: 'pen', label: 'Pen', icon: 'pen', command: 'tools.pen' },
+    { tool: 'pencil', label: 'Pencil', icon: 'pencil', command: 'tools.pencil' },
+  ],
 ];
 
 /** Floating bottom toolbar. Each group remembers the last tool picked from its dropdown. */

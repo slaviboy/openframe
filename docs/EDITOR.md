@@ -132,6 +132,12 @@ Positions snap to whole pixels for axis-aligned layers while **Snap to pixel gri
 - The start point and the dragged corner snap to the edges and centers of layers in the target container, shown by red guides. Hold Control to draw without snapping.
 - After drawing, the editor returns to the Move tool.
 
+### Pen (P) and Pencil (⇧P)
+
+- [`PenTool`](../src/editor/tools/pen-tool.ts) keeps one open transaction per path. Each click runs `penClick` ([`core/vector/pen.ts`](../src/core/vector/pen.ts)) on the path in the parent's space; dragging past the threshold re-places the point with a handle. `placeNetwork` ([`vector-draw.ts`](../src/editor/tools/vector-draw.ts)) fits the layer box to `networkBounds` and stores the network relative to it. Clicking a point of the current path (`vertexAt`) closes it into a region and commits; `cancel` (Escape, tool switch) commits an open path or discards a lone point.
+- [`PencilTool`](../src/editor/tools/pencil-tool.ts) collects pointer positions and places `pencilNetwork` ([`core/vector/pencil.ts`](../src/core/vector/pencil.ts)) on every move: Ramer–Douglas–Peucker simplification within one screen pixel, Catmull–Rom smoothing, or a straight segment with Shift. New sketches get a round 3 px stroke.
+- Vector layers render through `drawVector` and hit-test through `networkOutlines`; `vectorFinalizer` scales networks on resize.
+
 ### Text (T)
 
 - **Creating** ([`text-tool.ts`](../src/editor/tools/text-tool.ts)):

@@ -31,6 +31,8 @@ import { EyedropperTool, type EyedropperSample } from './eyedropper-tool';
 import { LayerPickTool } from './layer-pick-tool';
 import { ImagePlaceTool } from './image-tool';
 import { LineTool } from './line-tool';
+import { PenTool } from './pen-tool';
+import { PencilTool } from './pencil-tool';
 import { TextTool } from './text-tool';
 import { TextEditController, watchTextEdit } from '../interactions/text-edit';
 import { MoveTool } from './move-tool';
@@ -141,6 +143,8 @@ export class ToolManager {
       image: new ImagePlaceTool(this.env),
       eyedropper: new EyedropperTool(this.env),
       pickLayer: new LayerPickTool(this.env),
+      pen: new PenTool(this.env),
+      pencil: new PencilTool(this.env),
     };
     let previous = editor.state.getSnapshot().tool;
     editor.state.subscribe(() => {

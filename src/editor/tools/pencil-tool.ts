@@ -1,0 +1,116 @@
+/*
+ * Copyright (C) 2026 Stanislav Georgiev
+ * https://github.com/slaviboy
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+import { keyOnTop, makeVector } from '@/core/document/factory';
+import type { Transaction } from '@/core/history/history';
+import type { Id } from '@/core/ids/ids';
+import type { Vec2 } from '@/core/math/vec';
+import { EMPTY_NETWORK } from '@/core/vector/pen';
+import { pencilNetwork } from '@/core/vector/pencil';
+import { containerAt, nextLayerName, parentToLocal } from './draw-helpers';
+import type { CursorKind, ModifierState, PointerInfo, Tool, ToolEnvironment } from './types';
+import { placeNetwork } from './vector-draw';
+
+interface Sketch {
+  tx: Transaction;
+  id: Id;
+  toLocal: (world: Vec2) => Vec2;
+  /** Pointer positions in the parent's space. */
+  points: Vec2[];
+  shift: boolean;
+}
+
+/**
+ * Pencil (⇧P): drag to sketch a smoothed vector path with a round 3 px black stroke; hold Shift for a
+ * straight line. The tool stays active for the next sketch until Escape or another tool.
+ */
+export class PencilTool implements Tool {
+  readonly id = 'pencil' as const;
+  private sketch: Sketch | null = null;
+
+  constructor(private readonly env: ToolEnvironment) {}
+
+  get active(): boolean {
+    return this.sketch !== null;
+  }
+
+  cursor(): CursorKind {
+    return 'crosshair';
+  }
+
+  pointerDown(p: PointerInfo): void {
+    if (p.button !== 0) return;
+    const { editor } = this.env;
+    editor.scene.ensure(editor.pageId);
+    const parent = containerAt(editor, p.world);
+    const toLocal = parentToLocal(editor, parent);
+    const start = toLocal(p.world);
+    const tx = editor.history.begin('Sketch');
+    const id = editor.ids.next();
+    tx.create({
+      ...makeVector({ id, parent: { id: parent, key: keyOnTop(editor.doc, parent) }, name: nextLayerName(editor, 'Vector'), x: start.x, y: start.y, width: 0, height: 0 }, EMPTY_NETWORK),
+      strokeWeight: 3,
+      strokeJoin: 'ROUND',
+      endpointCap: 'ROUND',
+    });
+    editor.state.select([id]);
+    this.sketch = { tx, id, toLocal, points: [start], shift: p.shift };
+    this.apply();
+  }
+
+  pointerMove(p: PointerInfo): void {
+    const s = this.sketch;
+    if (!s) return;
+    s.points.push(s.toLocal(p.world));
+    s.shift = p.shift;
+    this.apply();
+  }
+
+  pointerUp(p: PointerInfo): void {
+    const s = this.sketch;
+    if (!s) return;
+    // The release position ends the sketch.
+    s.points.push(s.toLocal(p.world));
+    s.shift = p.shift;
+    this.apply();
+    this.sketch = null;
+    const moved = s.points.some((q) => Math.hypot(q.x - s.points[0]!.x, q.y - s.points[0]!.y) > 0);
+    if (moved) this.env.editor.history.commit(s.tx);
+    else this.env.editor.history.cancel(s.tx);
+  }
+
+  modifiersChanged(m: ModifierState): void {
+    if (!this.sketch) return;
+    this.sketch.shift = m.shift;
+    this.apply();
+  }
+
+  cancel(): boolean {
+    if (!this.sketch) return false;
+    this.env.editor.history.cancel(this.sketch.tx);
+    this.sketch = null;
+    return true;
+  }
+
+  private apply(): void {
+    const s = this.sketch!;
+    const { editor } = this.env;
+    placeNetwork(s.tx, s.id, pencilNetwork(s.points, { tolerance: 1 / editor.state.viewport.zoom, straight: s.shift }));
+    s.tx.flushPreview();
+    editor.requestRender();
+  }
+}

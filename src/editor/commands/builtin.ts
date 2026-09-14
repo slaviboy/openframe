@@ -75,6 +75,8 @@ const TOOL_COMMANDS: CommandDefinition[] = (
     ['tools.star', 'Star', 'star', []],
     ['tools.text', 'Text', 'text', ['T']],
     ['tools.eyedropper', 'Eyedropper', 'eyedropper', ['I']],
+    ['tools.pen', 'Pen', 'pen', ['P']],
+    ['tools.pencil', 'Pencil', 'pencil', ['Shift+P']],
   ] as const
 ).map(([id, label, tool, shortcuts]) => ({
   id,
