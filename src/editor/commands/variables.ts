@@ -24,6 +24,7 @@ import { hasGeometry, isSceneNode, type Paint, type SceneNode, type VariableColl
 import {
   BINDABLE_FIELDS,
   collectionVariables,
+  extensionsOf,
   inScope,
   isVariable,
   isVariableCollection,
@@ -32,12 +33,15 @@ import {
   resolveForLayer,
   variableLookup,
   VARIABLE_SCOPES,
+  VARIANT_BINDING_PREFIX,
   type BindableField,
   type VariablePaintField,
 } from '@/core/variables/document';
-import { exportMode, importTokens, isAlias, resolveVariable, wouldCreateAliasCycle, type ResolvedValue, type TokenGroup, type VariableType } from '@/core/variables/resolve';
+import { componentSetProperties } from '@/core/document/variants';
+import { exportMode, extensionChain, importTokens, isAlias, resolveVariable, wouldCreateAliasCycle, type ResolvedValue, type TokenGroup, type VariableAlias, type VariableType, type VariableValue } from '@/core/variables/resolve';
 import type { Editor } from '../editor';
 import { keyOf, nextKeyAbove } from './selection-helpers';
+import { instanceVariant } from './variants';
 
 /** The value a new variable has in every mode. */
 const DEFAULT_VALUES: Readonly<Record<VariableType, ResolvedValue>> = { COLOR: { r: 1, g: 1, b: 1, a: 1 }, FLOAT: 0, STRING: '', BOOLEAN: false };
@@ -108,10 +112,90 @@ export function renameCollection(editor: Editor, id: Id, name: string): boolean 
   return true;
 }
 
-/** Deletes a collection and its variables; bound properties keep their values. One undo step. */
+/** Deletes a collection, its variables and the collections extending it; bound properties keep their values. One undo step. */
 export function deleteCollection(editor: Editor, id: Id): boolean {
   if (!collectionOf(editor.doc, id)) return false;
-  editor.history.run('Delete collection', (tx) => tx.delete(id));
+  editor.history.run('Delete collection', (tx) => [...extensionsOf(tx.store, id).map((c) => c.id).reverse(), id].forEach((collectionId) => tx.delete(collectionId)));
+  return true;
+}
+
+/** Extended collections mirror the modes of the collection they extend; their overrides of deleted modes are removed. */
+function syncExtensionModes(tx: Transaction, collectionId: Id): void {
+  for (const extension of extensionsOf(tx.store, collectionId)) {
+    const parent = collectionOf(tx.store, extension.extendsCollectionId!);
+    if (!parent) continue;
+    tx.set(extension.id, 'modes', parent.modes.map((mode) => ({ ...mode })));
+    if (!extension.variableOverrides) continue;
+    const modeIds = new Set(parent.modes.map((mode) => mode.modeId));
+    const next = Object.fromEntries(
+      Object.entries(extension.variableOverrides)
+        .map(([variableId, byMode]) => [variableId, Object.fromEntries(Object.entries(byMode).filter(([modeId]) => modeIds.has(modeId)))] as const)
+        .filter(([, byMode]) => Object.keys(byMode).length > 0),
+    );
+    tx.set(extension.id, 'variableOverrides', Object.keys(next).length > 0 ? next : undefined);
+  }
+}
+
+/**
+ * Extends a collection (Extend collection): a new collection that uses its variables and modes, whose values can be
+ * overridden. Returns its id. One undo step.
+ */
+export function extendCollection(editor: Editor, parentId: Id, name?: string): Id | null {
+  const parent = collectionOf(editor.doc, parentId);
+  if (!parent) return null;
+  const id = editor.ids.next();
+  editor.history.run('Extend collection', (tx) => {
+    tx.create({
+      id,
+      type: 'VARIABLE_COLLECTION',
+      name: name?.trim() || `${parent.name} extended`,
+      parent: { id: ROOT_ID, key: keyOnTop(tx.store, ROOT_ID) },
+      visible: true,
+      locked: false,
+      modes: parent.modes.map((mode) => ({ ...mode })),
+      extendsCollectionId: parentId,
+    });
+  });
+  return id;
+}
+
+/**
+ * Overrides a variable's value in a mode of an extended collection (a value of its type, or an alias). A value equal
+ * to the one it inherits removes the override. One undo step.
+ */
+export function setVariableOverride(editor: Editor, collectionId: Id, variableId: Id, modeId: string, value: ResolvedValue | VariableAlias): boolean {
+  const collection = collectionOf(editor.doc, collectionId);
+  const variable = variableOf(editor.doc, variableId);
+  if (!collection || collection.extendsCollectionId === undefined || !variable || !collection.modes.some((m) => m.modeId === modeId)) return false;
+  const lookup = variableLookup(editor.doc);
+  const { root, extensions } = extensionChain(lookup, lookup.collection(collectionId)!);
+  if (editor.doc.parentOf(variableId) !== root.id) return false;
+  if (isAlias(value)) {
+    const target = variableOf(editor.doc, value.id);
+    if (!target || target.resolvedType !== variable.resolvedType || wouldCreateAliasCycle(lookup, variableId, value.id)) return false;
+  } else if (!validValue(variable.resolvedType, value)) {
+    return false;
+  }
+  const inherited = extensions
+    .slice(1)
+    .map((extension) => extension.overrides?.[variableId]?.[modeId])
+    .find((v) => v !== undefined) ?? variable.valuesByMode[modeId];
+  const overrides = collection.variableOverrides ?? {};
+  const own = without(overrides[variableId] ?? {}, modeId);
+  const nextOwn = JSON.stringify(inherited) === JSON.stringify(value) ? own : { ...own, [modeId]: value };
+  const next = Object.keys(nextOwn).length > 0 ? { ...overrides, [variableId]: nextOwn } : without(overrides, variableId);
+  editor.history.run('Change variable value', (tx) => tx.set(collectionId, 'variableOverrides', Object.keys(next).length > 0 ? next : undefined));
+  return true;
+}
+
+/** Reset change: removes an extended collection's override of a variable in a mode (or in every mode). One undo step. */
+export function resetVariableOverride(editor: Editor, collectionId: Id, variableId: Id, modeId?: string): boolean {
+  const collection = collectionOf(editor.doc, collectionId);
+  const own = collection?.variableOverrides?.[variableId];
+  if (!collection || !own || (modeId !== undefined && own[modeId] === undefined)) return false;
+  const nextOwn = modeId === undefined ? {} : without(own, modeId);
+  const next = Object.keys(nextOwn).length > 0 ? { ...collection.variableOverrides, [variableId]: nextOwn } : without(collection.variableOverrides ?? {}, variableId);
+  editor.history.run('Reset change', (tx) => tx.set(collectionId, 'variableOverrides', Object.keys(next).length > 0 ? next : undefined));
   return true;
 }
 
@@ -123,6 +207,7 @@ function addModeInTx(tx: Transaction, editor: Editor, collectionId: Id, name: st
   const index = afterModeId === undefined ? modes.length : modes.findIndex((mode) => mode.modeId === afterModeId) + 1;
   modes.splice(index, 0, { modeId, name });
   tx.set(collectionId, 'modes', modes);
+  syncExtensionModes(tx, collectionId);
   const source = sourceModeId ?? collection.modes[0]!.modeId;
   for (const variable of collectionVariables(tx.store, collectionId)) {
     const value = variable.valuesByMode[source];
@@ -134,7 +219,7 @@ function addModeInTx(tx: Transaction, editor: Editor, collectionId: Id, name: st
 /** Adds a mode with the default mode's values. Returns its id. One undo step. */
 export function addMode(editor: Editor, collectionId: Id, name?: string): string | null {
   const collection = collectionOf(editor.doc, collectionId);
-  if (!collection || collection.modes.length >= MAX_MODES) return null;
+  if (!collection || collection.extendsCollectionId !== undefined || collection.modes.length >= MAX_MODES) return null;
   let modeId: string | null = null;
   editor.history.run('Add mode', (tx) => {
     modeId = addModeInTx(tx, editor, collectionId, name?.trim() || `Mode ${collection.modes.length + 1}`);
@@ -146,7 +231,7 @@ export function addMode(editor: Editor, collectionId: Id, name?: string): string
 export function duplicateMode(editor: Editor, collectionId: Id, modeId: string): string | null {
   const collection = collectionOf(editor.doc, collectionId);
   const mode = collection?.modes.find((m) => m.modeId === modeId);
-  if (!collection || !mode || collection.modes.length >= MAX_MODES) return null;
+  if (!collection || !mode || collection.extendsCollectionId !== undefined || collection.modes.length >= MAX_MODES) return null;
   let copy: string | null = null;
   editor.history.run('Duplicate mode', (tx) => {
     copy = addModeInTx(tx, editor, collectionId, `${mode.name} copy`, modeId, modeId);
@@ -158,8 +243,11 @@ export function renameMode(editor: Editor, collectionId: Id, modeId: string, nam
   const collection = collectionOf(editor.doc, collectionId);
   const trimmed = name.trim();
   const mode = collection?.modes.find((m) => m.modeId === modeId);
-  if (!collection || !mode || trimmed === '' || trimmed === mode.name) return false;
-  editor.history.run('Rename mode', (tx) => tx.set(collectionId, 'modes', collection.modes.map((m) => (m.modeId === modeId ? { ...m, name: trimmed } : m))));
+  if (!collection || !mode || collection.extendsCollectionId !== undefined || trimmed === '' || trimmed === mode.name) return false;
+  editor.history.run('Rename mode', (tx) => {
+    tx.set(collectionId, 'modes', collection.modes.map((m) => (m.modeId === modeId ? { ...m, name: trimmed } : m)));
+    syncExtensionModes(tx, collectionId);
+  });
   return true;
 }
 
@@ -168,11 +256,14 @@ export function moveMode(editor: Editor, collectionId: Id, modeId: string, index
   const collection = collectionOf(editor.doc, collectionId);
   const from = collection?.modes.findIndex((m) => m.modeId === modeId) ?? -1;
   const to = Math.max(0, Math.min((collection?.modes.length ?? 1) - 1, index));
-  if (!collection || from === -1 || from === to) return false;
+  if (!collection || collection.extendsCollectionId !== undefined || from === -1 || from === to) return false;
   const modes = [...collection.modes];
   const [mode] = modes.splice(from, 1);
   modes.splice(to, 0, mode!);
-  editor.history.run(to === 0 ? 'Set default mode' : 'Move mode', (tx) => tx.set(collectionId, 'modes', modes));
+  editor.history.run(to === 0 ? 'Set default mode' : 'Move mode', (tx) => {
+    tx.set(collectionId, 'modes', modes);
+    syncExtensionModes(tx, collectionId);
+  });
   return true;
 }
 
@@ -182,16 +273,18 @@ export const setDefaultMode = (editor: Editor, collectionId: Id, modeId: string)
 /** Deletes a mode (not the last one) and its values; layers and pages set to it go back to Auto. One undo step. */
 export function deleteMode(editor: Editor, collectionId: Id, modeId: string): boolean {
   const collection = collectionOf(editor.doc, collectionId);
-  if (!collection || collection.modes.length <= 1 || !collection.modes.some((m) => m.modeId === modeId)) return false;
+  if (!collection || collection.extendsCollectionId !== undefined || collection.modes.length <= 1 || !collection.modes.some((m) => m.modeId === modeId)) return false;
   editor.history.run('Delete mode', (tx) => {
+    const affected = [collectionId, ...extensionsOf(tx.store, collectionId).map((c) => c.id)];
     tx.set(collectionId, 'modes', collection.modes.filter((m) => m.modeId !== modeId));
+    syncExtensionModes(tx, collectionId);
     for (const variable of collectionVariables(tx.store, collectionId)) {
       tx.set(variable.id, 'valuesByMode', without(variable.valuesByMode, modeId));
     }
     for (const node of [...tx.store.nodes()]) {
       const modes = rec(node).explicitVariableModes as Record<string, string> | undefined;
-      if (modes?.[collectionId] !== modeId) continue;
-      const next = without(modes, collectionId);
+      if (!modes || !affected.some((id) => modes[id] === modeId)) continue;
+      const next = Object.fromEntries(Object.entries(modes).filter(([id, mode]) => !(affected.includes(id) && mode === modeId)));
       tx.set(node.id, 'explicitVariableModes', Object.keys(next).length > 0 ? next : undefined);
     }
   });
@@ -201,7 +294,7 @@ export function deleteMode(editor: Editor, collectionId: Id, modeId: string): bo
 /** Creates a variable of a type at the end of a collection, with a default value in every mode. One undo step. */
 export function createVariable(editor: Editor, collectionId: Id, type: VariableType, name?: string): Id | null {
   const collection = collectionOf(editor.doc, collectionId);
-  if (!collection || collectionVariables(editor.doc, collectionId).length >= MAX_VARIABLES) return null;
+  if (!collection || collection.extendsCollectionId !== undefined || collectionVariables(editor.doc, collectionId).length >= MAX_VARIABLES) return null;
   const id = editor.ids.next();
   editor.history.run('Create variable', (tx) => {
     tx.create({
@@ -475,12 +568,71 @@ export function setExplicitVariableMode(editor: Editor, ids: readonly Id[], coll
   return true;
 }
 
+/** Import mode for an extended collection: matching tokens override the parent's values in that mode (an extended collection can't add modes). */
+function importIntoExtension(editor: Editor, collection: VariableCollectionNode, json: unknown, target: { readonly modeId: string } | { readonly name: string }): { created: number; updated: number } | null {
+  if (!('modeId' in target) || !collection.modes.some((m) => m.modeId === target.modeId)) return null;
+  const modeId = target.modeId;
+  const lookup = variableLookup(editor.doc);
+  const { root } = extensionChain(lookup, lookup.collection(collection.id)!);
+  const byName = new Map(collectionVariables(editor.doc, root.id).map((v) => [v.name, v]));
+  let overrides: Record<string, Record<string, VariableValue>> = { ...collection.variableOverrides };
+  let updated = 0;
+  for (const token of importTokens(json)) {
+    const variable = byName.get(token.name);
+    if (!variable || variable.resolvedType !== token.type) continue;
+    const aliasTarget = token.aliasOf === undefined ? undefined : byName.get(token.aliasOf);
+    const value: VariableValue | undefined =
+      token.value ?? (aliasTarget && aliasTarget.resolvedType === variable.resolvedType && !wouldCreateAliasCycle(lookup, variable.id, aliasTarget.id) ? { type: 'VARIABLE_ALIAS', id: aliasTarget.id } : undefined);
+    if (value === undefined) continue;
+    updated++;
+    const own = without(overrides[variable.id] ?? {}, modeId);
+    overrides = { ...overrides, [variable.id]: JSON.stringify(variable.valuesByMode[modeId]) === JSON.stringify(value) ? own : { ...own, [modeId]: value } };
+  }
+  const next = Object.fromEntries(Object.entries(overrides).filter(([, byMode]) => Object.keys(byMode).length > 0));
+  editor.history.run('Import mode', (tx) => tx.set(collection.id, 'variableOverrides', Object.keys(next).length > 0 ? next : undefined));
+  return { created: 0, updated };
+}
+
+/** The variables a variant property of an instance can be bound to: strings and numbers, or booleans and strings for true/false properties. */
+export function variantVariablesFor(editor: Editor, instanceId: Id, property: string): VariableNode[] {
+  const found = instanceVariant(editor, instanceId);
+  if (!found) return [];
+  const values = componentSetProperties(editor.doc, found.set.id).find((p) => p.name === property)?.values;
+  if (!values) return [];
+  const boolean = values.length === 2 && values.some((v) => /^true$/i.test(v)) && values.some((v) => /^false$/i.test(v));
+  const types: readonly VariableType[] = boolean ? ['BOOLEAN', 'STRING'] : ['STRING', 'FLOAT'];
+  return localCollections(editor.doc)
+    .flatMap((collection) => collectionVariables(editor.doc, collection.id))
+    .filter((variable) => types.includes(variable.resolvedType));
+}
+
+/** Assigns a variable to a variant property of an instance: the instance uses the variant whose value matches the variable's. One undo step. */
+export function bindVariantVariable(editor: Editor, instanceId: Id, property: string, variableId: Id): boolean {
+  const key = `${VARIANT_BINDING_PREFIX}${property}`;
+  if (key.length > 64 || !variantVariablesFor(editor, instanceId, property).some((v) => v.id === variableId)) return false;
+  editor.history.run('Assign variable', (tx) =>
+    tx.set(instanceId, 'boundVariables', { ...(rec(tx.store.get(instanceId)).boundVariables as object | undefined), [key]: { type: 'VARIABLE_ALIAS', id: variableId } }),
+  );
+  return true;
+}
+
+/** Detaches the variable of a variant property of an instance; it keeps its variant. One undo step. */
+export function unbindVariantVariable(editor: Editor, instanceId: Id, property: string): boolean {
+  const key = `${VARIANT_BINDING_PREFIX}${property}`;
+  const bound = rec(editor.doc.get(instanceId)).boundVariables as Record<string, unknown> | undefined;
+  if (bound?.[key] === undefined) return false;
+  const next = without(bound, key);
+  editor.history.run('Detach variable', (tx) => tx.set(instanceId, 'boundVariables', Object.keys(next).length > 0 ? next : undefined));
+  return true;
+}
+
 /** Exports a mode of a collection as DTCG design tokens (Export mode). */
 export function exportCollectionMode(editor: Editor, collectionId: Id, modeId: string): TokenGroup | null {
   const lookup = variableLookup(editor.doc);
   const collection = lookup.collection(collectionId);
   if (!collection?.modes.some((m) => m.modeId === modeId)) return null;
-  const variables = collectionVariables(editor.doc, collectionId).map((v) => lookup.variable(v.id)!);
+  // An extended collection exports its parent's variables with its overrides.
+  const variables = collectionVariables(editor.doc, extensionChain(lookup, collection).root.id).map((v) => lookup.variable(v.id)!);
   return exportMode(lookup, variables, collection, modeId);
 }
 
@@ -492,6 +644,7 @@ export function exportCollectionMode(editor: Editor, collectionId: Id, modeId: s
 export function importMode(editor: Editor, collectionId: Id, json: unknown, target: { readonly modeId: string } | { readonly name: string }): { created: number; updated: number } | null {
   const collection = collectionOf(editor.doc, collectionId);
   if (!collection) return null;
+  if (collection.extendsCollectionId !== undefined) return importIntoExtension(editor, collection, json, target);
   if ('modeId' in target ? !collection.modes.some((m) => m.modeId === target.modeId) : collection.modes.length >= MAX_MODES) return null;
   const tokens = importTokens(json);
   const result = { created: 0, updated: 0 };

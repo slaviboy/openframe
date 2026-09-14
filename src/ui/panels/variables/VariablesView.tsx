@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import { Fragment, useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Id } from '@/core/ids/ids';
 import type { VariableCollectionNode, VariableNode } from '@/core/schema/document';
 import { collectionVariables, isVariable, localCollections, variableLookup, VARIABLE_SCOPES } from '@/core/variables/document';
-import { isAlias, wouldCreateAliasCycle, type VariableColor, type VariableType } from '@/core/variables/resolve';
+import { extensionChain, isAlias, resolveVariable, wouldCreateAliasCycle, type ResolvedValue, type VariableColor, type VariableType, type VariableValue } from '@/core/variables/resolve';
 import { styleFolder, styleLeafName } from '@/editor/commands/styles';
 import {
   addMode,
@@ -32,15 +32,18 @@ import {
   duplicateMode,
   duplicateVariables,
   exportCollectionMode,
+  extendCollection,
   importMode,
   moveMode,
   renameCollection,
   renameMode,
   renameVariable,
+  resetVariableOverride,
   setDefaultMode,
   setVariableAlias,
   setVariableCodeSyntax,
   setVariableDescription,
+  setVariableOverride,
   setVariableScopes,
   setVariableValue,
   type CodeSyntaxPlatform,
@@ -139,53 +142,73 @@ function StringValue({ label, value, onCommit }: { label: string; value: string;
   );
 }
 
-/** A variable's value in a mode: a value editor for its type, or the variable it aliases with Detach alias. */
-function ValueCell({ variable, modeId, modeName, onAlias }: { variable: VariableNode; modeId: string; modeName: string; onAlias: () => void }) {
+/**
+ * A variable's value in a mode: a value editor for its type, or the variable it aliases with Detach alias. In an extended
+ * collection, values that differ from the parent collection's are highlighted.
+ */
+function ValueCell({ variable, modeName, value, overridden, onValue, onDetach, onAlias }: {
+  variable: VariableNode;
+  modeName: string;
+  value: VariableValue | undefined;
+  overridden: boolean;
+  onValue: (value: ResolvedValue) => void;
+  onDetach: () => void;
+  onAlias: () => void;
+}) {
   const editor = useEditor();
-  const value = variable.valuesByMode[modeId];
   const label = `${variable.name} ${modeName}`;
+  let control: ReactNode;
   if (isAlias(value)) {
-    const target = editor.doc.get(value.id);
-    return (
+    control = (
       <span className={css.alias}>
         <button type="button" className={css.aliasName} aria-label={`${label} alias`} title="Change the alias" onClick={onAlias}>
-          {target?.name ?? 'Missing variable'}
+          {editor.doc.get(value.id)?.name ?? 'Missing variable'}
         </button>
-        <IconButton icon="detach" label={`Detach alias ${label}`} onClick={() => detachAlias(editor, variable.id, modeId)} />
+        <IconButton icon="detach" label={`Detach alias ${label}`} onClick={onDetach} />
       </span>
     );
-  }
-  switch (variable.resolvedType) {
-    case 'COLOR': {
-      const color = (typeof value === 'object' ? value : { r: 1, g: 1, b: 1, a: 1 }) as VariableColor;
-      return (
-        <ColorControl
-          label={label}
-          color={{ r: color.r, g: color.g, b: color.b, a: 1 }}
-          opacity={color.a}
-          onGestureStart={noop}
-          onGestureEnd={noop}
-          onColor={(next) => setVariableValue(editor, variable.id, modeId, { r: next.r, g: next.g, b: next.b, a: color.a })}
-          onOpacity={(opacity) => setVariableValue(editor, variable.id, modeId, { ...color, a: opacity })}
-        />
-      );
+  } else {
+    switch (variable.resolvedType) {
+      case 'COLOR': {
+        const color = (typeof value === 'object' ? value : { r: 1, g: 1, b: 1, a: 1 }) as VariableColor;
+        control = (
+          <ColorControl
+            label={label}
+            color={{ r: color.r, g: color.g, b: color.b, a: 1 }}
+            opacity={color.a}
+            onGestureStart={noop}
+            onGestureEnd={noop}
+            onColor={(next) => onValue({ r: next.r, g: next.g, b: next.b, a: color.a })}
+            onOpacity={(opacity) => onValue({ ...color, a: opacity })}
+          />
+        );
+        break;
+      }
+      case 'FLOAT':
+        control = <NumberField label="" ariaLabel={label} value={typeof value === 'number' ? value : undefined} onChange={onValue} />;
+        break;
+      case 'STRING':
+        control = <StringValue label={label} value={typeof value === 'string' ? value : ''} onCommit={onValue} />;
+        break;
+      case 'BOOLEAN':
+        control = (
+          <label className={css.boolean}>
+            <input type="checkbox" aria-label={label} checked={value === true} onChange={(e) => onValue(e.target.checked)} />
+            {value === true ? 'True' : 'False'}
+          </label>
+        );
+        break;
     }
-    case 'FLOAT':
-      return <NumberField label="" ariaLabel={label} value={typeof value === 'number' ? value : undefined} onChange={(next) => setVariableValue(editor, variable.id, modeId, next)} />;
-    case 'STRING':
-      return <StringValue label={label} value={typeof value === 'string' ? value : ''} onCommit={(next) => setVariableValue(editor, variable.id, modeId, next)} />;
-    case 'BOOLEAN':
-      return (
-        <label className={css.boolean}>
-          <input type="checkbox" aria-label={label} checked={value === true} onChange={(e) => setVariableValue(editor, variable.id, modeId, e.target.checked)} />
-          {value === true ? 'True' : 'False'}
-        </label>
-      );
   }
+  return (
+    <div className={css.value} data-overridden={overridden || undefined} title={overridden ? 'Changed from the parent collection' : undefined}>
+      {control}
+    </div>
+  );
 }
 
 /** Create alias: the variables of the same type (in any collection) that the value can follow without a cycle. */
-function AliasPicker({ variable, modeId, onClose }: { variable: VariableNode; modeId: string; onClose: () => void }) {
+function AliasPicker({ variable, onPick, onClose }: { variable: VariableNode; onPick: (targetId: Id) => void; onClose: () => void }) {
   const editor = useEditor();
   const [query, setQuery] = useState('');
   const needle = query.trim().toLowerCase();
@@ -217,7 +240,7 @@ function AliasPicker({ variable, modeId, onClose }: { variable: VariableNode; mo
                 className={findStyles.result}
                 title={candidate.description}
                 onClick={() => {
-                  setVariableAlias(editor, variable.id, modeId, candidate.id);
+                  onPick(candidate.id);
                   onClose();
                 }}
               >
@@ -338,7 +361,33 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
     needle === '' ||
     variable.name.toLowerCase().includes(needle) ||
     Object.values(variable.valuesByMode).some((value) => (typeof value === 'string' ? value.toLowerCase().includes(needle) : typeof value === 'number' ? String(value).includes(needle) : false));
-  const variables = collection ? collectionVariables(editor.doc, collection.id).filter((v) => (typeFilter === 'ALL' || v.resolvedType === typeFilter) && matches(v)) : [];
+  const lookup = variableLookup(editor.doc);
+  const chain = collection ? extensionChain(lookup, lookup.collection(collection.id)!) : undefined;
+  // An extended collection shows its parent's variables and modes, with its own overriding values.
+  const extended = collection?.extendsCollectionId !== undefined;
+  const variables = collection && chain ? collectionVariables(editor.doc, chain.root.id).filter((v) => (typeFilter === 'ALL' || v.resolvedType === typeFilter) && matches(v)) : [];
+  const valueOf = (variable: VariableNode, modeId: string): VariableValue | undefined =>
+    chain?.extensions.map((extension) => extension.overrides?.[variable.id]?.[modeId]).find((v) => v !== undefined) ?? variable.valuesByMode[modeId];
+  const setValueOf = (variable: VariableNode, modeId: string, value: VariableValue) => {
+    if (!collection) return;
+    if (extended) setVariableOverride(editor, collection.id, variable.id, modeId, value);
+    else if (isAlias(value)) setVariableAlias(editor, variable.id, modeId, value.id);
+    else setVariableValue(editor, variable.id, modeId, value);
+  };
+  const detachAliasOf = (variable: VariableNode, modeId: string) => {
+    if (!collection || !chain) return;
+    if (!extended) {
+      detachAlias(editor, variable.id, modeId);
+      return;
+    }
+    const resolved = resolveVariable(
+      lookup,
+      variable.id,
+      (c) => (c.id === chain.root.id ? modeId : undefined),
+      (c) => (c.id === chain.root.id ? chain.extensions : []),
+    );
+    if (resolved !== null) setVariableOverride(editor, collection.id, variable.id, modeId, resolved);
+  };
   const live = selected.filter((id) => variables.some((v) => v.id === id));
 
   const at = (e: React.MouseEvent) => new DOMRect(e.clientX, e.clientY, 0, 0);
@@ -417,7 +466,8 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                       label: 'Collection actions',
                       entries: [
                         { kind: 'item', id: 'rename', label: 'Rename collection', onSelect: () => setPrompt({ kind: 'renameCollection', collection: c }) },
-                        { kind: 'item', id: 'import', label: 'Import modes', onSelect: () => pickImport(c.id) },
+                        { kind: 'item', id: 'extend', label: 'Extend collection', onSelect: () => setSelectedCollection(extendCollection(editor, c.id)) },
+                        { kind: 'item', id: 'import', label: 'Import modes', disabled: c.extendsCollectionId !== undefined, onSelect: () => pickImport(c.id) },
                         { kind: 'item', id: 'export', label: 'Export modes', onSelect: () => c.modes.forEach((mode) => exportModeFile(c, mode.modeId, mode.name)) },
                         { kind: 'separator', id: 'collection-separator' },
                         { kind: 'item', id: 'delete', label: 'Delete collection', onSelect: () => deleteCollection(editor, c.id) },
@@ -426,6 +476,7 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                   }}
                 >
                   {c.name}
+                  {c.extendsCollectionId !== undefined && <span className={css.muted}>extends {editor.doc.get(c.extendsCollectionId)?.name}</span>}
                 </button>
               </li>
             ))}
@@ -451,7 +502,14 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                     </option>
                   ))}
                 </select>
-                <button type="button" className={dialogStyles.primary} aria-haspopup="menu" onClick={(e) => setCreateMenu(e.currentTarget.getBoundingClientRect())}>
+                <button
+                  type="button"
+                  className={dialogStyles.primary}
+                  aria-haspopup="menu"
+                  disabled={extended}
+                  title={extended ? 'Variables are added in the parent collection' : undefined}
+                  onClick={(e) => setCreateMenu(e.currentTarget.getBoundingClientRect())}
+                >
                   Create variable
                 </button>
               </div>
@@ -460,7 +518,7 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                   className={css.table}
                   aria-label={`${collection.name} variables`}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && e.shiftKey && live.length > 0) {
+                    if (e.key === 'Enter' && e.shiftKey && live.length > 0 && !extended) {
                       e.preventDefault();
                       setSelected(duplicateVariables(editor, live));
                     }
@@ -475,7 +533,9 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                             type="button"
                             className={css.modeHeader}
                             title={index === 0 ? 'Default mode' : undefined}
-                            onDoubleClick={() => setPrompt({ kind: 'renameMode', collectionId: collection.id, modeId: mode.modeId, name: mode.name })}
+                            onDoubleClick={() => {
+                              if (!extended) setPrompt({ kind: 'renameMode', collectionId: collection.id, modeId: mode.modeId, name: mode.name });
+                            }}
                             onContextMenu={(e) => {
                               e.preventDefault();
                               const last = collection.modes.length - 1;
@@ -483,16 +543,16 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                                 anchor: at(e),
                                 label: 'Mode actions',
                                 entries: [
-                                  { kind: 'item', id: 'rename', label: 'Rename mode', onSelect: () => setPrompt({ kind: 'renameMode', collectionId: collection.id, modeId: mode.modeId, name: mode.name }) },
-                                  { kind: 'item', id: 'duplicate', label: 'Duplicate mode', onSelect: () => duplicateMode(editor, collection.id, mode.modeId) },
-                                  { kind: 'item', id: 'default', label: 'Set as default', disabled: index === 0, onSelect: () => setDefaultMode(editor, collection.id, mode.modeId) },
-                                  { kind: 'item', id: 'left', label: 'Move column left', disabled: index === 0, onSelect: () => moveMode(editor, collection.id, mode.modeId, index - 1) },
-                                  { kind: 'item', id: 'right', label: 'Move column right', disabled: index === last, onSelect: () => moveMode(editor, collection.id, mode.modeId, index + 1) },
+                                  { kind: 'item', id: 'rename', label: 'Rename mode', disabled: extended, onSelect: () => setPrompt({ kind: 'renameMode', collectionId: collection.id, modeId: mode.modeId, name: mode.name }) },
+                                  { kind: 'item', id: 'duplicate', label: 'Duplicate mode', disabled: extended, onSelect: () => duplicateMode(editor, collection.id, mode.modeId) },
+                                  { kind: 'item', id: 'default', label: 'Set as default', disabled: extended || index === 0, onSelect: () => setDefaultMode(editor, collection.id, mode.modeId) },
+                                  { kind: 'item', id: 'left', label: 'Move column left', disabled: extended || index === 0, onSelect: () => moveMode(editor, collection.id, mode.modeId, index - 1) },
+                                  { kind: 'item', id: 'right', label: 'Move column right', disabled: extended || index === last, onSelect: () => moveMode(editor, collection.id, mode.modeId, index + 1) },
                                   { kind: 'separator', id: 'file-separator' },
                                   { kind: 'item', id: 'import', label: 'Import mode', onSelect: () => pickImport(collection.id, mode.modeId) },
                                   { kind: 'item', id: 'export', label: 'Export mode', onSelect: () => exportModeFile(collection, mode.modeId, mode.name) },
                                   { kind: 'separator', id: 'delete-separator' },
-                                  { kind: 'item', id: 'delete', label: 'Delete mode', disabled: last === 0, onSelect: () => deleteMode(editor, collection.id, mode.modeId) },
+                                  { kind: 'item', id: 'delete', label: 'Delete mode', disabled: extended || last === 0, onSelect: () => deleteMode(editor, collection.id, mode.modeId) },
                                 ],
                               });
                             }}
@@ -502,7 +562,7 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                         </th>
                       ))}
                       <th scope="col" className={css.addMode}>
-                        <IconButton icon="plus" label="New variable mode" onClick={() => addMode(editor, collection.id)} />
+                        <IconButton icon="plus" label="New variable mode" disabled={extended} onClick={() => addMode(editor, collection.id)} />
                       </th>
                     </tr>
                   </thead>
@@ -535,7 +595,9 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                                 title={variable.description}
                                 style={{ paddingInlineStart: `${group === '' ? 4 : 16}px` }}
                                 onClick={(e) => select(e, variable)}
-                                onDoubleClick={() => setPrompt({ kind: 'renameVariable', variable })}
+                                onDoubleClick={() => {
+                                  if (!extended) setPrompt({ kind: 'renameVariable', variable });
+                                }}
                                 onContextMenu={(e) => {
                                   e.preventDefault();
                                   if (!live.includes(variable.id)) setSelected([variable.id]);
@@ -543,10 +605,10 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                                     anchor: at(e),
                                     label: 'Variable actions',
                                     entries: [
-                                      { kind: 'item', id: 'edit', label: 'Edit variable', disabled: ids.length !== 1, onSelect: () => setPrompt({ kind: 'edit', variable }) },
-                                      { kind: 'item', id: 'duplicate', label: ids.length === 1 ? 'Duplicate variable' : 'Duplicate variables', shortcut: '⇧↩', onSelect: () => setSelected(duplicateVariables(editor, ids)) },
+                                      { kind: 'item', id: 'edit', label: 'Edit variable', disabled: extended || ids.length !== 1, onSelect: () => setPrompt({ kind: 'edit', variable }) },
+                                      { kind: 'item', id: 'duplicate', label: ids.length === 1 ? 'Duplicate variable' : 'Duplicate variables', shortcut: '⇧↩', disabled: extended, onSelect: () => setSelected(duplicateVariables(editor, ids)) },
                                       { kind: 'separator', id: 'variable-separator' },
-                                      { kind: 'item', id: 'delete', label: ids.length === 1 ? 'Delete variable' : 'Delete variables', onSelect: () => deleteVariables(editor, ids) },
+                                      { kind: 'item', id: 'delete', label: ids.length === 1 ? 'Delete variable' : 'Delete variables', disabled: extended, onSelect: () => deleteVariables(editor, ids) },
                                     ],
                                   });
                                 }}
@@ -567,12 +629,26 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                                     label: 'Value actions',
                                     entries: [
                                       { kind: 'item', id: 'alias', label: 'Create alias', onSelect: () => setPrompt({ kind: 'alias', variable, modeId: mode.modeId }) },
-                                      { kind: 'item', id: 'detach', label: 'Detach alias', disabled: !isAlias(variable.valuesByMode[mode.modeId]), onSelect: () => detachAlias(editor, variable.id, mode.modeId) },
+                                      { kind: 'item', id: 'detach', label: 'Detach alias', disabled: !isAlias(valueOf(variable, mode.modeId)), onSelect: () => detachAliasOf(variable, mode.modeId) },
+                                      ...(extended
+                                        ? ([
+                                            { kind: 'separator', id: 'reset-separator' },
+                                            { kind: 'item', id: 'reset', label: 'Reset change', disabled: collection.variableOverrides?.[variable.id]?.[mode.modeId] === undefined, onSelect: () => resetVariableOverride(editor, collection.id, variable.id, mode.modeId) },
+                                          ] satisfies MenuEntry[])
+                                        : []),
                                     ],
                                   });
                                 }}
                               >
-                                <ValueCell variable={variable} modeId={mode.modeId} modeName={mode.name} onAlias={() => setPrompt({ kind: 'alias', variable, modeId: mode.modeId })} />
+                                <ValueCell
+                                  variable={variable}
+                                  modeName={mode.name}
+                                  value={valueOf(variable, mode.modeId)}
+                                  overridden={extended && collection.variableOverrides?.[variable.id]?.[mode.modeId] !== undefined}
+                                  onValue={(value) => setValueOf(variable, mode.modeId, value)}
+                                  onDetach={() => detachAliasOf(variable, mode.modeId)}
+                                  onAlias={() => setPrompt({ kind: 'alias', variable, modeId: mode.modeId })}
+                                />
                               </td>
                             ))}
                             <td />
@@ -628,7 +704,9 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
         />
       )}
       {prompt?.kind === 'edit' && isVariable(editor.doc.get(prompt.variable.id)) && <EditVariableDialog variable={editor.doc.get(prompt.variable.id) as VariableNode} onClose={() => setPrompt(null)} />}
-      {prompt?.kind === 'alias' && <AliasPicker variable={prompt.variable} modeId={prompt.modeId} onClose={() => setPrompt(null)} />}
+      {prompt?.kind === 'alias' && (
+        <AliasPicker variable={prompt.variable} onPick={(targetId) => setValueOf(prompt.variable, prompt.modeId, { type: 'VARIABLE_ALIAS', id: targetId })} onClose={() => setPrompt(null)} />
+      )}
     </section>
   );
 }

@@ -52,6 +52,10 @@ export interface CollectionData {
   readonly id: string;
   readonly name: string;
   readonly modes: readonly VariableMode[];
+  /** The collection this one extends: it uses that collection's variables and modes, with its own overriding values. */
+  readonly extends?: string;
+  /** Values overriding the parent collection's, by variable id, then mode id. */
+  readonly overrides?: Readonly<Record<string, Readonly<Record<string, VariableValue>>>>;
 }
 
 export interface VariableLookup {
@@ -79,10 +83,16 @@ export function effectiveMode(collection: CollectionData, explicitModes: Readonl
 
 /**
  * Resolves a variable's value: aliases are followed, each variable taking its value in the mode of its own collection
- * (`modeFor`, defaulting to the collection's default mode). Null for missing variables, missing values, type mismatches
- * and alias cycles.
+ * (`modeFor`, defaulting to the collection's default mode), overridden by the first extended collection in
+ * `overridesFor` (nearest first) with a value for it. Null for missing variables, missing values, type mismatches and
+ * alias cycles.
  */
-export function resolveVariable(lookup: VariableLookup, id: string, modeFor: (collection: CollectionData) => string | undefined = defaultModeId): ResolvedValue | null {
+export function resolveVariable(
+  lookup: VariableLookup,
+  id: string,
+  modeFor: (collection: CollectionData) => string | undefined = defaultModeId,
+  overridesFor: (collection: CollectionData) => readonly CollectionData[] = () => [],
+): ResolvedValue | null {
   const seen = new Set<string>();
   let variable = lookup.variable(id);
   const type = variable?.type;
@@ -91,12 +101,32 @@ export function resolveVariable(lookup: VariableLookup, id: string, modeFor: (co
     const collection = lookup.collection(variable.collectionId);
     if (!collection || variable.type !== type) return null;
     const modeId = modeFor(collection) ?? defaultModeId(collection);
-    const value = modeId === undefined ? undefined : (variable.valuesByMode[modeId] ?? variable.valuesByMode[defaultModeId(collection)!]);
+    const variableId = variable.id;
+    const override = modeId === undefined ? undefined : overridesFor(collection).map((extension) => extension.overrides?.[variableId]?.[modeId]).find((v) => v !== undefined);
+    const value = modeId === undefined ? undefined : (override ?? variable.valuesByMode[modeId] ?? variable.valuesByMode[defaultModeId(collection)!]);
     if (value === undefined) return null;
     if (!isAlias(value)) return value;
     variable = lookup.variable(value.id);
   }
   return null;
+}
+
+/**
+ * The collection an extended collection's variables belong to (following `extends` to a collection that extends none),
+ * and the extended collections from `collection` towards it, nearest first.
+ */
+export function extensionChain(lookup: VariableLookup, collection: CollectionData): { root: CollectionData; extensions: CollectionData[] } {
+  const extensions: CollectionData[] = [];
+  const seen = new Set<string>();
+  let current = collection;
+  while (current.extends !== undefined && !seen.has(current.id)) {
+    seen.add(current.id);
+    const parent = lookup.collection(current.extends);
+    if (!parent) break;
+    extensions.push(current);
+    current = parent;
+  }
+  return { root: current, extensions };
 }
 
 /** Whether aliasing `id` to `targetId` would make a cycle: the target already reaches `id` through aliases in any mode. */
@@ -142,17 +172,20 @@ const tokenPath = (name: string) =>
 /**
  * Exports one mode of a collection as DTCG JSON: groups follow the slash-separated variable names; colors are sRGB with
  * a hex; booleans are numbers marked `com.openframe.type: boolean`; aliases to variables in the same collection are
- * `{group.name}` references and aliases to other collections carry `com.openframe.aliasData`.
+ * `{group.name}` references and aliases to other collections carry `com.openframe.aliasData`. An extended collection
+ * exports its parent's variables with its own overriding values.
  */
 export function exportMode(lookup: VariableLookup, variables: readonly VariableData[], collection: CollectionData, modeId: string): TokenGroup {
-  const root: TokenGroup = {};
+  const { root, extensions } = extensionChain(lookup, collection);
+  const tokens: TokenGroup = {};
   for (const variable of variables) {
-    if (variable.collectionId !== collection.id) continue;
-    const value = variable.valuesByMode[modeId] ?? variable.valuesByMode[defaultModeId(collection) ?? ''];
+    if (variable.collectionId !== root.id) continue;
+    const override = extensions.map((extension) => extension.overrides?.[variable.id]?.[modeId]).find((v) => v !== undefined);
+    const value = override ?? variable.valuesByMode[modeId] ?? variable.valuesByMode[defaultModeId(root) ?? ''];
     if (value === undefined) continue;
-    const token = exportToken(lookup, variable, value, collection, modeId);
+    const token = exportToken(lookup, variable, value, root, extensions, modeId);
     const path = tokenPath(variable.name).split('.');
-    let group = root;
+    let group = tokens;
     for (const part of path.slice(0, -1)) {
       const next = group[part];
       if (next !== undefined && isToken(next)) break;
@@ -161,23 +194,28 @@ export function exportMode(lookup: VariableLookup, variables: readonly VariableD
     const leaf = path.at(-1)!;
     if (group[leaf] === undefined) group[leaf] = token;
   }
-  return root;
+  return tokens;
 }
 
-function exportToken(lookup: VariableLookup, variable: VariableData, value: VariableValue, collection: CollectionData, modeId: string): Token {
+function exportToken(lookup: VariableLookup, variable: VariableData, value: VariableValue, root: CollectionData, extensions: readonly CollectionData[], modeId: string): Token {
   const type = variable.type === 'COLOR' ? 'color' : variable.type === 'STRING' ? 'string' : 'number';
-  const extensions: Record<string, unknown> = variable.type === 'BOOLEAN' ? { 'com.openframe.type': 'boolean' } : {};
+  const meta: Record<string, unknown> = variable.type === 'BOOLEAN' ? { 'com.openframe.type': 'boolean' } : {};
   let $value: unknown;
   if (isAlias(value)) {
     const target = lookup.variable(value.id);
-    if (target && target.collectionId === collection.id) {
+    if (target && target.collectionId === root.id) {
       $value = `{${tokenPath(target.name)}}`;
     } else {
       const targetCollection = target && lookup.collection(target.collectionId);
       // The value the alias has in the exported mode, for tools that can't follow the alias.
-      const fallback = resolveVariable(lookup, variable.id, (c) => (c.id === collection.id ? modeId : defaultModeId(c)));
+      const fallback = resolveVariable(
+        lookup,
+        variable.id,
+        (c) => (c.id === root.id ? modeId : defaultModeId(c)),
+        (c) => (c.id === root.id ? extensions : []),
+      );
       $value = fallback === null ? null : plainValue(variable.type, fallback);
-      extensions['com.openframe.aliasData'] = {
+      meta['com.openframe.aliasData'] = {
         targetVariableID: value.id,
         targetVariableName: target?.name,
         targetVariableSetID: target?.collectionId,
@@ -187,7 +225,7 @@ function exportToken(lookup: VariableLookup, variable: VariableData, value: Vari
   } else {
     $value = plainValue(variable.type, value);
   }
-  return { $type: type, $value, ...(Object.keys(extensions).length > 0 ? { $extensions: extensions } : {}) };
+  return { $type: type, $value, ...(Object.keys(meta).length > 0 ? { $extensions: meta } : {}) };
 }
 
 function plainValue(type: VariableType, value: ResolvedValue): unknown {

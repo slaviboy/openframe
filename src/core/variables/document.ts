@@ -15,11 +15,13 @@
  * limitations under the License.
  */
 
+import { swapInstance } from '../document/instances';
 import type { DocumentStore } from '../document/store';
+import { componentSetProperties, isComponentSet, parseVariantName, variantFor } from '../document/variants';
 import type { Transaction } from '../history/history';
 import { ROOT_ID, type Id } from '../ids/ids';
 import { hasGeometry, isSceneNode, type Node, type Paint, type SceneNode, type VariableCollectionNode, type VariableNode } from '../schema/document';
-import { effectiveMode, resolveVariable, type ResolvedValue, type VariableData, type VariableLookup, type VariableType } from './resolve';
+import { defaultModeId, extensionChain, resolveVariable, type CollectionData, type ResolvedValue, type VariableData, type VariableLookup, type VariableType } from './resolve';
 
 /** Layer properties a variable can be bound to (paint colors bind on the paint itself). */
 export type BindableField =
@@ -148,7 +150,14 @@ export function variableLookup(store: DocumentStore): VariableLookup {
     },
     collection: (id) => {
       const node = store.get(id);
-      return isVariableCollection(node) ? { id: node.id, name: node.name, modes: node.modes } : undefined;
+      if (!isVariableCollection(node)) return undefined;
+      return {
+        id: node.id,
+        name: node.name,
+        modes: node.modes,
+        ...(node.extendsCollectionId !== undefined ? { extends: node.extendsCollectionId } : {}),
+        ...(node.variableOverrides !== undefined ? { overrides: node.variableOverrides } : {}),
+      } satisfies CollectionData;
     },
   };
 }
@@ -158,10 +167,67 @@ export function modeChain(store: DocumentStore, id: Id): Array<Readonly<Record<s
   return [id, ...store.ancestors(id)].map((ancestor) => rec(store.get(ancestor)).explicitVariableModes as Record<string, string> | undefined);
 }
 
-/** A variable's value on a layer: in the modes the layer uses (its own, inherited through Auto, or the defaults). */
+/** The collections extending a collection, directly or through other extended collections. */
+export function extensionsOf(store: DocumentStore, collectionId: Id): VariableCollectionNode[] {
+  const out: VariableCollectionNode[] = [];
+  const queue = [collectionId];
+  const seen = new Set<Id>([collectionId]);
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    for (const collection of localCollections(store)) {
+      if (collection.extendsCollectionId !== id || seen.has(collection.id)) continue;
+      seen.add(collection.id);
+      out.push(collection);
+      queue.push(collection.id);
+    }
+  }
+  return out;
+}
+
+interface ModeContext {
+  readonly modeId: string | undefined;
+  /** Extended collections whose values override the collection's, nearest first. */
+  readonly extensions: readonly CollectionData[];
+}
+
+/**
+ * The mode a collection's variables take on a layer: the nearest mode set, from the layer up to its page, for the
+ * collection or for a collection extending it (whose overriding values then apply); else the default mode (Auto).
+ */
+function modeContext(store: DocumentStore, lookup: VariableLookup, collection: CollectionData, chain: ReturnType<typeof modeChain>): ModeContext {
+  const extensions = extensionsOf(store, collection.id)
+    .map((c) => lookup.collection(c.id))
+    .filter((c): c is CollectionData => c !== undefined);
+  for (const modes of chain) {
+    if (!modes) continue;
+    const own = modes[collection.id];
+    if (own !== undefined && collection.modes.some((m) => m.modeId === own)) return { modeId: own, extensions: [] };
+    for (const extension of extensions) {
+      const modeId = modes[extension.id];
+      if (modeId !== undefined && extension.modes.some((m) => m.modeId === modeId)) return { modeId, extensions: extensionChain(lookup, extension).extensions };
+    }
+  }
+  return { modeId: defaultModeId(collection), extensions: [] };
+}
+
+/** A variable's value on a layer: in the modes the layer uses (its own, inherited through Auto, or the defaults), with extended collections' overrides. */
 export function resolveForLayer(store: DocumentStore, lookup: VariableLookup, layerId: Id, variableId: Id): ResolvedValue | null {
   const chain = modeChain(store, layerId);
-  return resolveVariable(lookup, variableId, (collection) => effectiveMode(collection, chain));
+  const contexts = new Map<string, ModeContext>();
+  const contextFor = (collection: CollectionData) => {
+    let context = contexts.get(collection.id);
+    if (!context) {
+      context = modeContext(store, lookup, collection, chain);
+      contexts.set(collection.id, context);
+    }
+    return context;
+  };
+  return resolveVariable(
+    lookup,
+    variableId,
+    (collection) => contextFor(collection).modeId,
+    (collection) => contextFor(collection).extensions,
+  );
 }
 
 type Alias = { readonly id: string };
@@ -201,6 +267,70 @@ export function bindingWrites(store: DocumentStore, lookup: VariableLookup, node
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
 
+/** The prefix of a variant property's key in an instance's `boundVariables` (`variant:Size`). */
+export const VARIANT_BINDING_PREFIX = 'variant:';
+
+/** A variable value as a value of a variant property: booleans match true or false values (in any case); numbers and strings match exactly. */
+export function variantValue(value: ResolvedValue, values: readonly string[]): string | undefined {
+  if (typeof value === 'boolean') return values.find((v) => v.toLowerCase() === String(value));
+  if (typeof value === 'number' || typeof value === 'string') {
+    const text = String(value);
+    return values.includes(text) ? text : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Switches an instance of a variant to the variant its variant properties' variables select (in the modes it uses).
+ * When the instance was just rebuilt (another variant picked by hand), properties whose variant no longer matches
+ * their variable are detached instead. Returns whether the instance was swapped.
+ */
+function applyVariantBindings(
+  tx: Transaction,
+  lookup: VariableLookup,
+  instance: SceneNode,
+  created: boolean,
+  nextId: () => Id,
+  setOwn: (id: Id, field: string, value: unknown) => void,
+): boolean {
+  const store = tx.store;
+  const bound = (instance.boundVariables ?? {}) as Record<string, Alias>;
+  const keys = Object.keys(bound).filter((key) => key.startsWith(VARIANT_BINDING_PREFIX));
+  if (keys.length === 0 || instance.type !== 'FRAME' || !instance.instance) return false;
+  const main = store.get(instance.instance.mainId);
+  const setId = main ? store.parentOf(main.id) : null;
+  const set = setId === null ? undefined : store.get(setId);
+  if (!main || !isSceneNode(main) || !set || !isSceneNode(set) || !isComponentSet(set)) return false;
+  const properties = new Map(componentSetProperties(store, set.id).map((property) => [property.name, property.values]));
+  let values: Array<readonly [string, string]> = [...(parseVariantName(main.name) ?? [])];
+  let target: SceneNode = main;
+  const detached = new Set<string>();
+  for (const key of keys) {
+    const property = key.slice(VARIANT_BINDING_PREFIX.length);
+    const resolved = resolveForLayer(store, lookup, instance.id, bound[key]!.id);
+    const wanted = resolved === null ? undefined : variantValue(resolved, properties.get(property) ?? []);
+    if (wanted === undefined || new Map(values).get(property) === wanted) continue;
+    if (created) {
+      detached.add(key);
+      continue;
+    }
+    const candidate = variantFor(store, set.id, [...values.filter(([p]) => p !== property), [property, wanted]], property);
+    if (!candidate) continue;
+    target = candidate;
+    values = [...(parseVariantName(candidate.name) ?? values)];
+  }
+  const kept = Object.fromEntries(Object.entries(bound).filter(([key]) => !detached.has(key)));
+  const boundVariables = Object.keys(kept).length > 0 ? kept : undefined;
+  if (detached.size > 0) setOwn(instance.id, 'boundVariables', boundVariables);
+  if (target.id === main.id) return false;
+  const explicitVariableModes = instance.explicitVariableModes;
+  if (!swapInstance(tx, instance.id, target.id, nextId)) return false;
+  // The rebuilt instance keeps its variables and modes.
+  setOwn(instance.id, 'boundVariables', boundVariables);
+  setOwn(instance.id, 'explicitVariableModes', explicitVariableModes);
+  return true;
+}
+
 /** Per transaction, the `id\0field` values the variable finalizer set itself, so they aren't taken for edits. */
 const finalizerWrites = new WeakMap<Transaction, Set<string>>();
 
@@ -218,7 +348,11 @@ function unboundPaint(paint: Paint): Paint {
  * - changing a bound property on a layer directly detaches the variable (the layer keeps the new value), and
  *   bindings to deleted variables are removed (the layer keeps the last value).
  */
-export function variableFinalizer(tx: Transaction): void {
+export function createVariableFinalizer(nextId: () => Id): (tx: Transaction) => void {
+  return (tx) => variableFinalizer(tx, nextId);
+}
+
+function variableFinalizer(tx: Transaction, nextId: () => Id): void {
   const store = tx.store;
   const ops = [...tx.ops];
   if (ops.length === 0) return;
@@ -229,9 +363,11 @@ export function variableFinalizer(tx: Transaction): void {
   const roots = new Set<Id>();
   const unbind = new Map<Id, Set<string>>();
   const paintEdits = new Map<Id, Set<VariablePaintField>>();
+  const createdInstances = new Set<Id>();
 
   for (const op of ops) {
     if (op.kind !== 'set') {
+      if (op.kind === 'create' && op.node.type === 'FRAME' && op.node.instance) createdInstances.add(op.node.id);
       if (op.node.type === 'VARIABLE' || op.node.type === 'VARIABLE_COLLECTION') everything = true;
       else if (op.kind === 'create') roots.add(op.node.id);
       continue;
@@ -321,5 +457,12 @@ export function variableFinalizer(tx: Transaction): void {
     }
     node = store.get(id) as SceneNode;
     for (const [field, value] of bindingWrites(store, lookup, node)) setOwn(id, field, value);
+    if (node.type === 'FRAME' && node.instance && applyVariantBindings(tx, lookup, node, createdInstances.has(id), nextId, setOwn)) {
+      // The instance was rebuilt from another variant: its layers take their bound values too.
+      for (const child of store.descendants(id, false)) {
+        const layer = store.get(child);
+        if (layer && isSceneNode(layer)) for (const [field, value] of bindingWrites(store, lookup, layer)) setOwn(child, field, value);
+      }
+    }
   }
 }

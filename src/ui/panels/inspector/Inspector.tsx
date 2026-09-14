@@ -125,7 +125,7 @@ const VERTICAL_CONSTRAINTS: readonly (readonly [Constraint, string])[] = [
 ];
 import { ImageSettings, ImageSwatch } from './ImageSettings';
 import { AppliedStyle, LocalStylesSection, StyleButton } from './StylesPanel';
-import { BoundPaint, VariableModeButton, VariableNumberField } from './VariableFields';
+import { BoundPaint, VariableModeButton, VariableNumberField, VariantVariableButton } from './VariableFields';
 import { PatternSettings } from './PatternSettings';
 import { PAINT_BLEND_OPTIONS } from './blend-modes';
 import { ColorControl } from './ColorControl';
@@ -983,15 +983,20 @@ function VariantControls({ instanceId }: { instanceId: string }) {
         const off = property.values.find((v) => /^false$/i.test(v));
         if (property.values.length === 2 && on !== undefined && off !== undefined) {
           return (
-            <label key={property.name} className={styles.checkbox}>
-              <input type="checkbox" checked={current === on} onChange={(e) => setInstanceVariant(editor, instanceId, property.name, e.target.checked ? on : off)} />
-              {property.name}
-            </label>
+            <div key={property.name} className={styles.grid2}>
+              <label className={styles.checkbox}>
+                <input type="checkbox" checked={current === on} onChange={(e) => setInstanceVariant(editor, instanceId, property.name, e.target.checked ? on : off)} />
+                {property.name}
+              </label>
+              <VariantVariableButton instanceId={instanceId} property={property.name} />
+            </div>
           );
         }
         return (
           <div key={property.name} className={styles.grid2}>
-            <span className={styles.hint}>{property.name}</span>
+            <span className={styles.hint}>
+              {property.name} <VariantVariableButton instanceId={instanceId} property={property.name} />
+            </span>
             <select className={primitives.select} aria-label={property.name} value={current} onChange={(e) => setInstanceVariant(editor, instanceId, property.name, e.target.value)}>
               {!property.values.includes(current) && <option value={current} />}
               {property.values.map((value) => (

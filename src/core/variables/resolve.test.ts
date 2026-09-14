@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import { effectiveMode, exportMode, importTokens, resolveVariable, wouldCreateAliasCycle, type CollectionData, type VariableData, type VariableLookup } from './resolve';
+import { effectiveMode, exportMode, extensionChain, importTokens, resolveVariable, wouldCreateAliasCycle, type CollectionData, type VariableData, type VariableLookup } from './resolve';
 
 const theme: CollectionData = { id: 'theme', name: 'Theme', modes: [{ modeId: 'light', name: 'Light' }, { modeId: 'dark', name: 'Dark' }] };
 const primitives: CollectionData = { id: 'primitives', name: 'Primitives', modes: [{ modeId: 'base', name: 'Value' }] };
@@ -112,5 +112,31 @@ describe('variables', () => {
       { name: 'spacing/small', type: 'FLOAT', value: 4 },
       { name: 'spacing/x/large', type: 'FLOAT', value: 32 },
     ]);
+  });
+});
+
+describe('extended collections', () => {
+  const brand: CollectionData = { id: 'brand', name: 'Brand', modes: [{ modeId: 'light', name: 'Light' }, { modeId: 'dark', name: 'Dark' }] };
+  const acme: CollectionData = { ...brand, id: 'acme', name: 'Acme', extends: 'brand', overrides: { bg: { dark: { r: 1, g: 0, b: 0, a: 0.8 } } } };
+  const night: CollectionData = { ...brand, id: 'night', name: 'Acme night', extends: 'acme', overrides: { bg: { light: { r: 0, g: 0, b: 0, a: 1 } } } };
+  const brandVariables: VariableData[] = [{ id: 'bg', name: 'bg/brand', collectionId: 'brand', type: 'COLOR', valuesByMode: { light: white, dark: navy } }];
+  const extended: VariableLookup = {
+    variable: (id) => brandVariables.find((v) => v.id === id),
+    collection: (id) => [brand, acme, night].find((c) => c.id === id),
+  };
+
+  test('values resolve with the nearest override, falling back to the parent collection', () => {
+    expect(extensionChain(extended, night)).toEqual({ root: brand, extensions: [night, acme] });
+    expect(extensionChain(extended, brand)).toEqual({ root: brand, extensions: [] });
+    expect(resolveVariable(extended, 'bg', () => 'dark', () => [acme])).toEqual({ r: 1, g: 0, b: 0, a: 0.8 });
+    expect(resolveVariable(extended, 'bg', () => 'light', () => [acme])).toEqual(white);
+    expect(resolveVariable(extended, 'bg', () => 'dark', () => [night, acme])).toEqual({ r: 1, g: 0, b: 0, a: 0.8 });
+    expect(resolveVariable(extended, 'bg', () => 'light', () => [night, acme])).toEqual({ r: 0, g: 0, b: 0, a: 1 });
+    expect(resolveVariable(extended, 'bg', () => 'dark')).toEqual(navy);
+  });
+
+  test('an extended collection exports its parent variables with its overrides', () => {
+    expect(exportMode(extended, brandVariables, acme, 'dark')).toMatchObject({ bg: { brand: { $type: 'color', $value: { components: [1, 0, 0], alpha: 0.8 } } } });
+    expect(exportMode(extended, brandVariables, acme, 'light')).toMatchObject({ bg: { brand: { $value: { hex: '#FFFFFF' } } } });
   });
 });

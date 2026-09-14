@@ -246,3 +246,16 @@ tr[data-selected] > th {
   align-items: center;
   gap: var(--space-2);
 }
+
+.value {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding-inline: 2px;
+  border-radius: var(--radius-xs);
+}
+
+/* An extended collection's value that differs from its parent collection's. */
+.value[data-overridden] {
+  background: color-mix(in srgb, var(--accent, #0d99ff) 16%, transparent);
+}

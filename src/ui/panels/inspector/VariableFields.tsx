@@ -17,10 +17,10 @@
 
 import { useState } from 'react';
 import type { Id } from '@/core/ids/ids';
-import type { Paint, SceneNode } from '@/core/schema/document';
-import { isVariable, localCollections, resolveForLayer, variableLookup, type BindableField, type VariablePaintField } from '@/core/variables/document';
+import { isSceneNode, type Paint, type SceneNode } from '@/core/schema/document';
+import { isVariable, localCollections, resolveForLayer, variableLookup, VARIANT_BINDING_PREFIX, type BindableField, type VariablePaintField } from '@/core/variables/document';
 import type { ResolvedValue } from '@/core/variables/resolve';
-import { bindVariable, setExplicitVariableMode, unbindPaintVariable, unbindVariable, variablesFor } from '@/editor/commands/variables';
+import { bindVariable, bindVariantVariable, setExplicitVariableMode, unbindPaintVariable, unbindVariable, unbindVariantVariable, variablesFor, variantVariablesFor } from '@/editor/commands/variables';
 import dialogStyles from '../../dialogs/Dialog.module.css';
 import { useEditor } from '../../hooks/useEditor';
 import { IconButton } from '../../primitives/IconButton';
@@ -160,6 +160,66 @@ export function VariableModeButton({ ids }: { ids: readonly Id[] }) {
     <>
       <IconButton icon="variables" label="Apply variable mode" aria-haspopup="menu" onClick={(e) => setAnchor(e.currentTarget.getBoundingClientRect())} />
       {anchor && <Menu label="Variable modes" entries={entries} anchor={anchor} placement="bottom-start" onClose={() => setAnchor(null)} />}
+    </>
+  );
+}
+
+/**
+ * Assign variable, for a variant property of an instance: a string or number variable (or a boolean for true and false
+ * properties) whose value picks the variant, in the modes the instance uses. A bound property shows its variable, with
+ * Detach variable.
+ */
+export function VariantVariableButton({ instanceId, property }: { instanceId: Id; property: string }) {
+  const editor = useEditor();
+  const [picking, setPicking] = useState(false);
+  const instance = editor.doc.get(instanceId);
+  const alias = instance && isSceneNode(instance) ? instance.boundVariables?.[`${VARIANT_BINDING_PREFIX}${property}`] : undefined;
+  const variable = alias ? editor.doc.get(alias.id) : undefined;
+  const candidates = picking ? variantVariablesFor(editor, instanceId, property) : [];
+  return (
+    <>
+      {isVariable(variable) ? (
+        <span className={styles.boundPaint} role="group" aria-label={`${property} variable`}>
+          <span className={styles.boundName}>{variable.name}</span>
+          <IconButton icon="detach" label={`Detach variable from ${property}`} onClick={() => unbindVariantVariable(editor, instanceId, property)} />
+        </span>
+      ) : (
+        <IconButton icon="variables" label={`Assign variable to ${property}`} onClick={() => setPicking(true)} />
+      )}
+      {picking && (
+        <Dialog
+          title="Assign variable"
+          onClose={() => setPicking(false)}
+          footer={
+            <button type="button" className={dialogStyles.secondary} onClick={() => setPicking(false)}>
+              Close
+            </button>
+          }
+        >
+          {candidates.length === 0 ? (
+            <p>No string, number or boolean variables that can select a variant. Create one in the variables view.</p>
+          ) : (
+            <ul className={findStyles.results} aria-label="Variables">
+              {candidates.map((candidate) => (
+                <li key={candidate.id}>
+                  <button
+                    type="button"
+                    className={findStyles.result}
+                    title={candidate.description}
+                    onClick={() => {
+                      bindVariantVariable(editor, instanceId, property, candidate.id);
+                      setPicking(false);
+                    }}
+                  >
+                    {candidate.name}
+                    <span className={styles.hint}> {formatValue(resolveForLayer(editor.doc, variableLookup(editor.doc), instanceId, candidate.id))}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Dialog>
+      )}
     </>
   );
 }

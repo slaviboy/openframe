@@ -832,7 +832,13 @@ export const StyleNodeSchema = z.object({
   hangingPunctuation: z.boolean().optional(),
 });
 
-/** A variable collection: a set of variables and modes (the first mode is the default). A child of the document. */
+/** A variable's value in a mode: a value of its type, or an alias to another variable of that type. */
+export const VariableValueSchema = z.union([VariableAliasSchema, ColorSchema, z.number().finite(), z.string().max(100_000), z.boolean()]);
+
+/**
+ * A variable collection: a set of variables and modes (the first mode is the default). A child of the document. An
+ * extended collection uses the variables, modes and order of the collection it extends, with its own overriding values.
+ */
 export const VariableCollectionNodeSchema = z.object({
   ...BaseNodeFields,
   type: z.literal('VARIABLE_COLLECTION'),
@@ -840,6 +846,10 @@ export const VariableCollectionNodeSchema = z.object({
     .array(z.object({ modeId: z.string().min(1).max(64), name: z.string().min(1).max(200) }))
     .min(1)
     .max(40),
+  /** An extended collection: the collection it extends. */
+  extendsCollectionId: IdSchema.optional(),
+  /** In an extended collection: values overriding the parent collection's, by variable id, then mode id. */
+  variableOverrides: z.record(IdSchema, z.record(z.string().min(1).max(64), VariableValueSchema)).optional(),
 });
 
 /** A variable: one value per mode of its collection (its parent), a value or an alias to a variable of the same type. */
@@ -847,7 +857,7 @@ export const VariableNodeSchema = z.object({
   ...BaseNodeFields,
   type: z.literal('VARIABLE'),
   resolvedType: z.enum(['COLOR', 'FLOAT', 'STRING', 'BOOLEAN']),
-  valuesByMode: z.record(z.string().min(1).max(64), z.union([VariableAliasSchema, ColorSchema, z.number().finite(), z.string().max(100_000), z.boolean()])),
+  valuesByMode: z.record(z.string().min(1).max(64), VariableValueSchema),
   description: z.string().max(10_000).optional(),
   /** The properties the variable is offered for; absent means all supported properties. */
   scopes: z.array(z.string().min(1).max(64)).max(64).optional(),
