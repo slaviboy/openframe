@@ -78,6 +78,7 @@ const MAIN_MENU: readonly (readonly [string, readonly (readonly string[])[]])[] 
     'Object',
     [
       ['object.group', 'object.frameSelection', 'object.wrapInSection', 'object.ungroup', 'object.removeSection', 'object.useAsMask'],
+      ['layout.addAutoLayout', 'layout.removeAutoLayout'],
       ['object.flipHorizontal', 'object.flipVertical'],
       ['object.toggleVisible', 'object.toggleLocked', 'object.rename'],
     ],
@@ -111,6 +112,7 @@ export function objectMenuEntries(editor: Editor): MenuEntry[] {
     ['edit.duplicate', 'edit.delete'],
     ['arrange.bringToFront', 'arrange.bringForward', 'arrange.sendBackward', 'arrange.sendToBack'],
     ['object.group', 'object.frameSelection', 'object.wrapInSection', 'object.ungroup', 'object.removeSection', 'object.useAsMask'],
+    ['layout.addAutoLayout', 'layout.removeAutoLayout'],
     ['object.flipHorizontal', 'object.flipVertical'],
     ['object.toggleVisible', 'object.toggleLocked', 'object.rename'],
   ]);

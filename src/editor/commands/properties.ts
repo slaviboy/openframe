@@ -70,6 +70,9 @@ export function setSize(tx: Transaction, node: SceneNode, axis: 'width' | 'heigh
     const mode = resizedTextMode(current.textAutoResize, { width: axis === 'width', height: axis === 'height' });
     if (mode !== current.textAutoResize) tx.set(node.id, 'textAutoResize', mode);
   }
+  // A typed size makes hug or fill layers fixed on that axis.
+  const sizingField = axis === 'width' ? 'layoutSizingHorizontal' : 'layoutSizingVertical';
+  if (current[sizingField]) tx.set(node.id, sizingField, undefined);
   const next = Math.max(0, value);
   const other = axis === 'width' ? 'height' : 'width';
   if (current.constrainProportions && current.type !== 'LINE' && current.size[axis] > 0) {

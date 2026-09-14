@@ -29,6 +29,7 @@ import type { CommandDefinition } from './registry';
 import { layersWithSame, matchingLayers } from './select-similar';
 import { canTidyUp, tidyUpSelection } from './tidy';
 import { canToggleMask, toggleMask } from './masks';
+import { addAutoLayout, canAddAutoLayout, canRemoveAutoLayout, removeAutoLayout } from './auto-layout';
 import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/core/color/color-profile';
 import { beginCrop, cropTarget, endCrop } from '../interactions/crop';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
@@ -428,6 +429,23 @@ const TEXT_FORMAT_COMMANDS: CommandDefinition[] = [
 
 export const BUILTIN_COMMANDS: CommandDefinition[] = [
   ...COLOR_PROFILE_COMMANDS,
+  // Registered before the align commands: ⇧⌥A removes auto layout when the selection has any, and aligns left to the parent otherwise.
+  {
+    id: 'layout.addAutoLayout',
+    label: 'Add auto layout',
+    category: 'Object',
+    shortcuts: ['Shift+A'],
+    enabled: canAddAutoLayout,
+    run: (e) => addAutoLayout(e),
+  },
+  {
+    id: 'layout.removeAutoLayout',
+    label: 'Remove auto layout',
+    category: 'Object',
+    shortcuts: ['Shift+Alt+A'],
+    enabled: canRemoveAutoLayout,
+    run: (e) => removeAutoLayout(e),
+  },
   // Listed first so Return applies a crop before it selects children.
   {
     id: 'image.applyCrop',

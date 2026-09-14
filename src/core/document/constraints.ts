@@ -86,7 +86,8 @@ export function constraintsFinalizer(tx: Transaction): void {
     const op = tx.ops[i]!;
     if (op.kind !== 'set' || op.field !== 'size' || done.has(op.id)) continue;
     const frame = store.get(op.id);
-    if (frame?.type !== 'FRAME') continue;
+    // Children of auto layout frames are positioned by the layout instead.
+    if (frame?.type !== 'FRAME' || frame.layoutMode) continue;
     done.add(op.id);
     const before = op.prev as Size | undefined;
     if (!before) continue;

@@ -42,6 +42,9 @@ import { IOS_CORNER_SMOOTHING } from '@/core/geometry/corners';
 import { backgroundColorBehind } from '@/core/color/contrast';
 import { useColorProfile } from '../../hooks/useColorProfile';
 import { ReorderHandle } from './ReorderHandle';
+import { AutoLayoutFields, LayoutSizingFields } from './AutoLayoutFields';
+import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
+import type { FrameNode } from '@/core/schema/document';
 import { TextResizingButtons, TypographyFields } from './TypographyFields';
 import type { LayoutGuide, TextNode } from '@/core/schema/document';
 import { convertLayoutGuide, defaultLayoutGuide, type LayoutGuideAlignment, type LayoutGuidePattern } from '@/core/layout/layout-guides';
@@ -536,7 +539,8 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
   // Sections never rotate; slices are invisible, so they have no appearance.
   const hasSection = nodes.some((n) => n.type === 'SECTION');
   // Constraints apply to layers inside frames.
-  const constrainable = nodes.length > 0 && nodes.every((n) => editor.doc.get(n.parent.id)?.type === 'FRAME');
+  // Constraints apply to layers inside frames; children of auto layout frames use resizing instead.
+  const constrainable = nodes.length > 0 && nodes.every((n) => { const parent = editor.doc.get(n.parent.id); return parent?.type === 'FRAME' && !isAutoLayoutFrame(parent); });
   const horizontalConstraint = val(shared(nodes, (n) => n.constraints?.horizontal ?? 'MIN'));
   const verticalConstraint = val(shared(nodes, (n) => n.constraints?.vertical ?? 'MIN'));
   const changeConstraint = (axis: 'horizontal' | 'vertical', value: Constraint) =>
@@ -612,6 +616,8 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             onChange={(v) => resize.change((tx) => nodes.forEach((n) => setSize(tx, n, 'height', v)))}
           />
         </div>
+        <LayoutSizingFields nodes={nodes} />
+        {frames.length === nodes.length && <AutoLayoutFields frames={frames as FrameNode[]} />}
         {smart && (
           <div className={styles.grid2}>
             <NumberField

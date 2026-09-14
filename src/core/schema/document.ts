@@ -275,6 +275,8 @@ const ParentRefSchema = z.object({ id: IdSchema, key: FractionalKeySchema });
  * STRETCH to both (resizing it), CENTER to the center, and SCALE keeps its position and size proportional.
  */
 export const ConstraintSchema = z.enum(['MIN', 'MAX', 'CENTER', 'STRETCH', 'SCALE']);
+/** Resizing inside auto layout: `HUG` (auto layout frames) or `FILL` (children of auto layout frames). Absent means fixed. */
+export const LayoutSizingSchema = z.enum(['HUG', 'FILL']);
 
 const BaseNodeFields = {
   id: IdSchema,
@@ -296,6 +298,10 @@ const SceneFields = {
   constrainProportions: z.boolean().optional(),
   /** How the layer responds when its parent frame is resized. Absent means left and top. */
   constraints: z.object({ horizontal: ConstraintSchema, vertical: ConstraintSchema }).optional(),
+  /** Horizontal resizing in auto layout (text hugs through `textAutoResize`). Absent means fixed. */
+  layoutSizingHorizontal: LayoutSizingSchema.optional(),
+  /** Vertical resizing in auto layout. Absent means fixed. */
+  layoutSizingVertical: LayoutSizingSchema.optional(),
   /** Used as a mask: masks the siblings above it, up to the next mask. Absent means not a mask. */
   isMask: z.boolean().optional(),
   /** How a mask reveals content; absent means ALPHA. */
@@ -386,6 +392,22 @@ export const FrameNodeSchema = z.object({
   guides: GuidesField,
   /** Layout guides, drawn over the frame's contents. Absent when none. */
   layoutGuides: z.array(LayoutGuideSchema).max(100).optional(),
+  /** Auto layout flow of the children, in layer order (first child first). Absent means freeform. */
+  layoutMode: z.enum(['HORIZONTAL', 'VERTICAL']).optional(),
+  /** Horizontal auto layout only: children that overflow continue on the next line. */
+  layoutWrap: z.literal(true).optional(),
+  paddingTop: z.number().min(0).max(100_000).optional(),
+  paddingRight: z.number().min(0).max(100_000).optional(),
+  paddingBottom: z.number().min(0).max(100_000).optional(),
+  paddingLeft: z.number().min(0).max(100_000).optional(),
+  /** Gap between children along the flow (may be negative). Absent means 0. */
+  itemSpacing: z.number().min(-100_000).max(100_000).optional(),
+  /** Gap between wrapped lines. Absent means 0. */
+  counterAxisSpacing: z.number().min(-100_000).max(100_000).optional(),
+  /** Packing along the flow, or an Auto gap (`SPACE_*`). Absent means start. */
+  primaryAxisAlignItems: z.enum(['CENTER', 'MAX', 'SPACE_BETWEEN', 'SPACE_AROUND', 'SPACE_EVENLY']).optional(),
+  /** Alignment across the flow. Absent means start. */
+  counterAxisAlignItems: z.enum(['CENTER', 'MAX']).optional(),
 });
 
 export const GroupNodeSchema = z.object({ ...SceneFields, type: z.literal('GROUP') });
