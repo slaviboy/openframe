@@ -78,7 +78,7 @@ import { commandItem } from '../../menus/menu-model';
 import { Menu, type MenuEntry } from '../../primitives/Menu';
 import { localComponents } from '@/editor/commands/insert-instance';
 import { swapInstanceFor } from '@/editor/commands/swap-instance';
-import { canResetOverrides, resetSelectedOverrides } from '@/editor/commands/reset-overrides';
+import { canResetOverrides, overrideLabel, resetSelectedOverride, resetSelectedOverrides, selectionOverriddenFields } from '@/editor/commands/reset-overrides';
 import { eraserWeight, vectorEditPaint } from '@/editor/interactions/vector-edit';
 import { invert, applyLinear } from '@/core/math/matrix';
 import {
@@ -593,6 +593,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             Reset all changes
           </button>
         )}
+        {single && isInInstance(editor.doc, single.id) && <InstanceActions />}
         {nodes.length > 1 && <span className={styles.count}>{nodes.length} layers</span>}
       </div>
       {single && <ComponentSection node={single} />}
@@ -899,6 +900,38 @@ function CreateComponentOptions() {
         onClick={(e) => setAnchor(e.currentTarget.getBoundingClientRect())}
       />
       {anchor && <Menu label="Create component options" entries={entries} anchor={anchor} placement="bottom-start" onClose={() => setAnchor(null)} />}
+    </>
+  );
+}
+
+/** The More actions menu of an instance, or a layer inside one: reset changed properties one by one or all, and the instance commands. */
+function InstanceActions() {
+  const editor = useEditor();
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const fields = anchor ? selectionOverriddenFields(editor) : [];
+  const commands = ['object.goToMainComponent', 'object.pushChangesToMain', 'object.restoreMainComponent', 'object.detachInstance']
+    .map((id) => commandItem(editor, id))
+    // Restore main component only shows while the main component is missing.
+    .filter((entry): entry is MenuEntry => entry !== null && !(entry.kind === 'item' && entry.id === 'object.restoreMainComponent' && entry.disabled === true));
+  const entries: MenuEntry[] = [
+    {
+      kind: 'submenu',
+      id: 'reset',
+      label: 'Reset',
+      disabled: fields.length === 0,
+      entries: [
+        ...fields.map((field): MenuEntry => ({ kind: 'item', id: `reset-${field}`, label: `Reset ${overrideLabel(field)}`, onSelect: () => resetSelectedOverride(editor, field) })),
+        { kind: 'separator', id: 'reset-separator' },
+        { kind: 'item', id: 'reset-all', label: 'Reset all changes', onSelect: () => resetSelectedOverrides(editor) },
+      ],
+    },
+    { kind: 'separator', id: 'separator' },
+    ...commands,
+  ];
+  return (
+    <>
+      <IconButton icon="more" label="More actions" aria-haspopup="menu" onClick={(e) => setAnchor(e.currentTarget.getBoundingClientRect())} />
+      {anchor && <Menu label="More actions" entries={entries} anchor={anchor} placement="bottom-start" onClose={() => setAnchor(null)} />}
     </>
   );
 }

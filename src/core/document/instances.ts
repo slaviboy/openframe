@@ -228,15 +228,16 @@ function mainValue(store: DocumentStore, layer: SceneNode, root: SceneNode, name
 /**
  * Reset all changes: every overridden field of the given instances (with their layers) or instance
  * layers takes the main component's value again, and the layers follow the component for it. With `nextId`,
- * a swapped copy of a nested instance becomes a copy of the nested instance in the component again.
+ * a swapped copy of a nested instance becomes a copy of the nested instance in the component again. With
+ * `only`, just that property is reset (Reset [property]) and the other changes stay.
  */
-export function resetOverrides(tx: Transaction, ids: readonly Id[], nextId?: () => Id): void {
+export function resetOverrides(tx: Transaction, ids: readonly Id[], nextId?: () => Id, only?: string): void {
   const store = tx.store;
   for (const id of ids) {
     const owner = ownerOf(store, id);
     if (owner?.kind !== 'instance') continue;
     const scope = () => (id === owner.root.id ? [id, ...store.descendants(id, false)] : [id]);
-    if (nextId) {
+    if (nextId && (only === undefined || only === 'instance')) {
       for (const layerId of scope()) {
         const layer = store.get(layerId);
         // Layers of a copy rebuilt earlier in this loop are gone.
@@ -251,14 +252,29 @@ export function resetOverrides(tx: Transaction, ids: readonly Id[], nextId?: () 
       if (!layer || !isSceneNode(layer) || !layer.overrides) continue;
       const root = ownerOf(store, layerId)?.root ?? owner.root;
       for (const name of layer.overrides) {
-        if (name === 'instance') continue;
+        if (name === 'instance' || (only !== undefined && name !== only)) continue;
         const value = mainValue(store, layer, root, name);
         // Document values are plain JSON data, so a JSON round trip copies them.
         tx.set(layerId, name, value === undefined ? undefined : (JSON.parse(JSON.stringify(value)) as unknown));
       }
-      tx.set(layerId, 'overrides', undefined);
+      const remaining = only === undefined ? [] : layer.overrides.filter((name) => name !== only);
+      tx.set(layerId, 'overrides', remaining.length > 0 ? remaining : undefined);
     }
   }
+}
+
+/** The properties changed on the given instances (with their layers) or instance layers, in layer order. */
+export function overriddenFields(store: DocumentStore, ids: readonly Id[]): string[] {
+  const fields = new Set<string>();
+  for (const id of ids) {
+    const owner = ownerOf(store, id);
+    if (owner?.kind !== 'instance') continue;
+    for (const layerId of id === owner.root.id ? [id, ...store.descendants(id, false)] : [id]) {
+      const layer = store.get(layerId);
+      if (layer && isSceneNode(layer)) for (const name of layer.overrides ?? []) fields.add(name);
+    }
+  }
+  return [...fields];
 }
 
 /** Whether any of the given layers is, or contains, an instance layer with overrides. */

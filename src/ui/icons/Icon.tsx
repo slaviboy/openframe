@@ -103,6 +103,13 @@ const PATHS = {
     </>
   ),
   plus: <path d="M12 6.5v11M6.5 12h11" />,
+  more: (
+    <>
+      <circle cx="7" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
+      <circle cx="17" cy="12" r="1" fill="currentColor" stroke="none" />
+    </>
+  ),
   search: (
     <>
       <circle cx="11" cy="11" r="4.5" />
