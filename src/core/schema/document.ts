@@ -411,6 +411,14 @@ export const FrameNodeSchema = z.object({
   ...CornerFields,
   type: z.literal('FRAME'),
   clipsContent: z.boolean(),
+  /** Present when the frame is a main component (Create component, ⌥⌘K). */
+  component: z
+    .object({
+      /** Component configuration: a description and a documentation link for collaborators. */
+      description: z.string().max(10_000).optional(),
+      link: z.string().max(2_000).optional(),
+    })
+    .optional(),
   /** Frame guides (for frames directly on the page or in a section). Absent when none. */
   guides: GuidesField,
   /** Layout guides, drawn over the frame's contents. Absent when none. */

@@ -36,6 +36,7 @@ import { addAutoLayout, canAddAutoLayout, canRemoveAutoLayout, removeAutoLayout,
 import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/core/color/color-profile';
 import { beginCrop, cropTarget, endCrop } from '../interactions/crop';
 import { BOOLEAN_NAMES, booleanSelection, canBooleanSelection } from './boolean';
+import { canCreateComponent, createComponent } from './components';
 import { canOutlineStroke, outlineStrokeSelection } from './outline-stroke';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
 
@@ -169,6 +170,15 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     shortcuts: ['Mod+Ctrl+M', 'Ctrl+Alt+M'],
     enabled: canToggleMask,
     run: (e) => toggleMask(e),
+  },
+  {
+    id: 'object.createComponent',
+    label: 'Create component',
+    category: 'Object',
+    // ⌥⌘K on macOS; Ctrl+Alt+K elsewhere.
+    shortcuts: ['Mod+Alt+K'],
+    enabled: canCreateComponent,
+    run: (e) => createComponent(e),
   },
   {
     id: 'object.frameSelection',

@@ -189,7 +189,7 @@ Its **Tests** column must then name the covering tests.
 
 | Feature | Documentation | Pri | Dependency | M | Status | Tests |
 |---|---|---:|---|---|---|---|
-| Create component (⌥⌘K), create multiple components, restore deleted main component | components/create-components-to-reuse-in-designs.html | P0 | Instance resolver | M7 | Planned | |
+| Create component (⌥⌘K), create multiple components, restore deleted main component | components/create-components-to-reuse-in-designs.html | P0 | Instance resolver | M7 | In progress (⌥⌘K, the Object menu, the layer context menu or the Create component button next to the selection's type in the properties panel: a single selected frame becomes a component itself, and any other selection is nested in a new component frame without a fill, named "Component N". Components show the component icon in the layers panel and are labeled Component in the properties panel; one undo step, and they persist. Create multiple components, instances, restoring a deleted main component, and the purple component color pending) | src/editor/commands/components.test.ts, e2e/components.spec.ts |
 | Instances: insert, duplicate, go to main (⌃⌥⌘K), push overrides to main | use-libraries/create-and-insert-component-instances.html | P0 | Instance resolver | M7 | Planned | |
 | Overrides (allowed vs disallowed), reset one or all overrides | use-libraries/apply-changes-to-instances.html | P0 | Override paths | M7 | Planned | |
 | Detach instance (⌥⌘B) | use-libraries/detach-an-instance-from-the-component.html | P0 | Instance resolver | M7 | Planned | |

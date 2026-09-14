@@ -59,6 +59,7 @@ import { canonicalStringify } from '@/core/serialize/serialize';
 import gradientStyles from './Gradient.module.css';
 import { gradientCss } from './gradient-css';
 import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
+import { canCreateComponent, createComponent } from '@/editor/commands/components';
 import { eraserWeight, vectorEditPaint } from '@/editor/interactions/vector-edit';
 import { invert, applyLinear } from '@/core/math/matrix';
 import {
@@ -502,7 +503,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
 
   const single = nodes.length === 1 ? nodes[0]! : null;
   const types = new Set(nodes.map((n) => n.type));
-  const typeLabel = types.size === 1 ? TYPE_LABELS[nodes[0]!.type] : 'Mixed';
+  const typeLabel = types.size === 1 ? (single?.type === 'FRAME' && single.component ? 'Component' : TYPE_LABELS[nodes[0]!.type]) : 'Mixed';
 
   // Multi-selection X/Y are the selection bounds in world space; single is parent-relative.
   const bounds = single ? null : editor.selectionBounds(nodes.map((n) => n.id));
@@ -556,6 +557,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
     <>
       <div className={styles.typeHeader}>
         <span className={styles.typeLabel}>{typeLabel}</span>
+        {canCreateComponent(editor) && <IconButton icon="component" label="Create component" onClick={() => createComponent(editor)} />}
         {nodes.length > 1 && <span className={styles.count}>{nodes.length} layers</span>}
       </div>
       {tool === 'scale' && <ScaleSection nodes={nodes} />}
