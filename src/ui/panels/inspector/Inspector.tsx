@@ -72,9 +72,14 @@ import {
   renameComponentProperty,
   setComponentPropertyDefault,
   setInstanceProperty,
+  canConvertToSlot,
+  convertToSlot,
+  createSlotProperty,
   setExposedInstance,
   setPreferredValues,
+  setSlotSettings,
   swapCandidates,
+  type SlotSettings,
 } from '@/editor/commands/component-properties';
 import { commandItem } from '../../menus/menu-model';
 import { Menu, type MenuEntry } from '../../primitives/Menu';
@@ -597,6 +602,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         )}
         {single && isInInstance(editor.doc, single.id) && <InstanceActions />}
         {bindable && single?.type === 'FRAME' && single.instance && <PropertyBinding layerId={single.id} type="INSTANCE_SWAP" />}
+        {single && canConvertToSlot(editor, single.id) && <ConvertToSlotButton layerId={single.id} />}
         {nodes.length > 1 && <span className={styles.count}>{nodes.length} layers</span>}
       </div>
       {single && <ComponentSection node={single} />}
@@ -1028,6 +1034,7 @@ function CreatePropertyButton({ onChoose, onExpose }: { onChoose: (type: Compone
             { kind: 'item', id: 'boolean', label: 'Boolean', onSelect: () => onChoose('BOOLEAN') },
             { kind: 'item', id: 'text', label: 'Text', onSelect: () => onChoose('TEXT') },
             { kind: 'item', id: 'instance-swap', label: 'Instance swap', onSelect: () => onChoose('INSTANCE_SWAP') },
+            { kind: 'item', id: 'slot', label: 'Slot', onSelect: () => onChoose('SLOT') },
             // Expose properties from nested instances, when the component has some to expose.
             ...(onExpose ? ([{ kind: 'separator', id: 'expose-separator' }, { kind: 'item', id: 'nested-instances', label: 'Nested instances', onSelect: onExpose }] satisfies MenuEntry[]) : []),
           ]}
@@ -1048,9 +1055,9 @@ function CreatePropertyForm({ ownerId, type, onDone }: { ownerId: string; type: 
   const [value, setValue] = useState<boolean | string>(type === 'BOOLEAN' ? true : type === 'INSTANCE_SWAP' ? (components[0]?.id ?? '') : '');
   const [preferred, setPreferred] = useState<readonly string[]>([]);
   const create = () => {
-    if (createComponentProperty(editor, ownerId, type, name, value, { preferredValues: preferred })) onDone();
+    if (type === 'SLOT' ? createSlotProperty(editor, ownerId, name) : createComponentProperty(editor, ownerId, type, name, value, { preferredValues: preferred })) onDone();
   };
-  const label = type === 'BOOLEAN' ? 'Create boolean property' : type === 'TEXT' ? 'Create text property' : 'Create instance swap property';
+  const label = type === 'BOOLEAN' ? 'Create boolean property' : type === 'TEXT' ? 'Create text property' : type === 'SLOT' ? 'Create slot property' : 'Create instance swap property';
   return (
     <div role="group" aria-label={label}>
       <input
@@ -1120,6 +1127,104 @@ function PreferredComponents({ label, components, preferred, onChange }: { label
         </label>
       ))}
     </div>
+  );
+}
+
+/** Convert to slot, for a frame nested in a main component: to a new slot property, or to one of the component's slot properties. */
+function ConvertToSlotButton({ layerId }: { layerId: string }) {
+  const editor = useEditor();
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const existing = Object.entries(propertyDefinitions(bindingOwner(editor.doc, layerId)))
+    .filter(([, definition]) => definition.type === 'SLOT')
+    .map(([name]) => name);
+  const entries: MenuEntry[] = [
+    { kind: 'item', id: 'new-slot', label: 'New slot property', onSelect: () => void convertToSlot(editor, layerId) },
+    ...(existing.length > 0 ? [{ kind: 'separator', id: 'slot-separator' } satisfies MenuEntry] : []),
+    ...existing.map((name): MenuEntry => ({ kind: 'item', id: `slot-${name}`, label: name, onSelect: () => void convertToSlot(editor, layerId, name) })),
+  ];
+  return (
+    <>
+      <button type="button" className={gradientStyles.textButton} aria-haspopup="menu" onClick={(e) => setAnchor(e.currentTarget.getBoundingClientRect())}>
+        Convert to slot
+      </button>
+      {anchor && <Menu label="Convert to slot" entries={entries} anchor={anchor} placement="bottom-start" onClose={() => setAnchor(null)} />}
+    </>
+  );
+}
+
+/**
+ * A slot property's row control: Edit slot property opens its settings: the description, minimum and maximum layer counts,
+ * preferred instances, and the Only allow preferred instances, display empty slots and fill items options.
+ */
+function SlotPropertySettings({ ownerId, name, definition }: { ownerId: string; name: string; definition: Extract<ComponentPropertyDefinition, { type: 'SLOT' }> }) {
+  const editor = useEditor();
+  const [editing, setEditing] = useState(false);
+  const components = swapCandidates(editor, ownerId);
+  const preferred = definition.preferredValues ?? [];
+  const change = (patch: SlotSettings) => setSlotSettings(editor, ownerId, name, patch);
+  const limit = (key: 'minLayers' | 'maxLayers', label: string) => {
+    const current = definition[key];
+    return (
+      <input
+        key={`${key}-${current ?? ''}`}
+        className={primitives.textInput}
+        type="number"
+        min={0}
+        step={1}
+        aria-label={`${label} of ${name}`}
+        placeholder={label}
+        defaultValue={current ?? ''}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          if (e.key === 'Enter') e.currentTarget.blur();
+        }}
+        onBlur={(e) => {
+          const text = e.currentTarget.value.trim();
+          const value = text === '' ? undefined : Number(text);
+          // An invalid limit (a fraction, or a minimum above the maximum) shows the current one again.
+          if (value !== current && !change(key === 'minLayers' ? { minLayers: value } : { maxLayers: value })) e.currentTarget.value = current === undefined ? '' : String(current);
+        }}
+      />
+    );
+  };
+  const option = (key: 'onlyPreferred' | 'showEmpty' | 'fillCounterAxis', label: string) => (
+    <label className={styles.checkbox}>
+      <input
+        type="checkbox"
+        checked={definition[key] === true}
+        onChange={(e) => change(key === 'onlyPreferred' ? { onlyPreferred: e.target.checked } : key === 'showEmpty' ? { showEmpty: e.target.checked } : { fillCounterAxis: e.target.checked })}
+      />
+      {label}
+    </label>
+  );
+  return (
+    <>
+      <button type="button" className={gradientStyles.textButton} aria-expanded={editing} onClick={() => setEditing(!editing)}>
+        Edit slot property
+      </button>
+      {editing && (
+        <div role="group" aria-label={`Settings of ${name}`}>
+          <textarea
+            key={`description-${definition.description ?? ''}`}
+            className={primitives.textInput}
+            aria-label={`Description of ${name}`}
+            placeholder="Description"
+            rows={2}
+            defaultValue={definition.description ?? ''}
+            onKeyDown={(e) => e.stopPropagation()}
+            onBlur={(e) => change({ description: e.currentTarget.value })}
+          />
+          <div className={styles.grid2}>
+            {limit('minLayers', 'Minimum layers')}
+            {limit('maxLayers', 'Maximum layers')}
+          </div>
+          <PreferredComponents label={`Preferred instances of ${name}`} components={components} preferred={preferred} onChange={(next) => change({ preferredValues: next })} />
+          {option('onlyPreferred', 'Only allow preferred instances')}
+          {option('showEmpty', 'By default, display empty slots')}
+          {option('fillCounterAxis', "By default, fill items on slot's counter-axis")}
+        </div>
+      )}
+    </>
   );
 }
 
@@ -1226,7 +1331,7 @@ function ComponentPropertyRows({ ownerId, creating, onCreated }: { ownerId: stri
             </span>
           )}
           {definition.type === 'SLOT' ? (
-            <span className={styles.hint}>Slot</span>
+            <SlotPropertySettings ownerId={ownerId} name={name} definition={definition} />
           ) : definition.type === 'INSTANCE_SWAP' ? (
             <SwapPropertyDefault ownerId={ownerId} name={name} definition={definition} />
           ) : definition.type === 'BOOLEAN' ? (
