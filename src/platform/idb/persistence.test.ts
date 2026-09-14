@@ -116,3 +116,32 @@ describe('LocalPersistence', () => {
     expect(await persistence.getSetting('theme')).toBe('dark');
   });
 });
+
+describe('file browser storage', () => {
+  test('files keep a thumbnail, move to the trash and back, and duplicate with their thumbnail', async () => {
+    const record = await persistence.createFile('f1', store, NOW);
+    expect(record.name).toBe('Doc');
+    await persistence.setThumbnail('f1', new Uint8Array([1, 2, 3]));
+
+    await persistence.trashFile('f1', NOW);
+    expect((await persistence.getFile('f1'))?.trashedAt).toBe(NOW);
+    await persistence.restoreFile('f1');
+    expect((await persistence.getFile('f1'))?.trashedAt).toBeUndefined();
+
+    const copy = await persistence.duplicateFile('f1', 'f2', NOW);
+    expect(copy.name).toBe('Doc (Copy)');
+    expect([...new Uint8Array((await persistence.getFile('f2'))!.thumbnail!)]).toEqual([1, 2, 3]);
+    const opened = await persistence.openFile('f2');
+    expect(opened.store.meta.name).toBe('Doc (Copy)');
+    expect(serializeDocument(opened.store)).toBe(serializeDocument((await persistence.openFile('f1')).store).replace('"name":"Doc"', '"name":"Doc (Copy)"'));
+  });
+});
+
+describe('renaming a file that is not open', () => {
+  test('renames its record and its document', async () => {
+    await persistence.createFile('f3', store, NOW);
+    await persistence.renameFile('f3', 'Renamed', NOW);
+    expect((await persistence.getFile('f3'))?.name).toBe('Renamed');
+    expect((await persistence.openFile('f3')).store.meta.name).toBe('Renamed');
+  });
+});

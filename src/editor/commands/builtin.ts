@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { canBeThumbnail, setThumbnailFrame, thumbnailFrameId } from '@/core/document/file-thumbnail';
 import { keyOnTop, makePage } from '@/core/document/factory';
 import { keyBetween } from '@/core/ids/fractional-index';
 import { ROOT_ID, type Id } from '@/core/ids/ids';
@@ -581,6 +582,20 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     category: 'File',
     shortcuts: ['Mod+Shift+E'],
     run: (e) => e.state.openDialog('export'),
+  },
+  {
+    id: 'file.setThumbnail',
+    label: 'Set as thumbnail',
+    category: 'File',
+    enabled: (e) => e.selection.length === 1 && canBeThumbnail(e.doc, e.selection[0]!) && thumbnailFrameId(e.doc) !== e.selection[0],
+    run: (e) => e.history.run('Set as thumbnail', (tx) => setThumbnailFrame(tx, e.selection[0]!)),
+  },
+  {
+    id: 'file.restoreThumbnail',
+    label: 'Restore default thumbnail',
+    category: 'File',
+    enabled: (e) => thumbnailFrameId(e.doc) !== undefined,
+    run: (e) => e.history.run('Restore default thumbnail', (tx) => setThumbnailFrame(tx, null)),
   },
   // Vector edit mode, registered first: Return and Delete act on the vector's points while it is being edited.
   // V, Q, X, ⇧B and ⇧E pick the secondary toolbar's Move, Lasso, Cut, Paint and Eraser while editing, before the main tools' shortcuts.

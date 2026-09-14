@@ -16,6 +16,7 @@
  */
 
 import type { ColorProfile } from '../color/color';
+import type { ThumbnailSource } from '../document/file-thumbnail';
 import type { DocumentStore } from '../document/store';
 import type { RasterFormat } from '../export/export-settings';
 import type { Id } from '../ids/ids';
@@ -34,4 +35,10 @@ export interface ThumbnailService {
    * `format`; null when there is nothing to draw.
    */
   exportImage(store: DocumentStore, index: SceneIndex, pageId: Id, id: Id, scale: number, format: RasterFormat, colorProfile?: ColorProfile): Uint8Array | null;
+
+  /**
+   * A file thumbnail (PNG) of `width` × `height` pixels: the frame set as the thumbnail scaled to fill the box, or the
+   * first page's content fitted into it on the page background; null when there is nothing to draw.
+   */
+  fileThumbnail(store: DocumentStore, index: SceneIndex, source: ThumbnailSource, width: number, height: number, colorProfile?: ColorProfile): Uint8Array | null;
 }

@@ -51,7 +51,7 @@ export function commandSections(editor: Editor, sections: readonly (readonly str
 }
 
 const MAIN_MENU: readonly (readonly [string, readonly (readonly string[])[]])[] = [
-  ['File', [['file.saveLocalCopy', 'file.open'], ['file.export'], ['file.colorProfileSrgb', 'file.colorProfileP3']]],
+  ['File', [['file.browse', 'file.saveLocalCopy', 'file.open'], ['file.export'], ['file.colorProfileSrgb', 'file.colorProfileP3']]],
   [
     'Edit',
     [
@@ -149,6 +149,7 @@ function objectCommandEntries(editor: Editor): MenuEntry[] {
     ['layout.addAutoLayout', 'layout.suggestAutoLayout', 'layout.removeAutoLayout'],
     ['object.flipHorizontal', 'object.flipVertical'],
     ['object.toggleVisible', 'object.toggleLocked', 'object.rename'],
+    ['file.setThumbnail', 'file.restoreThumbnail'],
   ]);
 }
 

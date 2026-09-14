@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { thumbnailFrameId } from '@/core/document/file-thumbnail';
 import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { Id } from '@/core/ids/ids';
 import { isSceneNode, type SceneNode } from '@/core/schema/document';
@@ -283,6 +284,11 @@ export function LayersPanel() {
                   </span>
                 )}
                 <ModeTag node={node} />
+                {node.id === thumbnailFrameId(editor.doc) && (
+                  <span className={styles.thumbnailTag} title="File thumbnail" aria-hidden="true" data-testid="thumbnail-tag">
+                    <Icon name="image" size={16} />
+                  </span>
+                )}
                 {/* Kept out of the row's accessible name, which is the layer name. */}
                 {suggested.has(row.id) && <span className={styles.suggested} aria-hidden="true" title="Suggested auto layout" />}
                 <span className={styles.actions} data-persist={node.locked || !node.visible || undefined}>

@@ -217,3 +217,11 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+/* Marks the frame used as the file's thumbnail. */
+.thumbnailTag {
+  display: grid;
+  flex: none;
+  place-items: center;
+  color: var(--fg-secondary);
+}

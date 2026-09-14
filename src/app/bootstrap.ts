@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { createThumbnailUpdater } from './file-thumbnails';
 import { createEmptyDocument } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
 import { BUILTIN_COMMANDS } from '@/editor/commands/builtin';
@@ -48,6 +49,8 @@ export interface AppSession {
   readonly session: SessionStore;
   /** Renames the local file (document metadata + file record) and writes a snapshot. */
   renameFile(name: string): Promise<void>;
+  /** Renders and stores the file's thumbnail now (when the rendering engine is ready). */
+  updateThumbnail(): Promise<void>;
   dispose(): void;
 }
 
@@ -104,13 +107,18 @@ export async function bootstrap(): Promise<AppSession> {
   // User fonts load before the canvas, so text shapes with them from the first frame.
   await editor.fonts.load().catch((error: unknown) => console.warn('Openframe: user fonts could not be loaded', error));
 
+  const thumbnails = createThumbnailUpdater(editor, persistence, file.id);
   const session = new SessionStore({ file, save: { state: 'saved', at: file.updatedAt }, recovered });
   const autosaver = new Autosaver({
     persistence,
     fileId: file.id,
     store: editor.doc,
     now: nowIso,
-    onStatus: (save) => session.update({ save }),
+    onStatus: (save) => {
+      session.update({ save });
+      // The thumbnail follows the saved file.
+      if (save.state === 'saved') thumbnails.schedule();
+    },
   });
 
   const unsubscribe = editor.history.subscribe((change) => {
@@ -145,12 +153,16 @@ export async function bootstrap(): Promise<AppSession> {
       await persistence.updateFileRecord(current.id, { name: trimmed });
       await autosaver.compactNow();
     },
+    updateThumbnail() {
+      return thumbnails.now();
+    },
     dispose() {
       unsubscribe();
       unsubscribePage();
       window.removeEventListener('pagehide', flush);
       document.removeEventListener('visibilitychange', onVisibility);
       autosaver.dispose();
+      thumbnails.dispose();
       persistence.close();
     },
   };

@@ -39,6 +39,10 @@ export interface FileRecord {
   updatedAt: string;
   /** Page the user last had open, restored on reopen. */
   lastPageId?: Id;
+  /** The file's thumbnail (PNG), shown in the file browser. */
+  thumbnail?: ArrayBuffer;
+  /** When the file was moved to the trash; absent for files that aren't in the trash. */
+  trashedAt?: string;
 }
 
 interface SnapshotRecord {
@@ -282,6 +286,49 @@ export class LocalPersistence {
 
   async setSetting(key: string, value: unknown): Promise<void> {
     await this.db.put('settings', value, key);
+  }
+
+  /** Stores a file's thumbnail image (PNG bytes), shown in the file browser. */
+  async setThumbnail(id: string, bytes: Uint8Array): Promise<void> {
+    try {
+      const tx = this.db.transaction('files', 'readwrite');
+      const existing = await tx.store.get(id);
+      if (existing) await tx.store.put({ ...existing, thumbnail: bytes.slice().buffer });
+      await tx.done;
+    } catch (error) {
+      throw classify(error);
+    }
+  }
+
+  /** Moves a file to the trash, from where it can be restored until it is deleted. */
+  async trashFile(id: string, now: string): Promise<void> {
+    await this.updateFileRecord(id, { trashedAt: now });
+  }
+
+  /** Takes a file out of the trash. */
+  async restoreFile(id: string): Promise<void> {
+    const tx = this.db.transaction('files', 'readwrite');
+    const existing = await tx.store.get(id);
+    if (existing) await tx.store.put(Object.fromEntries(Object.entries(existing).filter(([key]) => key !== 'trashedAt')) as unknown as FileRecord);
+    await tx.done;
+  }
+
+  /** Duplicates a file as it is now (its journal included) as a new file named "<name> (Copy)", with its thumbnail. */
+  async duplicateFile(sourceId: string, newId: string, now: string): Promise<FileRecord> {
+    const opened = await this.openFile(sourceId);
+    opened.store.meta = { ...opened.store.meta, name: `${opened.record.name} (Copy)` };
+    const record = await this.createFile(newId, opened.store, now);
+    if (opened.record.thumbnail) {
+      await this.setThumbnail(newId, new Uint8Array(opened.record.thumbnail));
+      return { ...record, thumbnail: opened.record.thumbnail };
+    }
+    return record;
+  }
+  /** Renames a file that isn't open: its document takes the name too (a fresh snapshot is written). */
+  async renameFile(id: string, name: string, now: string): Promise<void> {
+    const opened = await this.openFile(id);
+    opened.store.meta = { ...opened.store.meta, name };
+    await this.compact(id, opened.store, now);
   }
 }
 

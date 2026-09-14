@@ -45,6 +45,7 @@ beforeEach(() => {
   rendered.length = 0;
   editor.setThumbnails({
     thumbnail: () => null,
+    fileThumbnail: () => null,
     exportImage: (_store, _index, _pageId, id, scale, format) => {
       rendered.push({ id, scale, format });
       return new Uint8Array([1]);

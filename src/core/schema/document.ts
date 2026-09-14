@@ -417,6 +417,8 @@ export const DocumentNodeSchema = z.object({
   name: z.string(),
   /** How color values are interpreted and rendered; absent means sRGB. */
   colorProfile: z.enum(['SRGB', 'DISPLAY_P3']).optional(),
+  /** The frame set as the file's thumbnail (Set as thumbnail); absent means the thumbnail shows the first page. */
+  thumbnailNodeId: IdSchema.optional(),
 });
 
 /**

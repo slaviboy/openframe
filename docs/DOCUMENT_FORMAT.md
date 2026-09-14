@@ -146,7 +146,7 @@ Frames and rectangles also accept `individualStrokeWeights: { top, right, bottom
 
 | Type | Extra fields |
 |---|---|
-| `DOCUMENT` | `id: "0:0"`, `name`, optional `colorProfile` (`"SRGB"` \| `"DISPLAY_P3"`; absent means sRGB): how every color value in the file is interpreted |
+| `DOCUMENT` | `id: "0:0"`, `name`, optional `colorProfile` (`"SRGB"` \| `"DISPLAY_P3"`; absent means sRGB): how every color value in the file is interpreted; optional `thumbnailNodeId`: the frame set as the file's thumbnail (Set as thumbnail); absent, or no longer a frame, means the thumbnail shows the first page |
 | `PAGE` | `backgroundColor: Color` (canvas color); optional `guides: Guide[]` in world coordinates |
 | `STYLE` | A local style, a child of the document root (after the pages): `styleType` (`FILL`, `TEXT`, `EFFECT` or `GRID`), optional `description`, and its values: `paints` (color styles, for fills or strokes), `effects`, `layoutGuides`, or typography (`fontName`, `fontSize`, `lineHeight`, `letterSpacing`, `paragraphSpacing`, `paragraphIndent`, `listSpacing`, `textCase`, `textDecoration`, `openTypeFeatures`, `fontVariations`, `leadingTrim`, `hangingPunctuation`). Editing a style updates the layers it is applied to. |
 | `VARIABLE_COLLECTION` | A variable collection, a child of the document root: `modes` (1–40 `{modeId, name}`; the first is the default mode). Its children are its variables, in order. An extended collection has `extendsCollectionId` (the collection it extends): it has no variables of its own, its modes mirror the parent's (same mode ids, names and order), and `variableOverrides` (by variable id, then mode id) holds the values that differ from the parent's. |

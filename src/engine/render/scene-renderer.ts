@@ -16,6 +16,7 @@
  */
 
 import type { RasterFormat } from '@/core/export/export-settings';
+import type { ThumbnailSource } from '@/core/document/file-thumbnail';
 import type { Canvas, CanvasKit, ColorFilter, EmbindEnumEntity, Paint as CkPaint, ImageFilter, Path, RRect, RuntimeEffect, Shader } from 'canvaskit-wasm';
 import type { Effect } from '@/core/schema/document';
 
@@ -316,6 +317,45 @@ export class SceneRenderer {
     } finally {
       surface.delete();
       flat?.delete();
+    }
+  }
+
+  /**
+   * A file thumbnail (ThumbnailService): the frame set as the thumbnail scaled to fill `width` × `height` (what overflows
+   * is cropped), or the page's visible content fitted into it (enlarged at most 4×) on the page background.
+   */
+  fileThumbnail(store: DocumentStore, index: SceneIndex, source: ThumbnailSource, width: number, height: number, colorProfile?: ColorProfile): Uint8Array | null {
+    index.ensure(source.pageId);
+    let bounds: Rect | null = null;
+    if (source.kind === 'frame') {
+      bounds = index.worldBounds(source.id);
+    } else {
+      for (const child of store.children(source.pageId)) {
+        const node = store.get(child);
+        if (!node || !isSceneNode(node) || !node.visible) continue;
+        const b = index.paintBounds(child) ?? index.worldBounds(child);
+        if (!b) continue;
+        bounds = bounds
+          ? { x: Math.min(bounds.x, b.x), y: Math.min(bounds.y, b.y), width: Math.max(bounds.x + bounds.width, b.x + b.width) - Math.min(bounds.x, b.x), height: Math.max(bounds.y + bounds.height, b.y + b.height) - Math.min(bounds.y, b.y) }
+          : b;
+      }
+    }
+    if (!bounds || bounds.width <= 0 || bounds.height <= 0 || width <= 0 || height <= 0) return null;
+    const zoom = source.kind === 'frame' ? Math.max(width / bounds.width, height / bounds.height) : Math.min(width / bounds.width, height / bounds.height, 4);
+    const view = { x: bounds.x + bounds.width / 2 - width / zoom / 2, y: bounds.y + bounds.height / 2 - height / zoom / 2, zoom, width, height, dpr: 1 };
+    const surface = this.ck.MakeSurface(width, height);
+    if (!surface) return null;
+    try {
+      this.render(surface.getCanvas(), store, index, source.pageId, view, { ...(source.kind === 'frame' ? { only: source.id } : {}), ...(colorProfile ? { colorProfile } : {}) });
+      surface.flush();
+      const image = surface.makeImageSnapshot();
+      try {
+        return image.encodeToBytes();
+      } finally {
+        image.delete();
+      }
+    } finally {
+      surface.delete();
     }
   }
 

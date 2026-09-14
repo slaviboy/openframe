@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { FileBrowserDialog } from './dialogs/FileBrowserDialog';
 import { isPackageFile, openLocalFile, saveLocalCopy } from '@/app/local-files';
 import { PackageError } from '@/platform/package';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -120,6 +121,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
   const restoreUi = useCallback(() => setUiMode('full'), []);
   const [notice, setNotice] = useState<string | null>(null);
   const openInput = useRef<HTMLInputElement>(null);
+  const [filesOpen, setFilesOpen] = useState(false);
   // Opening an .openframe file makes it a new local file and reloads into it.
   const openPackage = useCallback(
     async (file: File) => {
@@ -134,6 +136,12 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
   useEffect(
     () =>
       editor.commands.register(
+        {
+          id: 'file.browse',
+          label: 'Files…',
+          category: 'File',
+          run: () => setFilesOpen(true),
+        },
         {
           id: 'file.saveLocalCopy',
           label: 'Save local copy…',
@@ -357,6 +365,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
           if (file) void openPackage(file);
         }}
       />
+      {filesOpen && <FileBrowserDialog session={session} onClose={() => setFilesOpen(false)} />}
       {editorState.tool === 'image' && <PlaceImageHint tools={tools} />}
       {editorState.tool === 'pickLayer' && <ToolHint text="Click a layer to use as the pattern source · Esc to cancel" />}
       {editorState.tool === 'eyedropper' && <ToolHint text="Click to apply a color from the canvas · Esc to cancel" />}
