@@ -168,6 +168,9 @@ This file is how work continues after a pause (for example, a usage limit). Read
   - Presentation options (the commit after marquee-selecting connections):
     - Options has Enable keyboard shortcuts and Hide UI; `hide-ui=1` is in `PresentParams` (`src/app/present.ts`)
     - scroll bars were dropped from the pending list: the docs mirror doesn't describe them
+  - Fixed layers with Animate matching layers (the commit after presentation options):
+    - in `smart-animate.ts`, `matchedLayersStore` shows matching fixed layers untransitioned and dissolves unmatched fixed layers in place
+    - `withoutMatchingLayersStore` leaves those fixed layers out of the moving frames
 
 ## In progress (uncommitted)
 
@@ -179,6 +182,5 @@ This file is how work continues after a pause (for example, a usage limit). Read
    - dragging a manual overlay into place on the canvas
    - choosing which frame of a GIF the canvas shows
    - responsive scaling
-   - the fixed layer rules with Animate matching layers
 
 **Stop after M10.** When every M10 row is finished and committed, stop and report to the user. Don't start M11 until the user says to continue. After that, M11–M15 follow `docs/FEATURE_MATRIX.md` (the rows marked Planned or In progress) in milestone order.

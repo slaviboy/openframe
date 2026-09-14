@@ -200,28 +200,59 @@ export function matchedLayersStore(store: DocumentStore, fromFrame: Id, toFrame:
   const frame = scene(store, toFrame)!;
   const nodes = ancestorNodes(store, toFrame);
   nodes.push({ ...frame, fills: [], strokes: [], effects: [] } as unknown as SceneNode);
+  const addAsIs = (id: Id) => {
+    const node = scene(store, id);
+    if (!node) return;
+    nodes.push(node);
+    store.children(id).forEach(addAsIs);
+  };
   // A layer matches only when its parent does (its path includes the parent's), so unmatched subtrees are left out whole.
-  const add = (id: Id, parentMatched: boolean) => {
+  const add = (id: Id, parentMatched: boolean, parentFixed: boolean) => {
     const node = scene(store, id);
     if (!node) return;
     const source = matches.get(id);
     const sourceNode = source ? scene(store, source) : undefined;
-    if (!sourceNode && !parentMatched) return;
-    nodes.push(sourceNode ? blendLayer(sourceNode, node, progress) : { ...node, opacity: node.opacity * fade });
-    for (const child of store.children(id)) add(child, true);
+    if (!sourceNode && !parentMatched) {
+      // A fixed layer only in the destination dissolves in where it is, instead of moving in with its frame.
+      if (isFixed(node)) {
+        nodes.push({ ...node, opacity: node.opacity * fade });
+        store.children(id).forEach(addAsIs);
+      }
+      return;
+    }
+    // Matching fixed layers (and the layers in them) get no transition: they show as they are in the destination.
+    const fixed = parentFixed || isFixed(node) || isFixed(sourceNode);
+    nodes.push(fixed ? node : sourceNode ? blendLayer(sourceNode, node, progress) : { ...node, opacity: node.opacity * fade });
+    for (const child of store.children(id)) add(child, true, fixed);
   };
-  for (const child of store.children(toFrame)) add(child, false);
+  for (const child of store.children(toFrame)) add(child, false, false);
+  // A fixed layer only in the frame left dissolves out where it was.
+  const matchedSources = new Set(matches.values());
+  for (const child of store.children(fromFrame)) {
+    const node = scene(store, child);
+    if (!node || !isFixed(node) || matchedSources.has(child)) continue;
+    nodes.push({ ...node, parent: { id: toFrame, key: node.parent.key }, opacity: node.opacity * (1 - fade) } as SceneNode);
+    store.children(child).forEach(addAsIs);
+  }
   return new DocumentStore(store.meta, nodes);
 }
 
-/** A frame without its layers that match layers of another frame (those animate on their own), as a document holding only that frame. */
+/** Layers set to Fixed: with Animate matching layers they don't move with their frame. */
+function isFixed(node: SceneNode | undefined): boolean {
+  return node?.scrollBehavior === 'FIXED';
+}
+
+/**
+ * A frame without its layers that match layers of another frame (those animate on their own) and without the fixed
+ * layers directly in it (those dissolve in place), as a document holding only that frame.
+ */
 export function withoutMatchingLayersStore(store: DocumentStore, frameId: Id, otherFrameId: Id): DocumentStore {
   const matched = new Set(matchLayers(store, otherFrameId, frameId).keys());
   matched.delete(frameId);
   const nodes = ancestorNodes(store, frameId);
   const visit = (id: Id) => {
     const node = scene(store, id);
-    if (!node || matched.has(id)) return;
+    if (!node || matched.has(id) || (store.parentOf(id) === frameId && isFixed(node))) return;
     nodes.push(node);
     store.children(id).forEach(visit);
   };
