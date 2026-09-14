@@ -41,7 +41,7 @@ export interface PlayerState {
 
 export type PlayerEffect =
   /** Show `to` (a screen, or an overlay above the screen) coming from `from`, with the transition. */
-  | { readonly type: 'transition'; readonly from: Id | null; readonly to: Id; readonly overlay: boolean; readonly transition: PrototypeTransition }
+  | { readonly type: 'transition'; readonly from: Id | null; readonly to: Id; readonly overlay: boolean; readonly transition: PrototypeTransition; readonly resetScroll?: boolean }
   | { readonly type: 'closeOverlay'; readonly id: Id }
   | { readonly type: 'scrollTo'; readonly nodeId: Id; readonly transition: PrototypeTransition }
   | { readonly type: 'openUrl'; readonly url: string };
@@ -179,18 +179,20 @@ function runAction(store: DocumentStore, state: PlayerState, action: PrototypeAc
       }
       const frame = topLevelFrame(store, destination);
       if (!frame) return state;
+      // State management: the destination's scroll position starts over.
+      const reset = action.resetScrollPosition ? { resetScroll: true } : {};
       if (action.navigation === 'OVERLAY') {
         if (state.overlays.includes(frame) || frame === state.frameId) return state;
-        effects.push({ type: 'transition', from: null, to: frame, overlay: true, transition: action.transition });
+        effects.push({ type: 'transition', from: null, to: frame, overlay: true, transition: action.transition, ...reset });
         return { ...state, overlays: [...state.overlays, frame] };
       }
       if (action.navigation === 'SWAP' && state.overlays.length > 0) {
         // The new overlay replaces the top one; swaps aren't recorded in the history.
-        effects.push({ type: 'transition', from: state.overlays.at(-1)!, to: frame, overlay: true, transition: action.transition });
+        effects.push({ type: 'transition', from: state.overlays.at(-1)!, to: frame, overlay: true, transition: action.transition, ...reset });
         return { ...state, overlays: [...state.overlays.slice(0, -1), frame] };
       }
       if (frame === state.frameId && state.overlays.length === 0) return state;
-      effects.push({ type: 'transition', from: state.frameId, to: frame, overlay: false, transition: action.transition });
+      effects.push({ type: 'transition', from: state.frameId, to: frame, overlay: false, transition: action.transition, ...reset });
       // Swap overlay from a screen replaces the screen without recording it in the history.
       const history = action.navigation === 'SWAP' ? state.history : [...state.history, state.frameId];
       return { ...state, frameId: frame, history, overlays: [] };

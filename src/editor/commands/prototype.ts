@@ -133,6 +133,22 @@ export function removeFlowStartingPoint(editor: Editor, frameId: Id): boolean {
   return true;
 }
 
+/** Sets frames' scroll overflow (No scrolling clears it). One undo step; false when none of the layers is a frame. */
+export function setOverflowDirection(editor: Editor, ids: readonly Id[], direction: NonNullable<SceneNode['overflowDirection']>): boolean {
+  const frames = layers(editor, ids).filter((node) => node.type === 'FRAME');
+  if (frames.length === 0) return false;
+  editor.history.run('Change overflow', (tx) => frames.forEach((node) => tx.set(node.id, 'overflowDirection', direction === 'NONE' ? undefined : direction)));
+  return true;
+}
+
+/** Sets how layers move when their frame scrolls (Scroll with parent clears it). One undo step. */
+export function setScrollBehavior(editor: Editor, ids: readonly Id[], behavior: NonNullable<SceneNode['scrollBehavior']>): boolean {
+  const targets = layers(editor, ids);
+  if (targets.length === 0) return false;
+  editor.history.run('Change scroll position', (tx) => targets.forEach((node) => tx.set(node.id, 'scrollBehavior', behavior === 'SCROLLS' ? undefined : behavior)));
+  return true;
+}
+
 /** Changes how a frame shows as an overlay (position, closing when clicking outside, background). One undo step. */
 export function setOverlaySettings(editor: Editor, frameId: Id, patch: Partial<OverlaySettings>): boolean {
   const node = layers(editor, [frameId])[0];

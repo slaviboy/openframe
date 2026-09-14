@@ -60,24 +60,19 @@ This file is how work continues after a pause (for example, a usage limit). Read
   - Smart animate (the commit after drag to connect):
     - `src/core/prototype/smart-animate.ts` matches layers and blends them
     - presentation view renders the blended frames each tick
+  - Scroll overflow (the commit after smart animate):
+    - `overflowDirection` and `scrollBehavior`, and `src/core/prototype/scroll.ts`
+    - the Scroll behavior section in the Prototype tab
+    - presentation view scrolls frames (wheel, Scroll to, fixed and sticky layers, remembered offsets)
+    - also fixed: the scene index is built before frames are drawn (earlier, presentation view showed blank frames)
 
 ## In progress (uncommitted)
 
-1. **Scroll overflow.** In progress:
-   - `overflowDirection` and `scrollBehavior` on layers (`src/core/schema/document.ts`)
-   - `src/core/prototype/scroll.ts` and its test: limits, the content-too-small warning, the wheel target, and `scrolledFrameStore` (fixed layers on top, sticky layers at the top)
-   - `setOverflowDirection` and `setScrollBehavior` in `src/editor/commands/prototype.ts`
-   - the Scroll behavior section in `PrototypePanel.tsx`
-
-   Still to do:
-   - In presentation view, keep scroll offsets per frame, scroll the target frame on wheel, and render the scrolled frame from `scrolledFrameStore`.
-   - Make Scroll to scroll the destination's scrolling frame.
-   - Write an E2E test, update the matrix row, run the gate, commit.
-   - Nested sticky layers and preserving scroll position come after.
+1. **Selecting connections on the canvas.** Starting: clicking a noodle selects its hotspot and opens that interaction's details in the Prototype tab (editor state for the focused interaction); dragging a noodle's end to another frame changes its destination; dropping it on empty canvas removes that action.
 
 ## Next (M10, in order)
 
-1. Clicking a noodle to select its interaction, and dragging its end to another destination; the overlay badge on the canvas.
+1. The overlay badge on the canvas; dragging to scroll on touch; nested sticky layers.
 2. State memorization of scroll position; Animate matching layers on the moving transitions.
 3. Inline preview (⇧Space) and follow prototype.
 4. Device and background settings; the prototype settings panel with nothing selected.

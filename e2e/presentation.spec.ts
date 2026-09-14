@@ -55,6 +55,15 @@ test('Present opens presentation view in a new tab that plays the prototype', as
   await expect(stage).toHaveAttribute('data-screen', 'Frame 1');
 
   const screen = (await present.getByTestId('presentation-screen').boundingBox())!;
+  // The frame is drawn: its area doesn't look like the same-sized patch of background beside it.
+  const inset = { x: screen.x + 10, y: screen.y + 10, width: 40, height: 40 };
+  await expect
+    .poll(async () => {
+      const frame = await present.screenshot({ clip: inset });
+      const background = await present.screenshot({ clip: { ...inset, x: Math.max(0, screen.x - 60) } });
+      return frame.equals(background);
+    })
+    .toBe(false);
   await present.mouse.click(screen.x + screen.width / 2, screen.y + screen.height / 2);
   await expect(stage).toHaveAttribute('data-screen', 'Frame 2');
   await present.keyboard.press('Enter');
@@ -68,6 +77,48 @@ test('Present opens presentation view in a new tab that plays the prototype', as
   await expect(stage).toHaveAttribute('data-screen', 'Frame 1');
   await present.getByRole('button', { name: 'Flows' }).click();
   await expect(present.getByRole('complementary', { name: 'Flows' })).toContainText('Flow 1');
+});
+
+test('a frame with vertical overflow scrolls in presentation view, bringing a hotspot below the fold into reach', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await drawFrame(page, 350, 200, 'Frame 1');
+  await drawFrame(page, 650, 200, 'Frame 2');
+  // A rectangle in Frame 1 reaching 60 below its bottom (content y 110 to 180 in a 120-tall frame).
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.getByRole('treeitem', { name: 'Frame 1' }).click();
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 360, box.y + 310);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 480, box.y + 380, { steps: 4 });
+  await page.mouse.up();
+  await expect(page.getByRole('treeitem', { name: 'Rectangle 1' })).toBeVisible();
+
+  await page.getByRole('tab', { name: 'Prototype' }).click();
+  const panel = page.getByRole('tabpanel', { name: 'Prototype' });
+  await panel.getByRole('button', { name: 'Add interaction' }).click();
+  await panel.getByRole('combobox', { name: 'Destination', exact: true }).selectOption({ label: 'Frame 2' });
+  await page.getByRole('treeitem', { name: 'Frame 1' }).click();
+  await panel.getByRole('combobox', { name: 'Overflow' }).selectOption({ label: 'Vertical' });
+  await expect(panel.getByRole('alert')).toHaveCount(0);
+
+  const popup = page.waitForEvent('popup');
+  await page.getByRole('button', { name: 'Present', exact: true }).click();
+  const present = await popup;
+  const stage = present.getByTestId('presentation');
+  await expect(stage).toHaveAttribute('data-ready', 'true');
+  await expect(stage).toHaveAttribute('data-screen', 'Frame 1');
+  const screen = (await present.getByTestId('presentation-screen').boundingBox())!;
+
+  // Before scrolling, the point is above the rectangle.
+  await present.mouse.click(screen.x + 70, screen.y + 100);
+  await expect(stage).toHaveAttribute('data-screen', 'Frame 1');
+  // Scrolling down brings the rectangle up under it.
+  await present.mouse.move(screen.x + 70, screen.y + 60);
+  await present.mouse.wheel(0, 200);
+  await expect(stage).toHaveAttribute('data-scroll', 'Frame 1:0,60');
+  await present.mouse.click(screen.x + 70, screen.y + 100);
+  await expect(stage).toHaveAttribute('data-screen', 'Frame 2');
 });
 
 test('a Smart animate interaction plays between matching frames', async ({ page }) => {

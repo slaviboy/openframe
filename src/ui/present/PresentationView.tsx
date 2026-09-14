@@ -39,7 +39,10 @@ import {
   type PlayerStep,
 } from '@/core/prototype/player';
 import { composeScene, frameAtPoint, layerRects, maxScrollY, SCALING_LABELS, SCALING_MODES, scrollOffsetOf, type PresentedScene, type ScalingMode } from '@/core/prototype/presentation';
-import { toEasing, transitionDurationMs } from '@/core/prototype/reactions';
+import { toEasing, topLevelFrame, transitionDurationMs } from '@/core/prototype/reactions';
+import { clampScroll, scrolledFrameStore, scrollFrameOf, scrollLimits, wheelScrollTarget } from '@/core/prototype/scroll';
+import type { Vec2 } from '@/core/math/vec';
+import { SceneIndex } from '@/core/scene/scene-index';
 import type { Reaction, SceneNode } from '@/core/schema/document';
 import { Menu, type MenuEntry } from '../primitives/Menu';
 import type { Box } from '../primitives/position';
@@ -102,6 +105,8 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<Box | null>(null);
   const [screenBox, setScreenBox] = useState<Rect | null>(null);
+  /** The scrolled frames and their offsets, as "name:x,y" (shown on the stage for tests and assistive tools). */
+  const [scrollLabel, setScrollLabel] = useState('');
   const closeMenu = useCallback(() => setMenuAnchor(null), []);
 
   // Mutable playback state the draw loop and input handlers share.
@@ -112,6 +117,9 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
     playing: null as Playing | null,
     scrollY: 0,
     scrolling: null as Scrolling | null,
+    /** Scroll offsets of the frames that scroll (kept when leaving a screen, so returning shows it scrolled as it was). */
+    frameScroll: new Map<Id, Vec2>(),
+    nestedScrolling: null as { frameId: Id; from: Vec2; to: Vec2; start: number; duration: number; easing: Easing | null } | null,
     hintRects: [] as Rect[],
     hintsUntil: 0,
     press: null as Press | null,
@@ -121,6 +129,7 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
     showHints,
     frame: 0,
     box: '',
+    scrollLabel: '',
   });
   const drawRef = useRef<() => void>(() => {});
 
@@ -142,8 +151,23 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
             state.scrollY = 0;
             state.scrolling = null;
           }
+          if (effect.resetScroll) {
+            for (const id of [...state.frameScroll.keys()]) if (topLevelFrame(doc, id) === effect.to) state.frameScroll.delete(id);
+          }
         } else if (effect.type === 'openUrl') {
           window.open(effect.url, '_blank', 'noopener,noreferrer');
+        } else if (effect.type === 'scrollTo' && scrollFrameOf(doc, effect.nodeId)) {
+          // Scroll to a layer in a scrolling frame: that frame scrolls to bring it to its top-left.
+          const frameId = scrollFrameOf(doc, effect.nodeId)!;
+          const frameBounds = editor.scene.worldBounds(frameId);
+          const nodeBounds = editor.scene.worldBounds(effect.nodeId);
+          if (frameBounds && nodeBounds) {
+            const to = clampScroll({ x: nodeBounds.x - frameBounds.x, y: nodeBounds.y - frameBounds.y }, scrollLimits(doc, editor.scene, frameId));
+            const from = state.frameScroll.get(frameId) ?? { x: 0, y: 0 };
+            const duration = transitionDurationMs(effect.transition);
+            if (duration > 0 && effect.transition.type !== 'INSTANT') state.nestedScrolling = { frameId, from, to, start: now, duration, easing: toEasing(effect.transition.easing) };
+            else state.frameScroll.set(frameId, to);
+          }
         } else if (effect.type === 'scrollTo' && step.state) {
           const offset = scrollOffsetOf(editor.scene, step.state.frameId, effect.nodeId);
           const node = doc.get(step.state.frameId) as SceneNode | undefined;
@@ -226,15 +250,30 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
         state.scrollY = state.scrolling.from + (state.scrolling.to - state.scrolling.from) * progress;
         if (t >= 1) state.scrolling = null;
       }
+      if (state.nestedScrolling) {
+        const nested = state.nestedScrolling;
+        const t = Math.min(1, (now - nested.start) / nested.duration);
+        const progress = nested.easing ? evaluateEasing(nested.easing, t) : 1;
+        state.frameScroll.set(nested.frameId, { x: nested.from.x + (nested.to.x - nested.from.x) * progress, y: nested.from.y + (nested.to.y - nested.from.y) * progress });
+        if (t >= 1) state.nestedScrolling = null;
+      }
       const scene = composeScene(doc, current, state.viewport, state.scaling, state.scrollY, playing);
       state.scene = scene;
-      state.renderer.draw(scene, background, now < state.hintsUntil ? state.hintRects : []);
+      state.renderer.draw(scene, background, now < state.hintsUntil ? state.hintRects : [], state.frameScroll);
+      const label = [...state.frameScroll]
+        .filter(([, offset]) => offset.x !== 0 || offset.y !== 0)
+        .map(([id, offset]) => `${doc.get(id)?.name ?? id}:${Math.round(offset.x)},${Math.round(offset.y)}`)
+        .join(';');
+      if (label !== state.scrollLabel) {
+        state.scrollLabel = label;
+        setScrollLabel(label);
+      }
       const box = `${scene.screen.x},${scene.screen.y},${scene.screen.width},${scene.screen.height}`;
       if (box !== state.box) {
         state.box = box;
         setScreenBox({ x: scene.screen.x, y: scene.screen.y, width: scene.screen.width, height: scene.screen.height });
       }
-      if (state.playing || state.scrolling || now < state.hintsUntil + 50) schedule();
+      if (state.playing || state.scrolling || state.nestedScrolling || now < state.hintsUntil + 50) schedule();
     };
   });
 
@@ -311,12 +350,19 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [doc, restartAt, run, start, step, toggleFullscreen]);
 
-  const locate = (e: ReactPointerEvent) => {
+  /** The shown frame and the layers under a pointer, hit tested where scrolled content is. */
+  const locate = (e: { readonly currentTarget: Element; readonly clientX: number; readonly clientY: number }) => {
     const state = live.current;
     const rect = e.currentTarget.getBoundingClientRect();
     const point = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     const hit = state.scene && state.player ? frameAtPoint(state.scene, state.player, point) : null;
-    return { point, hit, chain: hit ? hitTest(doc, editor.scene, hit.frameId, hit.local) : [] };
+    if (!hit) return { point, hit, chain: [] as Id[] };
+    const scrolled = [...state.frameScroll].some(([id, offset]) => (offset.x !== 0 || offset.y !== 0) && topLevelFrame(doc, id) === hit.frameId);
+    if (!scrolled) return { point, hit, chain: hitTest(doc, editor.scene, hit.frameId, hit.local) };
+    const store = scrolledFrameStore(doc, hit.frameId, state.frameScroll);
+    const index = new SceneIndex(store);
+    index.ensure(pageId);
+    return { point, hit, chain: hitTest(store, index, hit.frameId, hit.local) };
   };
 
   const onPointerDown = (e: ReactPointerEvent) => {
@@ -393,8 +439,21 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
   const onWheel = (e: ReactWheelEvent) => {
     const state = live.current;
     const current = state.player;
-    const node = current ? (doc.get(current.frameId) as SceneNode | undefined) : undefined;
-    if (!node || !state.scene) return;
+    if (!current || !state.scene) return;
+    // The deepest frame under the pointer that scrolls, and has room to move that way, scrolls.
+    const { hit, chain } = locate(e);
+    const delta = { x: e.deltaX / state.scene.screen.scale, y: e.deltaY / state.scene.screen.scale };
+    const target = hit ? wheelScrollTarget(doc, editor.scene, chain, delta, state.frameScroll) : null;
+    if (target) {
+      const offset = state.frameScroll.get(target) ?? { x: 0, y: 0 };
+      state.nestedScrolling = null;
+      state.frameScroll.set(target, clampScroll({ x: offset.x + delta.x, y: offset.y + delta.y }, scrollLimits(doc, editor.scene, target)));
+      schedule();
+      return;
+    }
+    // Otherwise a screen taller than the window scrolls.
+    const node = doc.get(current.frameId) as SceneNode | undefined;
+    if (!node) return;
     const limit = maxScrollY(state.scaling, state.viewport, node.size);
     if (limit <= 0) return;
     state.scrolling = null;
@@ -463,6 +522,7 @@ export function PresentationView({ session, startNodeId }: { session: Presentati
           data-ready={ready || undefined}
           data-screen={player ? nameOf(player.frameId) : undefined}
           data-overlays={player ? player.overlays.map(nameOf).join(',') : undefined}
+          data-scroll={scrollLabel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

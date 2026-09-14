@@ -47,7 +47,9 @@ import {
 import { DEFAULT_OVERLAY_BACKGROUND, flowsOf, isOverlayDestination, OVERLAY_POSITION_LABELS, overlaySettings } from '@/core/prototype/flows';
 import { topLevelFrame } from '@/core/prototype/reactions';
 import type { Color, OverlaySettings, PrototypeAction, PrototypeEasing, PrototypeTransition, Reaction, SceneNode } from '@/core/schema/document';
-import { addFlowStartingPoint, addInteraction, removeFlowStartingPoint, removeInteraction, setOverlaySettings, updateFlowStartingPoint, updateInteraction } from '@/editor/commands/prototype';
+import { addFlowStartingPoint, addInteraction, removeFlowStartingPoint, removeInteraction, setOverflowDirection, setOverlaySettings, setScrollBehavior, updateFlowStartingPoint, updateInteraction } from '@/editor/commands/prototype';
+import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
+import { needsBiggerContent, OVERFLOW_DIRECTIONS, OVERFLOW_LABELS, overflowOf, SCROLL_BEHAVIOR_LABELS, SCROLL_BEHAVIORS, scrollFrameOf, type OverflowDirection, type ScrollBehavior } from '@/core/prototype/scroll';
 import type { Editor } from '@/editor/editor';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import { IconButton } from '../../primitives/IconButton';
@@ -381,6 +383,66 @@ function FlowStartingPointSection({ frameId, pageId }: { frameId: Id; pageId: Id
   );
 }
 
+/**
+ * Scroll behavior: the Overflow of selected frames, and the Position of selected layers in a frame that scrolls (Sticky
+ * needs vertical scrolling; Fixed isn't available in auto layout unless the layer has absolute position).
+ */
+function ScrollBehaviorSection({ nodes }: { nodes: readonly SceneNode[] }) {
+  const editor = useEditor();
+  const ids = nodes.map((node) => node.id);
+  const frames = nodes.filter((node) => node.type === 'FRAME');
+  const allFrames = frames.length === nodes.length;
+  const scrollFrames = nodes.map((node) => scrollFrameOf(editor.doc, node.id));
+  const inScrollFrames = scrollFrames.every((id) => id !== null);
+  if (!allFrames && !inScrollFrames) return null;
+  const common = <T,>(values: readonly T[]): T | '' => (values.every((value) => value === values[0]) ? values[0]! : '');
+  const overflow = common(frames.map((node) => overflowOf(node)));
+  const position = common(nodes.map((node) => node.scrollBehavior ?? 'SCROLLS'));
+  const stickyAllowed = scrollFrames.every((id) => id !== null && ['VERTICAL', 'BOTH'].includes(overflowOf(editor.doc.get(id) as SceneNode)));
+  const fixedAllowed = nodes.every((node) => !isAutoLayoutFrame(editor.doc.get(node.parent.id)) || node.layoutPositioning === 'ABSOLUTE');
+  const tooSmall = allFrames && frames.some((node) => needsBiggerContent(editor.doc, editor.scene, node.id));
+  return (
+    <section className={inspector.section} aria-label="Scroll behavior">
+      <header className={inspector.sectionHeader}>
+        <h3 className={inspector.sectionTitle}>Scroll behavior</h3>
+      </header>
+      <div className={inspector.sectionBody}>
+        {allFrames && (
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>Overflow</span>
+            <select className={primitives.select} aria-label="Overflow" value={overflow} onKeyDown={stopKeys} onChange={(e) => setOverflowDirection(editor, ids, e.target.value as OverflowDirection)}>
+              {overflow === '' && <option value="">Mixed</option>}
+              {OVERFLOW_DIRECTIONS.map((direction) => (
+                <option key={direction} value={direction}>
+                  {OVERFLOW_LABELS[direction]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {tooSmall && (
+          <p className={inspector.hint} role="alert">
+            For scrolling to work on this frame, the content needs to be bigger than the frame.
+          </p>
+        )}
+        {inScrollFrames && (
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>Position</span>
+            <select className={primitives.select} aria-label="Scroll position" value={position} onKeyDown={stopKeys} onChange={(e) => setScrollBehavior(editor, ids, e.target.value as ScrollBehavior)}>
+              {position === '' && <option value="">Mixed</option>}
+              {SCROLL_BEHAVIORS.map((behavior) => (
+                <option key={behavior} value={behavior} disabled={(behavior === 'STICKY_SCROLLS' && !stickyAllowed) || (behavior === 'FIXED' && !fixedAllowed)}>
+                  {SCROLL_BEHAVIOR_LABELS[behavior]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+    </section>
+  );
+}
+
 /** For a selected frame that opens as an overlay: its position, closing when clicking outside, and background. */
 function OverlaySection({ node }: { node: SceneNode }) {
   const editor = useEditor();
@@ -482,6 +544,7 @@ export function PrototypePanel() {
           </div>
         )}
       </section>
+      <ScrollBehaviorSection nodes={nodes} />
       {frame && isOverlayDestination(editor.doc, frame.parent.id, frame.id) && <OverlaySection node={frame} />}
     </div>
   );

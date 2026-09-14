@@ -410,6 +410,10 @@ const SceneFields = {
   reactions: z.array(ReactionSchema).max(64).optional(),
   /** How this frame shows when an interaction opens it as an overlay. Absent means the defaults. */
   overlay: OverlaySettingsSchema.optional(),
+  /** A frame's scroll overflow in prototypes: which way content beyond its bounds scrolls. Absent means no scrolling. */
+  overflowDirection: z.enum(['NONE', 'HORIZONTAL', 'VERTICAL', 'BOTH']).optional(),
+  /** How the layer moves when the frame it's in scrolls. Absent means it scrolls with its parent. */
+  scrollBehavior: z.enum(['SCROLLS', 'FIXED', 'STICKY_SCROLLS']).optional(),
   /** Inside a main component or variant: the component properties (by name) this layer's visibility and text, or for a nested instance its component, follow. */
   componentPropertyReferences: z
     .object({

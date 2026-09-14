@@ -22,6 +22,9 @@ import type { Rect } from '@/core/math/rect';
 import type { DocumentStore } from '@/core/document/store';
 import type { PresentedScene } from '@/core/prototype/presentation';
 import { smartAnimateStore } from '@/core/prototype/smart-animate';
+import { topLevelFrame } from '@/core/prototype/reactions';
+import { scrolledFrameStore } from '@/core/prototype/scroll';
+import type { Vec2 } from '@/core/math/vec';
 import { SceneIndex } from '@/core/scene/scene-index';
 import type { Color, SceneNode } from '@/core/schema/document';
 import { cjkScriptFor, containsCjk } from '@/core/text/cjk';
@@ -46,6 +49,8 @@ export class PresentationRenderer {
   private surface: Surface | null = null;
   private paint: Paint | null = null;
   private readonly frames = new Map<string, CkImage | null>();
+  /** The last image of each frame with scrolled content, and the scroll it shows. */
+  private readonly scrolled = new Map<Id, { readonly key: string; readonly image: CkImage | null }>();
   private size = { width: 0, height: 0, dpr: 1 };
   private disposed = false;
   private readonly cleanups: (() => void)[] = [];
@@ -104,6 +109,8 @@ export class PresentationRenderer {
   private invalidate(): void {
     for (const image of this.frames.values()) image?.delete();
     this.frames.clear();
+    for (const entry of this.scrolled.values()) entry.image?.delete();
+    this.scrolled.clear();
     this.onInvalidate();
   }
 
@@ -125,6 +132,8 @@ export class PresentationRenderer {
   private renderFrame(store: DocumentStore, index: SceneIndex, frameId: Id, scale: number): CkImage | null {
     const { ck, renderer, editor } = this;
     if (!ck || !renderer) return null;
+    // The index is built lazily: build it before reading the frame's bounds.
+    index.ensure(editor.pageId);
     const node = store.get(frameId) as SceneNode | undefined;
     const origin = index.worldBounds(frameId);
     if (!node || !origin) return null;
@@ -151,6 +160,22 @@ export class PresentationRenderer {
     return image;
   }
 
+  /** A frame with its scrolling frames scrolled; null when none of them is scrolled (the cached image applies). */
+  private scrolledFrameImage(frameId: Id, scale: number, scroll: ReadonlyMap<Id, Vec2>): CkImage | null {
+    const own = [...scroll].filter(([id, offset]) => (offset.x !== 0 || offset.y !== 0) && topLevelFrame(this.editor.doc, id) === frameId);
+    if (own.length === 0 || !this.ck || !this.renderer) return null;
+    const key = `${scale.toFixed(4)}:${this.size.dpr}:${own.map(([id, offset]) => `${id}=${offset.x},${offset.y}`).join(';')}`;
+    const cached = this.scrolled.get(frameId);
+    if (cached?.key === key) return cached.image;
+    cached?.image?.delete();
+    const store = scrolledFrameStore(this.editor.doc, frameId, scroll);
+    const index = new SceneIndex(store);
+    index.ensure(this.editor.pageId);
+    const image = this.renderFrame(store, index, frameId, scale);
+    this.scrolled.set(frameId, { key, image });
+    return image;
+  }
+
   /** The destination of a smart animate transition, `progress` of the way from the frame left (not cached). */
   private smartFrameImage(fromFrame: Id, toFrame: Id, progress: number, scale: number): CkImage | null {
     if (!this.ck || !this.renderer) return null;
@@ -160,7 +185,7 @@ export class PresentationRenderer {
     return this.renderFrame(store, index, toFrame, scale);
   }
 
-  draw(scene: PresentedScene | null, background: Color, hints: readonly Rect[]): void {
+  draw(scene: PresentedScene | null, background: Color, hints: readonly Rect[], scroll: ReadonlyMap<Id, Vec2> = new Map()): void {
     const { ck, surface, paint } = this;
     if (!ck || !surface || !paint) return;
     const canvas = surface.getCanvas();
@@ -177,7 +202,7 @@ export class PresentationRenderer {
       if (item.alpha <= 0) continue;
       // A smart animate frame changes every tick, so it is drawn fresh rather than cached.
       const live = item.smart ? this.smartFrameImage(item.smart.from, item.frameId, item.smart.progress, item.scale) : null;
-      const image = live ?? this.frameImage(item.frameId, item.scale);
+      const image = live ?? this.scrolledFrameImage(item.frameId, item.scale, scroll) ?? this.frameImage(item.frameId, item.scale);
       if (!image) continue;
       paint.setColor(ck.Color4f(0, 0, 0, Math.min(1, item.alpha)));
       canvas.drawImageRect(image, ck.XYWHRect(0, 0, image.width(), image.height()), ck.XYWHRect(item.x, item.y, item.width, item.height), paint);
@@ -201,6 +226,8 @@ export class PresentationRenderer {
     for (const cleanup of this.cleanups) cleanup();
     for (const image of this.frames.values()) image?.delete();
     this.frames.clear();
+    for (const entry of this.scrolled.values()) entry.image?.delete();
+    this.scrolled.clear();
     this.surface?.delete();
     this.surface = null;
     this.paint?.delete();

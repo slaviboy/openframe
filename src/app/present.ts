@@ -64,6 +64,8 @@ export async function openPresentation(params: PresentParams): Promise<Presentat
     const ids = new IdGenerator(createReplicaId());
     const pageId = opened.store.get(params.pageId)?.type === 'PAGE' ? params.pageId : undefined;
     const editor = new Editor({ doc: opened.store, ids, ...(pageId ? { pageId } : {}), readOnly: true });
+    // Hit testing, hints and scrolling read layer bounds, so the page's scene index is built up front.
+    editor.scene.ensure(editor.pageId);
     editor.images.storage = {
       save: () => Promise.resolve(),
       load: async (hash) => {
