@@ -17,7 +17,7 @@
 
 import { expect, test } from './fixtures';
 
-test('the Assets tab (⌥2) lists local components, and clicking one inserts an instance', async ({ page }) => {
+test('the Assets tab (⌥2) lists local components, and clicking one opens its details to insert an instance', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
   const box = (await page.getByTestId('canvas').boundingBox())!;
@@ -36,6 +36,7 @@ test('the Assets tab (⌥2) lists local components, and clicking one inserts an 
   const item = assets.getByRole('list', { name: 'Local components' }).getByRole('button', { name: /Component 1/ });
   await expect(item).toBeVisible();
   await item.click();
+  await page.getByRole('dialog', { name: /Component 1/ }).getByRole('button', { name: 'Insert instance' }).click();
   await expect(page.getByText('Instance', { exact: true })).toBeVisible();
 
   // Back to the file: the layers panel shows the component and its new instance.

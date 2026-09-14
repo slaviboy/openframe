@@ -39,6 +39,7 @@ test('an instance of a variant is configured from its properties in the right si
   const assets = page.getByRole('list', { name: 'Local components' }).getByRole('button');
   await expect(assets).toHaveCount(1);
   await assets.filter({ hasText: 'Component 1' }).click();
+  await page.getByRole('dialog', { name: 'Component 1' }).getByRole('button', { name: 'Insert instance' }).click();
   await expect(page.getByTestId('type-label')).toHaveText('Instance');
   const variant = page.getByRole('combobox', { name: 'Variant', exact: true });
   await expect(variant).toHaveValue('Component 1');

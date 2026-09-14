@@ -15,44 +15,21 @@
  * limitations under the License.
  */
 
-import { useMemo, useState } from 'react';
-import { documentColorProfile } from '@/core/color/color-profile';
-import { assetTree, COMPONENT_DRAG_TYPE, componentLeafName, insertInstance, localComponents, type AssetFolder, type LocalComponent } from '@/editor/commands/insert-instance';
+import { useState } from 'react';
+import { assetTree, COMPONENT_DRAG_TYPE, componentLeafName, localComponents, type AssetFolder, type LocalComponent } from '@/editor/commands/insert-instance';
 import { Icon } from '../../icons/Icon';
-import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
+import { useDocumentRevision, useEditor } from '../../hooks/useEditor';
 import styles from '../find/FindPanel.module.css';
 import assetStyles from './AssetsPanel.module.css';
+import { ComponentDetailsDialog } from './ComponentDetailsDialog';
+import { ComponentThumbnail } from './ComponentThumbnail';
 
 /** Indentation per folder level. */
 const INDENT = 12;
-/** Thumbnail size in the grid view, in CSS pixels. */
-const THUMBNAIL_SIZE = 64;
-
-/** Base64 of binary data, in chunks so large images don't overflow the argument list. */
-function base64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(binary);
-}
-
-/** A component's thumbnail, drawn by the rendering engine from its current state. */
-function ComponentThumbnail({ component }: { component: LocalComponent }) {
-  const editor = useEditor();
-  const revision = useDocumentRevision();
-  const ready = useEditorState((s) => s.textLayoutReady);
-  const src = useMemo(() => {
-    const bytes = ready ? editor.thumbnails?.thumbnail(editor.doc, editor.scene, component.pageId, component.id, THUMBNAIL_SIZE, window.devicePixelRatio || 1, documentColorProfile(editor.doc)) : null;
-    return bytes ? `data:image/png;base64,${base64(bytes)}` : null;
-    // The document changes in place, so its revision is what says the thumbnail must be drawn again.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, component.pageId, component.id, revision, ready]);
-  return src ? <img className={assetStyles.thumbnail} src={src} alt="" draggable={false} /> : <span className={assetStyles.thumbnail} />;
-}
-
 /**
  * Assets tab (⌥2): the main components in this file, searchable by name and description, listed in folders (their
  * page, the sections and frames they're in, and the parts of their names before a slash) or flat. Clicking one
- * inserts an instance next to its main component; dragging one onto the canvas inserts it where it is dropped.
+ * opens its details, with Insert instance; dragging one onto the canvas inserts it where it is dropped.
  */
 export function AssetsPanel() {
   const editor = useEditor();
@@ -60,6 +37,7 @@ export function AssetsPanel() {
   const [query, setQuery] = useState('');
   const [subFolders, setSubFolders] = useState(true);
   const [view, setView] = useState<'list' | 'grid'>('list');
+  const [details, setDetails] = useState<LocalComponent | null>(null);
   const needle = query.trim().toLowerCase();
   // Descriptions are searched too, so they can tag components with keywords.
   const components = localComponents(editor).filter((c) => needle === '' || c.name.toLowerCase().includes(needle) || (c.description?.toLowerCase().includes(needle) ?? false));
@@ -71,8 +49,8 @@ export function AssetsPanel() {
         className={view === 'grid' ? assetStyles.tile : styles.result}
         style={view === 'grid' ? undefined : { paddingLeft: `calc(var(--space-3) + ${depth * INDENT}px)` }}
         draggable
-        title="Click to insert, or drag onto the canvas"
-        onClick={() => insertInstance(editor, component.id)}
+        title="Click for details, or drag onto the canvas"
+        onClick={() => setDetails(component)}
         onDragStart={(e) => {
           e.dataTransfer.setData(COMPONENT_DRAG_TYPE, component.id);
           e.dataTransfer.effectAllowed = 'copy';
@@ -139,6 +117,7 @@ export function AssetsPanel() {
       <ul className={styles.results} aria-label="Local components">
         {subFolders ? folderItems(assetTree(editor, components), 0) : items(components, (component) => component.name, 0, 'flat')}
       </ul>
+      {details && <ComponentDetailsDialog component={details} onClose={() => setDetails(null)} />}
     </section>
   );
 }

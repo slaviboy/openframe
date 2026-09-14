@@ -77,3 +77,20 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.detailsPreview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 216px;
+  margin-bottom: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-control);
+  cursor: grab;
+}
+
+.location {
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+}
