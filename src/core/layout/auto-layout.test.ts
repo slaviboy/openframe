@@ -220,4 +220,23 @@ describe('auto layout', () => {
     expect([y(small), y(big), y(rect)]).toEqual([16, 0, 14]);
     expect((store.getOrThrow(frame) as SceneNode).size.height).toBe(36);
   });
+
+  test('vertically trimmed text takes up only its trimmed height, keeping its own size', () => {
+    const ids = new IdGenerator('v');
+    const store = createEmptyDocument({ name: 'D', now: 'n', appVersion: 't', ids });
+    const layout = { measure: (n: SceneNode) => n.size, verticalTrim: () => ({ top: 3, bottom: 2 }) } as unknown as TextLayoutService;
+    const history = new History<null>({ store, captureMeta: () => null, restoreMeta: () => undefined, finalizers: [createAutoLayoutFinalizer(() => layout)] });
+    const page = store.pages()[0]!;
+    const [frame, text, rect] = [ids.next(), ids.next(), ids.next()];
+    history.run('create', (tx) => {
+      tx.create({ ...makeFrame({ id: frame, parent: { id: page, key: keyOnTop(store, page) }, name: 'F', x: 0, y: 0, width: 10, height: 10 }), layoutMode: 'VERTICAL', layoutSizingHorizontal: 'HUG', layoutSizingVertical: 'HUG' });
+      tx.create({ ...makeText({ id: text, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'T', x: 0, y: 0, width: 40, height: 20 }), textAutoResize: 'NONE' as const, leadingTrim: 'CAP_HEIGHT' as const });
+      tx.create(makeRectangle({ id: rect, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'R', x: 0, y: 0, width: 10, height: 10 }));
+    });
+    const node = (id: string) => store.getOrThrow(id) as SceneNode;
+    expect(node(text).transform[5]).toBe(-3);
+    expect(node(text).size).toEqual({ width: 40, height: 20 });
+    expect(node(rect).transform[5]).toBe(15);
+    expect(node(frame).size.height).toBe(25);
+  });
 });

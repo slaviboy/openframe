@@ -280,6 +280,17 @@ export class TextShaper implements TextLayoutService {
     if (typeface) this.typefaces.set(family, typeface);
   }
 
+  /** A family's cap height at a font size, from the bounds of its "H" (70% of the size when the font can't be read). */
+  private capHeight(family: string, fontSize: number): number {
+    const typeface = this.typefaces.get(family);
+    if (!typeface) return fontSize * 0.7;
+    const font = new this.ck.Font(typeface, fontSize);
+    const bounds = font.getGlyphBounds(font.getGlyphIDs('H'));
+    font.delete();
+    const height = bounds.length >= 4 ? -bounds[1]! : 0;
+    return height > 0 ? height : fontSize * 0.7;
+  }
+
   /** A family's underline position and thickness at a font size (from the font, or proportional defaults). */
   private underlineMetrics(family: string, fontSize: number): UnderlineMetrics {
     const key = `${family}\n${fontSize}`;
@@ -684,6 +695,19 @@ export class TextShaper implements TextLayoutService {
       this.layouts.delete(oldest!);
     }
     return block;
+  }
+
+  verticalTrim(node: TextNode): { top: number; bottom: number } | null {
+    const block = this.layout(node);
+    const visible = block.paragraphs.filter((p) => !p.hidden);
+    const first = visible[0];
+    const last = visible.at(-1);
+    const firstLine = first?.paragraph.getLineMetrics()[0];
+    const lastLine = last?.paragraph.getLineMetrics().at(-1);
+    if (!first || !last || !firstLine || !lastLine) return null;
+    const top = block.dy + first.top + firstLine.baseline - this.capHeight(node.fontName.family, node.fontSize);
+    const bottom = node.size.height - (block.dy + last.top + lastLine.baseline);
+    return { top: round2(Math.max(0, top)), bottom: round2(Math.max(0, bottom)) };
   }
 
   firstBaseline(node: TextNode): number | null {

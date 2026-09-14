@@ -634,6 +634,8 @@ export const TextNodeSchema = z.object({
   hangingList: z.boolean().optional(),
   /** An opening quotation mark starting a paragraph hangs outside the text box. Absent means false. */
   hangingPunctuation: z.boolean().optional(),
+  /** Vertical trim: in auto layout the text takes up only the space from its first line's cap height to its last baseline. */
+  leadingTrim: z.literal('CAP_HEIGHT').optional(),
   /** Underline style. Absent means SOLID. */
   decorationStyle: DecorationStyleSchema.optional(),
   /** Underline thickness in pixels. Absent means the font's own. */

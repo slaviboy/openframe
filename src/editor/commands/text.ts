@@ -271,6 +271,11 @@ export function setHangingPunctuation(tx: Transaction, node: SceneNode, hanging:
   if (textOf(tx, node)) tx.set(node.id, 'hangingPunctuation', hanging ? true : undefined);
 }
 
+/** Vertical trim: in auto layout the text takes up only the space from its cap height to its last baseline. */
+export function setVerticalTrim(tx: Transaction, node: SceneNode, on: boolean): void {
+  if (textOf(tx, node)) tx.set(node.id, 'leadingTrim', on ? 'CAP_HEIGHT' : undefined);
+}
+
 /** Sets the direction of the paragraphs a range touches (or the whole layer): left to right, right to left, or detected (AUTO). */
 export function setTextDirection(tx: Transaction, node: SceneNode, direction: TextDirection, range: TextRange = null): void {
   const text = textOf(tx, node);

@@ -47,6 +47,8 @@ export interface TextLayoutService {
   measure(node: TextNode, width: number | null): Size;
   /** Distance from the layer's top to its first line's alphabetic baseline (after vertical alignment); null without lines. */
   firstBaseline?(node: TextNode): number | null;
+  /** Vertical trim: the space above the first line's cap height and below the last line's baseline; null without lines. */
+  verticalTrim?(node: TextNode): { top: number; bottom: number } | null;
   /** The caret offset nearest to a point. */
   offsetAt(node: TextNode, point: Vec2): number;
   caretAt(node: TextNode, offset: number): TextCaretBox;

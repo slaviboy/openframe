@@ -133,7 +133,16 @@ function layoutFrame(tx: Transaction, frameId: Id, layout: TextLayoutService | n
     if (!isAutoLayoutFrame(frame)) break;
     const children = flowChildren(tx, frameId);
     const horizontal = frame.layoutMode === 'HORIZONTAL';
-    const items: FlowItem[] = children.map((child) => {
+    // Vertically trimmed text takes up only the space from its cap height to its last baseline.
+    const trims = children.map((child) => {
+      const t = child.transform;
+      return Math.abs(t[1]) < EPSILON && Math.abs(t[2]) < EPSILON && child.type === 'TEXT' && child.leadingTrim === 'CAP_HEIGHT' ? (layout?.verticalTrim?.(child) ?? null) : null;
+    });
+    const baselineOf = (child: SceneNode, i: number): number | undefined => {
+      const baseline = child.type === 'TEXT' ? layout?.firstBaseline?.(child) : null;
+      return baseline === null || baseline === undefined ? undefined : baseline - (trims[i]?.top ?? 0);
+    };
+    const items: FlowItem[] = children.map((child, i) => {
       const box = boundsInParent(child);
       const t = child.transform;
       const axisAligned = Math.abs(t[1]) < EPSILON && Math.abs(t[2]) < EPSILON;
@@ -143,12 +152,12 @@ function layoutFrame(tx: Transaction, frameId: Id, layout: TextLayoutService | n
       const padding = isAutoLayoutFrame(child) ? layoutPadding(child) : null;
       return {
         width: box.width,
-        height: box.height,
+        height: box.height - (trims[i] ? trims[i]!.top + trims[i]!.bottom : 0),
         horizontalSizing: axisAligned || h !== 'FILL' ? h : 'FIXED',
         verticalSizing: axisAligned || v !== 'FILL' ? v : 'FIXED',
         mainInset: padding ? (horizontal ? padding.left + padding.right : padding.top + padding.bottom) : 0,
         // Text baseline alignment measures unrotated text layers' first baselines.
-        baseline: frame.counterAxisAlignItems === 'BASELINE' && child.type === 'TEXT' && axisAligned ? (layout?.firstBaseline?.(child) ?? undefined) : undefined,
+        baseline: frame.counterAxisAlignItems === 'BASELINE' && child.type === 'TEXT' && axisAligned ? baselineOf(child, i) : undefined,
         // Limits apply to the layer's own box, so rotated layers aren't limited.
         ...(axisAligned ? { minWidth: child.minWidth, maxWidth: child.maxWidth, minHeight: child.minHeight, maxHeight: child.maxHeight } : {}),
       };
@@ -190,13 +199,13 @@ function layoutFrame(tx: Transaction, frameId: Id, layout: TextLayoutService | n
       // Axis-aligned children take the laid-out size: filled, or fixed and hugging sizes clamped by their limits.
       if (Math.abs(child.transform[1]) < EPSILON && Math.abs(child.transform[2]) < EPSILON) {
         width = round(box.width);
-        height = round(box.height);
+        height = round(box.height + (trims[i] ? trims[i]!.top + trims[i]!.bottom : 0));
       }
       const m = matrixOf(child.transform);
       // Where the bounding box sits relative to the layer's origin, at the new size.
       const offset = transformRect({ ...m, e: 0, f: 0 }, { x: 0, y: 0, width, height });
       const t = child.transform;
-      const transform: Transform = [t[0], t[1], t[2], t[3], round(box.x - offset.x), round(box.y - offset.y)];
+      const transform: Transform = [t[0], t[1], t[2], t[3], round(box.x - offset.x), round(box.y - offset.y - (trims[i]?.top ?? 0))];
       if (!valuesEqual(transform, t)) tx.set(child.id, 'transform', transform);
       if (width !== child.size.width || height !== child.size.height) {
         tx.set(child.id, 'size', { width, height });
@@ -248,7 +257,7 @@ const FRAME_FIELDS: ReadonlySet<string> = new Set([
 ]);
 
 /** Child fields that change its parent's layout. */
-const CHILD_FIELDS: ReadonlySet<string> = new Set(['size', 'transform', 'visible', 'layoutSizingHorizontal', 'layoutSizingVertical', 'textAutoResize', 'layoutPositioning', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight', ...GRID_CHILD_FIELDS]);
+const CHILD_FIELDS: ReadonlySet<string> = new Set(['leadingTrim', 'size', 'transform', 'visible', 'layoutSizingHorizontal', 'layoutSizingVertical', 'textAutoResize', 'layoutPositioning', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight', ...GRID_CHILD_FIELDS]);
 
 /**
  * Auto layout finalizer: lays out every auto layout frame affected by the transaction — its own
