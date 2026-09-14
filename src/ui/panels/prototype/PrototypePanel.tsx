@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-import { useState, type KeyboardEvent } from 'react';
+import { useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { formatDescription, type DescriptionFormat } from '@/core/prototype/description';
+import { FlowDescription } from '../../present/FlowDescription';
 import type { Id } from '@/core/ids/ids';
 import {
   ACTION_KINDS,
@@ -626,7 +628,7 @@ function FlowsSection() {
               <li key={flow.nodeId} className={styles.flow}>
                 <div className={styles.flowText}>
                   <span className={styles.flowName}>{flow.name}</span>
-                  {flow.description && <span className={styles.flowDescription}>{flow.description}</span>}
+                  {flow.description && <FlowDescription text={flow.description} className={styles.flowDescription} label={`${flow.name} description`} />}
                 </div>
                 <button
                   type="button"
@@ -667,10 +669,86 @@ function FlowStartingPointSection({ frameId, pageId }: { frameId: Id; pageId: Id
       {flow && (
         <div className={inspector.sectionBody}>
           <CommitText label="Flow name" value={flow.name} onCommit={(name) => updateFlowStartingPoint(editor, frameId, { name })} />
-          <CommitText label="Flow description" value={flow.description ?? ''} multiline onCommit={(description) => updateFlowStartingPoint(editor, frameId, { description })} />
+          {flow.description && <FlowDescription text={flow.description} className={styles.flowDescription} />}
+          <DescriptionEditor value={flow.description ?? ''} onSave={(description) => updateFlowStartingPoint(editor, frameId, { description })} />
         </div>
       )}
     </section>
+  );
+}
+
+/** Links a description can hold: web pages and email. */
+const LINK_ADDRESS = /^(https?:\/\/\S+|mailto:\S+)$/i;
+
+/**
+ * Edit description: the flow's description with formatting buttons (bold, bulleted and numbered lists, links) and a
+ * preview of how it shows; closing the panel saves it. The text holds its formatting as light markup.
+ */
+function DescriptionEditor({ value, onSave }: { value: string; onSave: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [href, setHref] = useState('https://');
+  const area = useRef<HTMLTextAreaElement>(null);
+  const selection = useRef<{ start: number; end: number } | null>(null);
+  // After formatting, the formatted text stays selected.
+  useLayoutEffect(() => {
+    const range = selection.current;
+    if (!range || !area.current) return;
+    selection.current = null;
+    area.current.focus();
+    area.current.setSelectionRange(range.start, range.end);
+  });
+  if (!open) {
+    return (
+      <button
+        type="button"
+        className={styles.textButton}
+        onClick={() => {
+          setDraft(value);
+          setOpen(true);
+        }}
+      >
+        Edit description
+      </button>
+    );
+  }
+  const format = (kind: DescriptionFormat) => {
+    const start = area.current?.selectionStart ?? draft.length;
+    const end = area.current?.selectionEnd ?? draft.length;
+    const next = formatDescription(draft, start, end, kind, href.trim());
+    selection.current = { start: next.start, end: next.end };
+    setDraft(next.text);
+  };
+  return (
+    <div className={styles.details} role="group" aria-label="Description">
+      <div className={styles.row}>
+        <button type="button" className={styles.textButton} onClick={() => format('bold')}>
+          Bold
+        </button>
+        <button type="button" className={styles.textButton} onClick={() => format('bullets')}>
+          Bulleted list
+        </button>
+        <button type="button" className={styles.textButton} onClick={() => format('numbers')}>
+          Numbered list
+        </button>
+        <IconButton
+          icon="close"
+          label="Close description"
+          onClick={() => {
+            if (draft !== value) onSave(draft);
+            setOpen(false);
+          }}
+        />
+      </div>
+      <textarea ref={area} className={primitives.textInput} aria-label="Flow description" rows={5} value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={stopKeys} />
+      <div className={styles.row}>
+        <input className={primitives.textInput} aria-label="Link address" value={href} spellCheck={false} onChange={(e) => setHref(e.target.value)} onKeyDown={stopKeys} />
+        <button type="button" className={styles.textButton} disabled={!LINK_ADDRESS.test(href.trim())} onClick={() => format('link')}>
+          Add link
+        </button>
+      </div>
+      {draft.trim() && <FlowDescription text={draft} className={styles.flowDescription} label="Description preview" />}
+    </div>
   );
 }
 
@@ -771,11 +849,6 @@ function OverlaySection({ node }: { node: SceneNode }) {
   );
 }
 
-/**
- * The Prototype tab of the right sidebar: the page's flows while nothing is selected; for a selected top-level frame, its
- * flow starting point (and its overlay settings when it opens as an overlay); and the selected layers' interactions. +
- * adds one (to each selected layer), and an interaction opens its details — trigger, actions, destination and animation.
- */
 /** Video: how the video fills of the selected layers play in presentation view (autoplay, loop and sound). */
 function VideoSection({ nodes }: { nodes: readonly SceneNode[] }) {
   const editor = useEditor();
@@ -806,6 +879,11 @@ function VideoSection({ nodes }: { nodes: readonly SceneNode[] }) {
   );
 }
 
+/**
+ * The Prototype tab of the right sidebar: the page's flows while nothing is selected; for a selected top-level frame, its
+ * flow starting point (and its overlay settings when it opens as an overlay); and the selected layers' interactions. +
+ * adds one (to each selected layer), and an interaction opens its details — trigger, actions, destination and animation.
+ */
 export function PrototypePanel() {
   const editor = useEditor();
   useDocumentRevision();

@@ -64,6 +64,7 @@ import { NO_VARIABLES } from '@/core/prototype/variables-runtime';
 import type { Reaction, SceneNode } from '@/core/schema/document';
 import { Menu, type MenuEntry } from '../primitives/Menu';
 import type { Box } from '../primitives/position';
+import { FlowDescription } from './FlowDescription';
 import { PresentationRenderer } from './presentation-renderer';
 import styles from './PresentationView.module.css';
 
@@ -706,8 +707,9 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
                   <li key={flow.nodeId}>
                     <button type="button" className={styles.flow} aria-current={start === flow.nodeId ? 'true' : undefined} onClick={() => restartAt(flow.nodeId)}>
                       <span className={styles.flowName}>{flow.name}</span>
-                      {flow.description && <span className={styles.muted}>{flow.description}</span>}
                     </button>
+                    {/* Outside the button: its links open on their own. */}
+                    {flow.description && <FlowDescription text={flow.description} className={styles.muted} label={`${flow.name} description`} />}
                   </li>
                 ))}
               </ul>

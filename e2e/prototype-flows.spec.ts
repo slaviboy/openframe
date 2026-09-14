@@ -45,8 +45,10 @@ test('connecting frames starts a flow; flows are renamed, described and listed; 
   await expect(flow.getByLabel('Flow name')).toHaveValue('Flow 1');
   await flow.getByLabel('Flow name').fill('Checkout');
   await flow.getByLabel('Flow name').press('Enter');
+  // Edit description opens the description panel; closing it saves.
+  await flow.getByRole('button', { name: 'Edit description' }).click();
   await flow.getByLabel('Flow description').fill('Buy the item');
-  await flow.getByLabel('Flow description').blur();
+  await flow.getByRole('button', { name: 'Close description' }).click();
 
   // Opening Frame 2 as an overlay gives it overlay settings.
   await panel.getByRole('combobox', { name: 'Action', exact: true }).selectOption({ label: 'Open overlay' });

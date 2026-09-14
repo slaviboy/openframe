@@ -126,9 +126,14 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - they are drawn through `SceneRenderer`'s `imageFrame` option
     - `useImageMime` labels GIFs in the Fill section and the Layers panel
 
+  - Formatted flow descriptions (the commit after animated GIFs):
+    - `src/core/prototype/description.ts` parses and formats the light markup
+    - `FlowDescription` (src/ui/present) renders it
+    - `DescriptionEditor` in PrototypePanel.tsx is the Description panel
+
 ## In progress (uncommitted)
 
-1. **Manual overlay positions, accessible prototypes, rich-text flow descriptions, gamepad triggers.**
+1. **Manual overlay positions, accessible prototypes, gamepad triggers.**
 
 ## Next (M10, in order)
 
