@@ -59,10 +59,12 @@ import {
   setListSpacing,
   setListType,
   setTextDirection,
+  setUnderlineOptions,
   setWrapStyle,
 } from '@/editor/commands/text';
 import { containsRtl } from '@/core/text/direction';
-import type { ListType, WrapStyle } from '@/core/schema/document';
+import type { Color, DecorationStyle, ListType, WrapStyle } from '@/core/schema/document';
+import { ColorControl } from './ColorControl';
 
 const LIST_OPTIONS: readonly (readonly [ListType, string])[] = [
   ['NONE', 'No list'],
@@ -252,6 +254,7 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
             <IconButton icon="underline" label="Underline" pressed={decoration === 'UNDERLINE'} onClick={() => run('Underline', (tx, n) => toggleTextDecoration(tx, n, 'UNDERLINE', range))} />
             <IconButton icon="strikethrough" label="Strikethrough" pressed={decoration === 'STRIKETHROUGH'} onClick={() => run('Strikethrough', (tx, n) => toggleTextDecoration(tx, n, 'STRIKETHROUGH', range))} />
           </div>
+          {decoration === 'UNDERLINE' && <UnderlineDetails nodes={nodes} range={range} />}
           <select className={primitives.select} aria-label="Letter case" value={textCase ?? ''} onChange={(e) => run('Change letter case', (tx, n) => setTextCase(tx, n, e.target.value as TextCase, range))}>
             {textCase === undefined && <option value="">Mixed</option>}
             {(Object.keys(TEXT_CASE_LABELS) as TextCase[]).map((value) => (
@@ -351,6 +354,91 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
         </div>
       )}
     </>
+  );
+}
+
+const UNDERLINE_STYLES: readonly (readonly [DecorationStyle, string])[] = [
+  ['SOLID', 'Solid'],
+  ['DOTTED', 'Dotted'],
+  ['WAVY', 'Wavy'],
+];
+
+/** "Auto" (the font's value) or a number of pixels; null when the input is neither. */
+function parseAutoPixels(input: string): { value: number | null } | null {
+  const text = input.trim().toLowerCase().replace(/px$/, '').trim();
+  if (text === '' || text === 'auto') return { value: null };
+  const value = Number(text);
+  return Number.isFinite(value) && value > 0 && value <= 1000 ? { value } : null;
+}
+
+/**
+ * Underline details for underlined text: style (solid, dotted, wavy), thickness (Auto or pixels),
+ * offset below the font's position, skip ink, and color (Auto or a custom color).
+ */
+function UnderlineDetails({ nodes, range }: { nodes: readonly TextNode[]; range: TextRange }) {
+  const editor = useEditor();
+  const colorGesture = useGesture('Change underline color');
+  const style = single(valuesOf(nodes, range, 'decorationStyle'));
+  const thickness = valuesOf(nodes, range, 'decorationThickness');
+  const offset = single(valuesOf(nodes, range, 'decorationOffset'));
+  const skipInk = single(valuesOf(nodes, range, 'decorationSkipInk'));
+  const colors = valuesOf(nodes, range, 'decorationColor');
+  const color = colors.length === 1 ? colors[0] : undefined;
+  const run = (label: string, options: Parameters<typeof setUnderlineOptions>[2]) => editor.history.run(label, (tx) => nodes.forEach((n) => setUnderlineOptions(tx, n, options, range)));
+  const changeColor = (next: Color) => colorGesture.change((tx) => nodes.forEach((n) => setUnderlineOptions(tx, n, { decorationColor: next }, range)));
+  // A custom color starts from the text's own color.
+  const textColor = (): Color => {
+    const fill = [...(nodes[0]?.fills ?? [])].reverse().find((p) => p.type === 'SOLID' && p.visible);
+    return fill?.type === 'SOLID' ? { ...fill.color, a: fill.opacity } : { r: 0, g: 0, b: 0, a: 1 };
+  };
+
+  return (
+    <div role="group" aria-label="Underline details">
+      <select className={primitives.select} aria-label="Underline style" value={style ?? ''} onChange={(e) => run('Change underline style', { decorationStyle: e.target.value as DecorationStyle })}>
+        {style === undefined && <option value="">Mixed</option>}
+        {UNDERLINE_STYLES.map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </select>
+      <div className={styles.grid2}>
+        <ValueField
+          label="Underline thickness"
+          short="≡"
+          testId="field-underline-thickness"
+          text={thickness.length !== 1 ? '' : thickness[0] === null ? 'Auto' : String(thickness[0])}
+          parse={parseAutoPixels}
+          onCommit={(parsed) => run('Change underline thickness', { decorationThickness: parsed.value })}
+        />
+        <NumberField label="↧" ariaLabel="Underline offset" testId="field-underline-offset" min={-1000} max={1000} value={offset} onChange={(v) => run('Change underline offset', { decorationOffset: v })} />
+      </div>
+      <label className={styles.checkbox}>
+        <input type="checkbox" checked={skipInk === true} onChange={(e) => run('Change skip ink', { decorationSkipInk: e.target.checked })} />
+        Skip ink
+      </label>
+      <select
+        className={primitives.select}
+        aria-label="Underline color source"
+        value={color === undefined ? '' : color === null ? 'AUTO' : 'CUSTOM'}
+        onChange={(e) => run('Change underline color', { decorationColor: e.target.value === 'CUSTOM' ? textColor() : null })}
+      >
+        {color === undefined && <option value="">Mixed</option>}
+        <option value="AUTO">Text color</option>
+        <option value="CUSTOM">Custom color</option>
+      </select>
+      {color && (
+        <ColorControl
+          label="Underline"
+          color={color}
+          opacity={color.a}
+          onColor={(next) => changeColor({ ...next, a: color.a })}
+          onOpacity={(a) => changeColor({ ...color, a })}
+          onGestureStart={colorGesture.start}
+          onGestureEnd={colorGesture.end}
+        />
+      )}
+    </div>
   );
 }
 

@@ -470,6 +470,9 @@ export const TextDirectionSchema = z.enum(['AUTO', 'LTR', 'RTL']);
 /** Where a paragraph's lines break: as many words as fit (AUTO), evenly balanced lines, or no orphaned last word (PRETTY). */
 export const WrapStyleSchema = z.enum(['AUTO', 'BALANCE', 'PRETTY']);
 
+/** How an underline is drawn. */
+export const DecorationStyleSchema = z.enum(['SOLID', 'DOTTED', 'WAVY']);
+
 /** Properties a range of characters can override in a text layer (mixed styles). */
 export const TextStyleOverridesSchema = z.object({
   fontName: FontNameSchema.optional(),
@@ -490,6 +493,12 @@ export const TextStyleOverridesSchema = z.object({
   textDirection: TextDirectionSchema.optional(),
   /** Wrap style of the paragraphs whose style comes from these characters. */
   wrapStyle: WrapStyleSchema.optional(),
+  /** Underline details; null thickness or color means the font's thickness or the text color. */
+  decorationStyle: DecorationStyleSchema.optional(),
+  decorationThickness: z.number().min(0.1).max(1000).nullable().optional(),
+  decorationOffset: z.number().min(-1000).max(1000).optional(),
+  decorationSkipInk: z.boolean().optional(),
+  decorationColor: ColorSchema.nullable().optional(),
 });
 /** Overrides on the characters [start, end) (UTF-16 offsets). */
 export const TextStyleRunSchema = z.object({ start: z.number().int().min(0), end: z.number().int().min(1), style: TextStyleOverridesSchema });
@@ -539,6 +548,16 @@ export const TextNodeSchema = z.object({
   wrapStyle: WrapStyleSchema.optional(),
   /** List markers hang outside the text box, so item text aligns with its edge. Absent means false. */
   hangingList: z.boolean().optional(),
+  /** Underline style. Absent means SOLID. */
+  decorationStyle: DecorationStyleSchema.optional(),
+  /** Underline thickness in pixels. Absent means the font's own. */
+  decorationThickness: z.number().min(0.1).max(1000).optional(),
+  /** Underline distance below the font's own position, in pixels. Absent means 0. */
+  decorationOffset: z.number().min(-1000).max(1000).optional(),
+  /** The underline skips where glyphs cross it. Absent means true. */
+  decorationSkipInk: z.boolean().optional(),
+  /** Underline color. Absent means the text's color. */
+  decorationColor: ColorSchema.optional(),
 });
 
 export const NodeSchema = z.discriminatedUnion('type', [
@@ -620,6 +639,7 @@ export type OpenTypeFeatures = Readonly<z.infer<typeof OpenTypeFeaturesSchema>>;
 export type FontVariations = Readonly<z.infer<typeof FontVariationsSchema>>;
 export type TextDirection = z.infer<typeof TextDirectionSchema>;
 export type WrapStyle = z.infer<typeof WrapStyleSchema>;
+export type DecorationStyle = z.infer<typeof DecorationStyleSchema>;
 export type TextNode = z.infer<typeof TextNodeSchema>;
 export type SceneNode = FrameNode | GroupNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | SectionNode | SliceNode | TextNode;
 export type Node = z.infer<typeof NodeSchema>;

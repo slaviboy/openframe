@@ -409,12 +409,18 @@ export class SceneRenderer {
       // Fill layers bottom to top; each paragraph paints every segment with its own fill at that layer.
       const layers = Math.max(0, ...textSegments(node).map((s) => s.fills.length));
       for (let i = 0; i < layers; i++) {
-        this.drawText(canvas, node, (segment) => {
-          const paint = segment.fills[i];
-          if (!paint || !paint.visible || paint.opacity <= 0) return this.transparentPaint();
-          this.configurePaint(this.fillPaint, paint, node.size);
-          return this.fillPaint;
-        });
+        this.drawText(
+          canvas,
+          node,
+          (segment) => {
+            const paint = segment.fills[i];
+            if (!paint || !paint.visible || paint.opacity <= 0) return this.transparentPaint();
+            this.configurePaint(this.fillPaint, paint, node.size);
+            return this.fillPaint;
+          },
+          // Underlines once, over the top fill.
+          i === layers - 1,
+        );
       }
       return;
     }
@@ -908,14 +914,17 @@ export class SceneRenderer {
   }
 
   /** Draws a text layer's glyphs, each mixed-style segment painted with the paint `paintFor` returns. */
-  private drawText(canvas: Canvas, node: TextNode, paintFor: (segment: TextSegment) => CkPaint): void {
+  private drawText(canvas: Canvas, node: TextNode, paintFor: (segment: TextSegment) => CkPaint, decorations = true): void {
     const shaper = this.textShaper;
     if (!shaper || node.characters === '') return;
     const painter = {
       background: this.transparentPaint(),
       paint: paintFor,
+      decorations,
       // Decorations take the segment's top visible fill color (the first stop of a gradient; black for images and patterns).
       decorationColor: (segment: TextSegment) => {
+        // A custom underline color, with its alpha as opacity.
+        if (segment.decorationColor && segment.textDecoration === 'UNDERLINE') return this.color({ ...segment.decorationColor, a: 1 }, segment.decorationColor.a);
         const top = [...segment.fills].reverse().find((p) => p.visible && p.opacity > 0);
         if (top?.type === 'SOLID') return this.color(top.color, top.opacity);
         if (top && isGradientPaint(top) && top.gradientStops[0]) return this.color(top.gradientStops[0].color, top.opacity);

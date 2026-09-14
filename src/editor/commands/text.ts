@@ -73,6 +73,16 @@ import type { FontName, ListType, TextDirection, WrapStyle } from '@/core/schema
 import { replaceFontInText } from '@/core/text/missing-fonts';
 import { resolveDirection } from '@/core/text/direction';
 
+/** Underline details for a range (or the whole layer): style, thickness (null: the font's), offset, skip ink, color (null: the text's). */
+export function setUnderlineOptions(
+  tx: Transaction,
+  node: SceneNode,
+  options: Pick<TextStyleOverrides, 'decorationStyle' | 'decorationThickness' | 'decorationOffset' | 'decorationSkipInk' | 'decorationColor'>,
+  range: TextRange = null,
+): void {
+  if (textOf(tx, node)) setTextStyle(tx, node, options, range);
+}
+
 /** Replaces fonts everywhere in the document (layer fonts and mixed-style runs). Returns the number of text layers changed. */
 export function replaceFonts(tx: Transaction, replacements: readonly { readonly from: FontName; readonly to: FontName }[]): number {
   let changed = 0;

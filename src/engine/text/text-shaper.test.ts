@@ -214,6 +214,28 @@ describe('text shaping', () => {
     expect(shaper.caretAt({ ...hanging, size: shaper.measure(hanging, null) }, 0).x).toBeCloseTo(0, 0);
   });
 
+  test('underlines: one piece per line, under the baseline by the font metrics, with thickness and offset', () => {
+    const plain = text({ characters: 'gypsy' });
+    expect(shaper.underlines({ ...plain, size: shaper.measure(plain, null) })).toEqual([]);
+    const node = text({ characters: 'gypsy', textDecoration: 'UNDERLINE' });
+    const laid = { ...node, size: shaper.measure(node, null) };
+    const [piece] = shaper.underlines(laid);
+    expect(piece).toBeDefined();
+    // Inter's underline at 20 px: 1.37 px thick, 3.4 px below the baseline.
+    expect(piece!.thickness).toBeCloseTo(4.375 / 64 * 20, 1);
+    expect(piece!.x1).toBeCloseTo(0, 0);
+    expect(piece!.x2).toBeCloseTo(laid.size.width, 0);
+    const baseline = shaper.caretAt(laid, 0).bottom - 20 * 0.2;
+    expect(piece!.y).toBeGreaterThan(baseline);
+    const custom = shaper.underlines({ ...laid, decorationThickness: 3, decorationOffset: 4 })[0]!;
+    expect(custom.thickness).toBe(3);
+    expect(custom.y).toBeCloseTo(piece!.y + 4 + (3 - piece!.thickness) / 2, 1);
+    // A wrapped run is underlined on each of its lines.
+    const wrapped = text({ characters: 'underlined words across lines', textDecoration: 'UNDERLINE', textAutoResize: 'HEIGHT' });
+    const wrappedLaid = { ...wrapped, size: { width: 90, height: shaper.measure(wrapped, 90).height } };
+    expect(shaper.underlines(wrappedLaid).length).toBeGreaterThanOrEqual(2);
+  });
+
   test('letter case changes the shaped text and max lines limits the height', () => {
     const lower = shaper.measure(text({ characters: 'hello' }), null).width;
     expect(shaper.measure(text({ characters: 'hello', textCase: 'UPPER' }), null).width).toBeGreaterThan(lower);

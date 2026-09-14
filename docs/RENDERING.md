@@ -171,7 +171,12 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
   - Fixed and truncated boxes are offset vertically by `textAlignVertical`.
   - Truncated boxes are rebuilt with `maxLines` set to the lines that fit and an ellipsis.
 - **Decoration, case and max lines:**
-  - Underline and strikethrough become SkParagraph decorations. Their thickness is the font size ÷ 16 (at least 1). Their color is the segment's top visible fill: the paint's color, a gradient's first stop, or black for images and patterns. Decorations don't take the glyph paint.
+  - Strikethrough is an SkParagraph decoration, as thick as the font size ÷ 16 (at least 1). Its color, and an underline's unless one is set, is the segment's top visible fill: the paint's color, a gradient's first stop, or black for images and patterns. Decorations don't take the glyph paint.
+  - **Underlines** are drawn by `TextShaper.draw` after the glyphs, on the renderer's top fill pass only (`TextPainter.decorations`).
+    - `underlines(node)` returns one piece per underlined run per line. Each piece comes from `getRectsForRange` on the laid-out paragraph, with its line found by the rectangle's middle.
+    - The center line comes from `underlineLine` ([`core/text/underline.ts`](../src/core/text/underline.ts)): the font's `underlinePosition` plus `decorationOffset`, with `decorationThickness` or the font's `underlineThickness`. These metrics come from `Font.getMetrics()` on one `Typeface` per registered family, with proportional fallbacks.
+    - Styles: solid is a rectangle, dotted a round-capped stroke with a dash effect, and wavy a stroked path of quadratic curves (`wavySegments`).
+    - Skip ink: the pieces are drawn inside a layer. The text is then laid out again with a stroke paint (twice the thickest underline, plus 1 px) using `DstOut` for runs that skip ink, which erases the underline around the glyph outlines before the layer is restored.
   - Letter case is applied to each segment's characters when building the paragraph (`applyTextCase`). Characters whose case would change their length stay as typed, so offsets still match. Small caps enables the `smcp` feature.
   - **OpenType features:** a run's `openTypeFeatures` become SkParagraph `fontFeatures` (1 on, 0 off), together with `smcp` for small caps ([`core/text/opentype.ts`](../src/core/text/opentype.ts)).
     - `TextShaper.supportedFeatures(fontName)` shapes `FEATURE_PROBE_TEXT` (printable ASCII plus fractions, ligature pairs, ordinals and capitals with punctuation) in that family alone. It then shapes the text again with each probed tag switched from its default. A tag is supported when any glyph ID or position changes.

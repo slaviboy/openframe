@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { Canvas, CanvasKit, EmbindEnumEntity, LineMetrics, Paint as CkPaint, Paragraph, TextStyle, TypefaceFontProvider } from 'canvaskit-wasm';
+import type { Canvas, CanvasKit, EmbindEnumEntity, LineMetrics, Paint as CkPaint, Paragraph, TextStyle, Typeface, TypefaceFontProvider } from 'canvaskit-wasm';
 import type { Id } from '@/core/ids/ids';
 import type { Rect } from '@/core/math/rect';
 import type { Vec2 } from '@/core/math/vec';
@@ -25,6 +25,7 @@ import { readFontAxes, type FontAxis } from '@/core/text/font-names';
 import { BUNDLED_FONT_AXES, mergeAxes, variationSettings } from '@/core/text/font-variations';
 import { resolveDirection } from '@/core/text/direction';
 import { balancedWidth, prettyWidth } from '@/core/text/wrap-style';
+import { fallbackUnderlineMetrics, underlineLine, wavySegments, type UnderlineMetrics } from '@/core/text/underline';
 import { parseFontStyle, VARIABLE_FONT_STYLES } from '@/core/text/font-style';
 import { nextGrapheme, previousGrapheme } from '@/core/text/text-editing';
 import type { FontFamilyInfo, TextCaretBox, TextLayoutService } from '@/core/text/text-layout';
@@ -46,6 +47,18 @@ export interface TextPainter {
   paint(segment: TextSegment): CkPaint;
   /** Color of underlines and strikethroughs (decorations don't take the glyph paint). */
   decorationColor?(segment: TextSegment): Float32Array;
+  /** Whether this pass draws underlines (a layer drawn in several fill passes draws them once). Absent means true. */
+  readonly decorations?: boolean | undefined;
+}
+
+/** An underline on one line of a run, in layer coordinates. */
+export interface UnderlinePiece {
+  readonly x1: number;
+  readonly x2: number;
+  /** Center line. */
+  readonly y: number;
+  readonly thickness: number;
+  readonly segment: TextSegment;
 }
 
 type RunStyle = Pick<RunsStyle, 'fontName' | 'fontSize' | 'lineHeight' | 'letterSpacing'> & {
@@ -118,6 +131,9 @@ export class TextShaper implements TextLayoutService {
   private readonly featureSupport = new Map<string, readonly string[]>();
   /** Variation axes of user families, read from their font files. */
   private readonly familyAxes = new Map<string, readonly FontAxis[]>();
+  /** One typeface per family, for its underline metrics. */
+  private readonly typefaces = new Map<string, Typeface>();
+  private readonly underlineCache = new Map<string, UnderlineMetrics>();
 
   constructor(
     private readonly ck: CanvasKit,
@@ -125,6 +141,7 @@ export class TextShaper implements TextLayoutService {
   ) {
     this.provider = ck.TypefaceFontProvider.Make();
     for (const font of fonts) {
+      this.rememberTypeface(font.family, font.bytes);
       this.provider.registerFont(font.bytes, font.family);
       if (!this.families.includes(font.family)) this.families.push(font.family);
     }
@@ -156,6 +173,7 @@ export class TextShaper implements TextLayoutService {
   /** Registers user fonts (uploaded or installed); cached layouts are dropped so text reshapes with them. */
   registerFonts(fonts: readonly { readonly family: string; readonly style: string; readonly bytes: ArrayBuffer | Uint8Array; readonly variable: boolean }[]): void {
     for (const font of fonts) {
+      this.rememberTypeface(font.family, font.bytes);
       this.provider.registerFont(font.bytes, font.family);
       if (!this.families.includes(font.family)) this.families.push(font.family);
       const entry = this.userFamilies.get(font.family) ?? { styles: new Set<string>(), variable: false };
@@ -212,11 +230,126 @@ export class TextShaper implements TextLayoutService {
   /** Registers internal fallback fonts loaded later (the color emoji font); cached layouts are dropped. */
   registerFallbackFonts(fonts: readonly FontSource[]): void {
     for (const font of fonts) {
+      this.rememberTypeface(font.family, font.bytes);
       this.provider.registerFont(font.bytes, font.family);
       if (!this.families.includes(font.family)) this.families.push(font.family);
     }
     this.featureSupport.clear();
     this.clearCache();
+  }
+
+  private rememberTypeface(family: string, bytes: ArrayBuffer | Uint8Array): void {
+    if (this.typefaces.has(family)) return;
+    const data = bytes instanceof Uint8Array ? bytes.slice().buffer : bytes;
+    const typeface = this.ck.Typeface.MakeTypefaceFromData(data);
+    if (typeface) this.typefaces.set(family, typeface);
+  }
+
+  /** A family's underline position and thickness at a font size (from the font, or proportional defaults). */
+  private underlineMetrics(family: string, fontSize: number): UnderlineMetrics {
+    const key = `${family}\n${fontSize}`;
+    const cached = this.underlineCache.get(key);
+    if (cached) return cached;
+    const fallback = fallbackUnderlineMetrics(fontSize);
+    const typeface = this.typefaces.get(family);
+    let metrics = fallback;
+    if (typeface) {
+      const font = new this.ck.Font(typeface, fontSize);
+      const m = font.getMetrics();
+      font.delete();
+      metrics = { position: m.underlinePosition ?? fallback.position, thickness: m.underlineThickness ?? fallback.thickness };
+    }
+    this.underlineCache.set(key, metrics);
+    return metrics;
+  }
+
+  /**
+   * The underlines of a text layer as laid out in its box: one piece per underlined run per line,
+   * with its center line, thickness, style and the segment it belongs to.
+   */
+  underlines(node: TextNode): UnderlinePiece[] {
+    if (node.characters === '') return [];
+    const block = this.layout(node);
+    const segments = textSegments(node).filter((s) => s.textDecoration === 'UNDERLINE');
+    const pieces: UnderlinePiece[] = [];
+    for (const layout of block.paragraphs) {
+      if (layout.hidden) continue;
+      const lines = layout.paragraph.getLineMetrics();
+      for (const segment of segments) {
+        const from = Math.max(segment.start, layout.range.start);
+        const to = Math.min(segment.end, layout.range.end);
+        if (to <= from) continue;
+        const metrics = this.underlineMetrics(segment.fontName.family, segment.fontSize);
+        const rects = layout.paragraph.getRectsForRange(toParagraphOffset(layout.range, from, layout.prefix), toParagraphOffset(layout.range, to, layout.prefix), this.ck.RectHeightStyle.Tight, this.ck.RectWidthStyle.Tight);
+        for (const { rect } of rects) {
+          const middle = (rect[1]! + rect[3]!) / 2;
+          const line = lines.find((l) => middle >= l.baseline - l.ascent - 0.5 && middle <= l.baseline + l.descent + 0.5) ?? lines[0];
+          if (!line || rect[2]! <= rect[0]!) continue;
+          const { y, thickness } = underlineLine(block.dy + layout.top + line.baseline, metrics, segment.decorationThickness, segment.decorationOffset);
+          pieces.push({ x1: layout.left + rect[0]!, x2: layout.left + rect[2]!, y, thickness, segment });
+        }
+      }
+    }
+    return pieces;
+  }
+
+  /** Draws underline pieces; with skip ink, erases them where a stroked copy of the glyphs crosses them. */
+  private drawUnderlines(canvas: Canvas, node: TextNode, painter: TextPainter): void {
+    const pieces = this.underlines(node);
+    if (pieces.length === 0) return;
+    const ck = this.ck;
+    const skipInk = pieces.some((p) => p.segment.decorationSkipInk);
+    if (skipInk) canvas.saveLayer();
+    const paint = new ck.Paint();
+    paint.setAntiAlias(true);
+    for (const piece of pieces) {
+      paint.setColor(painter.decorationColor?.(piece.segment) ?? ck.BLACK);
+      const { x1, x2, y, thickness } = piece;
+      switch (piece.segment.decorationStyle) {
+        case 'SOLID':
+          paint.setStyle(ck.PaintStyle.Fill);
+          paint.setPathEffect(null);
+          canvas.drawRect(ck.XYWHRect(x1, y - thickness / 2, x2 - x1, thickness), paint);
+          break;
+        case 'DOTTED': {
+          const dots = ck.PathEffect.MakeDash([0.001, thickness * 2]);
+          paint.setStyle(ck.PaintStyle.Stroke);
+          paint.setStrokeWidth(thickness);
+          paint.setStrokeCap(ck.StrokeCap.Round);
+          paint.setPathEffect(dots);
+          canvas.drawLine(x1 + thickness / 2, y, x2, y, paint);
+          paint.setPathEffect(null);
+          dots.delete();
+          break;
+        }
+        case 'WAVY': {
+          const builder = new ck.PathBuilder();
+          builder.moveTo(x1, y);
+          for (const [cx, cy, ex, ey] of wavySegments(x1, x2, y, thickness)) builder.quadTo(cx, cy, ex, ey);
+          const path = builder.detachAndDelete();
+          paint.setStyle(ck.PaintStyle.Stroke);
+          paint.setStrokeWidth(thickness);
+          paint.setStrokeCap(ck.StrokeCap.Butt);
+          canvas.drawPath(path, paint);
+          path.delete();
+          break;
+        }
+      }
+    }
+    paint.delete();
+    if (skipInk) {
+      const eraser = new ck.Paint();
+      eraser.setAntiAlias(true);
+      eraser.setStyle(ck.PaintStyle.Stroke);
+      eraser.setStrokeWidth(Math.max(...pieces.map((p) => p.thickness)) * 2 + 1);
+      eraser.setBlendMode(ck.BlendMode.DstOut);
+      // Only runs that skip ink erase; the others keep their underline whole.
+      const mask = this.stack(node, 'box', { background: painter.background, paint: (segment) => (segment.decorationSkipInk && segment.textDecoration === 'UNDERLINE' ? eraser : painter.background) });
+      for (const p of mask.paragraphs) if (!p.hidden) canvas.drawParagraph(p.paragraph, p.left, mask.dy + p.top);
+      deleteBlock(mask);
+      eraser.delete();
+      canvas.restore();
+    }
   }
 
   fontFamilyOf(bytes: Uint8Array): string | null {
@@ -229,6 +362,8 @@ export class TextShaper implements TextLayoutService {
 
   dispose(): void {
     this.clearCache();
+    for (const typeface of this.typefaces.values()) typeface.delete();
+    this.typefaces.clear();
     this.provider.delete();
   }
 
@@ -262,9 +397,10 @@ export class TextShaper implements TextLayoutService {
       letterSpacing: style.letterSpacing.unit === 'PIXELS' ? style.letterSpacing.value : (style.letterSpacing.value / 100) * style.fontSize,
       ...(lineHeight !== null ? { heightMultiplier: lineHeight, halfLeading: true } : {}),
       fontFeatures: toFontFeatures(style.openTypeFeatures ?? {}, style.textCase === 'SMALL_CAPS'),
-      ...(style.textDecoration === 'UNDERLINE' || style.textDecoration === 'STRIKETHROUGH'
+      // Underlines are drawn by `draw` (offset, dotted or wavy style, skip ink); strikethrough is an SkParagraph decoration.
+      ...(style.textDecoration === 'STRIKETHROUGH'
         ? {
-            decoration: style.textDecoration === 'UNDERLINE' ? ck.UnderlineDecoration : ck.LineThroughDecoration,
+            decoration: ck.LineThroughDecoration,
             decorationThickness: Math.max(1, style.fontSize / 16),
             ...(decorationColor ? { decorationColor } : {}),
           }
@@ -460,6 +596,7 @@ export class TextShaper implements TextLayoutService {
       if (p.marker) canvas.drawParagraph(p.marker.paragraph, p.marker.x, block.dy + p.marker.y);
     }
     deleteBlock(block);
+    if (painter.decorations !== false) this.drawUnderlines(canvas, node, painter);
   }
 
   private layout(node: TextNode): BlockLayout {

@@ -23,6 +23,7 @@ import { Editor } from '../editor';
 import { applyScale, captureScale } from '../interactions/scale';
 import { setSize } from './properties';
 import {
+  setUnderlineOptions,
   paragraphWrapStyles,
   setHangingList,
   setWrapStyle,
@@ -277,6 +278,21 @@ describe('text properties', () => {
     expect(get().hangingList).toBe(true);
     editor.history.run('hang', (tx) => setHangingList(tx, get(), false));
     expect(get().hangingList).toBeUndefined();
+  });
+
+  test('underline options apply per range and return to their defaults', () => {
+    editor.history.run('type', (tx) => tx.set(id, 'characters', 'underline me'));
+    editor.history.run('u', (tx) => setUnderlineOptions(tx, get(), { decorationStyle: 'WAVY', decorationThickness: 2 }, { start: 0, end: 9 }));
+    expect(textStyleValue(get(), 'decorationStyle', { start: 0, end: 9 })).toBe('WAVY');
+    expect(textStyleValue(get(), 'decorationThickness', { start: 10, end: 12 })).toBeNull();
+    editor.history.run('u', (tx) => setUnderlineOptions(tx, get(), { decorationSkipInk: false, decorationColor: { r: 1, g: 0, b: 0, a: 0.5 }, decorationOffset: 3 }));
+    expect(get()).toMatchObject({ decorationSkipInk: false, decorationColor: { r: 1, g: 0, b: 0, a: 0.5 }, decorationOffset: 3 });
+    editor.history.run('u', (tx) =>
+      setUnderlineOptions(tx, get(), { decorationStyle: 'SOLID', decorationThickness: null, decorationSkipInk: true, decorationColor: null, decorationOffset: 0 }),
+    );
+    expect(get().styleRuns).toBeUndefined();
+    expect(get().decorationColor).toBeUndefined();
+    expect(get().decorationSkipInk).toBeUndefined();
   });
 
   test('the Scale tool scales font size and pixel spacing', () => {

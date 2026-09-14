@@ -15,11 +15,8 @@
  * limitations under the License.
  */
 
-import { Fragment, useMemo, useRef, useState, type ReactNode } from 'react';
-import { documentColors } from '@/core/color/document-colors';
+import { Fragment, useRef, useState, type ReactNode } from 'react';
 import { selectionColors, showsSelectionColors, updateSelectionColor, type ColorPaint, type PaintUsage, type SelectionColor } from '@/core/color/selection-colors';
-import { ColorPicker } from '../../primitives/ColorPicker';
-import type { Box } from '../../primitives/position';
 import { addStop, convertPaint, PAINT_TYPE_LABELS, removeStop, reverseStops, updateStop, type PaintType } from '@/core/color/paints';
 import {
   blurOffsets,
@@ -66,7 +63,6 @@ import {
   type ShadowEffect,
   type StrokeJoin,
   type BlendMode,
-  type Color,
   type CornerRadii,
   type GradientPaint,
   type LineNode,
@@ -80,11 +76,11 @@ const PAINT_TYPES: readonly PaintType[] = ['SOLID', 'GRADIENT_LINEAR', 'GRADIENT
 import { ImageSettings, ImageSwatch } from './ImageSettings';
 import { PatternSettings } from './PatternSettings';
 import { PAINT_BLEND_OPTIONS } from './blend-modes';
+import { ColorControl } from './ColorControl';
 import { beginCrop } from '@/editor/interactions/crop';
 import { beginGradientEdit, endGradientEdit } from '@/editor/interactions/gradient-edit';
 import { MASK_TYPE_LABELS, type MaskType } from '@/core/scene/masks';
 import { setMaskType, toggleMask } from '@/editor/commands/masks';
-import { parseHex, toCss, toHex6 } from '@/core/color/color';
 import {
   MIXED,
   paintsEqual,
@@ -1567,108 +1563,3 @@ function ScaleSection({ nodes }: { nodes: SceneNode[] }) {
   );
 }
 
-interface ColorControlProps {
-  label: string;
-  color: Color;
-  opacity: number;
-  onColor: (color: Color) => void;
-  onOpacity: (opacity: number) => void;
-  onGestureStart: () => void;
-  onGestureEnd: () => void;
-  /** Paint blend mode, edited in the picker. */
-  blendMode?: BlendMode | undefined;
-  onBlendMode?: ((mode: BlendMode) => void) | undefined;
-  /** The color behind the layer, enabling the contrast checker in the picker. */
-  getContrastBackground?: (() => Color) | undefined;
-}
-
-/**
- * Swatch (native color picker, fully offline), hex input, and opacity field.
- * A custom HSB picker with eyedropper replaces the native picker in milestone M3.
- */
-function ColorControl({ label, color, opacity, onColor, onOpacity, onGestureStart, onGestureEnd, blendMode, onBlendMode, getContrastBackground }: ColorControlProps) {
-  const editor = useEditor();
-  const profile = useColorProfile();
-  const hex = toHex6(color);
-  // Draft text while the hex field is being edited; otherwise it mirrors the document.
-  const [draft, setDraft] = useState<string | null>(null);
-  const text = draft ?? hex;
-  const [pickerAnchor, setPickerAnchor] = useState<Box | null>(null);
-  // Collected when the picker opens, so swatches stay put while the color is being edited.
-  const swatches = useMemo(() => (pickerAnchor ? documentColors(editor.doc) : null), [pickerAnchor, editor]);
-
-  const commitHex = () => {
-    if (draft === null) return;
-    const parsed = parseHex(draft);
-    setDraft(null);
-    if (!parsed) return;
-    onGestureStart();
-    onColor(parsed);
-    onGestureEnd();
-  };
-
-  return (
-    <div className={styles.colorControl}>
-      <button
-        type="button"
-        className={styles.swatch}
-        aria-label={`${label} color`}
-        aria-haspopup="dialog"
-        aria-expanded={pickerAnchor !== null}
-        style={{ background: toCss({ ...color, a: 1 }, profile) }}
-        onClick={(e) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          setPickerAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
-        }}
-      />
-      {pickerAnchor && (
-        <ColorPicker
-          label={label}
-          color={{ ...color, a: 1 }}
-          opacity={opacity}
-          anchor={pickerAnchor}
-          onColor={onColor}
-          onOpacity={onOpacity}
-          onGestureStart={onGestureStart}
-          onGestureEnd={onGestureEnd}
-          onClose={() => setPickerAnchor(null)}
-          blendMode={blendMode}
-          blendOptions={PAINT_BLEND_OPTIONS}
-          onPickFromCanvas={editor.pickColorFromCanvas ?? undefined}
-          getContrastBackground={getContrastBackground}
-          colorProfile={profile}
-          onBlendMode={onBlendMode}
-          documentColors={swatches ?? undefined}
-        />
-      )}
-      <input
-        className={styles.hexInput}
-        aria-label={`${label} hex`}
-        value={text}
-        spellCheck={false}
-        onChange={(e) => setDraft(e.target.value.toUpperCase())}
-        onBlur={commitHex}
-        onKeyDown={(e) => {
-          e.stopPropagation();
-          if (e.key === 'Enter') e.currentTarget.blur();
-          if (e.key === 'Escape') {
-            setDraft(null);
-            e.currentTarget.blur();
-          }
-        }}
-      />
-      <NumberField
-        label=""
-        ariaLabel={`${label} opacity`}
-        suffix="%"
-        min={0}
-        max={100}
-        decimals={0}
-        value={Math.round(opacity * 100)}
-        onGestureStart={onGestureStart}
-        onGestureEnd={onGestureEnd}
-        onChange={(v) => onOpacity(v / 100)}
-      />
-    </div>
-  );
-}
