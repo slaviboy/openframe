@@ -60,8 +60,8 @@ import gradientStyles from './Gradient.module.css';
 import { gradientCss } from './gradient-css';
 import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
 import { canCreateComponent, canCreateMultipleComponents, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
-import { canCombineAsVariants, combineAsVariants, instanceVariant, setInstanceVariant } from '@/editor/commands/variants';
-import { componentSetProperties, defaultVariant, parseVariantName } from '@/core/document/variants';
+import { canCombineAsVariants, combineAsVariants, deleteVariantProperty, instanceVariant, moveVariantProperty, renameVariantProperty, renameVariantValue, setInstanceVariant } from '@/editor/commands/variants';
+import { componentSetProperties, defaultVariant, parseVariantName, variantErrors } from '@/core/document/variants';
 import { commandItem } from '../../menus/menu-model';
 import { Menu, type MenuEntry } from '../../primitives/Menu';
 import { localComponents } from '@/editor/commands/insert-instance';
@@ -888,13 +888,124 @@ function CreateComponentOptions() {
   );
 }
 
+/**
+ * The Properties section of a component set: its variant properties with their values. Double-click a property
+ * to rename it, drag it to reorder, open its values to change them, and right-click it (or press Delete) to delete it.
+ */
+function VariantPropertiesSection({ setId }: { setId: string }) {
+  const editor = useEditor();
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [editingValues, setEditingValues] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{ property: string; x: number; y: number } | null>(null);
+  const dragged = useRef<string | null>(null);
+  const properties = componentSetProperties(editor.doc, setId);
+  const errors = variantErrors(editor.doc, setId);
+  return (
+    <Section title="Properties">
+      {properties.map((property, index) => (
+        <div
+          key={property.name}
+          role="group"
+          aria-label={`Property ${property.name}`}
+          tabIndex={0}
+          draggable={renaming === null}
+          onDragStart={() => (dragged.current = property.name)}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (dragged.current !== null && dragged.current !== property.name) moveVariantProperty(editor, setId, dragged.current, index);
+            dragged.current = null;
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            setMenu({ property: property.name, x: e.clientX, y: e.clientY });
+          }}
+          onKeyDown={(e) => {
+            if (e.target !== e.currentTarget || (e.key !== 'Delete' && e.key !== 'Backspace')) return;
+            e.preventDefault();
+            e.stopPropagation();
+            deleteVariantProperty(editor, setId, property.name);
+          }}
+        >
+          <div className={styles.grid2}>
+            {renaming === property.name ? (
+              <input
+                autoFocus
+                className={primitives.textInput}
+                aria-label="Property name"
+                defaultValue={property.name}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Escape') e.currentTarget.value = property.name;
+                  if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur();
+                }}
+                onBlur={(e) => {
+                  renameVariantProperty(editor, setId, property.name, e.currentTarget.value);
+                  setRenaming(null);
+                }}
+              />
+            ) : (
+              <span className={styles.hint} onDoubleClick={() => setRenaming(property.name)}>
+                {property.name}
+              </span>
+            )}
+            <button
+              type="button"
+              className={gradientStyles.textButton}
+              aria-label={`Edit values of ${property.name}`}
+              aria-expanded={editingValues === property.name}
+              onClick={() => setEditingValues(editingValues === property.name ? null : property.name)}
+            >
+              {property.values.join(', ')}
+            </button>
+          </div>
+          {editingValues === property.name &&
+            property.values.map((value) => (
+              <input
+                key={value}
+                className={primitives.textInput}
+                aria-label={`Value ${value}`}
+                defaultValue={value}
+                onKeyDown={(e) => {
+                  e.stopPropagation();
+                  if (e.key === 'Enter') e.currentTarget.blur();
+                }}
+                onBlur={(e) => renameVariantValue(editor, setId, property.name, value, e.currentTarget.value)}
+              />
+            ))}
+        </div>
+      ))}
+      {errors.conflicted.length > 0 && (
+        <p className={styles.hint} role="alert">
+          {errors.conflicted.length} variants have the same property values. Each variant needs a unique combination of values.
+        </p>
+      )}
+      {errors.corrupted.length > 0 && (
+        <p className={styles.hint} role="alert">
+          {errors.corrupted.length === 1 ? '1 variant name doesn\'t' : `${errors.corrupted.length} variant names don't`} follow the syntax Property=value, Property=value.
+        </p>
+      )}
+      {menu && (
+        <Menu
+          label="Property actions"
+          entries={[{ kind: 'item', id: 'delete', label: 'Delete property', onSelect: () => deleteVariantProperty(editor, setId, menu.property) }]}
+          anchor={{ x: menu.x, y: menu.y, width: 0, height: 0 }}
+          placement="point"
+          onClose={() => setMenu(null)}
+        />
+      )}
+    </Section>
+  );
+}
+
 function ComponentSection({ node }: { node: SceneNode }) {
   const editor = useEditor();
   if (node.type !== 'FRAME') return null;
-  const main = node.component ? node : node.instance ? editor.doc.get(node.instance.mainId) : undefined;
-  if (!main || main.type !== 'FRAME' || !main.component) return null;
-  const description = main.component.description ?? '';
-  const link = main.component.link ?? '';
+  const main = node.component || node.componentSet ? node : node.instance ? editor.doc.get(node.instance.mainId) : undefined;
+  const config = main?.type === 'FRAME' ? (main.component ?? main.componentSet) : undefined;
+  if (!main || main.type !== 'FRAME' || !config) return null;
+  const description = config.description ?? '';
+  const link = config.link ?? '';
   const docs = link && isSafeLink(link) ? (
     <a href={link} target="_blank" rel="noreferrer noopener">
       Open documentation
@@ -947,6 +1058,7 @@ function ComponentSection({ node }: { node: SceneNode }) {
     );
   }
   return (
+    <>
     <Section title="Component">
       <textarea
         key={`description-${main.id}-${description}`}
@@ -973,6 +1085,8 @@ function ComponentSection({ node }: { node: SceneNode }) {
       />
       {docs}
     </Section>
+    {node.componentSet && <VariantPropertiesSection setId={node.id} />}
+    </>
   );
 }
 

@@ -98,6 +98,22 @@ export function defaultVariant(store: VariantStore, setId: Id): SceneNode | null
 }
 
 /**
+ * New names for a component set's variants after `change` rewrites their property values. Variants whose names
+ * don't follow the syntax, or would be left without any value, keep their names; unchanged names are omitted.
+ */
+export function renamedVariants(store: VariantStore, setId: Id, change: (values: VariantValues) => VariantValues): Array<readonly [Id, string]> {
+  const renamed: Array<readonly [Id, string]> = [];
+  for (const variant of variantsOf(store, setId)) {
+    const values = parseVariantName(variant.name);
+    const next = values ? change(values) : [];
+    if (next.length === 0) continue;
+    const name = formatVariantName(next);
+    if (name !== variant.name) renamed.push([variant.id, name]);
+  }
+  return renamed;
+}
+
+/**
  * The variant for a combination of values after `property` changed: the variant with exactly these values,
  * or else the one with the changed value that matches most of the other values (the first in layer order).
  */

@@ -104,8 +104,10 @@ export const isSafeLink = (link: string): boolean => /^https?:\/\//i.test(link.t
  */
 export function setComponentConfiguration(editor: Editor, id: Id, change: { readonly description?: string; readonly link?: string }): void {
   const node = editor.doc.get(id) as SceneNode | undefined;
-  if (node?.type !== 'FRAME' || !node.component) return;
-  const current = node.component;
+  const current = node?.type === 'FRAME' ? (node.component ?? node.componentSet) : undefined;
+  if (node?.type !== 'FRAME' || !current) return;
+  // Component sets take a description and documentation link like components.
+  const fieldName = node.component ? 'component' : 'componentSet';
   // The changed value (trimmed; empty removes the field), otherwise the current one.
   const pick = (key: 'description' | 'link'): string | undefined => {
     const value = change[key];
@@ -115,6 +117,6 @@ export function setComponentConfiguration(editor: Editor, id: Id, change: { read
   const link = pick('link');
   const next = { ...(description !== undefined ? { description } : {}), ...(link !== undefined ? { link } : {}) };
   if (JSON.stringify(next) === JSON.stringify(current)) return;
-  editor.history.run(change.link !== undefined ? 'Change documentation link' : 'Change component description', (tx) => tx.set(id, 'component', next));
+  editor.history.run(change.link !== undefined ? 'Change documentation link' : 'Change component description', (tx) => tx.set(id, fieldName, next));
 }
 
