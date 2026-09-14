@@ -423,6 +423,13 @@ export const FrameNodeSchema = z.object({
       link: z.string().max(2_000).optional(),
     })
     .optional(),
+  /** Present when the frame is a component set: the container of a component's variants. */
+  componentSet: z
+    .object({
+      description: z.string().max(10_000).optional(),
+      link: z.string().max(2_000).optional(),
+    })
+    .optional(),
   /** Present when the frame is an instance of a main component. */
   instance: z.object({ mainId: IdSchema }).optional(),
   /** Frame guides (for frames directly on the page or in a section). Absent when none. */

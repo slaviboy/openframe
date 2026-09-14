@@ -60,6 +60,7 @@ import gradientStyles from './Gradient.module.css';
 import { gradientCss } from './gradient-css';
 import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
 import { canCreateComponent, canCreateMultipleComponents, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
+import { canCombineAsVariants, combineAsVariants } from '@/editor/commands/variants';
 import { commandItem } from '../../menus/menu-model';
 import { Menu, type MenuEntry } from '../../primitives/Menu';
 import { localComponents } from '@/editor/commands/insert-instance';
@@ -508,7 +509,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
 
   const single = nodes.length === 1 ? nodes[0]! : null;
   const types = new Set(nodes.map((n) => n.type));
-  const typeLabel = types.size === 1 ? (single?.type === 'FRAME' && single.component ? 'Component' : single?.type === 'FRAME' && single.instance ? 'Instance' : TYPE_LABELS[nodes[0]!.type]) : 'Mixed';
+  const typeLabel = types.size === 1 ? (single?.type === 'FRAME' && single.componentSet ? 'Component set' : single?.type === 'FRAME' && single.component ? 'Component' : single?.type === 'FRAME' && single.instance ? 'Instance' : TYPE_LABELS[nodes[0]!.type]) : 'Mixed';
 
   // Multi-selection X/Y are the selection bounds in world space; single is parent-relative.
   const bounds = single ? null : editor.selectionBounds(nodes.map((n) => n.id));
@@ -566,6 +567,11 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         </span>
         {canCreateComponent(editor) && <IconButton icon="component" label="Create component" onClick={() => createComponent(editor)} />}
         {canCreateMultipleComponents(editor) && <CreateComponentOptions />}
+        {canCombineAsVariants(editor) && (
+          <button type="button" className={gradientStyles.textButton} onClick={() => combineAsVariants(editor)}>
+            Combine as variants
+          </button>
+        )}
         {canResetOverrides(editor) && (
           <button type="button" className={gradientStyles.textButton} onClick={() => resetSelectedOverrides(editor)}>
             Reset all changes

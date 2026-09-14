@@ -37,6 +37,7 @@ import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/c
 import { beginCrop, cropTarget, endCrop } from '../interactions/crop';
 import { BOOLEAN_NAMES, booleanSelection, canBooleanSelection } from './boolean';
 import { canCreateComponent, canCreateMultipleComponents, createMultipleComponents, createComponent } from './components';
+import { canCombineAsVariants, combineAsVariants } from './variants';
 import { canDetachInstance, detachInstances } from './detach';
 import { canResetOverrides, resetSelectedOverrides } from './reset-overrides';
 import { canGoToMainComponent, canPushChangesToMain, canRestoreMainComponent, goToMainComponent, pushChangesToMain, restoreMainComponent } from './main-component';
@@ -189,6 +190,13 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     category: 'Object',
     enabled: canCreateMultipleComponents,
     run: (e) => createMultipleComponents(e),
+  },
+  {
+    id: 'object.combineAsVariants',
+    label: 'Combine as variants',
+    category: 'Object',
+    enabled: canCombineAsVariants,
+    run: (e) => combineAsVariants(e),
   },
   {
     id: 'object.detachInstance',

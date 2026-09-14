@@ -37,7 +37,7 @@ export const LAYER_TYPE_ICONS: Record<SceneNode['type'], IconName> = {
 /** Icon for a specific layer: masks show the mask icon, rectangles filled with an image the image icon. */
 export function layerIcon(node: SceneNode): IconName {
   if (node.isMask) return 'mask';
-  if (node.type === 'FRAME' && node.component) return 'component';
+  if (node.type === 'FRAME' && (node.component || node.componentSet)) return 'component';
   if (node.type === 'FRAME' && node.instance) return 'instance';
   if (node.type === 'RECTANGLE' && node.fills.some((p) => p.type === 'IMAGE' && p.visible)) return 'image';
   return LAYER_TYPE_ICONS[node.type];
