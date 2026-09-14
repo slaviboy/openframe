@@ -50,7 +50,8 @@ import {
 import { TEXT_CASE_LABELS } from '@/core/text/letter-case';
 import type { TextCase } from '@/core/schema/document';
 import { textSelectionRange, textStyleRange } from '@/editor/interactions/text-edit';
-import { changeIndentation, paragraphListTypes, setListSpacing, setListType } from '@/editor/commands/text';
+import { changeIndentation, paragraphDirections, paragraphListTypes, setListSpacing, setListType, setTextDirection } from '@/editor/commands/text';
+import { containsRtl } from '@/core/text/direction';
 import type { ListType } from '@/core/schema/document';
 
 const LIST_OPTIONS: readonly (readonly [ListType, string])[] = [
@@ -154,6 +155,9 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
   const listRange = nodes.length === 1 ? textSelectionRange(editor, nodes[0]!.id) : null;
   const listType = single([...new Set(nodes.flatMap((n) => paragraphListTypes(n, listRange)))]);
   const listSpacing = single([...new Set(nodes.map((n) => n.listSpacing ?? 0))]);
+  // Direction controls appear once right-to-left script is in the text; like lists they apply to paragraphs.
+  const hasRtl = nodes.some((n) => containsRtl(n.characters));
+  const direction = single([...new Set(nodes.flatMap((n) => paragraphDirections(n, listRange)))]);
   const hAlign = shared(nodes, (n) => n.textAlignHorizontal);
   const vAlign = shared(nodes, (n) => n.textAlignVertical);
   const run = (label: string, apply: (tx: Transaction, node: TextNode) => void) => editor.history.run(label, (tx) => nodes.forEach((n) => apply(tx, n)));
@@ -212,6 +216,12 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
           ))}
         </div>
       </div>
+      {hasRtl && (
+        <div role="group" aria-label="Text direction" className={styles.buttonRow}>
+          <IconButton icon="textLtr" label="Left to right" pressed={direction === 'LTR'} onClick={() => run('Use left to right text direction', (tx, n) => setTextDirection(tx, n, 'LTR', listRange))} />
+          <IconButton icon="textRtl" label="Right to left" pressed={direction === 'RTL'} onClick={() => run('Use right to left text direction', (tx, n) => setTextDirection(tx, n, 'RTL', listRange))} />
+        </div>
+      )}
       <div className={styles.buttonRow}>
         <button type="button" className={styles.disclosure} aria-expanded={settingsOpen} onClick={() => setSettingsOpen((open) => !open)}>
           Type settings

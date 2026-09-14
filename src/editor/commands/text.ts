@@ -69,7 +69,8 @@ export function setFontVariation(tx: Transaction, node: SceneNode, axis: string,
     range,
   );
 }
-import type { ListType } from '@/core/schema/document';
+import type { ListType, TextDirection } from '@/core/schema/document';
+import { resolveDirection } from '@/core/text/direction';
 
 /**
  * Links the characters of a range (or the whole layer) to a web address and underlines them, or
@@ -212,6 +213,20 @@ export function paragraphListTypes(node: TextNode, range: TextRange): ListType[]
   const from = range ? paragraphAt(ranges, Math.min(range.start, range.end)).index : 0;
   const to = range ? paragraphAt(ranges, Math.max(range.start, range.end)).index : ranges.length - 1;
   return ranges.slice(from, to + 1).map((r) => textStyleAt(node, paragraphStyleOffset(r)).listType);
+}
+
+/** Sets the direction of the paragraphs a range touches (or the whole layer): left to right, right to left, or detected (AUTO). */
+export function setTextDirection(tx: Transaction, node: SceneNode, direction: TextDirection, range: TextRange = null): void {
+  const text = textOf(tx, node);
+  if (text) setTextStyle(tx, node, { textDirection: direction }, range ? listSpan(text.characters, range) : null);
+}
+
+/** The direction in effect for each paragraph a range touches (every paragraph without a range). */
+export function paragraphDirections(node: TextNode, range: TextRange): ('LTR' | 'RTL')[] {
+  const ranges = paragraphRanges(node.characters);
+  const from = range ? paragraphAt(ranges, Math.min(range.start, range.end)).index : 0;
+  const to = range ? paragraphAt(ranges, Math.max(range.start, range.end)).index : ranges.length - 1;
+  return ranges.slice(from, to + 1).map((r) => resolveDirection(textStyleAt(node, paragraphStyleOffset(r)).textDirection, node.characters.slice(r.start, r.end)));
 }
 
 /** Makes the paragraphs a range touches (or the whole layer) a list of a type, or no list. */

@@ -29,6 +29,8 @@ import latinItalic from '@fontsource-variable/inter/files/inter-latin-wght-itali
 import latinNormal from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?inline';
 import vietnameseItalic from '@fontsource-variable/inter/files/inter-vietnamese-wght-italic.woff2?inline';
 import vietnameseNormal from '@fontsource-variable/inter/files/inter-vietnamese-wght-normal.woff2?inline';
+import notoArabic from '@fontsource-variable/noto-sans-arabic/files/noto-sans-arabic-arabic-wght-normal.woff2?inline';
+import notoHebrew from '@fontsource-variable/noto-sans-hebrew/files/noto-sans-hebrew-hebrew-wght-normal.woff2?inline';
 
 /**
  * Bundled font files as base64 data URLs, by file name. Kept in its own module so the fonts load
@@ -49,4 +51,6 @@ export const FONT_DATA: Readonly<Record<string, string>> = {
   'inter-greek-ext-wght-italic.woff2': greekExtItalic,
   'inter-vietnamese-wght-normal.woff2': vietnameseNormal,
   'inter-vietnamese-wght-italic.woff2': vietnameseItalic,
+  'noto-sans-arabic-arabic-wght-normal.woff2': notoArabic,
+  'noto-sans-hebrew-hebrew-wght-normal.woff2': notoHebrew,
 };

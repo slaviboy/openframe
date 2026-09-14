@@ -25,6 +25,7 @@ import { listTrigger } from '@/core/text/lists';
 import { paragraphAt, paragraphRanges, paragraphStyleOffset } from '@/core/text/paragraphs';
 import { changeIndentation, setHyperlink, setListType, toggleListType } from '../commands/text';
 import { linkAt, type TextLink } from '@/core/text/links';
+import { directionAt } from '@/core/text/direction';
 import {
   caret,
   clampSelection,
@@ -334,9 +335,12 @@ export function moveTextCaret(editor: Editor, move: CaretMove, options: { extend
   let goalX: number | null = null;
   switch (move) {
     case 'left':
-    case 'right':
-      next = moveHorizontal(text, selection, move === 'left' ? -1 : 1, options);
+    case 'right': {
+      // Left and right are backward and forward in reading order, so they swap in right-to-left paragraphs.
+      const forward = (move === 'right') !== (directionAt(node, selection.focus) === 'RTL');
+      next = moveHorizontal(text, selection, forward ? 1 : -1, options);
       break;
+    }
     case 'up':
     case 'down': {
       if (!layout) return;

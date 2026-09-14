@@ -23,13 +23,16 @@ export const BUNDLED_FAMILY = 'Inter';
  * subset is registered as the user-facing family; the other subsets are registered under internal
  * family names and used as fallbacks for characters Latin doesn't cover.
  */
-export const BUNDLED_FONT_FILES: readonly { readonly family: string; readonly file: string }[] = [
-  { family: BUNDLED_FAMILY, file: 'inter-latin-wght-normal.woff2' },
-  { family: BUNDLED_FAMILY, file: 'inter-latin-wght-italic.woff2' },
+export const BUNDLED_FONT_FILES: readonly { readonly family: string; readonly file: string; readonly package: string }[] = [
+  { family: BUNDLED_FAMILY, file: 'inter-latin-wght-normal.woff2', package: '@fontsource-variable/inter' },
+  { family: BUNDLED_FAMILY, file: 'inter-latin-wght-italic.woff2', package: '@fontsource-variable/inter' },
   ...['latin-ext', 'cyrillic', 'cyrillic-ext', 'greek', 'greek-ext', 'vietnamese'].flatMap((subset) => [
-    { family: `${BUNDLED_FAMILY} (${subset})`, file: `inter-${subset}-wght-normal.woff2` },
-    { family: `${BUNDLED_FAMILY} (${subset})`, file: `inter-${subset}-wght-italic.woff2` },
+    { family: `${BUNDLED_FAMILY} (${subset})`, file: `inter-${subset}-wght-normal.woff2`, package: '@fontsource-variable/inter' },
+    { family: `${BUNDLED_FAMILY} (${subset})`, file: `inter-${subset}-wght-italic.woff2`, package: '@fontsource-variable/inter' },
   ]),
+  // Right-to-left scripts Inter doesn't cover.
+  { family: `${BUNDLED_FAMILY} (noto-arabic)`, file: 'noto-sans-arabic-arabic-wght-normal.woff2', package: '@fontsource-variable/noto-sans-arabic' },
+  { family: `${BUNDLED_FAMILY} (noto-hebrew)`, file: 'noto-sans-hebrew-hebrew-wght-normal.woff2', package: '@fontsource-variable/noto-sans-hebrew' },
 ];
 
 /** Whether a registered family is an internal fallback subset rather than a font users pick. */

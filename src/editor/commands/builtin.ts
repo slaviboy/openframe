@@ -320,8 +320,8 @@ const COLOR_PROFILE_COMMANDS: CommandDefinition[] = (['SRGB', 'DISPLAY_P3'] as c
   },
 }));
 
-import { beginTextEdit, openLinkEditor } from '../interactions/text-edit';
-import { stepTextProperty, toggleFontStyle, toggleListType, toggleTextDecoration } from './text';
+import { beginTextEdit, openLinkEditor, textSelectionRange } from '../interactions/text-edit';
+import { paragraphDirections, setTextDirection, stepTextProperty, toggleFontStyle, toggleListType, toggleTextDecoration } from './text';
 import type { SceneNode as TextTarget } from '@/core/schema/document';
 
 /** Text layers in the selection when not editing text (while editing, the text input applies these to the selected characters). */
@@ -336,6 +336,29 @@ export function autoLineHeight(e: Editor, fontSize: number): number {
 }
 
 const TEXT_FORMAT_COMMANDS: CommandDefinition[] = [
+  ...(
+    [
+      ['text.directionLtr', 'Use left to right text direction', 'LTR'],
+      ['text.directionRtl', 'Use right to left text direction', 'RTL'],
+    ] as const
+  ).map(
+    ([id, label, direction]): CommandDefinition => ({
+      id,
+      label,
+      category: 'Text',
+      enabled: (e) => selectedTextLayers(e).length > 0,
+      // While editing one layer, the paragraphs under the caret or selection; otherwise whole layers.
+      checked: (e) => {
+        const layers = selectedTextLayers(e);
+        return layers.length > 0 && layers.every((n) => n.type === 'TEXT' && paragraphDirections(n, layers.length === 1 ? textSelectionRange(e, n.id) : null).every((d) => d === direction));
+      },
+      run: (e) =>
+        e.history.run(label, (tx) => {
+          const layers = selectedTextLayers(e);
+          layers.forEach((n) => setTextDirection(tx, n, direction, layers.length === 1 ? textSelectionRange(e, n.id) : null));
+        }),
+    }),
+  ),
   {
     id: 'text.createLink',
     label: 'Create link',

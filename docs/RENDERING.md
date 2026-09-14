@@ -143,7 +143,10 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
 **Text**
 - `TextShaper` ([`engine/text/text-shaper.ts`](../src/engine/text/text-shaper.ts)) builds an SkParagraph per text layer from a `TypefaceFontProvider`. It uses HarfBuzz shaping and ICU line breaking. `applyRoundingHack` is off, so auto-width text laid out at its exact natural width doesn't wrap.
 - **Fonts:** the bundled Inter variable font (weight axis 100–900, upright and italic) loads with CanvasKit before the canvas reports ready ([`bundled-fonts.ts`](../src/engine/text/bundled-fonts.ts)). The font files are embedded as base64 in a lazily imported chunk (`bundled-font-data.ts`) and decoded in memory, because app code never uses `fetch`, not even for same-origin assets.
-  - The Latin subset is registered as `Inter`. Latin-extended, Cyrillic, Greek and Vietnamese subsets are registered under internal family names and listed after the layer's family as fallbacks.
+  - The Latin subset is registered as `Inter`. Latin-extended, Cyrillic, Greek and Vietnamese subsets, plus Noto Sans Arabic and Noto Sans Hebrew (variable weight), are registered under internal family names (`Inter (…)`) and listed after the layer's family as fallbacks.
+- **Direction:** each paragraph's SkParagraph gets `textDirection` from `resolveDirection` ([`core/text/direction.ts`](../src/core/text/direction.ts)): the paragraph's stored `textDirection`, or its first letter's script when `AUTO`. ICU bidi then orders the runs.
+  - Carets use the direction reported by `getRectsForRange`: the right edge of a right-to-left glyph is its leading edge.
+  - Right-to-left list items keep their text at the left edge. Their marker is drawn after the text area, on the right.
   - Style names map to a `FontWeight` plus a `wght` font variation, and italic to `FontSlant.Italic` ([`core/text/font-style.ts`](../src/core/text/font-style.ts)).
   - **User fonts** (uploaded or installed; `editor.fonts`, persisted in the IndexedDB `fonts` store) are registered with `TextShaper.registerFonts` when the canvas starts and whenever more are added, which drops cached layouts. They are also added to `document.fonts` as `FontFace`s from their bytes, for UI previews. `fontFamilyOf` reads a font file's family name through `Typeface.getFamilyName` for formats the name-table parser can't read.
 - **Text style:**

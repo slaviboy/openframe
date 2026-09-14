@@ -16,7 +16,7 @@
  */
 
 import { valuesEqual } from '../ops/equality';
-import type { FontName, FontVariations, Hyperlink, LetterSpacing, LineHeight, ListType, OpenTypeFeatures, Paint, TextCase, TextDecoration, TextNode } from '../schema/document';
+import type { FontName, FontVariations, Hyperlink, LetterSpacing, LineHeight, ListType, OpenTypeFeatures, Paint, TextCase, TextDecoration, TextDirection, TextNode } from '../schema/document';
 
 /**
  * Mixed styles within a text layer. The layer's own properties are the default style; `styleRuns`
@@ -43,6 +43,8 @@ export interface TextStyle {
   readonly openTypeFeatures: OpenTypeFeatures;
   /** Variable font axis values; absent axes use the style or font default. */
   readonly fontVariations: FontVariations;
+  /** Paragraph direction: detected (AUTO), left to right or right to left. */
+  readonly textDirection: TextDirection;
 }
 
 export type TextStyleKey = keyof TextStyle;
@@ -60,7 +62,7 @@ export interface TextSegment extends TextStyle {
   readonly end: number;
 }
 
-export const TEXT_STYLE_KEYS: readonly TextStyleKey[] = ['fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'fills', 'textDecoration', 'textCase', 'listType', 'indentation', 'hyperlink', 'openTypeFeatures', 'fontVariations'];
+export const TEXT_STYLE_KEYS: readonly TextStyleKey[] = ['fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'fills', 'textDecoration', 'textCase', 'listType', 'indentation', 'hyperlink', 'openTypeFeatures', 'fontVariations', 'textDirection'];
 
 export type RunsNode = Pick<TextNode, 'characters' | 'fontName' | 'fontSize' | 'lineHeight' | 'letterSpacing' | 'fills'> & {
   readonly styleRuns?: readonly TextStyleRun[] | undefined;
@@ -71,6 +73,7 @@ export type RunsNode = Pick<TextNode, 'characters' | 'fontName' | 'fontSize' | '
   readonly hyperlink?: Hyperlink | undefined;
   readonly openTypeFeatures?: OpenTypeFeatures | undefined;
   readonly fontVariations?: FontVariations | undefined;
+  readonly textDirection?: TextDirection | undefined;
 };
 
 const NO_FEATURES: OpenTypeFeatures = {};
@@ -91,6 +94,7 @@ export function baseTextStyle(node: RunsNode): TextStyle {
     hyperlink: node.hyperlink ?? null,
     openTypeFeatures: node.openTypeFeatures ?? NO_FEATURES,
     fontVariations: node.fontVariations ?? NO_VARIATIONS,
+    textDirection: node.textDirection ?? 'AUTO',
   };
 }
 
@@ -98,6 +102,7 @@ export function baseTextStyle(node: RunsNode): TextStyle {
 export function layerFieldValue<K extends TextStyleKey>(key: K, value: TextStyle[K]): TextStyle[K] | undefined {
   if ((key === 'textDecoration' && value === 'NONE') || (key === 'textCase' && value === 'ORIGINAL') || (key === 'listType' && value === 'NONE') || (key === 'indentation' && value === 1) || (key === 'hyperlink' && value === null)) return undefined;
   if ((key === 'openTypeFeatures' || key === 'fontVariations') && Object.keys(value as object).length === 0) return undefined;
+  if (key === 'textDirection' && value === 'AUTO') return undefined;
   return value;
 }
 

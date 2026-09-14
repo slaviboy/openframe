@@ -23,6 +23,7 @@ import type { FontName, OpenTypeFeatures, Size, TextAlignVertical, TextNode } fr
 import { FEATURE_PROBE_TEXT, isDefaultOnFeature, PROBED_FEATURES, toFontFeatures } from '@/core/text/opentype';
 import { readFontAxes, type FontAxis } from '@/core/text/font-names';
 import { BUNDLED_FONT_AXES, mergeAxes, variationSettings } from '@/core/text/font-variations';
+import { resolveDirection } from '@/core/text/direction';
 import { parseFontStyle, VARIABLE_FONT_STYLES } from '@/core/text/font-style';
 import { nextGrapheme, previousGrapheme } from '@/core/text/text-editing';
 import type { FontFamilyInfo, TextCaretBox, TextLayoutService } from '@/core/text/text-layout';
@@ -269,7 +270,7 @@ export class TextShaper implements TextLayoutService {
    * placeholder when the layer has one. With a `painter`, segments are painted with the paints it
    * returns. Not laid out; the caller deletes it.
    */
-  private buildParagraph(node: TextNode, range: ParagraphRange, indent: number, painter: TextPainter | undefined, maxLines?: number): Paragraph {
+  private buildParagraph(node: TextNode, range: ParagraphRange, indent: number, rtl: boolean, painter: TextPainter | undefined, maxLines?: number): Paragraph {
     const ck = this.ck;
     const align = { LEFT: ck.TextAlign.Left, CENTER: ck.TextAlign.Center, RIGHT: ck.TextAlign.Right, JUSTIFIED: ck.TextAlign.Justify }[node.textAlignHorizontal];
     // An empty paragraph takes the style of the character before it (what typing there would get).
@@ -277,6 +278,8 @@ export class TextShaper implements TextLayoutService {
     const style = new ck.ParagraphStyle({
       textStyle: this.textStyle(range.end > range.start ? textStyleAt(node, range.start) : emptyStyle),
       textAlign: align,
+      // The base direction for bidi reordering of the paragraph's runs.
+      textDirection: rtl ? ck.TextDirection.RTL : ck.TextDirection.LTR,
       // Rounding widths up would wrap auto-width text laid out at its exact natural width.
       applyRoundingHack: false,
       ...(node.textAutoResize === 'TRUNCATE' || node.maxLines !== undefined ? { ellipsis: '…' } : {}),
@@ -321,19 +324,22 @@ export class TextShaper implements TextLayoutService {
     const items: ListItem[] = styles.map((s) => ({ type: s.listType, level: s.indentation }));
     const counters = listCounters(items);
     // List items indent every line by level (wrapped lines hang); other paragraphs take the first-line indent.
-    const lefts = items.map((item, i) => (item.type === 'NONE' ? 0 : clampLevel(item.level) * Math.round(styles[i]!.fontSize * LIST_INDENT_EM)));
+    const insets = items.map((item, i) => (item.type === 'NONE' ? 0 : clampLevel(item.level) * Math.round(styles[i]!.fontSize * LIST_INDENT_EM)));
+    const rtl = ranges.map((range, i) => resolveDirection(styles[i]!.textDirection, node.characters.slice(range.start, range.end)) === 'RTL');
+    // Right-to-left list items are indented from the right, with the marker on that side.
+    const lefts = insets.map((inset, i) => (rtl[i] ? 0 : inset));
     const indents = items.map((item) => (item.type === 'NONE' ? this.indentOf(node) : 0));
-    const paragraphs = ranges.map((range, i) => this.buildParagraph(node, range, indents[i]!, painter));
+    const paragraphs = ranges.map((range, i) => this.buildParagraph(node, range, indents[i]!, rtl[i]!, painter));
     let naturalWidth = 0;
     let layoutWidth: number;
     if (width === null || (width === 'box' && node.textAutoResize === 'WIDTH_AND_HEIGHT')) {
       for (const p of paragraphs) p.layout(UNBOUNDED);
-      naturalWidth = Math.max(0, ...paragraphs.map((p, i) => p.getMaxIntrinsicWidth() + lefts[i]!));
+      naturalWidth = Math.max(0, ...paragraphs.map((p, i) => p.getMaxIntrinsicWidth() + insets[i]!));
       layoutWidth = (width === 'box' ? Math.max(node.size.width, naturalWidth) : naturalWidth) + 0.01;
     } else {
       layoutWidth = Math.max(0, width === 'box' ? node.size.width : width);
     }
-    const widthOf = (i: number) => Math.max(1, layoutWidth - lefts[i]!);
+    const widthOf = (i: number) => Math.max(1, layoutWidth - insets[i]!);
     paragraphs.forEach((p, i) => p.layout(widthOf(i)));
     // List spacing separates consecutive list items; paragraph spacing everything else.
     const gapBetween = (previous: number, next: number) => (items[previous]!.type !== 'NONE' && items[next]!.type !== 'NONE' ? listSpacing : spacing);
@@ -366,7 +372,7 @@ export class TextShaper implements TextLayoutService {
       const hidden = budget === 0 && i > 0;
       if (!hidden && budget < counts[i]!) {
         paragraph.delete();
-        paragraph = this.buildParagraph(node, ranges[i]!, indents[i]!, painter, Math.max(1, budget));
+        paragraph = this.buildParagraph(node, ranges[i]!, indents[i]!, rtl[i]!, painter, Math.max(1, budget));
         paragraph.layout(widthOf(i));
       }
       if (!hidden && previous >= 0) top += gapBetween(previous, i);
@@ -379,7 +385,7 @@ export class TextShaper implements TextLayoutService {
         const baseline = firstLine ? firstLine.baseline : paragraph.getAlphabeticBaseline();
         marker = {
           paragraph: markerParagraph,
-          x: lefts[i]! - markerParagraph.getMaxIntrinsicWidth() - style.fontSize * LIST_MARKER_GAP_EM,
+          x: rtl[i] ? widthOf(i) + style.fontSize * LIST_MARKER_GAP_EM : lefts[i]! - markerParagraph.getMaxIntrinsicWidth() - style.fontSize * LIST_MARKER_GAP_EM,
           y: top + baseline - markerParagraph.getAlphabeticBaseline(),
         };
       }
@@ -492,14 +498,16 @@ export class TextShaper implements TextLayoutService {
       const line = lines[this.lineIndex(lines, localIndex)]!;
       return { top: line.baseline - line.ascent + y, bottom: line.baseline + line.descent + y };
     };
-    const rect = (start: number, end: number) => paragraph.getRectsForRange(start, end, this.ck.RectHeightStyle.Tight, this.ck.RectWidthStyle.Tight)[0]?.rect;
+    const rtlValue = this.ck.TextDirection.RTL.value;
+    const glyph = (start: number, end: number) => paragraph.getRectsForRange(start, end, this.ck.RectHeightStyle.Tight, this.ck.RectWidthStyle.Tight)[0];
+    // The caret sits before a glyph on its leading edge (left in left-to-right runs, right in right-to-left ones), or after it on the trailing edge.
     if (at < range.end) {
-      const r = rect(local(at), local(nextGrapheme(text, at)));
-      if (r) return { x: layout.left + r[0]!, ...box(local(at)) };
+      const g = glyph(local(at), local(nextGrapheme(text, at)));
+      if (g) return { x: layout.left + (g.dir.value === rtlValue ? g.rect[2]! : g.rect[0]!), ...box(local(at)) };
     }
     if (at > range.start) {
-      const r = rect(local(previousGrapheme(text, at)), local(at));
-      if (r) return { x: layout.left + r[2]!, ...box(local(at) - 1) };
+      const g = glyph(local(previousGrapheme(text, at)), local(at));
+      if (g) return { x: layout.left + (g.dir.value === rtlValue ? g.rect[0]! : g.rect[2]!), ...box(local(at) - 1) };
     }
     // An empty paragraph.
     const width = paragraph.getMaxWidth();

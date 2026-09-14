@@ -82,6 +82,7 @@ const MAIN_MENU: readonly (readonly [string, readonly (readonly string[])[]])[] 
       ['object.toggleVisible', 'object.toggleLocked', 'object.rename'],
     ],
   ],
+  ['Text', [['text.bold', 'text.italic'], ['text.bulletedList', 'text.numberedList', 'text.createLink'], ['text.directionLtr', 'text.directionRtl']]],
   [
     'Arrange',
     [

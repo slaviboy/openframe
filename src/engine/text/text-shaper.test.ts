@@ -30,7 +30,7 @@ let shaper: TextShaper;
 beforeAll(async () => {
   const init = require('canvaskit-wasm/bin/full/canvaskit.js') as (opts: { locateFile: (f: string) => string }) => Promise<CanvasKit>;
   const ck = await init({ locateFile: (f) => require.resolve(`canvaskit-wasm/bin/full/${f}`) });
-  const fonts = BUNDLED_FONT_FILES.map(({ family, file }) => ({ family, bytes: new Uint8Array(readFileSync(require.resolve(`@fontsource-variable/inter/files/${file}`))) }));
+  const fonts = BUNDLED_FONT_FILES.map(({ family, file, package: pkg }) => ({ family, bytes: new Uint8Array(readFileSync(require.resolve(`${pkg}/files/${file}`))) }));
   shaper = new TextShaper(ck, fonts);
 });
 
@@ -126,6 +126,23 @@ describe('text shaping', () => {
     expect(shaper.measure({ ...bold, fontVariations: { wght: 400 } }, null).width).toBeCloseTo(regular, 0);
     expect(shaper.fontAxes('Inter')).toEqual([{ tag: 'wght', name: 'Weight', min: 100, default: 400, max: 900, hidden: false }]);
     expect(shaper.fontAxes('Not A Font')).toEqual([]);
+  });
+
+  test('right-to-left paragraphs shape with the bundled Noto fallbacks and put the caret on the right', () => {
+    expect(shaper.registeredFamilies).toEqual(expect.arrayContaining(['Inter (noto-arabic)', 'Inter (noto-hebrew)']));
+    const hebrew = text({ characters: 'שלום' });
+    const laid = { ...hebrew, size: shaper.measure(hebrew, null) };
+    expect(laid.size.width).toBeGreaterThan(30);
+    // The first character is at the right edge, the end of the text at the left.
+    expect(shaper.caretAt(laid, 0).x).toBeCloseTo(laid.size.width, 0);
+    expect(shaper.caretAt(laid, 4).x).toBeCloseTo(0, 0);
+    expect(shaper.caretAt(laid, 1).x).toBeLessThan(shaper.caretAt(laid, 0).x);
+    const arabic = shaper.measure(text({ characters: 'مرحبا' }), null);
+    expect(arabic.width).toBeGreaterThan(30);
+    // A right-to-left list item has its marker on the right.
+    const item = text({ characters: 'שלום', listType: 'UNORDERED' });
+    const itemLaid = { ...item, size: shaper.measure(item, null) };
+    expect(shaper.caretAt(itemLaid, 0).x).toBeLessThan(itemLaid.size.width - 20);
   });
 
   test('letter case changes the shaped text and max lines limits the height', () => {

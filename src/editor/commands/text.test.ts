@@ -23,6 +23,8 @@ import { Editor } from '../editor';
 import { applyScale, captureScale } from '../interactions/scale';
 import { setSize } from './properties';
 import {
+  paragraphDirections,
+  setTextDirection,
   setFontVariation,
   updateOpenTypeFeatures,
   setHyperlink,
@@ -233,6 +235,20 @@ describe('text properties', () => {
     expect(get().styleRuns).toBeUndefined();
     editor.history.run('reset', (tx) => setFontVariation(tx, get(), 'wght', null));
     expect(get().fontVariations).toBeUndefined();
+  });
+
+  test('text direction is detected per paragraph and set for the paragraphs a range touches', () => {
+    editor.history.run('type', (tx) => tx.set(id, 'characters', 'Hello\nשלום'));
+    expect(paragraphDirections(get(), null)).toEqual(['LTR', 'RTL']);
+    editor.history.run('rtl', (tx) => setTextDirection(tx, get(), 'RTL', { start: 2, end: 2 }));
+    expect(paragraphDirections(get(), null)).toEqual(['RTL', 'RTL']);
+    expect(paragraphDirections(get(), { start: 8, end: 8 })).toEqual(['RTL']);
+    editor.history.run('ltr', (tx) => setTextDirection(tx, get(), 'LTR'));
+    expect(get().textDirection).toBe('LTR');
+    expect(paragraphDirections(get(), null)).toEqual(['LTR', 'LTR']);
+    editor.history.run('auto', (tx) => setTextDirection(tx, get(), 'AUTO'));
+    expect(get().textDirection).toBeUndefined();
+    expect(get().styleRuns).toBeUndefined();
   });
 
   test('the Scale tool scales font size and pixel spacing', () => {

@@ -107,6 +107,24 @@ describe('lists while editing', () => {
   });
 });
 
+describe('right-to-left editing', () => {
+  test('left and right arrows follow reading order in right-to-left paragraphs', () => {
+    editor.state.setTool('text');
+    click(100, 100);
+    insertText(editor, 'ab\nשלום');
+    // In the Hebrew paragraph, ← moves forward.
+    setTextSelection(editor, caret(4));
+    moveTextCaret(editor, 'left', { extend: false, word: false });
+    expect(textEditTarget(editor)!.selection).toEqual({ anchor: 5, focus: 5 });
+    moveTextCaret(editor, 'right', { extend: false, word: false });
+    expect(textEditTarget(editor)!.selection).toEqual({ anchor: 4, focus: 4 });
+    // In the English paragraph, ← moves backward.
+    setTextSelection(editor, caret(1));
+    moveTextCaret(editor, 'left', { extend: false, word: false });
+    expect(textEditTarget(editor)!.selection).toEqual({ anchor: 0, focus: 0 });
+  });
+});
+
 describe('links while editing', () => {
   test('the link editor opens for selected characters or a link under the caret; links apply and remove as a whole', () => {
     editor.state.setTool('text');
