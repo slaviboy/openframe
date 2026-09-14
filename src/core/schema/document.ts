@@ -309,6 +309,15 @@ const SceneFields = {
   maxHeight: z.number().min(0).max(100_000).optional(),
   /** Ignore auto layout: the child keeps its own position (and constraints) inside an auto layout frame. */
   layoutPositioning: z.literal('ABSOLUTE').optional(),
+  /** Grid auto layout children: columns and rows the child spans (absent means 1). */
+  gridColumnSpan: z.number().int().min(1).max(1000).optional(),
+  gridRowSpan: z.number().int().min(1).max(10_000).optional(),
+  /** Grid auto layout children with manual positioning: the 0-based column and row of the child's cell. */
+  gridColumn: z.number().int().min(0).max(1000).optional(),
+  gridRow: z.number().int().min(0).max(10_000).optional(),
+  /** Alignment within a grid cell. Absent means left and top. */
+  gridChildHorizontalAlign: z.enum(['CENTER', 'MAX']).optional(),
+  gridChildVerticalAlign: z.enum(['CENTER', 'MAX']).optional(),
   /** Used as a mask: masks the siblings above it, up to the next mask. Absent means not a mask. */
   isMask: z.boolean().optional(),
   /** How a mask reveals content; absent means ALPHA. */
@@ -389,6 +398,13 @@ export const LayoutGuideSchema = z.object({
   offset: z.number().min(0).max(100_000),
 });
 
+/** A grid track size: fixed pixels, a fraction (fr) of the free space, or hugging its cells. */
+export const GridTrackSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('FIXED'), value: z.number().min(0).max(100_000) }),
+  z.object({ type: z.literal('FLEX'), value: z.number().min(0.01).max(1000) }),
+  z.object({ type: z.literal('HUG') }),
+]);
+
 export const FrameNodeSchema = z.object({
   ...SceneFields,
   ...GeometryFields,
@@ -400,7 +416,7 @@ export const FrameNodeSchema = z.object({
   /** Layout guides, drawn over the frame's contents. Absent when none. */
   layoutGuides: z.array(LayoutGuideSchema).max(100).optional(),
   /** Auto layout flow of the children, in layer order (first child first). Absent means freeform. */
-  layoutMode: z.enum(['HORIZONTAL', 'VERTICAL']).optional(),
+  layoutMode: z.enum(['HORIZONTAL', 'VERTICAL', 'GRID']).optional(),
   /** Horizontal auto layout only: children that overflow continue on the next line. */
   layoutWrap: z.literal(true).optional(),
   paddingTop: z.number().min(0).max(100_000).optional(),
@@ -419,6 +435,14 @@ export const FrameNodeSchema = z.object({
   itemReverseZIndex: z.literal(true).optional(),
   /** Inside strokes are excluded from the layout. Absent means they take up room like padding. */
   strokesIncludedInLayout: z.literal(false).optional(),
+  /** Grid auto layout: one size per column (at least one). */
+  gridColumnSizes: z.array(GridTrackSchema).min(1).max(1000).optional(),
+  /** Grid auto layout: explicit rows; absent means Auto (as many 1fr rows as the cells need). */
+  gridRowSizes: z.array(GridTrackSchema).min(1).max(10_000).optional(),
+  gridColumnGap: z.number().min(0).max(100_000).optional(),
+  gridRowGap: z.number().min(0).max(100_000).optional(),
+  /** Grid auto layout: children keep their own cells instead of filling cells in layer order. */
+  gridAutoPositioning: z.literal(false).optional(),
 });
 
 export const GroupNodeSchema = z.object({ ...SceneFields, type: z.literal('GROUP') });
@@ -675,6 +699,7 @@ export type IndividualStrokeWeights = z.infer<typeof IndividualStrokeWeightsSche
 export const DEFAULT_MITER_ANGLE = 28.96;
 export type Guide = z.infer<typeof GuideSchema>;
 export type LayoutGuide = z.infer<typeof LayoutGuideSchema>;
+export type GridTrack = z.infer<typeof GridTrackSchema>;
 export type CornerRadii = z.infer<typeof CornerRadiiSchema>;
 export type DocumentNode = z.infer<typeof DocumentNodeSchema>;
 export type PageNode = z.infer<typeof PageNodeSchema>;

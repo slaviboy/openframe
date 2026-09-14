@@ -84,7 +84,8 @@ export function setLayoutSizing(tx: Transaction, node: SceneNode, axis: 'horizon
   } else {
     tx.set(node.id, field, sizing === 'FIXED' ? undefined : sizing);
   }
-  if (sizing === 'FILL' && parent?.type === 'FRAME' && parent[field] === 'HUG') {
+  // In a grid, fill stretches over cells whose tracks the parent can still hug.
+  if (sizing === 'FILL' && parent?.type === 'FRAME' && parent.layoutMode !== 'GRID' && parent[field] === 'HUG') {
     const parentAxisIsFlow = (parent.layoutMode === 'HORIZONTAL') === (axis === 'horizontal');
     // A parent can't hug a child that fills it along its flow.
     if (parentAxisIsFlow || tx.store.children(parent.id).length === 1) tx.set(parent.id, field, undefined);

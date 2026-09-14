@@ -50,12 +50,14 @@ function flowItems(store: DocumentStore, frameId: Id, exclude: ReadonlySet<Id>):
 export function flowInsertionIndex(store: DocumentStore, frameId: Id, point: Vec2, exclude: ReadonlySet<Id>): number {
   const frame = store.get(frameId);
   if (!isAutoLayoutFrame(frame)) return 0;
-  const horizontal = frame.layoutMode === 'HORIZONTAL';
+  // Grids fill cells row by row, like a wrapping horizontal flow.
+  const horizontal = frame.layoutMode !== 'VERTICAL';
+  const wraps = frame.layoutWrap === true || frame.layoutMode === 'GRID';
   let index = 0;
   flowItems(store, frameId, exclude).forEach(({ box }, i) => {
     const before = !horizontal
       ? point.y > box.y + box.height / 2
-      : frame.layoutWrap
+      : wraps
         ? box.y + box.height < point.y || (point.y >= box.y && point.x > box.x + box.width / 2)
         : point.x > box.x + box.width / 2;
     if (before) index = i + 1;
@@ -69,13 +71,14 @@ export function flowInsertionLine(store: DocumentStore, frameId: Id, index: numb
   if (!isAutoLayoutFrame(frame)) return null;
   const items = flowItems(store, frameId, exclude);
   const pad = layoutPadding(frame);
-  const halfGap = Math.max(0, frame.itemSpacing ?? 0) / 2;
+  const wraps = frame.layoutWrap === true || frame.layoutMode === 'GRID';
+  const halfGap = Math.max(0, (frame.layoutMode === 'GRID' ? frame.gridColumnGap : frame.itemSpacing) ?? 0) / 2;
   const prev = items[index - 1]?.box;
   const next = items[index]?.box;
-  if (frame.layoutMode === 'HORIZONTAL') {
-    const x = prev && next && !frame.layoutWrap ? (prev.x + prev.width + next.x) / 2 : prev ? prev.x + prev.width + halfGap : next ? next.x - halfGap : pad.left;
+  if (frame.layoutMode !== 'VERTICAL') {
+    const x = prev && next && !wraps ? (prev.x + prev.width + next.x) / 2 : prev ? prev.x + prev.width + halfGap : next ? next.x - halfGap : pad.left;
     const row = prev ?? next;
-    const [top, bottom] = frame.layoutWrap && row ? [row.y, row.y + row.height] : [pad.top, frame.size.height - pad.bottom];
+    const [top, bottom] = wraps && row ? [row.y, row.y + row.height] : [pad.top, frame.size.height - pad.bottom];
     return [
       { x, y: top },
       { x, y: bottom },

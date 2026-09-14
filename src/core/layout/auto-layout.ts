@@ -25,8 +25,9 @@ import { isSceneNode, type FrameNode, type Node, type SceneNode, type Transform 
 import type { TextLayoutService } from '../text/text-layout';
 import { fitTextBox } from '../text/text-resize';
 import { layoutFlow, type FlowDirection, type FlowItem, type Padding, type Sizing } from './flow-layout';
+import { layoutGrid, type GridContainer, type GridItem } from './grid-layout';
 
-export type AutoLayoutFrame = FrameNode & { readonly layoutMode: FlowDirection };
+export type AutoLayoutFrame = FrameNode & { readonly layoutMode: FlowDirection | 'GRID' };
 
 const EPSILON = 1e-6;
 const round = (v: number) => Math.round(v * 100) / 100;
@@ -74,6 +75,51 @@ export function stackingOrder(node: Node | undefined, children: readonly Id[]): 
   return isAutoLayoutFrame(node) && node.itemReverseZIndex ? [...children].reverse() : children;
 }
 
+const FLEX_TRACK = { type: 'FLEX', value: 1 } as const;
+const GRID_FRAME_FIELDS = ['gridColumnSizes', 'gridRowSizes', 'gridColumnGap', 'gridRowGap', 'gridAutoPositioning'] as const;
+const GRID_CHILD_FIELDS = ['gridColumnSpan', 'gridRowSpan', 'gridColumn', 'gridRow', 'gridChildHorizontalAlign', 'gridChildVerticalAlign'] as const;
+
+function gridContainer(frame: AutoLayoutFrame): GridContainer {
+  return {
+    padding: layoutPadding(frame),
+    columnGap: frame.gridColumnGap ?? 0,
+    rowGap: frame.gridRowGap ?? 0,
+    width: frame.size.width,
+    height: frame.size.height,
+    horizontalSizing: frame.layoutSizingHorizontal === 'HUG' ? 'HUG' : 'FIXED',
+    verticalSizing: frame.layoutSizingVertical === 'HUG' ? 'HUG' : 'FIXED',
+    minWidth: frame.minWidth,
+    maxWidth: frame.maxWidth,
+    minHeight: frame.minHeight,
+    maxHeight: frame.maxHeight,
+    columns: frame.gridColumnSizes ?? [FLEX_TRACK],
+    rows: frame.gridRowSizes ?? [],
+    autoRow: FLEX_TRACK,
+    autoPlacement: frame.gridAutoPositioning !== false,
+  };
+}
+
+const gridItem = (child: SceneNode, item: FlowItem): GridItem => ({
+  ...item,
+  columnSpan: child.gridColumnSpan ?? 1,
+  rowSpan: child.gridRowSpan ?? 1,
+  column: child.gridColumn,
+  row: child.gridRow,
+  horizontalAlign: child.gridChildHorizontalAlign ?? 'MIN',
+  verticalAlign: child.gridChildVerticalAlign ?? 'MIN',
+});
+
+/** The cell of every flow child of a grid auto layout frame. */
+export function gridCells(tx: Transaction, frameId: Id): Map<Id, { column: number; row: number }> {
+  const cells = new Map<Id, { column: number; row: number }>();
+  const frame = tx.store.get(frameId);
+  if (!isAutoLayoutFrame(frame) || frame.layoutMode !== 'GRID') return cells;
+  const children = flowChildren(tx, frameId);
+  const result = layoutGrid(gridContainer(frame), children.map((child) => gridItem(child, { width: 0, height: 0, horizontalSizing: 'FIXED', verticalSizing: 'FIXED' })));
+  children.forEach((child, i) => cells.set(child.id, result.cells[i]!));
+  return cells;
+}
+
 /**
  * Lays out one auto layout frame's children and fits the frame when it hugs. Returns whether the
  * frame's size changed and which children were resized.
@@ -105,7 +151,10 @@ function layoutFrame(tx: Transaction, frameId: Id, layout: TextLayoutService | n
         ...(axisAligned ? { minWidth: child.minWidth, maxWidth: child.maxWidth, minHeight: child.minHeight, maxHeight: child.maxHeight } : {}),
       };
     });
-    const result = layoutFlow(
+    const result =
+      frame.layoutMode === 'GRID'
+        ? layoutGrid(gridContainer(frame), children.map((child, i) => gridItem(child, items[i]!)))
+        : layoutFlow(
       {
         direction: frame.layoutMode,
         wrap: frame.layoutWrap === true,
@@ -193,10 +242,11 @@ const FRAME_FIELDS: ReadonlySet<string> = new Set([
   'maxWidth',
   'minHeight',
   'maxHeight',
+  ...GRID_FRAME_FIELDS,
 ]);
 
 /** Child fields that change its parent's layout. */
-const CHILD_FIELDS: ReadonlySet<string> = new Set(['size', 'transform', 'visible', 'layoutSizingHorizontal', 'layoutSizingVertical', 'textAutoResize', 'layoutPositioning', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight']);
+const CHILD_FIELDS: ReadonlySet<string> = new Set(['size', 'transform', 'visible', 'layoutSizingHorizontal', 'layoutSizingVertical', 'textAutoResize', 'layoutPositioning', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight', ...GRID_CHILD_FIELDS]);
 
 /**
  * Auto layout finalizer: lays out every auto layout frame affected by the transaction — its own
@@ -324,7 +374,7 @@ export function applyAutoLayout(tx: Transaction, frameId: Id, options: { readonl
 export function clearAutoLayout(tx: Transaction, frameId: Id): void {
   const frame = tx.store.get(frameId);
   if (!isAutoLayoutFrame(frame)) return;
-  for (const field of ['layoutMode', 'layoutWrap', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'itemSpacing', 'counterAxisSpacing', 'primaryAxisAlignItems', 'counterAxisAlignItems', 'itemReverseZIndex', 'strokesIncludedInLayout']) {
+  for (const field of ['layoutMode', 'layoutWrap', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'itemSpacing', 'counterAxisSpacing', 'primaryAxisAlignItems', 'counterAxisAlignItems', 'itemReverseZIndex', 'strokesIncludedInLayout', ...GRID_FRAME_FIELDS]) {
     tx.set(frameId, field, undefined);
   }
   if (frame.layoutSizingHorizontal === 'HUG') tx.set(frameId, 'layoutSizingHorizontal', undefined);
@@ -335,5 +385,78 @@ export function clearAutoLayout(tx: Transaction, frameId: Id): void {
     if (child.layoutSizingHorizontal === 'FILL') tx.set(id, 'layoutSizingHorizontal', undefined);
     if (child.layoutSizingVertical === 'FILL') tx.set(id, 'layoutSizingVertical', undefined);
     if (child.layoutPositioning) tx.set(id, 'layoutPositioning', undefined);
+    for (const field of GRID_CHILD_FIELDS) if (child[field] !== undefined) tx.set(id, field, undefined);
   }
+}
+
+/**
+ * Switches a frame to the grid flow (giving it auto layout first when needed): as many 1fr columns as
+ * its first row of children, with its gap between columns and between rows.
+ */
+export function applyGridLayout(tx: Transaction, frameId: Id): void {
+  const store = tx.store;
+  if (store.get(frameId)?.type !== 'FRAME') return;
+  if (!isAutoLayoutFrame(store.get(frameId))) applyAutoLayout(tx, frameId);
+  const frame = store.get(frameId);
+  if (!isAutoLayoutFrame(frame) || frame.layoutMode === 'GRID') return;
+  const children = flowChildren(tx, frameId).map((child) => ({ id: child.id, box: boundsInParent(child) }));
+  const boxes = children.map((c) => c.box);
+  const top = boxes.length > 0 ? boxes.reduce((a, b) => (b.y < a.y ? b : a)) : null;
+  const left = boxes.length > 0 ? boxes.reduce((a, b) => (b.x < a.x ? b : a)) : null;
+  const firstRow = top ? boxes.filter((b) => b.y < top.y + top.height / 2).sort((a, b) => a.x - b.x) : [];
+  const firstColumn = left ? boxes.filter((b) => b.x < left.x + left.width / 2).sort((a, b) => a.y - b.y) : [];
+  const columns = Math.max(1, firstRow.length);
+  const averageGap = (sorted: readonly Rect[], axis: 'x' | 'y') => {
+    const size = axis === 'x' ? 'width' : 'height';
+    const gaps = sorted.slice(1).map((b, i) => b[axis] - sorted[i]![axis] - sorted[i]![size]);
+    return gaps.length > 0 ? Math.max(0, Math.round(gaps.reduce((sum, g) => sum + g, 0) / gaps.length)) : null;
+  };
+  const gap = averageGap(firstRow, 'x') ?? Math.max(0, frame.itemSpacing ?? 0);
+  const rowGap = averageGap(firstColumn, 'y') ?? gap;
+  // Cells fill in reading order: children on the same row (overlapping vertically) left to right.
+  const reading = [...children].sort((a, b) => (Math.abs(a.box.y - b.box.y) < Math.min(a.box.height, b.box.height) / 2 ? a.box.x - b.box.x : a.box.y - b.box.y)).map((c) => c.id);
+  const flowIds = store.children(frameId).filter((id) => reading.includes(id));
+  if (reading.some((id, i) => flowIds[i] !== id)) {
+    const others = store.children(frameId).filter((id) => !reading.includes(id));
+    const keys = keysBetween(null, null, reading.length + others.length);
+    [...reading, ...others].forEach((id, i) => tx.set(id, 'parent', { id: frameId, key: keys[i]! }));
+  }
+  tx.set(frameId, 'layoutMode', 'GRID');
+  tx.set(frameId, 'gridColumnSizes', Array.from({ length: columns }, () => FLEX_TRACK));
+  tx.set(frameId, 'gridColumnGap', gap > 0 ? gap : undefined);
+  tx.set(frameId, 'gridRowGap', rowGap > 0 ? rowGap : undefined);
+  for (const field of ['layoutWrap', 'itemSpacing', 'counterAxisSpacing', 'primaryAxisAlignItems', 'counterAxisAlignItems']) tx.set(frameId, field, undefined);
+}
+
+/** Leaves the grid flow (before switching to horizontal or vertical): the column gap becomes the gap between items. */
+export function clearGridLayout(tx: Transaction, frameId: Id): void {
+  const frame = tx.store.get(frameId);
+  if (!isAutoLayoutFrame(frame) || frame.layoutMode !== 'GRID') return;
+  tx.set(frameId, 'itemSpacing', frame.gridColumnGap);
+  for (const field of GRID_FRAME_FIELDS) tx.set(frameId, field, undefined);
+  for (const id of tx.store.children(frameId)) {
+    const child = tx.store.get(id);
+    if (!child || !isSceneNode(child)) continue;
+    for (const field of GRID_CHILD_FIELDS) if (child[field] !== undefined) tx.set(id, field, undefined);
+  }
+}
+
+/** Turns a grid's automatic positioning off (children keep their current cells) or back on (rows become Auto). */
+export function setGridAutoPositioning(tx: Transaction, frameId: Id, on: boolean): void {
+  const frame = tx.store.get(frameId);
+  if (!isAutoLayoutFrame(frame) || frame.layoutMode !== 'GRID') return;
+  if (on) {
+    tx.set(frameId, 'gridAutoPositioning', undefined);
+    tx.set(frameId, 'gridRowSizes', undefined);
+    for (const id of tx.store.children(frameId)) {
+      tx.set(id, 'gridColumn', undefined);
+      tx.set(id, 'gridRow', undefined);
+    }
+    return;
+  }
+  for (const [id, cell] of gridCells(tx, frameId)) {
+    tx.set(id, 'gridColumn', cell.column);
+    tx.set(id, 'gridRow', cell.row);
+  }
+  tx.set(frameId, 'gridAutoPositioning', false);
 }

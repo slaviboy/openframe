@@ -21,7 +21,7 @@ import { BLACK, createEmptyDocument, keyOnTop, makeFrame, makeRectangle, solid }
 import { History } from '../history/history';
 import { IdGenerator } from '../ids/ids';
 import type { FrameNode, SceneNode } from '../schema/document';
-import { applyAutoLayout, clearAutoLayout, createAutoLayoutFinalizer, stackingOrder } from './auto-layout';
+import { applyAutoLayout, applyGridLayout, clearAutoLayout, clearGridLayout, createAutoLayoutFinalizer, setGridAutoPositioning, stackingOrder } from './auto-layout';
 
 function setup() {
   const ids = new IdGenerator('a');
@@ -160,5 +160,43 @@ describe('auto layout', () => {
     expect(stackingOrder(node, store.children(frame))).toEqual([a, b, abs]);
     history.run('first on top', (tx) => tx.set(frame, 'itemReverseZIndex', true));
     expect(stackingOrder(store.getOrThrow(frame), store.children(frame))).toEqual([abs, b, a]);
+  });
+
+  test('grid flow: columns and gaps from the arrangement, spans, manual positioning, and switching back', () => {
+    const { ids, store, history, page, box, node } = setup();
+    const frame = ids.next();
+    const kids = [ids.next(), ids.next(), ids.next(), ids.next()];
+    history.run('create', (tx) => {
+      tx.create(makeFrame({ id: frame, parent: { id: page, key: keyOnTop(store, page) }, name: 'F', x: 0, y: 0, width: 230, height: 230 }));
+      // Two rows of two 100 px squares, 10 px apart and 10 px from the edges; created in reverse order.
+      [...kids].reverse().forEach((id) => {
+        const i = kids.indexOf(id);
+        tx.create(makeRectangle({ id, parent: { id: frame, key: keyOnTop(store, frame) }, name: id, x: 10 + (i % 2) * 110, y: 10 + Math.floor(i / 2) * 110, width: 100, height: 100 }));
+      });
+    });
+    history.run('grid', (tx) => applyGridLayout(tx, frame));
+    expect(node<FrameNode>(frame)).toMatchObject({ layoutMode: 'GRID', gridColumnGap: 10, gridRowGap: 10, paddingLeft: 10, layoutSizingHorizontal: 'HUG' });
+    expect(node<FrameNode>(frame).gridColumnSizes).toHaveLength(2);
+    expect(store.children(frame)).toEqual(kids);
+    expect(box(kids[3]!)).toMatchObject({ x: 120, y: 120 });
+    expect(box(frame)).toMatchObject({ width: 230, height: 230 });
+
+    history.run('span', (tx) => tx.set(kids[0]!, 'gridColumnSpan', 2));
+    expect(box(kids[3]!)).toMatchObject({ x: 10, y: 230 });
+    expect(box(frame).height).toBe(340);
+
+    // Manual positioning keeps each child in its cell when a sibling is hidden.
+    history.run('manual', (tx) => setGridAutoPositioning(tx, frame, false));
+    expect(node(kids[3]!)).toMatchObject({ gridColumn: 0, gridRow: 2 });
+    history.run('hide', (tx) => tx.set(kids[1]!, 'visible', false));
+    expect(box(kids[2]!).x).toBe(120);
+
+    history.run('horizontal', (tx) => {
+      clearGridLayout(tx, frame);
+      tx.set(frame, 'layoutMode', 'HORIZONTAL');
+    });
+    expect(node(kids[0]!).gridColumnSpan).toBeUndefined();
+    expect(node<FrameNode>(frame)).toMatchObject({ layoutMode: 'HORIZONTAL', itemSpacing: 10 });
+    expect(box(kids[2]!).x).toBe(120);
   });
 });

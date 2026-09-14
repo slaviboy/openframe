@@ -105,8 +105,10 @@ function nudge(e: Editor, dx: number, dy: number): void {
     e.history.run('Reorder', (tx) => {
       for (const id of dx > 0 || dy > 0 ? [...ids].reverse() : ids) {
         const frame = tx.store.get(tx.store.parentOf(id)!);
-        const horizontal = frame?.type === 'FRAME' && frame.layoutMode === 'HORIZONTAL';
-        const delta = Math.sign(horizontal ? dx : dy);
+        const mode = frame?.type === 'FRAME' ? frame.layoutMode : undefined;
+        // In a grid, ←/→ move one cell and ↑/↓ one row.
+        const columns = frame?.type === 'FRAME' ? (frame.gridColumnSizes?.length ?? 1) : 1;
+        const delta = mode === 'GRID' ? Math.sign(dx) + Math.sign(dy) * columns : Math.sign(mode === 'HORIZONTAL' ? dx : dy);
         if (delta !== 0) moveInFlow(tx, id, delta);
       }
     });

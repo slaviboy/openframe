@@ -17,7 +17,8 @@
 
 import { useState } from 'react';
 import type { Transaction } from '@/core/history/history';
-import { applyAutoLayout, clearAutoLayout, horizontalSizing, isAutoLayoutFrame, verticalSizing } from '@/core/layout/auto-layout';
+import { applyAutoLayout, applyGridLayout, clearAutoLayout, clearGridLayout, horizontalSizing, isAutoLayoutFrame, verticalSizing } from '@/core/layout/auto-layout';
+import { GridLayoutFields } from './GridLayoutFields';
 import type { CounterAlign, FlowDirection, PrimaryAlign, Sizing } from '@/core/layout/flow-layout';
 import type { FrameNode, SceneNode } from '@/core/schema/document';
 import { setLayoutSizing, setSizeLimit, type SizeLimitField } from '@/editor/commands/auto-layout';
@@ -143,13 +144,18 @@ export function AutoLayoutFields({ frames }: { frames: FrameNode[] }) {
   const mode = shared(frames, (f) => f.layoutMode ?? 'NONE');
   const direction: FlowDirection | null = mode === 'HORIZONTAL' || mode === 'VERTICAL' ? mode : null;
 
-  const setFlow = (next: FlowDirection | 'NONE') =>
+  const setFlow = (next: FlowDirection | 'GRID' | 'NONE') =>
     run(next === 'NONE' ? 'Remove auto layout' : 'Change auto layout direction', (tx, f) => {
       if (next === 'NONE') {
         clearAutoLayout(tx, f.id);
         return;
       }
+      if (next === 'GRID') {
+        applyGridLayout(tx, f.id);
+        return;
+      }
       if (!f.layoutMode) applyAutoLayout(tx, f.id);
+      if (f.layoutMode === 'GRID') clearGridLayout(tx, f.id);
       tx.set(f.id, 'layoutMode', next);
       if (next === 'VERTICAL') {
         tx.set(f.id, 'layoutWrap', undefined);
@@ -162,6 +168,7 @@ export function AutoLayoutFields({ frames }: { frames: FrameNode[] }) {
       <IconButton icon="layoutFreeform" label="Freeform" pressed={mode === 'NONE'} onClick={() => setFlow('NONE')} />
       <IconButton icon="layoutVertical" label="Vertical layout" pressed={mode === 'VERTICAL'} onClick={() => setFlow('VERTICAL')} />
       <IconButton icon="layoutHorizontal" label="Horizontal layout" pressed={mode === 'HORIZONTAL'} onClick={() => setFlow('HORIZONTAL')} />
+      <IconButton icon="layoutGrid" label="Grid layout" pressed={mode === 'GRID'} onClick={() => setFlow('GRID')} />
       {direction === 'HORIZONTAL' && (
         <IconButton
           icon="wrap"
@@ -175,7 +182,16 @@ export function AutoLayoutFields({ frames }: { frames: FrameNode[] }) {
       )}
     </div>
   );
-  if (!direction) return flowButtons;
+  if (!direction) {
+    return mode === 'GRID' ? (
+      <>
+        {flowButtons}
+        <GridLayoutFields frames={frames} />
+      </>
+    ) : (
+      flowButtons
+    );
+  }
 
   const primary = valueOf(shared(frames, (f) => f.primaryAxisAlignItems ?? 'MIN'));
   const counter = valueOf(shared(frames, (f) => f.counterAxisAlignItems ?? 'MIN'));

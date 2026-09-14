@@ -43,6 +43,7 @@ import { backgroundColorBehind } from '@/core/color/contrast';
 import { useColorProfile } from '../../hooks/useColorProfile';
 import { ReorderHandle } from './ReorderHandle';
 import { AutoLayoutFields, LayoutSizingFields } from './AutoLayoutFields';
+import { GridChildFields } from './GridLayoutFields';
 import { setIgnoreAutoLayout } from '@/editor/commands/auto-layout';
 import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
 import type { FrameNode } from '@/core/schema/document';
@@ -603,6 +604,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             }}
           />
         )}
+        <GridChildFields nodes={nodes} />
       </Section>
       <Section title="Layout">
         <div className={styles.grid2}>
