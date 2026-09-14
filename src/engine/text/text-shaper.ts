@@ -24,6 +24,7 @@ import { FEATURE_PROBE_TEXT, isDefaultOnFeature, PROBED_FEATURES, toFontFeatures
 import { readFontAxes, type FontAxis } from '@/core/text/font-names';
 import { BUNDLED_FONT_AXES, mergeAxes, variationSettings } from '@/core/text/font-variations';
 import { resolveDirection } from '@/core/text/direction';
+import { balancedWidth, prettyWidth } from '@/core/text/wrap-style';
 import { parseFontStyle, VARIABLE_FONT_STYLES } from '@/core/text/font-style';
 import { nextGrapheme, previousGrapheme } from '@/core/text/text-editing';
 import type { FontFamilyInfo, TextCaretBox, TextLayoutService } from '@/core/text/text-layout';
@@ -65,6 +66,8 @@ const VERTICAL: Record<TextAlignVertical, number> = { TOP: 0, CENTER: 0.5, BOTTO
 const LIST_INDENT_EM = 1.5;
 /** Gap between a list marker and its item's text, in ems. */
 const LIST_MARKER_GAP_EM = 0.4;
+/** The most a Pretty wrap narrows a paragraph to avoid an orphan, as a share of its width. */
+const PRETTY_MAX_SHRINK = 0.2;
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
 
@@ -334,7 +337,9 @@ export class TextShaper implements TextLayoutService {
     const items: ListItem[] = styles.map((s) => ({ type: s.listType, level: s.indentation }));
     const counters = listCounters(items);
     // List items indent every line by level (wrapped lines hang); other paragraphs take the first-line indent.
-    const insets = items.map((item, i) => (item.type === 'NONE' ? 0 : clampLevel(item.level) * Math.round(styles[i]!.fontSize * LIST_INDENT_EM)));
+    // Hanging lists take one level off, so first-level markers sit outside the box and item text aligns with its edge.
+    const hang = node.hangingList ? 1 : 0;
+    const insets = items.map((item, i) => (item.type === 'NONE' ? 0 : (clampLevel(item.level) - hang) * Math.round(styles[i]!.fontSize * LIST_INDENT_EM)));
     const rtl = ranges.map((range, i) => resolveDirection(styles[i]!.textDirection, node.characters.slice(range.start, range.end)) === 'RTL');
     // Right-to-left list items are indented from the right, with the marker on that side.
     const lefts = insets.map((inset, i) => (rtl[i] ? 0 : inset));
@@ -351,6 +356,27 @@ export class TextShaper implements TextLayoutService {
     }
     const widthOf = (i: number) => Math.max(1, layoutWidth - insets[i]!);
     paragraphs.forEach((p, i) => p.layout(widthOf(i)));
+    // Wrap style: balanced or orphan-free paragraphs lay out narrower, aligned within the full width. Auto-width text never wraps.
+    const wraps = width !== null && !(width === 'box' && node.textAutoResize === 'WIDTH_AND_HEIGHT');
+    const wrapWidths = paragraphs.map((p, i) => {
+      const full = widthOf(i);
+      const style = styles[i]!.wrapStyle;
+      if (!wraps || style === 'AUTO') return full;
+      const range = ranges[i]!;
+      const prefix = indents[i]! > 0 ? 1 : 0;
+      const measure = (w: number) => {
+        p.layout(w);
+        const lines = p.getLineMetrics();
+        const last = lines[lines.length - 1];
+        const lastText = last ? node.characters.slice(fromParagraphOffset(range, last.startIndex, prefix), fromParagraphOffset(range, last.endIndex, prefix)) : '';
+        return { lines: lines.length, lastLineWords: lastText.trim().split(/\s+/).filter(Boolean).length };
+      };
+      const chosen = style === 'BALANCE' ? balancedWidth((w) => measure(w).lines, full) : prettyWidth(measure, full, full * PRETTY_MAX_SHRINK);
+      p.layout(chosen);
+      return chosen;
+    });
+    const alignFactor = { LEFT: 0, JUSTIFIED: 0, CENTER: 0.5, RIGHT: 1 }[node.textAlignHorizontal];
+    const shifts = wrapWidths.map((w, i) => (widthOf(i) - w) * alignFactor);
     // List spacing separates consecutive list items; paragraph spacing everything else.
     const gapBetween = (previous: number, next: number) => (items[previous]!.type !== 'NONE' && items[next]!.type !== 'NONE' ? listSpacing : spacing);
     const counts = paragraphs.map((p) => p.getLineMetrics().length);
@@ -383,7 +409,7 @@ export class TextShaper implements TextLayoutService {
       if (!hidden && budget < counts[i]!) {
         paragraph.delete();
         paragraph = this.buildParagraph(node, ranges[i]!, indents[i]!, rtl[i]!, painter, Math.max(1, budget));
-        paragraph.layout(widthOf(i));
+        paragraph.layout(wrapWidths[i]!);
       }
       if (!hidden && previous >= 0) top += gapBetween(previous, i);
       const height = hidden ? 0 : paragraph.getHeight();
@@ -399,7 +425,7 @@ export class TextShaper implements TextLayoutService {
           y: top + baseline - markerParagraph.getAlphabeticBaseline(),
         };
       }
-      layouts.push({ range: ranges[i]!, paragraph, prefix: indents[i]! > 0 ? 1 : 0, left: lefts[i]!, marker, top, height, hidden });
+      layouts.push({ range: ranges[i]!, paragraph, prefix: indents[i]! > 0 ? 1 : 0, left: lefts[i]! + shifts[i]!, marker, top, height, hidden });
       if (!hidden) {
         top += height;
         previous = i;

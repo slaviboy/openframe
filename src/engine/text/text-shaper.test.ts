@@ -175,6 +175,45 @@ describe('text shaping', () => {
     expect(shaper.caretAt(laid, 1).x).toBeCloseTo(20, 0);
   });
 
+  test('wrap styles balance lines or avoid an orphan without adding lines; hanging lists put markers outside', () => {
+    const lastLineWords = (node: TextNode) => {
+      const [start, end] = shaper.lineRange(node, node.characters.length);
+      return node.characters.slice(start, end).trim().split(/\s+/).length;
+    };
+    const rightmost = (node: TextNode) => Math.max(...shaper.selectionRects(node, 0, node.characters.length).map((r) => r.x + r.width));
+    const base = text({ characters: 'one two three four five six seven eight nine ten eleven', textAutoResize: 'HEIGHT' });
+    // Widths at which Auto leaves a single word on the last line: Pretty never adds a line, and fixes the orphan where it can.
+    let orphans = 0;
+    let fixed = 0;
+    let width = 0;
+    for (let w = 120; w < 400; w += 2) {
+      const auto = { ...base, size: { width: w, height: shaper.measure(base, w).height } };
+      if (auto.size.height <= 30 || lastLineWords(auto) !== 1) continue;
+      orphans++;
+      const pretty = { ...auto, wrapStyle: 'PRETTY' as const };
+      expect(shaper.measure(pretty, w).height).toBeCloseTo(auto.size.height, 0);
+      if (lastLineWords(pretty) >= 2) {
+        fixed++;
+        width ||= w;
+      }
+    }
+    expect(orphans).toBeGreaterThan(0);
+    expect(fixed).toBeGreaterThan(0);
+    const auto = { ...base, size: { width, height: shaper.measure(base, width).height } };
+    const balance = { ...auto, wrapStyle: 'BALANCE' as const };
+    expect(shaper.measure(balance, width).height).toBeCloseTo(auto.size.height, 0);
+    expect(rightmost(balance)).toBeLessThan(rightmost(auto) - 5);
+    // Centered balanced text stays centered in the box.
+    const centered = { ...balance, textAlignHorizontal: 'CENTER' as const };
+    const rects = shaper.selectionRects(centered, 0, centered.characters.length);
+    expect(Math.min(...rects.map((r) => r.x))).toBeGreaterThan(2);
+
+    const item = text({ characters: 'item', listType: 'UNORDERED' });
+    expect(shaper.caretAt({ ...item, size: shaper.measure(item, null) }, 0).x).toBeCloseTo(30, 0);
+    const hanging = { ...item, hangingList: true };
+    expect(shaper.caretAt({ ...hanging, size: shaper.measure(hanging, null) }, 0).x).toBeCloseTo(0, 0);
+  });
+
   test('letter case changes the shaped text and max lines limits the height', () => {
     const lower = shaper.measure(text({ characters: 'hello' }), null).width;
     expect(shaper.measure(text({ characters: 'hello', textCase: 'UPPER' }), null).width).toBeGreaterThan(lower);

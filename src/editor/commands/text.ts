@@ -69,7 +69,7 @@ export function setFontVariation(tx: Transaction, node: SceneNode, axis: string,
     range,
   );
 }
-import type { FontName, ListType, TextDirection } from '@/core/schema/document';
+import type { FontName, ListType, TextDirection, WrapStyle } from '@/core/schema/document';
 import { replaceFontInText } from '@/core/text/missing-fonts';
 import { resolveDirection } from '@/core/text/direction';
 
@@ -235,6 +235,25 @@ export function paragraphListTypes(node: TextNode, range: TextRange): ListType[]
   const from = range ? paragraphAt(ranges, Math.min(range.start, range.end)).index : 0;
   const to = range ? paragraphAt(ranges, Math.max(range.start, range.end)).index : ranges.length - 1;
   return ranges.slice(from, to + 1).map((r) => textStyleAt(node, paragraphStyleOffset(r)).listType);
+}
+
+/** Sets the wrap style of the paragraphs a range touches (or the whole layer). */
+export function setWrapStyle(tx: Transaction, node: SceneNode, wrapStyle: WrapStyle, range: TextRange = null): void {
+  const text = textOf(tx, node);
+  if (text) setTextStyle(tx, node, { wrapStyle }, range ? listSpan(text.characters, range) : null);
+}
+
+/** The wrap style of each paragraph a range touches (every paragraph without a range). */
+export function paragraphWrapStyles(node: TextNode, range: TextRange): WrapStyle[] {
+  const ranges = paragraphRanges(node.characters);
+  const from = range ? paragraphAt(ranges, Math.min(range.start, range.end)).index : 0;
+  const to = range ? paragraphAt(ranges, Math.max(range.start, range.end)).index : ranges.length - 1;
+  return ranges.slice(from, to + 1).map((r) => textStyleAt(node, paragraphStyleOffset(r)).wrapStyle);
+}
+
+/** Hanging lists: list markers outside the text box, so item text aligns with its edge. */
+export function setHangingList(tx: Transaction, node: SceneNode, hanging: boolean): void {
+  if (textOf(tx, node)) tx.set(node.id, 'hangingList', hanging ? true : undefined);
 }
 
 /** Sets the direction of the paragraphs a range touches (or the whole layer): left to right, right to left, or detected (AUTO). */

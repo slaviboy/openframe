@@ -161,6 +161,10 @@ The decision record is [ADR 0001](adr/0001-renderer-canvaskit.md). In short:
   - **Lists** ([`core/text/lists.ts`](../src/core/text/lists.ts)): a paragraph's `listType` and `indentation` come from its first character (`paragraphStyleOffset`). A list item is laid out narrower and drawn shifted right by level × 1.5 em (the `left` of its layout), so wrapped lines hang under the first; carets, hit testing and selection rectangles add the same offset. It takes no first-line indent.
     - The marker ("•", or "1." / "a." / "i." by level from `listCounters`) is a separate one-line SkParagraph in the item's style without decoration or letter case. It is drawn 0.4 em before the text, on the first line's baseline.
     - `listSpacing` replaces `paragraphSpacing` between two consecutive list items.
+    - `hangingList` removes one indentation level, so first-level markers are drawn left of the box (right of it for right-to-left items).
+  - **Wrap style** ([`core/text/wrap-style.ts`](../src/core/text/wrap-style.ts)): after the normal layout, a paragraph set to `BALANCE` or `PRETTY` is laid out again at a narrower width. Balance uses `balancedWidth`, a binary search for the narrowest width with the same line count. Pretty uses `prettyWidth`, the widest width at most 20% narrower whose last line has two or more words and the same line count.
+    - The narrower paragraph is offset in the box by the alignment (half the difference when centered, all of it when right-aligned) through its layout's `left`, so carets, hit testing and selection follow.
+    - Truncation rebuilds use the same width. Auto-width text isn't wrapped, so the style has no effect there.
 - **Layout by `textAutoResize`:**
   - Auto width is laid out at its natural width (never narrower than the box).
   - Everything else wraps to the box width.

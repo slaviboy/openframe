@@ -50,14 +50,30 @@ import {
 import { TEXT_CASE_LABELS } from '@/core/text/letter-case';
 import type { TextCase } from '@/core/schema/document';
 import { textSelectionRange, textStyleRange } from '@/editor/interactions/text-edit';
-import { changeIndentation, paragraphDirections, paragraphListTypes, setListSpacing, setListType, setTextDirection } from '@/editor/commands/text';
+import {
+  changeIndentation,
+  paragraphDirections,
+  paragraphListTypes,
+  paragraphWrapStyles,
+  setHangingList,
+  setListSpacing,
+  setListType,
+  setTextDirection,
+  setWrapStyle,
+} from '@/editor/commands/text';
 import { containsRtl } from '@/core/text/direction';
-import type { ListType } from '@/core/schema/document';
+import type { ListType, WrapStyle } from '@/core/schema/document';
 
 const LIST_OPTIONS: readonly (readonly [ListType, string])[] = [
   ['NONE', 'No list'],
   ['UNORDERED', 'Bulleted list'],
   ['ORDERED', 'Numbered list'],
+];
+
+const WRAP_OPTIONS: readonly (readonly [WrapStyle, string])[] = [
+  ['AUTO', 'Wrap: Auto'],
+  ['BALANCE', 'Wrap: Balance'],
+  ['PRETTY', 'Wrap: Pretty'],
 ];
 import type { IconName } from '../../icons/Icon';
 import { useEditor, useEditorState } from '../../hooks/useEditor';
@@ -158,6 +174,8 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
   // Direction controls appear once right-to-left script is in the text; like lists they apply to paragraphs.
   const hasRtl = nodes.some((n) => containsRtl(n.characters));
   const direction = single([...new Set(nodes.flatMap((n) => paragraphDirections(n, listRange)))]);
+  const wrapStyle = single([...new Set(nodes.flatMap((n) => paragraphWrapStyles(n, listRange)))]);
+  const hangingList = single([...new Set(nodes.map((n) => n.hangingList ?? false))]);
   const hAlign = shared(nodes, (n) => n.textAlignHorizontal);
   const vAlign = shared(nodes, (n) => n.textAlignVertical);
   const run = (label: string, apply: (tx: Transaction, node: TextNode) => void) => editor.history.run(label, (tx) => nodes.forEach((n) => apply(tx, n)));
@@ -281,6 +299,18 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
             value={listSpacing}
             onChange={(v) => run('Change list spacing', (tx, n) => setListSpacing(tx, n, v))}
           />
+          <label className={styles.checkbox}>
+            <input type="checkbox" checked={hangingList === true} onChange={(e) => run('Change hanging lists', (tx, n) => setHangingList(tx, n, e.target.checked))} />
+            Hanging lists
+          </label>
+          <select className={primitives.select} aria-label="Wrap style" value={wrapStyle ?? ''} onChange={(e) => run('Change wrap style', (tx, n) => setWrapStyle(tx, n, e.target.value as WrapStyle, listRange))}>
+            {wrapStyle === undefined && <option value="">Mixed</option>}
+            {WRAP_OPTIONS.map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
           <div className={styles.grid2}>
             <NumberField
               label="¶↕"

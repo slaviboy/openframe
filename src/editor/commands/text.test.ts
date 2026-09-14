@@ -23,6 +23,9 @@ import { Editor } from '../editor';
 import { applyScale, captureScale } from '../interactions/scale';
 import { setSize } from './properties';
 import {
+  paragraphWrapStyles,
+  setHangingList,
+  setWrapStyle,
   replaceFonts,
   paragraphDirections,
   setTextDirection,
@@ -259,6 +262,21 @@ describe('text properties', () => {
     expect(get().fontName).toEqual({ family: 'Inter', style: 'Bold' });
     editor.history.undo();
     expect(get().fontName).toEqual({ family: 'Gone Sans', style: 'Regular' });
+  });
+
+  test('wrap style applies to paragraphs and hanging lists to the layer', () => {
+    editor.history.run('type', (tx) => tx.set(id, 'characters', 'one\ntwo'));
+    editor.history.run('wrap', (tx) => setWrapStyle(tx, get(), 'BALANCE', { start: 5, end: 5 }));
+    expect(paragraphWrapStyles(get(), null)).toEqual(['AUTO', 'BALANCE']);
+    editor.history.run('wrap', (tx) => setWrapStyle(tx, get(), 'PRETTY'));
+    expect(get().wrapStyle).toBe('PRETTY');
+    expect(get().styleRuns).toBeUndefined();
+    editor.history.run('wrap', (tx) => setWrapStyle(tx, get(), 'AUTO'));
+    expect(get().wrapStyle).toBeUndefined();
+    editor.history.run('hang', (tx) => setHangingList(tx, get(), true));
+    expect(get().hangingList).toBe(true);
+    editor.history.run('hang', (tx) => setHangingList(tx, get(), false));
+    expect(get().hangingList).toBeUndefined();
   });
 
   test('the Scale tool scales font size and pixel spacing', () => {

@@ -16,7 +16,7 @@
  */
 
 import { valuesEqual } from '../ops/equality';
-import type { FontName, FontVariations, Hyperlink, LetterSpacing, LineHeight, ListType, OpenTypeFeatures, Paint, TextCase, TextDecoration, TextDirection, TextNode } from '../schema/document';
+import type { FontName, FontVariations, Hyperlink, LetterSpacing, LineHeight, ListType, OpenTypeFeatures, Paint, TextCase, TextDecoration, TextDirection, TextNode, WrapStyle } from '../schema/document';
 
 /**
  * Mixed styles within a text layer. The layer's own properties are the default style; `styleRuns`
@@ -45,6 +45,8 @@ export interface TextStyle {
   readonly fontVariations: FontVariations;
   /** Paragraph direction: detected (AUTO), left to right or right to left. */
   readonly textDirection: TextDirection;
+  /** Paragraph wrap style. */
+  readonly wrapStyle: WrapStyle;
 }
 
 export type TextStyleKey = keyof TextStyle;
@@ -62,7 +64,7 @@ export interface TextSegment extends TextStyle {
   readonly end: number;
 }
 
-export const TEXT_STYLE_KEYS: readonly TextStyleKey[] = ['fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'fills', 'textDecoration', 'textCase', 'listType', 'indentation', 'hyperlink', 'openTypeFeatures', 'fontVariations', 'textDirection'];
+export const TEXT_STYLE_KEYS: readonly TextStyleKey[] = ['fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'fills', 'textDecoration', 'textCase', 'listType', 'indentation', 'hyperlink', 'openTypeFeatures', 'fontVariations', 'textDirection', 'wrapStyle'];
 
 export type RunsNode = Pick<TextNode, 'characters' | 'fontName' | 'fontSize' | 'lineHeight' | 'letterSpacing' | 'fills'> & {
   readonly styleRuns?: readonly TextStyleRun[] | undefined;
@@ -74,6 +76,7 @@ export type RunsNode = Pick<TextNode, 'characters' | 'fontName' | 'fontSize' | '
   readonly openTypeFeatures?: OpenTypeFeatures | undefined;
   readonly fontVariations?: FontVariations | undefined;
   readonly textDirection?: TextDirection | undefined;
+  readonly wrapStyle?: WrapStyle | undefined;
 };
 
 const NO_FEATURES: OpenTypeFeatures = {};
@@ -95,6 +98,7 @@ export function baseTextStyle(node: RunsNode): TextStyle {
     openTypeFeatures: node.openTypeFeatures ?? NO_FEATURES,
     fontVariations: node.fontVariations ?? NO_VARIATIONS,
     textDirection: node.textDirection ?? 'AUTO',
+    wrapStyle: node.wrapStyle ?? 'AUTO',
   };
 }
 
@@ -102,7 +106,7 @@ export function baseTextStyle(node: RunsNode): TextStyle {
 export function layerFieldValue<K extends TextStyleKey>(key: K, value: TextStyle[K]): TextStyle[K] | undefined {
   if ((key === 'textDecoration' && value === 'NONE') || (key === 'textCase' && value === 'ORIGINAL') || (key === 'listType' && value === 'NONE') || (key === 'indentation' && value === 1) || (key === 'hyperlink' && value === null)) return undefined;
   if ((key === 'openTypeFeatures' || key === 'fontVariations') && Object.keys(value as object).length === 0) return undefined;
-  if (key === 'textDirection' && value === 'AUTO') return undefined;
+  if ((key === 'textDirection' || key === 'wrapStyle') && value === 'AUTO') return undefined;
   return value;
 }
 

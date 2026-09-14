@@ -21,7 +21,7 @@ import type { TextNode } from '../schema/document';
 import type { TextLayoutService } from './text-layout';
 
 /** Fields whose change can change a text layer's box or name. */
-const TEXT_FIELDS: ReadonlySet<string> = new Set(['characters', 'fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'styleRuns', 'textCase', 'maxLines', 'paragraphSpacing', 'paragraphIndent', 'listType', 'indentation', 'listSpacing', 'openTypeFeatures', 'fontVariations', 'textDirection', 'textAlignHorizontal', 'textAutoResize', 'size', 'autoRename']);
+const TEXT_FIELDS: ReadonlySet<string> = new Set(['characters', 'fontName', 'fontSize', 'lineHeight', 'letterSpacing', 'styleRuns', 'textCase', 'maxLines', 'paragraphSpacing', 'paragraphIndent', 'listType', 'indentation', 'listSpacing', 'openTypeFeatures', 'fontVariations', 'textDirection', 'wrapStyle', 'hangingList', 'textAlignHorizontal', 'textAutoResize', 'size', 'autoRename']);
 
 /** Renames a layer; a text layer stops following its content once renamed. */
 export function renameLayer(tx: Transaction, id: Id, name: string): void {
