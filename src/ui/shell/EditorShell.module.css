@@ -298,3 +298,14 @@
   background: var(--bg-hover);
   color: var(--fg-primary);
 }
+
+button.tab {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+button.tab:not([data-active]) {
+  color: var(--fg-secondary);
+}

@@ -87,6 +87,64 @@ export const ExportSettingSchema = z.object({
 });
 export type ExportSetting = z.infer<typeof ExportSettingSchema>;
 
+/** Prototype easing: a bezier or spring preset, or a custom curve or spring. */
+export const PrototypeEasingSchema = z.union([
+  z.object({ type: z.enum(['LINEAR', 'EASE_IN', 'EASE_OUT', 'EASE_IN_AND_OUT', 'EASE_IN_BACK', 'EASE_OUT_BACK', 'EASE_IN_AND_OUT_BACK', 'GENTLE', 'QUICK', 'BOUNCY', 'SLOW']) }),
+  z.object({ type: z.literal('CUSTOM_CUBIC_BEZIER'), x1: z.number().min(0).max(1), y1: z.number().min(-10).max(10), x2: z.number().min(0).max(1), y2: z.number().min(-10).max(10) }),
+  z.object({ type: z.literal('CUSTOM_SPRING'), stiffness: z.number().positive().max(10_000), damping: z.number().min(0).max(1000), mass: z.number().positive().max(100) }),
+]);
+export type PrototypeEasing = z.infer<typeof PrototypeEasingSchema>;
+
+const transitionDuration = z.number().int().min(1).max(10_000);
+
+/** How a prototype moves to its destination (the interaction's animation). */
+export const PrototypeTransitionSchema = z.union([
+  z.object({ type: z.literal('INSTANT') }),
+  z.object({ type: z.enum(['DISSOLVE', 'SMART_ANIMATE']), easing: PrototypeEasingSchema, duration: transitionDuration }),
+  z.object({
+    type: z.enum(['MOVE_IN', 'MOVE_OUT', 'PUSH', 'SLIDE_IN', 'SLIDE_OUT']),
+    direction: z.enum(['LEFT', 'RIGHT', 'TOP', 'BOTTOM']),
+    /** Animate matching layers: smart animate layers that match between the frames. */
+    matchLayers: z.boolean(),
+    easing: PrototypeEasingSchema,
+    duration: transitionDuration,
+  }),
+]);
+export type PrototypeTransition = z.infer<typeof PrototypeTransitionSchema>;
+
+/** What starts an interaction. */
+export const PrototypeTriggerSchema = z.union([
+  z.object({ type: z.enum(['ON_CLICK', 'ON_DRAG', 'ON_HOVER', 'ON_PRESS', 'MOUSE_ENTER', 'MOUSE_LEAVE', 'MOUSE_DOWN', 'MOUSE_UP']) }),
+  /** After delay, in milliseconds. */
+  z.object({ type: z.literal('AFTER_TIMEOUT'), timeout: z.number().int().min(0).max(600_000) }),
+  /** A key or a combination of keys (KeyboardEvent codes, modifiers first). */
+  z.object({ type: z.literal('ON_KEY_DOWN'), keys: z.array(z.string().min(1).max(32)).min(1).max(6) }),
+]);
+export type PrototypeTrigger = z.infer<typeof PrototypeTriggerSchema>;
+
+/** What an interaction does. */
+export const PrototypeActionSchema = z.union([
+  z.object({
+    type: z.literal('NODE'),
+    navigation: z.enum(['NAVIGATE', 'OVERLAY', 'SWAP', 'SCROLL_TO']),
+    /** The destination layer; null until one is chosen. */
+    destinationId: IdSchema.nullable(),
+    transition: PrototypeTransitionSchema,
+    /** State management: reset the destination's scroll position. */
+    resetScrollPosition: z.boolean().optional(),
+  }),
+  z.object({ type: z.enum(['BACK', 'CLOSE']) }),
+  z.object({ type: z.literal('URL'), url: z.string().max(4096) }),
+]);
+export type PrototypeAction = z.infer<typeof PrototypeActionSchema>;
+
+/** A prototype interaction: a trigger and the actions it runs, in order. */
+export const ReactionSchema = z.object({
+  trigger: PrototypeTriggerSchema,
+  actions: z.array(PrototypeActionSchema).min(1).max(32),
+});
+export type Reaction = z.infer<typeof ReactionSchema>;
+
 /** A reference to a variable: a variable's value that follows another variable, or a property bound to a variable. */
 export const VariableAliasSchema = z.object({ type: z.literal('VARIABLE_ALIAS'), id: IdSchema });
 
@@ -330,6 +388,8 @@ const SceneFields = {
   explicitVariableModes: ExplicitVariableModesSchema.optional(),
   /** Export configurations (the Export section), in order. Absent when the layer has none. */
   exportSettings: z.array(ExportSettingSchema).max(64).optional(),
+  /** Prototype interactions starting on this layer (the Prototype tab), in order. Absent when the layer has none. */
+  reactions: z.array(ReactionSchema).max(64).optional(),
   /** Inside a main component or variant: the component properties (by name) this layer's visibility and text, or for a nested instance its component, follow. */
   componentPropertyReferences: z
     .object({

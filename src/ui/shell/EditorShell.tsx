@@ -28,6 +28,7 @@ import { LayersPanel } from '../panels/layers/LayersPanel';
 import { PagesPanel } from '../panels/pages/PagesPanel';
 import { VariablesView } from '../panels/variables/VariablesView';
 import { VersionHistoryPanel } from '../panels/versions/VersionHistoryPanel';
+import { PrototypePanel } from '../panels/prototype/PrototypePanel';
 import { Menu } from '../primitives/Menu';
 import { PropertyLabelsContext } from '../primitives/property-labels';
 import { viewPrefs } from '../view/view-prefs';
@@ -62,6 +63,7 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
   const variablesOpen = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().variablesOpen);
   const propertyLabels = useSyncExternalStore(viewPrefs.subscribe, () => viewPrefs.getSnapshot().propertyLabels);
   const versionHistoryOpen = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().versionHistoryOpen);
+  const rightTab = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().rightTab);
   const viewingVersion = useSyncExternalStore(session.session.subscribe, () => session.session.getSnapshot().viewing !== null);
   // Version history replaces the properties panel while it is open, and while an earlier version is shown.
   const inVersionHistory = versionHistoryOpen || viewingVersion;
@@ -162,9 +164,13 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
             ) : (
               <>
                 <RightHeader />
-                <PropertyLabelsContext.Provider value={propertyLabels}>
-                  <Inspector />
-                </PropertyLabelsContext.Provider>
+                {rightTab === 'prototype' ? (
+                  <PrototypePanel />
+                ) : (
+                  <PropertyLabelsContext.Provider value={propertyLabels}>
+                    <Inspector />
+                  </PropertyLabelsContext.Provider>
+                )}
               </>
             )}
           </aside>
@@ -308,14 +314,17 @@ function MultiEditVariantsButton() {
 function RightHeader() {
   const editor = useEditor();
   const zoom = useEditorState((s) => s.viewports[s.activePageId]?.zoom ?? 1);
+  const rightTab = useEditorState((s) => s.rightTab);
   const [anchor, setAnchor] = useState<Box | null>(null);
   const close = useCallback(() => setAnchor(null), []);
   return (
     <div className={styles.rightHeader}>
       <div className={styles.tabs} role="tablist" aria-label="Properties panel">
-        <span role="tab" aria-selected="true" className={styles.tab} data-active>
-          Design
-        </span>
+        {(['design', 'prototype'] as const).map((tab) => (
+          <button key={tab} type="button" role="tab" aria-selected={rightTab === tab} className={styles.tab} data-active={rightTab === tab || undefined} onClick={() => editor.state.setRightTab(tab)}>
+            {tab === 'design' ? 'Design' : 'Prototype'}
+          </button>
+        ))}
       </div>
       <MultiEditTextButton />
       <MultiEditVariantsButton />
