@@ -113,6 +113,8 @@ export interface RenderOptions {
   readonly only?: Id;
   /** Presentation view: the current frame of a playing video fill, by video hash (null draws its poster). */
   readonly videoFrame?: (videoHash: string) => CkImage | null;
+  /** Presentation view: the current frame of an animated GIF image fill, by image hash (null draws the stored image). */
+  readonly imageFrame?: (imageHash: string) => CkImage | null;
 }
 
 interface DrawContext {
@@ -171,6 +173,8 @@ export class SceneRenderer {
   private profile: ColorProfile = 'SRGB';
   /** The current frames of video fills while rendering (presentation view). */
   private videoFrame: ((videoHash: string) => CkImage | null) | null = null;
+  /** The current frames of animated GIFs while rendering (presentation view). */
+  private imageFrame: ((imageHash: string) => CkImage | null) | null = null;
 
   constructor(
     private readonly ck: CanvasKit,
@@ -223,6 +227,7 @@ export class SceneRenderer {
     const start = performance.now();
     this.profile = options.colorProfile ?? 'SRGB';
     this.videoFrame = options.videoFrame ?? null;
+    this.imageFrame = options.imageFrame ?? null;
     this.drawStore = store;
     const stats: RenderStats = { drawn: 0, culled: 0, ms: 0 };
     const page = store.get(pageId);
@@ -1532,7 +1537,7 @@ export class SceneRenderer {
       target.setColor(shader ? this.ck.Color4f(1, 1, 1, paint.opacity) : this.ck.TRANSPARENT);
     } else if (paint.type === 'IMAGE' || paint.type === 'VIDEO') {
       // A video fill shows its poster, or in presentation view the current frame of the video playing.
-      const frame = paint.type === 'VIDEO' ? (this.videoFrame?.(paint.videoHash) ?? null) : null;
+      const frame = paint.type === 'VIDEO' ? (this.videoFrame?.(paint.videoHash) ?? null) : paint.imageHash ? (this.imageFrame?.(paint.imageHash) ?? null) : null;
       const shader = this.imageShader(paint.type === 'VIDEO' ? { ...paint, type: 'IMAGE' } : paint, size, frame);
       target.setShader(shader);
       shader.delete();

@@ -50,6 +50,19 @@ export function videoFillsOf(node: SceneNode | undefined): VideoFill[] {
   return out;
 }
 
+/** The images of the visible image fills in a frame and the visible layers in it (animated GIFs play from them). */
+export function imageHashesIn(store: DocumentStore, frameId: Id): string[] {
+  const out = new Set<string>();
+  const visit = (id: Id) => {
+    const node = store.get(id);
+    if (!node || !('transform' in node) || !node.visible) return;
+    if ('fills' in node) for (const paint of node.fills) if (paint.type === 'IMAGE' && paint.visible && paint.imageHash) out.add(paint.imageHash);
+    store.children(id).forEach(visit);
+  };
+  visit(frameId);
+  return [...out];
+}
+
 /** The visible video fills in a frame and the visible layers in it, in layer order. */
 export function videoFillsIn(store: DocumentStore, frameId: Id): VideoFill[] {
   const out: VideoFill[] = [];

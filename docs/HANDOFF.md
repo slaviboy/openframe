@@ -121,9 +121,14 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - `mediaReactions` in player.ts
     - `controlVideo` / `resetVideos` / `onVideoTime` in presentation-renderer.ts
 
+  - Animated GIFs (the commit after video triggers and actions):
+    - `gifFor` / `gifImage` in presentation-renderer.ts play GIFs with CanvasKit's `AnimatedImage`
+    - they are drawn through `SceneRenderer`'s `imageFrame` option
+    - `useImageMime` labels GIFs in the Fill section and the Layers panel
+
 ## In progress (uncommitted)
 
-1. **Animated GIFs play in presentation view.** GIF fills are image fills. The canvas shows the first frame, as now.
+1. **Manual overlay positions, accessible prototypes, rich-text flow descriptions, gamepad triggers.**
 
 ## Next (M10, in order)
 

@@ -23,6 +23,7 @@ import { moveLayers, type DropPosition } from '@/editor/commands/layers';
 import { Icon } from '../../icons/Icon';
 import { layerIcon } from '../../icons/layer-icons';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
+import { useImageMime } from '../../images/useImageUrl';
 import { objectMenuEntries } from '../../menus/menu-model';
 import { IconButton } from '../../primitives/IconButton';
 import { Menu } from '../../primitives/Menu';
@@ -284,6 +285,7 @@ export function LayersPanel() {
                   </span>
                 )}
                 <ModeTag node={node} />
+                <GifTag node={node} />
                 {'scrollBehavior' in node && node.scrollBehavior === 'FIXED' && (
                   <span className={styles.fixedTag} aria-hidden="true" data-testid="fixed-tag">
                     Fixed
@@ -363,6 +365,18 @@ function RenameInput({ initial, onDone }: { initial: string; onDone: (value: str
 }
 
 /** The variable modes set on a layer: the mode's name, or how many modes (listed on hover). Kept out of the row's accessible name. */
+/** GIF: a layer whose image fill is an animated GIF (kept out of the row's accessible name). */
+function GifTag({ node }: { node: SceneNode }) {
+  const paint = 'fills' in node ? node.fills.find((p) => p.type === 'IMAGE' && p.visible && p.imageHash !== undefined) : undefined;
+  const mime = useImageMime(paint?.type === 'IMAGE' ? paint.imageHash : undefined);
+  if (mime !== 'image/gif') return null;
+  return (
+    <span className={styles.fixedTag} aria-hidden="true" data-testid="layer-gif-tag">
+      GIF
+    </span>
+  );
+}
+
 function ModeTag({ node }: { node: SceneNode }) {
   const editor = useEditor();
   const tags = Object.entries(node.explicitVariableModes ?? {}).flatMap(([collectionId, modeId]) => {

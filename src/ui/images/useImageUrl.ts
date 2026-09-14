@@ -37,3 +37,14 @@ export function useImageUrl(hash: string | undefined): string | undefined {
   }
   return url;
 }
+
+/** The format of an image asset (such as image/gif), loading it from storage if needed; undefined until available. */
+export function useImageMime(hash: string | undefined): string | undefined {
+  const editor = useEditor();
+  const subscribe = useCallback((onChange: () => void) => editor.images.subscribe(onChange), [editor]);
+  const asset = useSyncExternalStore(subscribe, () => (hash ? editor.images.get(hash) : undefined));
+  useEffect(() => {
+    if (hash && !asset) editor.images.request(hash);
+  }, [hash, asset, editor]);
+  return asset?.mime;
+}

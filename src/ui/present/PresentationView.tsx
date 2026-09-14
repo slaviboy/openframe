@@ -155,6 +155,8 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
   const [variableLabel, setVariableLabel] = useState('');
   /** The video fills shown, as "layer=playing" or "layer=paused" (shown on the stage for tests). */
   const [videoLabel, setVideoLabel] = useState('');
+  /** How many animated GIFs of the frames shown are playing (shown on the stage for tests). */
+  const [gifLabel, setGifLabel] = useState('0');
   const closeMenu = () => setMenuAnchor(null);
 
   // Mutable playback state the draw loop and input handlers share.
@@ -183,6 +185,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
     variantLabel: '',
     variableLabel: '',
     videoLabel: '',
+    gifLabel: '0',
     deviceScaling: null as ScalingMode | null,
     frame: 0,
     box: '',
@@ -377,7 +380,13 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
       // The videos of the frames shown play, and the view keeps drawing while they do.
       const videos = state.renderer.syncVideos(shownFrames(current));
       state.renderer.draw(scene, background, now < state.hintsUntil ? state.hintRects : [], state.frameScroll);
-      if (videos.some((video) => video.playing)) schedule();
+      // Animated GIFs play too (their players are made as their frames draw).
+      const gifs = state.renderer.animatingGifs(shownFrames(current));
+      if (videos.some((video) => video.playing) || gifs > 0) schedule();
+      if (String(gifs) !== state.gifLabel) {
+        state.gifLabel = String(gifs);
+        setGifLabel(String(gifs));
+      }
       const videoText = videos.map((video) => `${doc.get(video.nodeId)?.name ?? video.nodeId}=${video.playing ? 'playing' : 'paused'}`).join(';');
       if (videoText !== state.videoLabel) {
         state.videoLabel = videoText;
@@ -717,6 +726,7 @@ export function PresentationView({ session, startNodeId, inline }: PresentationV
           data-variants={variantLabel}
           data-variables={variableLabel}
           data-videos={videoLabel}
+          data-animated-gifs={gifLabel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}

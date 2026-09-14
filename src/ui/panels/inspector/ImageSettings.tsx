@@ -36,7 +36,7 @@ import { IconButton } from '../../primitives/IconButton';
 import { NumberField } from '../../primitives/NumberField';
 import primitives from '../../primitives/primitives.module.css';
 import { IMAGE_ACCEPT, readImageFile } from '../../images/import-image';
-import { useImageUrl } from '../../images/useImageUrl';
+import { useImageMime, useImageUrl } from '../../images/useImageUrl';
 import gradientStyles from './Gradient.module.css';
 import { PAINT_BLEND_OPTIONS } from './blend-modes';
 
@@ -77,6 +77,8 @@ export function ImageSettings({ label, paint, onEdit, onScrub, onGestureStart, o
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   const [error, setError] = useState<string | null>(null);
+  // Animated GIFs are labeled, and take no image adjustments.
+  const gif = useImageMime(paint.imageHash) === 'image/gif';
   const croppingId = useEditorState((s) => s.croppingId);
   const cropAspect = useEditorState((s) => s.cropAspect);
   const canCrop = onCrop !== undefined && paint.imageHash !== undefined && paint.imageSize !== undefined;
@@ -129,6 +131,11 @@ export function ImageSettings({ label, paint, onEdit, onScrub, onGestureStart, o
             </option>
           ))}
         </select>
+        {gif && (
+          <span data-testid="gif-tag" style={{ fontSize: 11, color: 'var(--fg-secondary)' }}>
+            GIF
+          </span>
+        )}
         {canCrop && !cropping && (
           <button type="button" className={gradientStyles.textButton} onClick={onCrop}>
             Crop image
@@ -209,39 +216,45 @@ export function ImageSettings({ label, paint, onEdit, onScrub, onGestureStart, o
           {error}
         </p>
       )}
-      <div className={gradientStyles.stopsHeader}>
-        <span>Adjustments</span>
-        {hasAdjustments(paint.filters) && (
-          <button type="button" className={gradientStyles.textButton} onClick={() => onEdit('Reset adjustments', resetImageAdjustments)}>
-            Reset adjustments
-          </button>
-        )}
-      </div>
-      {IMAGE_ADJUSTMENTS.map((key) => {
-        const value = Math.round((paint.filters?.[key] ?? 0) * 100);
-        return (
-          <div key={key} className={gradientStyles.adjustRow}>
-            <span id={`${id}-${key}`} aria-hidden="true">
-              {IMAGE_ADJUSTMENT_LABELS[key]}
-            </span>
-            <input
-              type="range"
-              min={-100}
-              max={100}
-              step={1}
-              aria-label={`${label} ${key}`}
-              value={value}
-              onPointerDown={onGestureStart}
-              onPointerUp={onGestureEnd}
-              onPointerCancel={onGestureEnd}
-              onBlur={onGestureEnd}
-              onDoubleClick={() => onEdit(`Reset ${key}`, (p) => setImageAdjustment(p, key, 0))}
-              onChange={(e) => onScrub((p) => setImageAdjustment(p, key, Number(e.target.value)))}
-            />
-            <output aria-labelledby={`${id}-${key}`}>{value}</output>
+      {gif ? (
+        <p style={{ margin: 0, fontSize: 11, color: 'var(--fg-secondary)' }}>Image adjustments are not available for GIFs.</p>
+      ) : (
+        <>
+          <div className={gradientStyles.stopsHeader}>
+            <span>Adjustments</span>
+            {hasAdjustments(paint.filters) && (
+              <button type="button" className={gradientStyles.textButton} onClick={() => onEdit('Reset adjustments', resetImageAdjustments)}>
+                Reset adjustments
+              </button>
+            )}
           </div>
-        );
-      })}
+          {IMAGE_ADJUSTMENTS.map((key) => {
+            const value = Math.round((paint.filters?.[key] ?? 0) * 100);
+            return (
+              <div key={key} className={gradientStyles.adjustRow}>
+                <span id={`${id}-${key}`} aria-hidden="true">
+                  {IMAGE_ADJUSTMENT_LABELS[key]}
+                </span>
+                <input
+                  type="range"
+                  min={-100}
+                  max={100}
+                  step={1}
+                  aria-label={`${label} ${key}`}
+                  value={value}
+                  onPointerDown={onGestureStart}
+                  onPointerUp={onGestureEnd}
+                  onPointerCancel={onGestureEnd}
+                  onBlur={onGestureEnd}
+                  onDoubleClick={() => onEdit(`Reset ${key}`, (p) => setImageAdjustment(p, key, 0))}
+                  onChange={(e) => onScrub((p) => setImageAdjustment(p, key, Number(e.target.value)))}
+                />
+                <output aria-labelledby={`${id}-${key}`}>{value}</output>
+              </div>
+            );
+          })}
+        </>
+      )}
     </li>
   );
 }

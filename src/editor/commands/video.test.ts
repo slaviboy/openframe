@@ -18,7 +18,7 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import { createEmptyDocument, keyOnTop, makeFrame, makeRectangle } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
-import { videoFillsIn, videoOptionsOf } from '@/core/prototype/video';
+import { imageHashesIn, videoFillsIn, videoOptionsOf } from '@/core/prototype/video';
 import type { Paint, RectangleNode, VideoPaint } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { setVideoOptions } from './video';
@@ -37,6 +37,7 @@ beforeEach(() => {
     tx.create({ ...makeRectangle(shape('clip', 'screen', 0)), fills: [solid, video] });
     tx.create({ ...makeRectangle(shape('hidden', 'screen', 20)), fills: [video], visible: false });
     tx.create(makeRectangle(shape('plain', 'screen', 40)));
+    tx.create({ ...makeRectangle(shape('photo', 'screen', 60)), fills: [{ type: 'IMAGE', imageHash: 'c'.repeat(64), scaleMode: 'FILL', opacity: 1, visible: true, blendMode: 'NORMAL' }] });
   });
 });
 
@@ -44,6 +45,8 @@ describe('video fills in prototypes', () => {
   test('a frame lists the video fills of its visible layers; options default to autoplay without loop, with sound', () => {
     expect(videoFillsIn(editor.doc, 'screen')).toEqual([{ nodeId: 'clip', index: 1, paint: video }]);
     expect(videoOptionsOf(video)).toEqual({ autoplay: true, loop: false, muted: false });
+    // Animated GIFs play from the images of the frame's image fills.
+    expect(imageHashesIn(editor.doc, 'screen')).toEqual(['c'.repeat(64)]);
   });
 
   test('setting video options changes every video fill of the layers in one undo step', () => {

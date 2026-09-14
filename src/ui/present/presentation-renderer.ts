@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { CanvasKit, Image as CkImage, Paint, Surface } from 'canvaskit-wasm';
+import type { AnimatedImage, CanvasKit, Image as CkImage, Paint, Surface } from 'canvaskit-wasm';
 import { documentColorProfile } from '@/core/color/color-profile';
 import type { Id } from '@/core/ids/ids';
 import type { Rect } from '@/core/math/rect';
@@ -25,7 +25,7 @@ import { matchedLayersStore, smartAnimateStore, withoutMatchingLayersStore } fro
 import type { RuntimeDocument } from '@/editor/prototype-runtime';
 import { topLevelFrame } from '@/core/prototype/reactions';
 import { scrolledFrameStore } from '@/core/prototype/scroll';
-import { videoFillsIn, videoFillsOf, videoOptionsOf, type VideoOptions } from '@/core/prototype/video';
+import { imageHashesIn, videoFillsIn, videoFillsOf, videoOptionsOf, type VideoOptions } from '@/core/prototype/video';
 import type { Vec2 } from '@/core/math/vec';
 import { SceneIndex } from '@/core/scene/scene-index';
 import type { Color, MediaAction, SceneNode } from '@/core/schema/document';
@@ -39,6 +39,16 @@ import { loadCjkSubsets } from '@/engine/text/cjk-fonts';
 import { TextShaper } from '@/engine/text/text-shaper';
 
 const HINT_COLOR = { r: 13 / 255, g: 153 / 255, b: 1 };
+
+/** An animated GIF playing: the frame shown moves on once its delay passes, until the GIF's loops are done. */
+interface GifPlayer {
+  readonly animation: AnimatedImage;
+  nextAt: number;
+  finished: boolean;
+}
+
+/** A GIF frame's delay: like browsers, delays under 20 ms play at 100 ms. */
+const gifDelay = (ms: number): number => (ms < 20 ? 100 : ms);
 
 /** A video fill shown, and whether its video is playing. */
 export interface VideoState {
@@ -71,6 +81,10 @@ export class PresentationRenderer {
   private readonly videoImages: CkImage[] = [];
   /** Called as a video plays (with its time) and when it ends: video triggers listen. */
   onVideoTime: ((videoHash: string, time: number, ended: boolean) => void) | null = null;
+  /** Animated GIF players by image hash (null for images that aren't animated GIFs). */
+  private readonly gifs = new Map<string, GifPlayer | null>();
+  /** The animated GIFs in each frame. */
+  private readonly gifFrames = new Map<Id, string[]>();
 
   private get doc(): DocumentStore {
     return this.runtime?.doc ?? this.editor.doc;
@@ -153,6 +167,7 @@ export class PresentationRenderer {
     for (const entry of this.scrolled.values()) entry.image?.delete();
     this.scrolled.clear();
     this.videoFrames.clear();
+    this.gifFrames.clear();
     this.onInvalidate();
   }
 
@@ -190,7 +205,7 @@ export class PresentationRenderer {
         index,
         editor.pageId,
         { x: origin.x, y: origin.y, zoom: scale, width, height, dpr: this.size.dpr },
-        { only: frameId, colorProfile: documentColorProfile(editor.doc), videoFrame: (hash) => this.videoImage(hash) },
+        { only: frameId, colorProfile: documentColorProfile(editor.doc), videoFrame: (hash) => this.videoImage(hash), imageFrame: (hash) => this.gifImage(hash) },
       );
       surface.flush();
       return surface.makeImageSnapshot();
@@ -311,6 +326,52 @@ export class PresentationRenderer {
     return video;
   }
 
+  /** The animated GIFs of a frame's image fills (once their images are loaded). */
+  private animatedGifsIn(frameId: Id): string[] {
+    let hashes = this.gifFrames.get(frameId);
+    if (!hashes) this.gifFrames.set(frameId, (hashes = imageHashesIn(this.doc, frameId).filter((hash) => this.gifFor(hash) !== null)));
+    return hashes;
+  }
+
+  /** The player of an animated GIF (a GIF with more than one frame), made once its bytes are loaded. */
+  private gifFor(hash: string): GifPlayer | null {
+    if (this.gifs.has(hash)) return this.gifs.get(hash) ?? null;
+    const asset = this.editor.images.get(hash);
+    // Not remembered until loaded: images arriving invalidate the frames, which look again.
+    if (!this.ck || !asset) return null;
+    let player: GifPlayer | null = null;
+    if (asset.mime === 'image/gif') {
+      const animation = this.ck.MakeAnimatedImageFromEncoded(asset.bytes);
+      if (animation && animation.getFrameCount() > 1) player = { animation, nextAt: performance.now() + gifDelay(animation.currentFrameDuration()), finished: false };
+      else animation?.delete();
+    }
+    this.gifs.set(hash, player);
+    return player;
+  }
+
+  /** An animated GIF's current frame, moved on as its frame delays pass (null for other images). */
+  private gifImage(hash: string): CkImage | null {
+    const player = this.gifs.get(hash);
+    if (!player) return null;
+    const now = performance.now();
+    // After a long pause (a hidden tab), the GIF goes on from where it was rather than catching up.
+    if (now - player.nextAt > 1000) player.nextAt = now;
+    while (!player.finished && now >= player.nextAt) {
+      const delay = player.animation.decodeNextFrame();
+      if (delay < 0) player.finished = true;
+      else player.nextAt += gifDelay(delay);
+    }
+    const image = player.animation.makeImageAtCurrentFrame();
+    if (image) this.videoImages.push(image);
+    return image;
+  }
+
+  /** How many animated GIFs of the frames shown are still playing (the view keeps drawing while one is). */
+  animatingGifs(frameIds: readonly Id[]): number {
+    const hashes = new Set(frameIds.flatMap((frameId) => this.animatedGifsIn(frameId)));
+    return [...hashes].filter((hash) => this.gifs.get(hash)?.finished === false).length;
+  }
+
   /** Runs a video action on the video of a layer's video fill: play, pause, sound, or its time. */
   controlVideo(nodeId: Id, action: MediaAction, amount: number): void {
     const fill = videoFillsOf(this.doc.get(nodeId) as SceneNode | undefined)[0];
@@ -416,7 +477,7 @@ export class PresentationRenderer {
           ? this.storeFrameImage(matchedLayersStore(this.doc, item.matched.from, item.frameId, item.matched.progress), item.frameId, item.scale)
           : item.without
             ? this.storeFrameImage(withoutMatchingLayersStore(this.doc, item.frameId, item.without), item.frameId, item.scale)
-            : this.hasVideo(item.frameId)
+            : this.hasVideo(item.frameId) || this.animatedGifsIn(item.frameId).length > 0
               ? this.freshFrameImage(item.frameId, item.scale, scroll)
               : null;
       const image = live ?? this.scrolledFrameImage(item.frameId, item.scale, scroll) ?? this.frameImage(item.frameId, item.scale);
@@ -458,5 +519,7 @@ export class PresentationRenderer {
       URL.revokeObjectURL(url);
     }
     this.videos.clear();
+    for (const player of this.gifs.values()) player?.animation.delete();
+    this.gifs.clear();
   }
 }
