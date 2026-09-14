@@ -102,3 +102,47 @@ export function boundLayers(store: PropertyStore, rootId: Id, name: string): Arr
   }
   return bound;
 }
+
+type FrameLayer = Extract<SceneNode, { type: 'FRAME' }>;
+
+/** Whether an instance's component has properties an exposed instance would show: component properties, or variants. */
+function showsProperties(store: PropertyStore, instance: FrameLayer): boolean {
+  const owner = instance.instance ? propertyOwner(store, instance.instance.mainId) : null;
+  return owner !== null && (Object.keys(propertyDefinitions(owner)).length > 0 || isComponentSet(owner));
+}
+
+/** The instance a layer is inside (its nearest instance ancestor), or null. */
+function enclosingInstance(store: PropertyStore, id: Id): Id | null {
+  for (let cur = store.parentOf(id); cur !== null; cur = store.parentOf(cur)) {
+    const node = sceneNodeAt(store, cur);
+    if (!node) return null;
+    if (isInstance(node)) return cur;
+  }
+  return null;
+}
+
+/**
+ * The nested instances of a main component (or of a component set's variants) that can be exposed: instances in the
+ * component, not inside other instances, whose components have properties to show, or that are exposed already.
+ */
+export function exposableInstances(store: PropertyStore, owner: SceneNode): FrameLayer[] {
+  const found: FrameLayer[] = [];
+  for (const main of ownerComponents(store, owner)) {
+    for (const id of store.descendants(main.id, false)) {
+      const node = sceneNodeAt(store, id);
+      if (node?.type !== 'FRAME' || !node.instance || enclosingInstance(store, id) !== null) continue;
+      if (node.isExposedInstance || showsProperties(store, node)) found.push(node);
+    }
+  }
+  return found;
+}
+
+/** The exposed nested instances whose properties an instance shows: its copies of the instances exposed in its component. */
+export function exposedInstances(store: PropertyStore, instanceId: Id): FrameLayer[] {
+  const found: FrameLayer[] = [];
+  for (const id of store.descendants(instanceId, false)) {
+    const node = sceneNodeAt(store, id);
+    if (node?.type === 'FRAME' && node.instance && node.isExposedInstance && enclosingInstance(store, id) === instanceId) found.push(node);
+  }
+  return found;
+}

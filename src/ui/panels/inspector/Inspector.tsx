@@ -62,7 +62,7 @@ import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
 import { canCreateComponent, canCreateMultipleComponents, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
 import { addVariant, canAddVariant, canCombineAsVariants, combineAsVariants, deleteVariantProperty, instanceVariant, moveVariantProperty, renameVariantProperty, renameVariantValue, setInstanceVariant } from '@/editor/commands/variants';
 import { componentSetProperties, defaultVariant, parseVariantName, variantErrors } from '@/core/document/variants';
-import { bindingOwner, isInInstance, PROPERTY_FIELD, propertyDefinitions, propertyOwner, type ComponentPropertyType } from '@/core/document/component-properties';
+import { bindingOwner, exposableInstances, exposedInstances, isInInstance, PROPERTY_FIELD, propertyDefinitions, propertyOwner, type ComponentPropertyType } from '@/core/document/component-properties';
 import {
   applyComponentProperty,
   canHaveProperties,
@@ -72,6 +72,7 @@ import {
   renameComponentProperty,
   setComponentPropertyDefault,
   setInstanceProperty,
+  setExposedInstance,
   setPreferredValues,
   swapCandidates,
 } from '@/editor/commands/component-properties';
@@ -938,8 +939,84 @@ function InstanceActions() {
   );
 }
 
+/** An instance's variant properties: a dropdown of values for each property of its component set, or a toggle for true/false values. */
+function VariantControls({ instanceId }: { instanceId: string }) {
+  const editor = useEditor();
+  const variantOf = instanceVariant(editor, instanceId);
+  if (!variantOf) return null;
+  const values = new Map(parseVariantName(variantOf.variant.name) ?? []);
+  return (
+    <>
+      {componentSetProperties(editor.doc, variantOf.set.id).map((property) => {
+        const current = values.get(property.name) ?? '';
+        const on = property.values.find((v) => /^true$/i.test(v));
+        const off = property.values.find((v) => /^false$/i.test(v));
+        if (property.values.length === 2 && on !== undefined && off !== undefined) {
+          return (
+            <label key={property.name} className={styles.checkbox}>
+              <input type="checkbox" checked={current === on} onChange={(e) => setInstanceVariant(editor, instanceId, property.name, e.target.checked ? on : off)} />
+              {property.name}
+            </label>
+          );
+        }
+        return (
+          <div key={property.name} className={styles.grid2}>
+            <span className={styles.hint}>{property.name}</span>
+            <select className={primitives.select} aria-label={property.name} value={current} onChange={(e) => setInstanceVariant(editor, instanceId, property.name, e.target.value)}>
+              {!property.values.includes(current) && <option value={current} />}
+              {property.values.map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+/** Nested instances exposed in a main component or component set, with the checklist to choose them from. */
+function ExposedInstances({ ownerId, choosing, onDone }: { ownerId: string; choosing: boolean; onDone: () => void }) {
+  const editor = useEditor();
+  const exposable = exposableInstances(editor.doc, editor.doc.get(ownerId) as SceneNode);
+  const exposed = exposable.filter((instance) => instance.isExposedInstance);
+  return (
+    <>
+      {exposed.length > 0 && (
+        <div role="group" aria-label="Exposed instances">
+          {exposed.map((instance) => (
+            <div key={instance.id} className={styles.grid2}>
+              <span className={styles.hint}>
+                <Icon name="instance" size={16} /> {instance.name}
+              </span>
+              <button type="button" className={gradientStyles.textButton} aria-label={`Stop exposing ${instance.name}`} onClick={() => setExposedInstance(editor, instance.id, false)}>
+                Remove
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {choosing && (
+        <div role="group" aria-label="Expose nested instances">
+          {exposable.map((instance) => (
+            <label key={instance.id} className={styles.checkbox}>
+              <input type="checkbox" aria-label={`Expose ${instance.name}`} checked={instance.isExposedInstance === true} onChange={(e) => setExposedInstance(editor, instance.id, e.target.checked)} />
+              {instance.name}
+            </label>
+          ))}
+          <button type="button" className={gradientStyles.textButton} onClick={onDone}>
+            Done
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
 /** The create button of a Properties section: a menu of the component property types. */
-function CreatePropertyButton({ onChoose }: { onChoose: (type: ComponentPropertyType) => void }) {
+function CreatePropertyButton({ onChoose, onExpose }: { onChoose: (type: ComponentPropertyType) => void; onExpose?: (() => void) | undefined }) {
   const [anchor, setAnchor] = useState<DOMRect | null>(null);
   return (
     <>
@@ -951,6 +1028,8 @@ function CreatePropertyButton({ onChoose }: { onChoose: (type: ComponentProperty
             { kind: 'item', id: 'boolean', label: 'Boolean', onSelect: () => onChoose('BOOLEAN') },
             { kind: 'item', id: 'text', label: 'Text', onSelect: () => onChoose('TEXT') },
             { kind: 'item', id: 'instance-swap', label: 'Instance swap', onSelect: () => onChoose('INSTANCE_SWAP') },
+            // Expose properties from nested instances, when the component has some to expose.
+            ...(onExpose ? ([{ kind: 'separator', id: 'expose-separator' }, { kind: 'item', id: 'nested-instances', label: 'Nested instances', onSelect: onExpose }] satisfies MenuEntry[]) : []),
           ]}
           anchor={anchor}
           placement="bottom-start"
@@ -1184,10 +1263,14 @@ function ComponentPropertyRows({ ownerId, creating, onCreated }: { ownerId: stri
 
 /** The Properties section of a main component that isn't a variant. */
 function ComponentPropertiesSection({ ownerId }: { ownerId: string }) {
+  const editor = useEditor();
   const [creating, setCreating] = useState<ComponentPropertyType | null>(null);
+  const [exposing, setExposing] = useState(false);
+  const canExpose = exposableInstances(editor.doc, editor.doc.get(ownerId) as SceneNode).length > 0;
   return (
-    <Section title="Properties" actions={<CreatePropertyButton onChoose={setCreating} />}>
+    <Section title="Properties" actions={<CreatePropertyButton onChoose={setCreating} onExpose={canExpose ? () => setExposing(true) : undefined} />}>
       <ComponentPropertyRows ownerId={ownerId} creating={creating} onCreated={() => setCreating(null)} />
+      <ExposedInstances ownerId={ownerId} choosing={exposing} onDone={() => setExposing(false)} />
     </Section>
   );
 }
@@ -1219,7 +1302,7 @@ function PropertyBinding({ layerId, type }: { layerId: string; type: ComponentPr
 }
 
 /** An instance's component properties: a toggle for each boolean property and a text field for each text property. */
-function InstanceProperties({ instanceId }: { instanceId: string }) {
+function InstanceProperties({ instanceId, nested = false }: { instanceId: string; nested?: boolean }) {
   const editor = useEditor();
   return (
     <>
@@ -1250,6 +1333,19 @@ function InstanceProperties({ instanceId }: { instanceId: string }) {
           </div>
         );
       })}
+      {/* Exposed nested instances show their properties too; hovering one highlights it on the canvas. */}
+      {!nested &&
+        exposedInstances(editor.doc, instanceId)
+          .filter((exposed) => exposed.visible)
+          .map((exposed) => (
+            <div key={exposed.id} role="group" aria-label={`Nested instance ${exposed.name}`} onMouseEnter={() => editor.state.setHover(exposed.id)} onMouseLeave={() => editor.state.setHover(null)}>
+              <span className={styles.hint}>
+                <Icon name="instance" size={16} /> {exposed.name}
+              </span>
+              <VariantControls instanceId={exposed.id} />
+              <InstanceProperties instanceId={exposed.id} nested />
+            </div>
+          ))}
     </>
   );
 }
@@ -1265,10 +1361,12 @@ function VariantPropertiesSection({ setId }: { setId: string }) {
   const [menu, setMenu] = useState<{ property: string; x: number; y: number } | null>(null);
   const dragged = useRef<string | null>(null);
   const [creating, setCreating] = useState<ComponentPropertyType | null>(null);
+  const [exposing, setExposing] = useState(false);
+  const canExpose = exposableInstances(editor.doc, editor.doc.get(setId) as SceneNode).length > 0;
   const properties = componentSetProperties(editor.doc, setId);
   const errors = variantErrors(editor.doc, setId);
   return (
-    <Section title="Properties" actions={<CreatePropertyButton onChoose={setCreating} />}>
+    <Section title="Properties" actions={<CreatePropertyButton onChoose={setCreating} onExpose={canExpose ? () => setExposing(true) : undefined} />}>
       {properties.map((property, index) => (
         <div
           key={property.name}
@@ -1343,6 +1441,7 @@ function VariantPropertiesSection({ setId }: { setId: string }) {
         </div>
       ))}
       <ComponentPropertyRows ownerId={setId} creating={creating} onCreated={() => setCreating(null)} />
+      <ExposedInstances ownerId={setId} choosing={exposing} onDone={() => setExposing(false)} />
       {errors.conflicted.length > 0 && (
         <p className={styles.hint} role="alert">
           {errors.conflicted.length} variants have the same property values. Each variant needs a unique combination of values.
@@ -1381,7 +1480,6 @@ function ComponentSection({ node }: { node: SceneNode }) {
   ) : null;
   if (main.id !== node.id) {
     const variantOf = instanceVariant(editor, node.id);
-    const values = new Map(variantOf ? (parseVariantName(variantOf.variant.name) ?? []) : []);
     // The instance menu: swap this instance for another component of the file.
     return (
       <Section title="Component">
@@ -1392,34 +1490,7 @@ function ComponentSection({ node }: { node: SceneNode }) {
             </option>
           ))}
         </select>
-        {variantOf &&
-          // Configure the variant: a dropdown of values for each property of the set, or a toggle for true/false.
-          componentSetProperties(editor.doc, variantOf.set.id).map((property) => {
-            const current = values.get(property.name) ?? '';
-            const on = property.values.find((v) => /^true$/i.test(v));
-            const off = property.values.find((v) => /^false$/i.test(v));
-            if (property.values.length === 2 && on !== undefined && off !== undefined) {
-              return (
-                <label key={property.name} className={styles.checkbox}>
-                  <input type="checkbox" checked={current === on} onChange={(e) => setInstanceVariant(editor, node.id, property.name, e.target.checked ? on : off)} />
-                  {property.name}
-                </label>
-              );
-            }
-            return (
-              <div key={property.name} className={styles.grid2}>
-                <span className={styles.hint}>{property.name}</span>
-                <select className={primitives.select} aria-label={property.name} value={current} onChange={(e) => setInstanceVariant(editor, node.id, property.name, e.target.value)}>
-                  {!property.values.includes(current) && <option value={current} />}
-                  {property.values.map((value) => (
-                    <option key={value} value={value}>
-                      {value}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            );
-          })}
+        <VariantControls instanceId={node.id} />
         <InstanceProperties instanceId={node.id} />
         {description && <p className={styles.hint}>{description}</p>}
         {docs}

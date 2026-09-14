@@ -449,6 +449,8 @@ export const FrameNodeSchema = z.object({
   componentPropertyDefinitions: z.record(z.string().min(1).max(200), ComponentPropertyDefinitionSchema).optional(),
   /** Present when the frame is an instance of a main component. */
   instance: z.object({ mainId: IdSchema }).optional(),
+  /** A nested instance in a main component whose component properties the component's instances show with their own. */
+  isExposedInstance: z.literal(true).optional(),
   /** Frame guides (for frames directly on the page or in a section). Absent when none. */
   guides: GuidesField,
   /** Layout guides, drawn over the frame's contents. Absent when none. */

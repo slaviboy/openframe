@@ -18,6 +18,7 @@
 import {
   bindingOwner,
   boundLayers,
+  exposableInstances,
   ownerComponents,
   PROPERTY_FIELD,
   propertyDefinitions,
@@ -203,4 +204,17 @@ export function swapCandidates(editor: Editor, ownerId: Id): LocalComponent[] {
   const owner = sceneNode(editor, ownerId);
   const containers = owner ? ownerComponents(editor.doc, owner).map((component) => component.id) : [];
   return localComponents(editor).filter((component) => !containers.some((container) => wouldCycle(editor.doc, component.id, container)));
+}
+
+/**
+ * Exposes a nested instance of a main component (or stops exposing it), so the component's instances show its
+ * properties with their own. Only instances whose components have properties can be exposed. One undo step.
+ */
+export function setExposedInstance(editor: Editor, layerId: Id, exposed: boolean): boolean {
+  const layer = sceneNode(editor, layerId);
+  const owner = bindingOwner(editor.doc, layerId);
+  if (!layer || !owner || layer.type !== 'FRAME' || !layer.instance || exposed === (layer.isExposedInstance === true)) return false;
+  if (exposed && !exposableInstances(editor.doc, owner).some((instance) => instance.id === layerId)) return false;
+  editor.history.run(exposed ? 'Expose nested instance' : 'Stop exposing nested instance', (tx) => tx.set(layerId, 'isExposedInstance', exposed ? true : undefined));
+  return true;
 }
