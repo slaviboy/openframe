@@ -18,6 +18,7 @@
 import { groupFinalizer } from '@/core/document/groups';
 import { constraintsFinalizer } from '@/core/document/constraints';
 import { createAutoLayoutFinalizer } from '@/core/layout/auto-layout';
+import { vectorFinalizer } from '@/core/vector/vector-finalizer';
 import { assertDocumentInvariants } from '@/core/document/invariants';
 import type { DocumentStore } from '@/core/document/store';
 import { History, type ChangeSet } from '@/core/history/history';
@@ -155,9 +156,9 @@ export class Editor {
       // Text boxes fit their content before groups measure their children.
       // Constraints move children of resized frames before text boxes fit and groups measure them.
       // Constraints and text sizes settle before auto layout measures its children; groups hug the result.
-      finalizers: [constraintsFinalizer, createTextFinalizer(() => this.textLayout), createAutoLayoutFinalizer(() => this.textLayout), groupFinalizer],
+      finalizers: [vectorFinalizer, constraintsFinalizer, createTextFinalizer(() => this.textLayout), createAutoLayoutFinalizer(() => this.textLayout), groupFinalizer],
       // Constraints and auto layout follow resize drags live.
-      previewFinalizers: [constraintsFinalizer, createAutoLayoutFinalizer(() => this.textLayout, { preview: true })],
+      previewFinalizers: [vectorFinalizer, constraintsFinalizer, createAutoLayoutFinalizer(() => this.textLayout, { preview: true })],
       ...(options.validate ? { validate: assertDocumentInvariants } : {}),
     });
     // The scene index must learn about every change before anything renders or hit-tests.

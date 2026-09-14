@@ -156,6 +156,7 @@ const TYPE_LABELS: Record<SceneNode['type'], string> = {
   POLYGON: 'Polygon',
   STAR: 'Star',
   LINE: 'Line',
+  VECTOR: 'Vector',
   SECTION: 'Section',
   SLICE: 'Slice',
   TEXT: 'Text',

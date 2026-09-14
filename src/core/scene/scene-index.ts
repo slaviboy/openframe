@@ -25,6 +25,7 @@ import type { Vec2 } from '../math/vec';
 import { effectOutset } from '../effects/effects';
 import { distanceToSegment, lineCapSize, pointInPolygon, polygonPoints, starPoints } from '../geometry/shapes';
 import { flattenPath, rectangleCorners, resolveCornerRadii, roundedPolygon } from '../geometry/corners';
+import { networkOutlines } from '../vector/vector-network';
 import { hasGeometry, isSceneNode, type Node, type SceneNode, type StrokeCap } from '../schema/document';
 
 export const matrixOf = (t: readonly number[]): Matrix => ({ a: t[0]!, b: t[1]!, c: t[2]!, d: t[3]!, e: t[4]!, f: t[5]! });
@@ -207,6 +208,15 @@ export function nodeContainsLocal(node: SceneNode, p: Vec2, tolerance: number): 
       if (pointInPolygon(p, points)) return true;
       if (tolerance <= 0) return false;
       return points.some((a, i) => distanceToSegment(p, a, points[(i + 1) % points.length]!) <= tolerance);
+    }
+    case 'VECTOR': {
+      const reach = node.strokeWeight / 2 + tolerance;
+      if (!containsPoint({ x: -reach, y: -reach, width: w + reach * 2, height: h + reach * 2 }, p)) return false;
+      const outlines = networkOutlines(node.vectorNetwork);
+      if (outlines.fills.some((polygon) => pointInPolygon(p, polygon))) return true;
+      return outlines.strokes.some(({ points, closed }) =>
+        points.some((a, i) => (i > 0 && distanceToSegment(p, points[i - 1]!, a) <= reach) || (closed && i === points.length - 1 && distanceToSegment(p, a, points[0]!) <= reach)),
+      );
     }
     case 'ELLIPSE': {
       const rx = w / 2 + tolerance;

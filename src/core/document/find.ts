@@ -33,6 +33,7 @@ export const FIND_CATEGORY: Record<SceneNode['type'], FindCategory> = {
   POLYGON: 'shape',
   STAR: 'shape',
   LINE: 'shape',
+  VECTOR: 'shape',
 };
 
 export interface FindResult {

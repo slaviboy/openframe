@@ -31,8 +31,7 @@ import type {
   SectionNode,
   SliceNode,
   StarNode,
-  StrokeCap,
-} from '../schema/document';
+  StrokeCap, VectorNode } from '../schema/document';
 import { DocumentStore } from './store';
 
 export const WHITE: Color = { r: 1, g: 1, b: 1, a: 1 };
@@ -154,6 +153,17 @@ export const makeStar = (init: ShapeInit): StarNode => ({
   innerRadius: 0.38,
 });
 
+/** A vector layer (Pen, Pencil) with a 1px black center stroke and no fill; `network` is in the layer's local space. */
+export const makeVector = (init: ShapeInit, network: VectorNetwork): VectorNode => ({
+  ...sceneDefaults(init),
+  type: 'VECTOR',
+  fills: [],
+  strokes: [solid(BLACK)],
+  strokeWeight: 1,
+  strokeAlign: 'CENTER',
+  vectorNetwork: network as VectorNode['vectorNetwork'],
+});
+
 /** A line (or arrow, with `endCap`) with a 1px black center stroke and no fill. */
 export const makeLine = (init: ShapeInit, endCap: StrokeCap = 'NONE'): LineNode => ({
   ...sceneDefaults(init),
@@ -199,6 +209,7 @@ export const makeText = (init: ShapeInit): TextNode => ({
   textAutoResize: 'WIDTH_AND_HEIGHT',
 });
 import type { TextNode } from '../schema/document';
+import type { VectorNetwork } from '../vector/vector-network';
 
 export function makePage(id: Id, name: string, key: string, canvas: Color = LIGHT_CANVAS): PageNode {
   return { id, type: 'PAGE', name, parent: { id: ROOT_ID, key }, visible: true, locked: false, backgroundColor: canvas };

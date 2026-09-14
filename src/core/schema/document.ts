@@ -497,6 +497,32 @@ export const LineNodeSchema = z.object({
   endCap: StrokeCapSchema,
 });
 
+const VectorPointSchema = z.object({ x: finite, y: finite });
+
+/**
+ * Vector network: vertices joined by straight or curved segments in any direction (branches
+ * allowed), plus closed regions that can be filled. A segment's tangents are the offsets of its
+ * Bézier control points from its start and end vertices (zero for straight segments); a region
+ * lists loops of segment indices. Coordinates are in the layer's local space.
+ */
+export const VectorNetworkSchema = z.object({
+  vertices: z.array(VectorPointSchema).max(100_000),
+  segments: z
+    .array(z.object({ start: z.number().int().min(0), end: z.number().int().min(0), tangentStart: VectorPointSchema, tangentEnd: VectorPointSchema }))
+    .max(100_000),
+  regions: z.array(z.object({ loops: z.array(z.array(z.number().int().min(0)).min(1)).min(1), windingRule: z.enum(['NONZERO', 'EVENODD']) })).max(10_000),
+});
+
+/** A vector layer (Pen, Pencil): a vector network whose geometry fills the layer box; resizing scales the network. */
+export const VectorNodeSchema = z.object({
+  ...SceneFields,
+  ...GeometryFields,
+  type: z.literal('VECTOR'),
+  vectorNetwork: VectorNetworkSchema,
+  /** Cap of the network's open ends; absent means NONE. */
+  endpointCap: StrokeCapSchema.optional(),
+});
+
 /**
  * Canvas region that organizes layers. Sections live on the page or inside other sections
  * (never in frames or groups), do not clip, and are never rotated or flipped.
@@ -658,6 +684,7 @@ export const NodeSchema = z.discriminatedUnion('type', [
   PolygonNodeSchema,
   StarNodeSchema,
   LineNodeSchema,
+  VectorNodeSchema,
   SectionNodeSchema,
   SliceNodeSchema,
   TextNodeSchema,
@@ -712,6 +739,8 @@ export type EllipseNode = z.infer<typeof EllipseNodeSchema>;
 export type PolygonNode = z.infer<typeof PolygonNodeSchema>;
 export type StarNode = z.infer<typeof StarNodeSchema>;
 export type LineNode = z.infer<typeof LineNodeSchema>;
+export type VectorNode = z.infer<typeof VectorNodeSchema>;
+export type VectorNetworkData = z.infer<typeof VectorNetworkSchema>;
 export type StrokeCap = z.infer<typeof StrokeCapSchema>;
 export type SectionNode = z.infer<typeof SectionNodeSchema>;
 export type SliceNode = z.infer<typeof SliceNodeSchema>;
@@ -732,17 +761,18 @@ export type WrapStyle = z.infer<typeof WrapStyleSchema>;
 export type Constraint = z.infer<typeof ConstraintSchema>;
 export type DecorationStyle = z.infer<typeof DecorationStyleSchema>;
 export type TextNode = z.infer<typeof TextNodeSchema>;
-export type SceneNode = FrameNode | GroupNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | SectionNode | SliceNode | TextNode;
+export type SceneNode = FrameNode | GroupNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | VectorNode | SectionNode | SliceNode | TextNode;
 export type Node = z.infer<typeof NodeSchema>;
 export type NodeType = Node['type'];
 export type DocumentMeta = z.infer<typeof DocumentMetaSchema>;
 export type SerializedDocument = z.infer<typeof DocumentSchema>;
 
 export const isSceneNode = (n: Node): n is SceneNode => n.type !== 'DOCUMENT' && n.type !== 'PAGE';
-export const hasGeometry = (n: Node): n is FrameNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | SectionNode | TextNode =>
+export const hasGeometry = (n: Node): n is FrameNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | VectorNode | SectionNode | TextNode =>
   n.type === 'FRAME' ||
   n.type === 'RECTANGLE' ||
   n.type === 'ELLIPSE' ||
+  n.type === 'VECTOR' ||
   n.type === 'POLYGON' ||
   n.type === 'STAR' ||
   n.type === 'LINE' ||

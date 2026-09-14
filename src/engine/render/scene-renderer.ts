@@ -20,6 +20,8 @@ import type { Effect } from '@/core/schema/document';
 
 const isNormalBlend = (mode: string): boolean => mode === 'NORMAL' || mode === 'PASS_THROUGH';
 import { maskRuns } from '@/core/scene/masks';
+import { networkStrokePath, regionFillPath } from '@/core/vector/vector-network';
+import type { VectorNode } from '@/core/schema/document';
 import { stackingOrder } from '@/core/layout/auto-layout';
 import {
   blurOffsets,
@@ -424,6 +426,10 @@ export class SceneRenderer {
           i === layers - 1,
         );
       }
+      return;
+    }
+    if (node.type === 'VECTOR') {
+      this.drawVector(canvas, node);
       return;
     }
     const path = this.shapePath(node);
@@ -1001,13 +1007,70 @@ export class SceneRenderer {
         builder.close();
         return builder.detachAndDelete();
       }
+      case 'VECTOR':
+        return this.vectorFillPath(node);
       default:
         return null;
     }
   }
 
-  private pathFrom(commands: readonly PathCommand[]): Path {
+  /** The closed regions of a vector layer as one path, each region filled by its own winding rule; null without regions. */
+  private vectorFillPath(node: VectorNode): Path | null {
+    const network = node.vectorNetwork;
+    let combined: Path | null = null;
+    for (const region of network.regions) {
+      const path = this.pathFrom(regionFillPath(network, region), region.windingRule === 'EVENODD');
+      if (!combined) {
+        combined = path;
+        continue;
+      }
+      const merged: Path | null = this.ck.Path.MakeFromOp(combined, path, this.ck.PathOp.Union);
+      combined.delete();
+      path.delete();
+      combined = merged;
+    }
+    return combined;
+  }
+
+  /** A vector layer: fills over its closed regions, strokes along every segment with the endpoint cap. */
+  private drawVector(canvas: Canvas, node: VectorNode): void {
+    const fillPath = this.vectorFillPath(node);
+    if (fillPath) {
+      for (const paint of node.fills) {
+        if (!paint.visible || paint.opacity <= 0) continue;
+        this.configurePaint(this.fillPaint, paint, node.size);
+        canvas.drawPath(fillPath, this.fillPaint);
+      }
+    }
+    if (node.strokeWeight > 0 && node.vectorNetwork.segments.length > 0) {
+      const strokePath = this.pathFrom(networkStrokePath(node.vectorNetwork));
+      this.applyStrokeStyle(node);
+      const cap = node.endpointCap === 'ROUND' ? this.ck.StrokeCap.Round : node.endpointCap === 'SQUARE' ? this.ck.StrokeCap.Square : this.ck.StrokeCap.Butt;
+      for (const paint of node.strokes) {
+        if (!paint.visible || paint.opacity <= 0) continue;
+        this.configurePaint(this.strokePaint, paint, node.size);
+        // Dashes keep their own cap.
+        if (!node.strokeDashes) this.strokePaint.setStrokeCap(cap);
+        canvas.save();
+        if (node.strokeAlign !== 'CENTER' && fillPath) {
+          // Inside/outside strokes of closed regions: a double-width stroke clipped to (or outside) the filled area.
+          this.strokePaint.setStrokeWidth(node.strokeWeight * 2);
+          canvas.clipPath(fillPath, node.strokeAlign === 'INSIDE' ? this.ck.ClipOp.Intersect : this.ck.ClipOp.Difference, true);
+        } else {
+          this.strokePaint.setStrokeWidth(node.strokeWeight);
+        }
+        canvas.drawPath(strokePath, this.strokePaint);
+        canvas.restore();
+      }
+      this.resetStrokeStyle();
+      strokePath.delete();
+    }
+    fillPath?.delete();
+  }
+
+  private pathFrom(commands: readonly PathCommand[], evenOdd = false): Path {
     const builder = new this.ck.PathBuilder();
+    if (evenOdd) builder.setFillType(this.ck.FillType.EvenOdd);
     for (const c of commands) {
       if (c.op === 'M') builder.moveTo(c.x, c.y);
       else if (c.op === 'L') builder.lineTo(c.x, c.y);

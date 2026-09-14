@@ -29,6 +29,7 @@ export const LAYER_TYPE_ICONS: Record<SceneNode['type'], IconName> = {
   POLYGON: 'polygon',
   STAR: 'star',
   LINE: 'line',
+  VECTOR: 'vector',
   TEXT: 'text',
 };
 
