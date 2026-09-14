@@ -80,8 +80,8 @@ export interface EditorState {
   readonly vectorEdit: VectorEditRef | null;
 }
 
-/** Tool of vector edit mode's secondary toolbar: Move (V) drags points; Lasso (Q) selects the points inside a drawn outline; Cut (X) breaks the path where it is clicked; Bend pulls Bézier handles out of a point; Paint (⇧B) fills closed regions. */
-export type VectorEditTool = 'move' | 'lasso' | 'cut' | 'bend' | 'paint';
+/** Tool of vector edit mode's secondary toolbar: Move (V) drags points; Lasso (Q) selects the points inside a drawn outline; Cut (X) breaks the path where it is clicked; Bend pulls Bézier handles out of a point; Paint (⇧B) fills closed regions; Eraser (⇧E) removes the area it is dragged over. */
+export type VectorEditTool = 'move' | 'lasso' | 'cut' | 'bend' | 'paint' | 'eraser';
 
 /** Vector edit mode on a vector layer: the indices of its selected points, and the secondary toolbar's tool (absent: Move). */
 export interface VectorEditRef {
@@ -90,6 +90,8 @@ export interface VectorEditRef {
   readonly tool?: VectorEditTool;
   /** The Paint tool's paint; absent means the layer's first solid fill, or the default shape fill. */
   readonly paint?: Paint;
+  /** The Eraser's weight, in canvas units; absent means 10. */
+  readonly eraserWeight?: number;
 }
 
 /** A value field open on an auto layout frame's padding or gap handle; `mode` is which sides a padding value applies to. */

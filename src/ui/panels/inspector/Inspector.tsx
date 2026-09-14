@@ -59,7 +59,7 @@ import { canonicalStringify } from '@/core/serialize/serialize';
 import gradientStyles from './Gradient.module.css';
 import { gradientCss } from './gradient-css';
 import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
-import { vectorEditPaint } from '@/editor/interactions/vector-edit';
+import { eraserWeight, vectorEditPaint } from '@/editor/interactions/vector-edit';
 import { invert, applyLinear } from '@/core/math/matrix';
 import {
   DEFAULT_MITER_ANGLE,
@@ -830,6 +830,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
           {nodes.every((n) => n.type !== 'TEXT') && <PaintSection title="Stroke" field="strokes" nodes={geometryNodes} defaultPaint={() => solid(BLACK)} />}
         </>
       )}
+      <VectorEraserSection />
       <VectorPaintSection />
       <SelectionColorsSection nodes={nodes} />
       {!allSlices && <EffectsSection nodes={nodes} />}
@@ -839,6 +840,27 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
 }
 
 type GeometryNode = Extract<SceneNode, { fills: readonly Paint[] }>;
+
+/** The Eraser's weight while the Eraser is picked in vector edit mode. */
+function VectorEraserSection() {
+  const editor = useEditor();
+  const state = useEditorState((s) => s.vectorEdit);
+  if (state?.tool !== 'eraser') return null;
+  return (
+    <Section title="Eraser">
+      <NumberField
+        label="W"
+        ariaLabel="Eraser weight"
+        testId="field-eraser-weight"
+        min={1}
+        max={1000}
+        decimals={1}
+        value={eraserWeight(editor)}
+        onChange={(v) => editor.state.setVectorEdit({ ...state, eraserWeight: v })}
+      />
+    </Section>
+  );
+}
 
 /** The Paint tool's paint, a solid color, while Paint is picked in vector edit mode. */
 function VectorPaintSection() {

@@ -468,7 +468,7 @@ const TEXT_FORMAT_COMMANDS: CommandDefinition[] = [
 export const BUILTIN_COMMANDS: CommandDefinition[] = [
   ...COLOR_PROFILE_COMMANDS,
   // Vector edit mode, registered first: Return and Delete act on the vector's points while it is being edited.
-  // V, Q, X and ⇧B pick the secondary toolbar's Move, Lasso, Cut and Paint while editing, before the main tools' shortcuts.
+  // V, Q, X, ⇧B and ⇧E pick the secondary toolbar's Move, Lasso, Cut, Paint and Eraser while editing, before the main tools' shortcuts.
   {
     id: 'vector.toolMove',
     label: 'Move points',
@@ -513,6 +513,15 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     palette: false,
     enabled: (e) => e.state.getSnapshot().vectorEdit !== null,
     run: (e) => setVectorEditTool(e, 'paint'),
+  },
+  {
+    id: 'vector.toolEraser',
+    label: 'Eraser',
+    category: 'Edit',
+    shortcuts: ['Shift+E'],
+    palette: false,
+    enabled: (e) => e.state.getSnapshot().vectorEdit !== null,
+    run: (e) => setVectorEditTool(e, 'eraser'),
   },
   {
     id: 'vector.edit',

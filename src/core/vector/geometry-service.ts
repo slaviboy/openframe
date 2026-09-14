@@ -16,7 +16,9 @@
  */
 
 import type { PathCommand } from '../geometry/corners';
+import type { Vec2 } from '../math/vec';
 import type { SceneNode } from '../schema/document';
+import type { VectorNetwork } from './vector-network';
 
 /** Path geometry that needs the rendering engine's path operations (stroking, dashing, combining). */
 export interface GeometryService {
@@ -26,4 +28,10 @@ export interface GeometryService {
    * stroke or its stroke can't be outlined.
    */
   strokeOutline(node: SceneNode): PathCommand[] | null;
+
+  /**
+   * Eraser on a closed region: the region's area (in the network's space) minus a round stroke of
+   * `weight` along `path`, as path commands; [] when nothing is left, null when the stroke doesn't reach it.
+   */
+  regionMinusStroke(network: VectorNetwork, region: number, path: readonly Vec2[], weight: number): PathCommand[] | null;
 }

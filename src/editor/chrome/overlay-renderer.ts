@@ -70,6 +70,8 @@ export interface OverlayInput {
   readonly vectorLasso?: readonly Vec2[] | null;
   /** The region the Paint tool would change, and whether it would remove the region's fill. */
   readonly vectorPaintHover?: { readonly region: number; readonly remove: boolean } | null;
+  /** The eraser's path on screen and its width, while erasing in vector edit mode. */
+  readonly vectorEraser?: { readonly points: readonly Vec2[]; readonly width: number } | null;
   /** Text editing chrome; `caretVisible` is the blink phase. */
   readonly textEdit?: { readonly caretVisible: boolean } | null;
   /** Snapping guides of the current move, in world coordinates. */
@@ -655,6 +657,22 @@ function drawVectorEdit(ctx: CanvasRenderingContext2D, input: OverlayInput): voi
     ctx.strokeStyle = theme.selection;
     ctx.stroke();
   });
+  const eraser = input.vectorEraser;
+  if (eraser && eraser.points.length > 0) {
+    // The eraser's path, as wide as the eraser.
+    ctx.beginPath();
+    eraser.points.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+    if (eraser.points.length === 1) ctx.lineTo(eraser.points[0]!.x + 0.01, eraser.points[0]!.y);
+    ctx.globalAlpha = 0.25;
+    ctx.strokeStyle = theme.selection;
+    ctx.lineWidth = eraser.width;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.lineCap = 'butt';
+    ctx.lineJoin = 'miter';
+  }
   const lasso = input.vectorLasso;
   if (lasso && lasso.length > 1) {
     ctx.beginPath();

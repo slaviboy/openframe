@@ -24,6 +24,7 @@ import { DEFAULT_SHAPE_FILL, solid } from '@/core/document/factory';
 import type { Paint, Transform, VectorNode } from '@/core/schema/document';
 import { cutVertex, deleteVertices, healVertices, moveVertices, nearestOnSegments, splitSegment } from '@/core/vector/vector-edit';
 import { bendVertex, oppositeEnd, setTangent, tangentAt, type SegmentEnd } from '@/core/vector/vector-bend';
+import { eraseNetwork } from '@/core/vector/vector-erase';
 import { regionAt, setRegionFills } from '@/core/vector/vector-paint';
 import type { VectorNetwork } from '@/core/vector/vector-network';
 import { paintsEqual } from '../commands/properties';
@@ -70,6 +71,9 @@ const editedVector = (editor: Editor): VectorNode | null => {
   const node = state ? editor.doc.get(state.nodeId) : undefined;
   return node?.type === 'VECTOR' ? node : null;
 };
+
+/** The Eraser's weight in canvas units: the one set for it, else 10. */
+export const eraserWeight = (editor: Editor): number => editor.state.getSnapshot().vectorEdit?.eraserWeight ?? 10;
 
 /** The Paint tool's paint: the one picked for it, else the layer's first solid fill, else the default shape fill. */
 export function vectorEditPaint(editor: Editor): Paint {
@@ -136,6 +140,20 @@ interface PaintDrag {
   readonly painted: Set<number>;
 }
 
+/** Erasing: the eraser's path so far, in the space of the network the drag started from, and on screen for the overlay. */
+interface EraseDrag {
+  readonly tx: Transaction;
+  readonly start: VectorNetwork;
+  readonly startTransform: Transform;
+  readonly startInverse: Matrix;
+  /** The eraser's weight in the network's space. */
+  readonly weight: number;
+  readonly path: Vec2[];
+  readonly screen: Vec2[];
+  readonly screenWidth: number;
+  erased: boolean;
+}
+
 interface PointDrag {
   tx: Transaction;
   start: VectorNetwork;
@@ -154,6 +172,7 @@ interface PointDrag {
  * With Bend, pressing on a point (or a path, adding a point) and dragging pulls out mirrored handles.
  * The handles of selected points can be dragged; handles that mirrored each other keep mirroring.
  * With Paint (⇧B), clicking a closed region fills it with the paint, or removes a fill that already matches it; a drag paints every region it crosses.
+ * With the Eraser (⇧E), a drag removes the area it passes over: open paths are clipped and closed regions lose that area.
  */
 export class VectorEditController implements Tool {
   readonly id = 'move' as const;
@@ -161,6 +180,7 @@ export class VectorEditController implements Tool {
   private lasso: LassoDrag | null = null;
   private handle: HandleGesture | null = null;
   private painting: PaintDrag | null = null;
+  private erasing: EraseDrag | null = null;
   private hover: { readonly region: number; readonly remove: boolean } | null = null;
 
   constructor(
@@ -169,7 +189,7 @@ export class VectorEditController implements Tool {
   ) {}
 
   get active(): boolean {
-    return this.drag !== null || this.lasso !== null || this.handle !== null || this.painting !== null;
+    return this.drag !== null || this.lasso !== null || this.handle !== null || this.painting !== null || this.erasing !== null;
   }
 
   /** Screen outline of the lasso being drawn, for the overlay. */
@@ -180,6 +200,11 @@ export class VectorEditController implements Tool {
   /** The region under the pointer with the Paint tool, and whether a click there removes its fill. */
   get paintHover(): { readonly region: number; readonly remove: boolean } | null {
     return this.editor.state.getSnapshot().vectorEdit?.tool === 'paint' ? this.hover : null;
+  }
+
+  /** The eraser's path on screen and its width there, while erasing. */
+  get eraserTrail(): { readonly points: readonly Vec2[]; readonly width: number } | null {
+    return this.erasing ? { points: this.erasing.screen, width: this.erasing.screenWidth } : null;
   }
 
   cursor(): CursorKind {
@@ -201,6 +226,24 @@ export class VectorEditController implements Tool {
     editor.scene.ensure(editor.pageId);
     const toWorld = editor.scene.worldTransform(node.id);
     const v = editor.state.viewport;
+    if (state.tool === 'eraser') {
+      const eraseInverse = invert(toWorld);
+      if (!eraseInverse || !editor.geometry) return;
+      const weight = eraserWeight(editor);
+      this.erasing = {
+        tx: editor.history.begin('Erase'),
+        start: node.vectorNetwork,
+        startTransform: node.transform,
+        startInverse: eraseInverse,
+        weight: weight / (Math.hypot(toWorld.a, toWorld.b) || 1),
+        path: [],
+        screen: [],
+        screenWidth: weight * v.zoom,
+        erased: false,
+      };
+      this.erase(p);
+      return;
+    }
     if (state.tool === 'paint') {
       const region = this.regionUnder(node, p.world);
       if (region === null) return;
@@ -285,6 +328,10 @@ export class VectorEditController implements Tool {
   }
 
   pointerMove(p: PointerInfo): void {
+    if (this.erasing) {
+      this.erase(p);
+      return;
+    }
     if (this.editor.state.getSnapshot().vectorEdit?.tool === 'paint') {
       const node = editedVector(this.editor);
       const region = node ? this.regionUnder(node, p.world) : null;
@@ -323,6 +370,14 @@ export class VectorEditController implements Tool {
   }
 
   pointerUp(): void {
+    const erasing = this.erasing;
+    if (erasing) {
+      this.erasing = null;
+      if (erasing.erased) this.editor.history.commit(erasing.tx);
+      else this.editor.history.cancel(erasing.tx);
+      this.editor.requestRender();
+      return;
+    }
     const painting = this.painting;
     if (painting) {
       this.painting = null;
@@ -347,6 +402,21 @@ export class VectorEditController implements Tool {
     this.drag = null;
     if (d.moved) this.editor.history.commit(d.tx);
     else this.editor.history.cancel(d.tx);
+  }
+
+  /** Extends the eraser's path to the pointer and erases along the whole path from the starting network. */
+  private erase(p: PointerInfo): void {
+    const g = this.erasing;
+    const state = this.editor.state.getSnapshot().vectorEdit;
+    const geometry = this.editor.geometry;
+    if (!g || !state || !geometry) return;
+    g.path.push(apply(g.startInverse, p.world));
+    g.screen.push({ ...p.screen });
+    const network = eraseNetwork(g.start, g.path, g.weight, (n, region, path, weight) => geometry.regionMinusStroke(n, region, path, weight));
+    g.erased = network !== g.start;
+    refitVector(g.tx, state.nodeId, network, g.startTransform);
+    g.tx.flushPreview();
+    this.editor.requestRender();
   }
 
   /** The region of the edited vector under a world point. */
@@ -402,6 +472,12 @@ export class VectorEditController implements Tool {
   }
 
   cancel(): boolean {
+    if (this.erasing) {
+      this.editor.history.cancel(this.erasing.tx);
+      this.erasing = null;
+      this.editor.requestRender();
+      return true;
+    }
     if (this.painting) {
       this.editor.history.cancel(this.painting.tx);
       this.painting = null;
