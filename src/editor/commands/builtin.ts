@@ -39,6 +39,7 @@ import { BOOLEAN_NAMES, booleanSelection, canBooleanSelection } from './boolean'
 import { canCreateComponent, createComponent } from './components';
 import { canDetachInstance, detachInstances } from './detach';
 import { canResetOverrides, resetSelectedOverrides } from './reset-overrides';
+import { canGoToMainComponent, canPushChangesToMain, canRestoreMainComponent, goToMainComponent, pushChangesToMain, restoreMainComponent } from './main-component';
 import { canOutlineStroke, outlineStrokeSelection } from './outline-stroke';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
 
@@ -197,6 +198,29 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     category: 'Object',
     enabled: canResetOverrides,
     run: (e) => resetSelectedOverrides(e),
+  },
+  {
+    id: 'object.goToMainComponent',
+    label: 'Go to main component',
+    category: 'Object',
+    // ⌃⌥⌘K on macOS; Ctrl+Alt+Shift+K elsewhere.
+    shortcuts: ['Mod+Ctrl+Alt+K', 'Ctrl+Alt+Shift+K'],
+    enabled: canGoToMainComponent,
+    run: (e) => goToMainComponent(e),
+  },
+  {
+    id: 'object.restoreMainComponent',
+    label: 'Restore main component',
+    category: 'Object',
+    enabled: canRestoreMainComponent,
+    run: (e) => restoreMainComponent(e),
+  },
+  {
+    id: 'object.pushChangesToMain',
+    label: 'Push changes to main component',
+    category: 'Object',
+    enabled: canPushChangesToMain,
+    run: (e) => pushChangesToMain(e),
   },
   {
     id: 'object.frameSelection',
