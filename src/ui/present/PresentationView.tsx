@@ -42,8 +42,8 @@ import {
 } from '@/core/prototype/player';
 import { DRAG_FINISH_AT, dragDirection, dragProgress } from '@/core/prototype/drag-transition';
 import { sharedVariants, sharedVideos } from '@/core/prototype/state-sharing';
-import { composeScene, frameAtPoint, layerRects, SCALING_LABELS, SCALING_MODES, screenArea, scrollOffsetOf, type DeviceScreen, type PresentedScene, type ScalingMode } from '@/core/prototype/presentation';
-import { deviceLayout, deviceOuterSize, effectiveDevice, type PrototypeDevice } from '@/core/prototype/device';
+import { composeScene, frameAtPoint, layerRects, responsiveSize, SCALING_LABELS, SCALING_MODES, screenArea, scrollOffsetOf, type DeviceScreen, type PresentedScene, type ScalingMode } from '@/core/prototype/presentation';
+import { deviceLayout, deviceOuterSize, deviceScreenSize, effectiveDevice, type PrototypeDevice } from '@/core/prototype/device';
 import { MOBILE_DEVICE_CATEGORIES } from '@/core/document/frame-presets';
 import type { Size } from '@/core/schema/document';
 
@@ -221,6 +221,9 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
     accessibleKey: '',
     follow,
     device: null as DevicePreset | null,
+    /** Responsive: the screen's frame laid out at another size in the prototype's copy, and which size that was. */
+    frameSizes: [] as ReadonlyArray<readonly [Id, Size]>,
+    responsiveKey: '',
     runtime: null as RuntimeDocument | null,
     /** Instances interactive components switched, and the variant each shows. */
     variantChanges: new Map<Id, Id>(),
@@ -237,11 +240,33 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
     dragLabel: '',
   });
   const drawRef = useRef<() => void>(() => {});
+  // Responsive: the screen's frame is laid out at the window's size (or its device's screen) in the prototype's copy of
+  // the document, rebuilt when that size or the screen changes.
+  const responsiveRef = useRef<() => void>(() => {});
 
   const schedule = useCallback(() => {
     const state = live.current;
     if (!state.frame) state.frame = requestAnimationFrame(() => drawRef.current());
   }, []);
+
+  useEffect(() => {
+    responsiveRef.current = () => {
+      const state = live.current;
+      const current = state.player;
+      const frame = current ? (editor.doc.get(current.frameId) as SceneNode | undefined) : undefined;
+      const on = (state.deviceScaling ?? state.scaling) === 'RESPONSIVE' && state.viewport.width > 0;
+      const size = on && current && frame ? responsiveSize(state.device ? deviceScreenSize(state.device) : state.viewport, frame.size) : null;
+      const key = size && current ? `${current.frameId}:${size.width}x${size.height}` : '';
+      if (key === state.responsiveKey) return;
+      state.responsiveKey = key;
+      state.frameSizes = size && current ? [[current.frameId, size]] : [];
+      const next = buildRuntime(editor.doc, pageId, { variants: [...state.variantChanges], variables: current?.variables ?? NO_VARIABLES, frameSizes: state.frameSizes }, editor.textLayout);
+      state.runtime = next;
+      state.renderer?.setDocument(next);
+      setRuntime(next);
+      schedule();
+    };
+  });
 
   /** Applies a step of the player: its state, and its effects (transitions, scrolling, links). */
   const apply = useCallback(
@@ -316,7 +341,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
       }
       // Switched variants and variables set play in a copy of the document with those changes (bound layers follow).
       if (rebuild || step.state.variables !== state.player?.variables) {
-        const next = buildRuntime(editor.doc, pageId, { variants: [...state.variantChanges], variables: step.state.variables ?? NO_VARIABLES }, editor.textLayout);
+        const next = buildRuntime(editor.doc, pageId, { variants: [...state.variantChanges], variables: step.state.variables ?? NO_VARIABLES, frameSizes: state.frameSizes }, editor.textLayout);
         state.runtime = next;
         state.renderer?.setDocument(next);
         setRuntime(next);
@@ -325,6 +350,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
       if (state.follow && step.state && step.state.frameId !== state.player?.frameId) editor.state.select([step.state.frameId]);
       state.player = step.state;
       setPlayer(step.state);
+      responsiveRef.current();
       schedule();
     },
     [doc, editor, pageId, sceneIndex, schedule],
@@ -343,6 +369,9 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
       const next = startPlayer(doc, pageId, nodeId);
       const state = live.current;
       state.playing = null;
+      // Restarting drops the prototype's copy: Responsive lays the screen out again.
+      state.responsiveKey = '';
+      state.frameSizes = [];
       state.scrolling = null;
       state.scrollY = 0;
       // Restarting resets interactive components to their variants in the file.
@@ -380,6 +409,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
     state.follow = follow;
     state.device = device;
     state.deviceScaling = deviceScaling;
+    responsiveRef.current();
     schedule();
   }, [scaling, showHints, accessible, follow, device, deviceScaling, schedule]);
 
@@ -520,6 +550,12 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
     };
   });
 
+  // A new copy of the document (variants switched, variables set, a responsive layout) is drawn once the view uses it:
+  // a draw asked for while it was being built would still lay out the previous one.
+  useEffect(() => {
+    schedule();
+  }, [runtime, schedule]);
+
   // The rendering engine, sized to the stage.
   useEffect(() => {
     const container = containerRef.current!;
@@ -532,6 +568,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
       const rect = container.getBoundingClientRect();
       state.viewport = { width: rect.width, height: rect.height };
       renderer.resize(rect.width, rect.height, window.devicePixelRatio || 1);
+      responsiveRef.current();
       schedule();
     };
     const observer = new ResizeObserver(resize);

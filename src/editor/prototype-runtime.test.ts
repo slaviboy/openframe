@@ -16,15 +16,16 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { createEmptyDocument, keyOnTop, makeRectangle } from '@/core/document/factory';
+import { createEmptyDocument, keyOnTop, makeFrame, makeRectangle } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
 import { instanceToChange, runReaction, startPlayer } from '@/core/prototype/player';
+import { NO_VARIABLES } from '@/core/prototype/variables-runtime';
 import { destinationCandidates, variantSetOf } from '@/core/prototype/reactions';
 import type { Reaction, SceneNode } from '@/core/schema/document';
 import { BUILTIN_COMMANDS } from './commands/builtin';
 import { insertInstance } from './commands/insert-instance';
 import { Editor } from './editor';
-import { changeVariant } from './prototype-runtime';
+import { buildRuntime, changeVariant } from './prototype-runtime';
 
 let editor: Editor;
 
@@ -81,5 +82,28 @@ describe('interactive components', () => {
     expect(runtime.index.worldBounds(instance)).not.toBeNull();
     // The file itself is unchanged.
     expect(main(instance)).toBe(off);
+  });
+});
+
+describe('responsive screens', () => {
+  test('a frame laid out at another size in the copy: its layers follow their constraints, and the file is unchanged', () => {
+    const ids = new IdGenerator('r');
+    const local = new Editor({ doc: createEmptyDocument({ name: 'D', now: 'n', appVersion: 't', ids }), ids, validate: true });
+    const page = local.pageId;
+    local.history.run('Build', (tx) => {
+      tx.create(makeFrame({ id: 'home', parent: { id: page, key: keyOnTop(tx.store, page) }, name: 'Home', x: 0, y: 0, width: 400, height: 300 }));
+      // A bar 20 px in from both sides, stretching with the frame; a badge kept to the right edge.
+      tx.create({ ...makeRectangle({ id: 'bar', parent: { id: 'home', key: keyOnTop(tx.store, 'home') }, name: 'Bar', x: 20, y: 10, width: 360, height: 40 }), constraints: { horizontal: 'STRETCH', vertical: 'MIN' } });
+      tx.create({ ...makeRectangle({ id: 'badge', parent: { id: 'home', key: keyOnTop(tx.store, 'home') }, name: 'Badge', x: 350, y: 60, width: 30, height: 30 }), constraints: { horizontal: 'MAX', vertical: 'MIN' } });
+    });
+    const size = (doc: typeof local.doc, id: string) => (doc.getOrThrow(id) as SceneNode).size;
+    const x = (doc: typeof local.doc, id: string) => (doc.getOrThrow(id) as SceneNode).transform[4];
+
+    expect(buildRuntime(local.doc, page, { variants: [], variables: NO_VARIABLES, frameSizes: [] })).toBeNull();
+    const runtime = buildRuntime(local.doc, page, { variants: [], variables: NO_VARIABLES, frameSizes: [['home', { width: 800, height: 300 }]] })!;
+    expect(size(runtime.doc, 'home')).toEqual({ width: 800, height: 300 });
+    expect(size(runtime.doc, 'bar').width).toBe(760);
+    expect(x(runtime.doc, 'badge')).toBe(750);
+    expect(size(local.doc, 'bar').width).toBe(360);
   });
 });

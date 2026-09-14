@@ -110,3 +110,25 @@ test('Options resize the preview window to 100% of the frame, and keep the windo
   await option('Respect aspect ratio');
   await expect.poll(async () => Math.round((await preview.boundingBox())!.height - (await header()))).toBe(420);
 });
+
+test('Responsive in the preview\'s options lays the screen out at the preview\'s width', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await drawFrame(page, 350, 200, 'Frame 1');
+  await page.getByRole('treeitem', { name: 'Frame 1' }).click();
+  await page.keyboard.press('Shift+Space');
+  const preview = page.getByRole('region', { name: 'Preview' });
+  const stage = preview.getByTestId('presentation');
+  await expect(stage).toHaveAttribute('data-ready', 'true');
+  const screenWidth = async () => Math.round((await preview.getByTestId('presentation-screen').boundingBox())!.width);
+  const option = async (name: string) => {
+    await preview.getByRole('button', { name: 'Options' }).click();
+    await page.getByRole('menuitem', { name }).or(page.getByRole('menuitemcheckbox', { name })).click();
+  };
+  // The 140 px frame at its size, then laid out at the preview's width.
+  await option('Actual size (100%)');
+  await expect.poll(screenWidth).toBe(140);
+  await option('Responsive');
+  const stageWidth = Math.round((await stage.boundingBox())!.width);
+  await expect.poll(screenWidth).toBe(stageWidth);
+});

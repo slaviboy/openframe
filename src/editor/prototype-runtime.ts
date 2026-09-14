@@ -33,6 +33,8 @@ export interface RuntimeDocument {
 export interface RuntimeChanges {
   readonly variants: ReadonlyArray<readonly [instanceId: Id, variantId: Id]>;
   readonly variables: PrototypeVariables;
+  /** Responsive: frames laid out at another size, their layers following their constraints and auto layout. */
+  readonly frameSizes?: ReadonlyArray<readonly [frameId: Id, size: { readonly width: number; readonly height: number }]>;
 }
 
 /**
@@ -42,7 +44,7 @@ export interface RuntimeChanges {
  * shares them). Null when there is nothing to change.
  */
 export function buildRuntime(source: DocumentStore, pageId: Id, changes: RuntimeChanges, textLayout?: Editor['textLayout']): RuntimeDocument | null {
-  if (changes.variants.length === 0 && !hasVariableChanges(changes.variables)) return null;
+  if (changes.variants.length === 0 && !hasVariableChanges(changes.variables) && (changes.frameSizes?.length ?? 0) === 0) return null;
   const doc = new DocumentStore(source.meta, [...source.nodes()]);
   const scratch = new Editor({ doc, ids: new IdGenerator('prototype'), pageId });
   if (textLayout) scratch.setTextLayout(textLayout);
@@ -50,6 +52,12 @@ export function buildRuntime(source: DocumentStore, pageId: Id, changes: Runtime
   for (const [collectionId, modeId] of Object.entries(changes.variables.pageModes)) setExplicitVariableMode(scratch, [pageId], collectionId, modeId);
   for (const [variableId, modes] of Object.entries(changes.variables.values)) {
     for (const [modeId, value] of Object.entries(modes)) setVariableValue(scratch, variableId, modeId, value);
+  }
+  const frameSizes = changes.frameSizes ?? [];
+  if (frameSizes.length > 0) {
+    scratch.history.run('Responsive', (tx) => {
+      for (const [frameId, size] of frameSizes) if (tx.store.has(frameId)) tx.set(frameId, 'size', { width: size.width, height: size.height });
+    });
   }
   const index = new SceneIndex(doc);
   index.ensure(pageId);

@@ -27,12 +27,13 @@ import type { OverlayAnchor, PlayerEffect, PlayerState } from './player';
 import { topLevelFrame } from './reactions';
 
 /** How presentation view scales the screen to the window. */
-export type ScalingMode = 'ACTUAL' | 'FIT_WIDTH' | 'FIT' | 'FILL';
+export type ScalingMode = 'ACTUAL' | 'RESPONSIVE' | 'FIT_WIDTH' | 'FIT' | 'FILL';
 
-export const SCALING_MODES: readonly ScalingMode[] = ['ACTUAL', 'FIT_WIDTH', 'FIT', 'FILL'];
+export const SCALING_MODES: readonly ScalingMode[] = ['ACTUAL', 'RESPONSIVE', 'FIT_WIDTH', 'FIT', 'FILL'];
 
 export const SCALING_LABELS: Readonly<Record<ScalingMode, string>> = {
   ACTUAL: 'Actual size (100%)',
+  RESPONSIVE: 'Responsive',
   FIT_WIDTH: 'Fit width',
   FIT: 'Fit width and height',
   FILL: 'Fill screen',
@@ -43,7 +44,7 @@ const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
 /**
  * The screen's scale: 1 at actual size; filling the window's width for Fit width; shrinking (never enlarging) to fit
  * both dimensions for Fit width and height; and scaling up or down until it fills the window without overflowing for
- * Fill screen.
+ * Fill screen. Responsive draws the screen unscaled: its frame is laid out at the window's size instead.
  */
 export function screenScale(mode: ScalingMode, viewport: Size, frame: Size): number {
   if (frame.width <= 0 || frame.height <= 0 || viewport.width <= 0 || viewport.height <= 0) return 1;
@@ -51,6 +52,7 @@ export function screenScale(mode: ScalingMode, viewport: Size, frame: Size): num
   const fitBoth = Math.min(fitWidth, viewport.height / frame.height);
   switch (mode) {
     case 'ACTUAL':
+    case 'RESPONSIVE':
       return 1;
     case 'FIT_WIDTH':
       return fitWidth;
@@ -59,6 +61,15 @@ export function screenScale(mode: ScalingMode, viewport: Size, frame: Size): num
     default:
       return Math.min(1, fitBoth);
   }
+}
+
+/**
+ * Responsive: the size a screen's frame is laid out at, its layers following their constraints and auto layout — the
+ * width of the area it shows in (the window, or a device's screen), and its height too unless the frame is taller (then it
+ * keeps its height and scrolls).
+ */
+export function responsiveSize(area: Size, frame: Size): Size {
+  return { width: Math.max(1, Math.round(area.width)), height: Math.max(Math.round(area.height), frame.height) };
 }
 
 /** How far a screen taller than the window scrolls, in the screen's coordinates. */

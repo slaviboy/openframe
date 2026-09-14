@@ -230,6 +230,11 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - Resize window to 100% sizes the window to the frame (or `deviceOuterSize` plus the 24 px margins with a device) plus the measured inline header
     - Respect aspect ratio (no device) is an effect keeping the height at the width × the frame's proportions
     - row 241's flow preview icon was already the canvas tag's icon; row 200's instance state sharing came with the state sharing commit
+  - Responsive scaling (the commit after the inline preview window at 100%):
+    - `RESPONSIVE` in `ScalingMode` (scale 1) and `responsiveSize` in `src/core/prototype/presentation.ts`
+    - `frameSizes` in `RuntimeChanges`: `buildRuntime` sets the frames' sizes in its scratch editor, whose constraints and auto layout finalizers lay the layers out
+    - PresentationView's `responsiveRef` rebuilds the runtime when the stage, the screen, the scaling or the device changes (keyed by frame and size); restart clears the key
+    - a `useEffect` on `runtime` schedules a draw: a draw asked for while a new runtime was being set still used the old `doc` (Chromium and Firefox showed the unscaled frame)
 
 ## In progress (uncommitted)
 
@@ -241,8 +246,7 @@ This file is how work continues after a pause (for example, a usage limit). Read
    - 160 Video / GIF fills: video crop, video from the fill picker, GIF label next to the dimensions, GIF metadata on export
    - 200 Interactive components: the Variant interactions section, animating Change to
    - 239 Variables: extended collections' modes, library variables, variable picker in expressions
-   - 240 Presentation view: responsive scaling, device frames, comments, sharing links
-   - 241 Inline preview: Responsive
+   - 240 Presentation view: device frames, comments, sharing links
    - 242 Device settings: device models and the device switcher
    - 244 Accessible prototypes: the Accessibility settings dialog
 

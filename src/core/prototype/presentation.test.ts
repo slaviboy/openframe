@@ -23,7 +23,7 @@ import { IdGenerator } from '../ids/ids';
 import { SceneIndex } from '../scene/scene-index';
 import type { PrototypeTransition, SceneNode } from '../schema/document';
 import type { PlayerState } from './player';
-import { composeScene, frameAtPoint, layerRects, maxScrollY, screenScale, scrollOffsetOf, transitionOffsets } from './presentation';
+import { composeScene, frameAtPoint, layerRects, maxScrollY, responsiveSize, screenScale, scrollOffsetOf, transitionOffsets } from './presentation';
 import { matchedLayersStore, withoutMatchingLayersStore } from './smart-animate';
 
 let store: DocumentStore;
@@ -63,6 +63,10 @@ describe('presentation layout', () => {
     expect(screenScale('FILL', { width: 800, height: 900 }, frame)).toBe(2);
     expect(maxScrollY('ACTUAL', { width: 800, height: 600 }, { width: 400, height: 2000 })).toBe(1400);
     expect(maxScrollY('FIT', { width: 800, height: 600 }, frame)).toBe(0);
+    // Responsive draws the screen unscaled, its frame laid out at the window's width (and height, unless it's taller).
+    expect(screenScale('RESPONSIVE', { width: 800, height: 100 }, frame)).toBe(1);
+    expect(responsiveSize({ width: 800, height: 600 }, frame)).toEqual({ width: 800, height: 600 });
+    expect(responsiveSize({ width: 800.4, height: 600 }, { width: 400, height: 2000 })).toEqual({ width: 800, height: 2000 });
   });
 
   test('transitions move and fade the frames in the direction of travel', () => {
