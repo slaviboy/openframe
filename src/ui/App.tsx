@@ -16,7 +16,8 @@
  */
 
 import { FileBrowserDialog } from './dialogs/FileBrowserDialog';
-import { isPackageFile, openLocalFile, saveLocalCopy } from '@/app/local-files';
+import { isPackageFile, openFromDisk, openLocalFile, saveLocalCopy, saveResultNotice, saveToDisk } from '@/app/local-files';
+import { canOpenFromDisk } from '@/platform/disk-file';
 import { PackageError } from '@/platform/package';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { bootstrap, type AppSession } from '@/app/bootstrap';
@@ -154,7 +155,41 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
           id: 'file.open',
           label: 'Open file…',
           category: 'File',
-          run: () => openInput.current?.click(),
+          run: () => {
+            // Opened from disk, the file saves back to where it came from; elsewhere the file input opens a copy.
+            if (!canOpenFromDisk()) {
+              openInput.current?.click();
+              return;
+            }
+            void openFromDisk(session).catch((error: unknown) => setNotice(error instanceof PackageError ? error.message : 'The file could not be opened.'));
+          },
+        },
+        {
+          id: 'file.save',
+          label: 'Save',
+          category: 'File',
+          shortcuts: ['Mod+S'],
+          run: () =>
+            void saveToDisk(session).then(
+              (result) => {
+                const text = saveResultNotice(result);
+                if (text) setNotice(text);
+              },
+              () => setNotice('The file could not be saved.'),
+            ),
+        },
+        {
+          id: 'file.saveAs',
+          label: 'Save as…',
+          category: 'File',
+          run: () =>
+            void saveToDisk(session, true).then(
+              (result) => {
+                const text = saveResultNotice(result);
+                if (text) setNotice(text);
+              },
+              () => setNotice('The file could not be saved.'),
+            ),
         },
         {
           id: 'file.showVersionHistory',
