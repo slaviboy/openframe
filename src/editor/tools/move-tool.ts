@@ -32,7 +32,7 @@ import { canParent } from '@/core/document/containment';
 import type { DuplicateMemory } from '../editor';
 import type { Vec2 } from '@/core/math/vec';
 import { hitTestDeepest, isArtboardWithChildren, isInteractive, marqueeSelect, selectionTarget } from '@/core/scene/hit-test';
-import { connectDestinationAt, connectHandle, connectionAt, connectionsInScreenRect, hitConnectHandle, variantDestinationAt } from '../chrome/prototype-geometry';
+import { connectDestinationAt, connectHandle, connectionAt, connectionsInScreenRect, hitConnectHandle, overlayBadgeAt, variantDestinationAt } from '../chrome/prototype-geometry';
 import { variantSetOf } from '@/core/prototype/reactions';
 import { addInteraction, removeConnections, setConnectionsDestination, type ConnectionRef } from '../commands/prototype';
 import { snapEqualGaps, type GapIndicator } from '@/core/scene/equal-gaps';
@@ -339,6 +339,13 @@ export class MoveTool implements Tool {
     if (connect && hitConnectHandle(editor, p.screen)) {
       editor.scene.ensure(editor.pageId);
       this.gesture = { kind: 'connect', sourceIds: connect.sourceIds, start: connect.center, current: p, destination: null };
+      return;
+    }
+    // Prototype tab: an overlay frame's badge selects the overlay (Delete then removes the interactions opening it).
+    const badge = this.id === 'move' ? overlayBadgeAt(editor, p.screen) : null;
+    if (badge) {
+      editor.state.selectOverlay(badge);
+      editor.requestRender();
       return;
     }
     // Prototype tab: pressing a connection's noodle selects it (⇧ adds or removes it); dragging moves the selected connections.

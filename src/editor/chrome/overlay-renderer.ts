@@ -58,7 +58,7 @@ import { variantsOf } from '@/core/document/variants';
 import { slotIndicators } from '@/core/document/component-properties';
 import { noodleBetween, visibleConnections, type Noodle } from '@/core/prototype/connections';
 import { flowsOf } from '@/core/prototype/flows';
-import { CONNECT_HANDLE_SIZE, connectHandle, screenBounds } from './prototype-geometry';
+import { CONNECT_HANDLE_SIZE, connectHandle, overlayBadgeRect, overlayFrames, screenBounds } from './prototype-geometry';
 
 export interface OverlayInput {
   readonly editor: Editor;
@@ -162,6 +162,28 @@ function drawPrototypeChrome(ctx: CanvasRenderingContext2D, input: OverlayInput,
     ctx.fill();
     ctx.fillStyle = '#ffffff';
     ctx.fillText(text, x + 5, y + 9.5);
+  }
+  // Each overlay frame's badge: a blue icon just outside its top-right corner (outlined while it is selected).
+  const selectedOverlay = editor.state.getSnapshot().selectedOverlay;
+  for (const frameId of overlayFrames(editor)) {
+    const badge = overlayBadgeRect(editor, frameId);
+    if (!badge) continue;
+    const bx = Math.round(badge.x);
+    const by = Math.round(badge.y);
+    ctx.fillStyle = PROTOTYPE_COLOR;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, badge.width, badge.height, 4);
+    ctx.fill();
+    // A layer over another.
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(bx + 3.5, by + 3.5, 6, 6);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(bx + 7, by + 7, 6, 6);
+    if (selectedOverlay === frameId) {
+      ctx.lineWidth = 2;
+      ctx.strokeRect(bx - 1.5, by - 1.5, badge.width + 3, badge.height + 3);
+    }
   }
   ctx.strokeStyle = PROTOTYPE_COLOR;
   ctx.fillStyle = PROTOTYPE_COLOR;

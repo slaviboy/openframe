@@ -196,6 +196,11 @@ export function guideMenuEntries(editor: Editor): MenuEntry[] {
   return commandSections(editor, [['guide.remove']]);
 }
 
+/** Context menu for a prototype connection. */
+export function connectionMenuEntries(editor: Editor): MenuEntry[] {
+  return commandSections(editor, [['prototype.removeAllInteractions']]);
+}
+
 /** Context menu for empty canvas. */
 export function canvasMenuEntries(editor: Editor): MenuEntry[] {
   return commandSections(editor, [['edit.paste'], ['edit.selectAll'], ['view.zoomToFit', 'view.zoom100'], ['view.commandPalette']]);

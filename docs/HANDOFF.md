@@ -178,6 +178,13 @@ This file is how work continues after a pause (for example, a usage limit). Read
   - A GIF's canvas frame (the commit after Select matching interactions):
     - `gifFrame` on image paints, set with `setGifFrame` from the Fill section's Frame field
     - `SceneRenderer.decodedImage` decodes that frame with CanvasKit's `AnimatedImage`
+  - Overlay badges and Remove all interactions (the commit after the GIF canvas frame):
+    - `overlayFrames` / `overlayBadgeRect` / `overlayBadgeAt` in prototype-geometry.ts
+    - `selectedOverlay` in the editor store
+    - `removeOverlayInteractions` / `removeAllInteractions` in `src/editor/commands/prototype-remove.ts`
+    - the connection context menu
+    - correction: an earlier commit dropped the overlay badge as undocumented, but the overlays page does describe it
+    - dragging an overlay into place isn't documented, so it's off the list
 
 ## In progress (uncommitted)
 
@@ -186,7 +193,6 @@ This file is how work continues after a pause (for example, a usage limit). Read
 ## Next (M10, in order)
 
 1. The smaller pending sub-items in the M10 rows:
-   - dragging a manual overlay into place on the canvas
    - responsive scaling
 
 **Stop after M10.** When every M10 row is finished and committed, stop and report to the user. Don't start M11 until the user says to continue. After that, M11–M15 follow `docs/FEATURE_MATRIX.md` (the rows marked Planned or In progress) in milestone order.

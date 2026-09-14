@@ -20,6 +20,8 @@ import type { Rect } from '@/core/math/rect';
 import type { Vec2 } from '@/core/math/vec';
 import { distanceToNoodle, noodleBetween, noodleCrossesRect, visibleConnections, type Connection } from '@/core/prototype/connections';
 import { topLevelFrame, variantSetOf } from '@/core/prototype/reactions';
+import { isOverlayDestination } from '@/core/prototype/flows';
+import { presentableFrames } from '@/core/prototype/player';
 import { hitTestDeepest } from '@/core/scene/hit-test';
 import type { Editor } from '../editor';
 import { worldToScreen } from '../viewport/viewport';
@@ -84,6 +86,30 @@ export function connectionsInScreenRect(editor: Editor, rect: Rect, selection: r
     const destination = screenBounds(editor, connection.destinationId);
     return source !== null && destination !== null && noodleCrossesRect(noodleBetween(source, destination), rect);
   });
+}
+
+/** Size of the badge next to an overlay frame on the canvas. */
+export const OVERLAY_BADGE_SIZE = 16;
+
+/** The frames on the page that interactions open as overlays, which show badges while the Prototype tab is open. */
+export function overlayFrames(editor: Editor): Id[] {
+  if (editor.state.getSnapshot().rightTab !== 'prototype') return [];
+  return presentableFrames(editor.doc, editor.pageId).filter((id) => isOverlayDestination(editor.doc, editor.pageId, id));
+}
+
+/** An overlay frame's badge on screen: just outside the frame's top-right corner. */
+export function overlayBadgeRect(editor: Editor, frameId: Id): Rect | null {
+  const bounds = screenBounds(editor, frameId);
+  return bounds ? { x: bounds.x + bounds.width + 6, y: bounds.y, width: OVERLAY_BADGE_SIZE, height: OVERLAY_BADGE_SIZE } : null;
+}
+
+/** The overlay whose badge is under a screen point, while the Prototype tab is open. */
+export function overlayBadgeAt(editor: Editor, screen: Vec2): Id | null {
+  for (const frameId of overlayFrames(editor)) {
+    const rect = overlayBadgeRect(editor, frameId);
+    if (rect && screen.x >= rect.x && screen.x <= rect.x + rect.width && screen.y >= rect.y && screen.y <= rect.y + rect.height) return frameId;
+  }
+  return null;
 }
 
 /**

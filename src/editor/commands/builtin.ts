@@ -28,6 +28,7 @@ import { alignSelection, distributeSelection } from './align';
 import { reorder } from './arrange';
 import type { CommandDefinition } from './registry';
 import { layersWithSame, matchingLayers } from './select-similar';
+import { hasInteractions, removeAllInteractions, removeOverlayInteractions } from './prototype-remove';
 import { canTidyUp, tidyUpSelection } from './tidy';
 import { canToggleMask, toggleMask } from './masks';
 import { canFlatten, flattenSelection } from './flatten';
@@ -663,6 +664,16 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     checked: (e) => e.state.getSnapshot().rightTab === 'prototype',
     run: (e) => e.state.setRightTab(e.state.getSnapshot().rightTab === 'prototype' ? 'design' : 'prototype'),
   },
+  // A connection's context menu: every interaction on the current page goes.
+  {
+    id: 'prototype.removeAllInteractions',
+    label: 'Remove all interactions',
+    category: 'Edit',
+    enabled: (e) => hasInteractions(e),
+    run: (e) => {
+      removeAllInteractions(e);
+    },
+  },
   {
     id: 'view.inlinePreview',
     label: 'Preview',
@@ -844,6 +855,13 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
       const guide = e.state.getSnapshot().selectedGuide;
       if (guide) {
         removeGuide(e, guide);
+        return;
+      }
+      const overlay = e.state.getSnapshot().selectedOverlay;
+      if (overlay) {
+        // A selected overlay badge deletes the overlay: the interactions opening it, not the frame.
+        removeOverlayInteractions(e, overlay);
+        e.state.selectOverlay(null);
         return;
       }
       const ids = e.selection.filter((id) => e.doc.has(id));

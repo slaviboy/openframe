@@ -51,6 +51,8 @@ export interface EditorState {
   readonly selectedGuide: GuideRef | null;
   /** Prototype connections selected on the canvas (their hotspots are the layer selection). */
   readonly selectedConnections: readonly SelectedConnection[];
+  /** The overlay frame whose badge is selected on the canvas (Delete removes the interactions opening it). */
+  readonly selectedOverlay: Id | null;
   readonly hoverId: Id | null;
   readonly tool: ToolId;
   /** Tool to return to after a temporary tool (e.g. holding Space for hand). */
@@ -160,6 +162,7 @@ export class EditorStore extends Observable<EditorState> {
       selectedGuide: null,
       hoverId: null,
       selectedConnections: [],
+      selectedOverlay: null,
       tool: 'move',
       spring: null,
       mode: 'design',
@@ -305,7 +308,7 @@ export class EditorStore extends Observable<EditorState> {
 
   setActivePage(pageId: Id): void {
     if (this.doc.get(pageId)?.type !== 'PAGE') return;
-    this.setState({ activePageId: pageId, selection: [], selectedGuide: null, hoverId: null, renamingId: null, croppingId: null, gradientEdit: null, blurEdit: null, textEdit: null, multiEditSetId: null, addInstancesSlotId: null });
+    this.setState({ activePageId: pageId, selection: [], selectedGuide: null, selectedOverlay: null, hoverId: null, renamingId: null, croppingId: null, gradientEdit: null, blurEdit: null, textEdit: null, multiEditSetId: null, addInstancesSlotId: null });
   }
 
   setViewport(viewport: Viewport, pageId: Id = this.state.activePageId): void {
@@ -372,7 +375,7 @@ export class EditorStore extends Observable<EditorState> {
     const vectorEdit = this.state.vectorEdit;
     if (vectorEdit && !(normalized.length === 1 && normalized[0] === vectorEdit.nodeId)) this.setState({ vectorEdit: null });
     const unchanged = normalized.length === this.state.selection.length && normalized.every((id, i) => id === this.state.selection[i]);
-    if (unchanged && this.state.selectedGuide === null) return;
+    if (unchanged && this.state.selectedGuide === null && this.state.selectedOverlay === null) return;
     // Selecting anything other than the layer being cropped leaves crop mode.
     const only = normalized.length === 1 ? normalized[0] : null;
     const keepCrop = only !== null && only === this.state.croppingId;
@@ -390,6 +393,7 @@ export class EditorStore extends Observable<EditorState> {
       selection: normalized,
       selectedGuide: null,
       selectedConnections: [],
+      selectedOverlay: null,
       croppingId: keepCrop ? this.state.croppingId : null,
       gradientEdit: keepGradient ? this.state.gradientEdit : null,
       blurEdit: keepBlur ? this.state.blurEdit : null,
@@ -403,6 +407,11 @@ export class EditorStore extends Observable<EditorState> {
   selectConnections(refs: readonly SelectedConnection[]): void {
     if (refs.length > 0) this.select([...new Set(refs.map((ref) => ref.sourceId))]);
     this.setState({ selectedConnections: refs });
+  }
+
+  /** Selects an overlay by its badge on the canvas: the overlay frame becomes the selection, and Delete removes the interactions opening it. */
+  selectOverlay(frameId: Id | null): void {
+    this.setState({ selection: frameId ? [frameId] : this.state.selection, selectedOverlay: frameId, selectedGuide: null, selectedConnections: [] });
   }
 
   /** Selects a ruler guide (clearing the layer selection), or clears the guide selection. */
@@ -419,8 +428,8 @@ export class EditorStore extends Observable<EditorState> {
   }
 
   clearSelection(): void {
-    if (this.state.selection.length || this.state.selectedGuide || this.state.croppingId || this.state.gradientEdit || this.state.blurEdit) {
-      this.setState({ selection: [], selectedGuide: null, croppingId: null, gradientEdit: null, blurEdit: null });
+    if (this.state.selection.length || this.state.selectedGuide || this.state.selectedOverlay || this.state.croppingId || this.state.gradientEdit || this.state.blurEdit) {
+      this.setState({ selection: [], selectedGuide: null, selectedOverlay: null, croppingId: null, gradientEdit: null, blurEdit: null });
     }
   }
 

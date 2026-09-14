@@ -42,7 +42,7 @@ import { MissingFontsDialog } from './dialogs/MissingFontsDialog';
 import { clipboardCommands } from './clipboard/clipboard-commands';
 import { ClipboardController } from './clipboard/clipboard-controller';
 import { KeyboardController } from './keyboard/keyboard-controller';
-import { canvasMenuEntries, guideMenuEntries, objectMenuEntries, pasteHereEntries, selectLayerEntries } from './menus/menu-model';
+import { canvasMenuEntries, connectionMenuEntries, guideMenuEntries, objectMenuEntries, pasteHereEntries, selectLayerEntries } from './menus/menu-model';
 import { BatchRenameDialog } from './dialogs/BatchRenameDialog';
 import { NudgeDialog } from './dialogs/NudgeDialog';
 import { CommandPalette } from './palette/CommandPalette';
@@ -404,7 +404,9 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
           entries={
             editorState.selectedGuide
               ? guideMenuEntries(editor)
-              : [
+              : editorState.selectedConnections.length > 0 && editorState.rightTab === 'prototype'
+                ? connectionMenuEntries(editor)
+                : [
                   ...spellingEntries(editor, contextMenu.spelling),
                   ...selectLayerEntries(editor, contextMenu.layers),
                   ...contextMenu.pasteEntries,

@@ -21,6 +21,7 @@ import { hitTestDeepest, layersAt, selectionTarget } from '@/core/scene/hit-test
 import type { SnapGuide } from '@/core/scene/snapping';
 import type { Editor } from '../editor';
 import { hitHandle, hitRotationCorner, selectionFrame } from '../chrome/selection-geometry';
+import { connectionAt } from '../chrome/prototype-geometry';
 import { GuideController, guidesOf, hitGuide, rulerAt, sameGuide } from '../interactions/guides';
 import type { GuideRef, ToolId } from '../stores/editor-store';
 import { panBy, screenToWorld, zoomAt, type Viewport } from '../viewport/viewport';
@@ -331,6 +332,13 @@ export class ToolManager {
       editor.state.selectGuide(guide);
       return;
     }
+    // Prototype tab: right-clicking a connection's noodle selects it, for its menu.
+    const connection = connectionAt(editor, p.screen);
+    if (connection) {
+      editor.state.selectConnections([{ sourceId: connection.sourceId, reactionIndex: connection.reactionIndex, actionIndex: connection.actionIndex }]);
+      return;
+    }
+    editor.state.selectConnections([]);
     const deepest = hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, {
       tolerance: this.env.hitTolerancePx / editor.state.viewport.zoom,
     });
