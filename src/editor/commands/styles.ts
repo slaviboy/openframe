@@ -165,7 +165,7 @@ export function duplicateStyles(editor: Editor, ids: readonly Id[]): Id[] {
   return copies;
 }
 
-/** Moves styles before or after another style, keeping their order. One undo step. */
+/** Moves styles before or after another style, keeping their order, and into its folder. One undo step. */
 export function moveStyles(editor: Editor, ids: readonly Id[], targetId: Id, position: 'before' | 'after'): boolean {
   const moving = new Set(ids.filter((id) => id !== targetId && styleNode(editor, id) !== undefined));
   if (moving.size === 0 || !styleNode(editor, targetId)) return false;
@@ -178,7 +178,15 @@ export function moveStyles(editor: Editor, ids: readonly Id[], targetId: Id, pos
   };
   const target = keyOf(editor.doc, targetId);
   const keys = position === 'before' ? keysBetween(neighbour(-1), target, ordered.length) : keysBetween(target, neighbour(1), ordered.length);
-  editor.history.run(moving.size === 1 ? 'Move style' : 'Move styles', (tx) => ordered.forEach((id, i) => tx.set(id, 'parent', { id: ROOT_ID, key: keys[i]! })));
+  // Styles dropped next to a style in another folder move into its folder.
+  const folder = styleFolder(styleNode(editor, targetId)!.name);
+  editor.history.run(moving.size === 1 ? 'Move style' : 'Move styles', (tx) =>
+    ordered.forEach((id, i) => {
+      tx.set(id, 'parent', { id: ROOT_ID, key: keys[i]! });
+      const name = (tx.store.get(id) as StyleNode).name;
+      if (styleFolder(name) !== folder) tx.set(id, 'name', folder ? `${folder}/${styleLeafName(name)}` : styleLeafName(name));
+    }),
+  );
   return true;
 }
 
@@ -200,7 +208,7 @@ export function moveStylesToFolder(editor: Editor, ids: readonly Id[], folder: s
 }
 
 /** The styles of a type inside a folder, including its subfolders. */
-function stylesInFolder(editor: Editor, styleType: StyleType, folder: string): StyleNode[] {
+export function stylesInFolder(editor: Editor, styleType: StyleType, folder: string): StyleNode[] {
   return editor.doc
     .children(ROOT_ID)
     .map((id) => styleNode(editor, id))

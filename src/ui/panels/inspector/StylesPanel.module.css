@@ -1,0 +1,131 @@
+/*
+ * Copyright (C) 2026 Stanislav Georgiev
+ * https://github.com/slaviboy
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+.section {
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+}
+
+.title,
+.groupTitle {
+  margin: 0;
+  font-size: inherit;
+  font-weight: 600;
+}
+
+.groupTitle {
+  margin-top: var(--space-2);
+  color: var(--fg-secondary);
+  font-weight: 500;
+}
+
+.empty {
+  margin: 0;
+  color: var(--fg-secondary);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row,
+.folder {
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+  border-radius: var(--radius-xs);
+}
+
+.folder {
+  gap: 2px;
+  color: var(--fg-secondary);
+}
+
+.row[data-selected] {
+  background: color-mix(in srgb, var(--accent, #0d99ff) 18%, transparent);
+}
+
+.name,
+.appliedName,
+.pickerRow {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0 var(--space-1);
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: default;
+}
+
+.name {
+  min-height: 28px;
+}
+
+.swatch {
+  display: inline-grid;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.effect {
+  border-radius: var(--radius-xs);
+  box-shadow: 1px 2px 3px color-mix(in srgb, currentColor 45%, transparent);
+}
+
+.image {
+  background: repeating-conic-gradient(var(--border-strong) 0 25%, transparent 0 50%) 0 0 / 6px 6px;
+}
+
+.applied {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  margin: 0 var(--space-3) var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+}
+
+.appliedName {
+  min-height: 30px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.folderLabel {
+  padding: var(--space-1) var(--space-2) 0;
+  color: var(--fg-secondary);
+}

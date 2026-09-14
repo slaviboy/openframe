@@ -124,6 +124,7 @@ const VERTICAL_CONSTRAINTS: readonly (readonly [Constraint, string])[] = [
   ['SCALE', 'Scale'],
 ];
 import { ImageSettings, ImageSwatch } from './ImageSettings';
+import { AppliedStyle, LocalStylesSection, StyleButton } from './StylesPanel';
 import { PatternSettings } from './PatternSettings';
 import { PAINT_BLEND_OPTIONS } from './blend-modes';
 import { ColorControl } from './ColorControl';
@@ -209,7 +210,14 @@ export function Inspector() {
 
   return (
     <div className={styles.inspector} data-testid="inspector">
-      {nodes.length === 0 ? <PageSection /> : <SelectionSections nodes={nodes} />}
+      {nodes.length === 0 ? (
+        <>
+          <PageSection />
+          <LocalStylesSection />
+        </>
+      ) : (
+        <SelectionSections nodes={nodes} />
+      )}
     </div>
   );
 }
@@ -480,13 +488,20 @@ function MaskSection({ nodes }: { nodes: SceneNode[] }) {
   );
 }
 
-function Section({ title, actions, children }: { title: string; actions?: ReactNode; children?: ReactNode }) {
+/** A sidebar section; `styleAction` (the Apply styles button) sits before the actions, and `applied` (the applied style) above the body. */
+function Section({ title, actions, styleAction, applied, children }: { title: string; actions?: ReactNode; styleAction?: ReactNode; applied?: ReactNode; children?: ReactNode }) {
   return (
     <section className={styles.section} aria-label={title}>
       <header className={styles.sectionHeader}>
         <h3 className={styles.sectionTitle}>{title}</h3>
-        {actions && <div className={styles.sectionActions}>{actions}</div>}
+        {(actions || styleAction) && (
+          <div className={styles.sectionActions}>
+            {styleAction}
+            {actions}
+          </div>
+        )}
       </header>
+      {applied}
       {children && <div className={styles.sectionBody}>{children}</div>}
     </section>
   );
@@ -867,7 +882,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       </Section>
       )}
       {texts.length === nodes.length && (
-        <Section title="Typography" actions={bindable && single?.type === 'TEXT' ? <PropertyBinding layerId={single.id} type="TEXT" /> : undefined}>
+        <Section title="Typography" styleAction={<StyleButton slot="text" ids={texts.map((n) => n.id)} />} applied={<AppliedStyle slot="text" nodes={texts} />} actions={bindable && single?.type === 'TEXT' ? <PropertyBinding layerId={single.id} type="TEXT" /> : undefined}>
           <TypographyFields nodes={texts} />
         </Section>
       )}
@@ -1833,7 +1848,12 @@ function PaintSection({
     });
 
   return (
-    <Section title={title} actions={<IconButton icon="plus" label={`Add ${title.toLowerCase()}`} onClick={add} />}>
+    <Section
+      title={title}
+      styleAction={<StyleButton slot={field === 'fills' ? 'fill' : 'stroke'} ids={nodes.map((n) => n.id)} />}
+      applied={<AppliedStyle slot={field === 'fills' ? 'fill' : 'stroke'} nodes={nodes} />}
+      actions={<IconButton icon="plus" label={`Add ${title.toLowerCase()}`} onClick={add} />}
+    >
       {mixed && <p className={styles.hint}>Click + to replace mixed {title.toLowerCase()}s</p>}
       {list.length > 0 && (
         <ul className={styles.paintList}>
@@ -2139,6 +2159,8 @@ function EffectsSection({ nodes }: { nodes: SceneNode[] }) {
   return (
     <Section
       title="Effects"
+      styleAction={<StyleButton slot="effect" ids={nodes.map((n) => n.id)} />}
+      applied={<AppliedStyle slot="effect" nodes={nodes} />}
       actions={
         <IconButton
           icon="plus"
@@ -2334,6 +2356,8 @@ function LayoutGuideSection({ nodes }: { nodes: SceneNode[] }) {
   return (
     <Section
       title="Layout guide"
+      styleAction={<StyleButton slot="grid" ids={nodes.map((n) => n.id)} />}
+      applied={<AppliedStyle slot="grid" nodes={nodes} />}
       actions={<IconButton icon="plus" label="Add layout guide" onClick={() => write('Add layout guide', (cur) => [...(mixed ? [] : cur), defaultLayoutGuide()])} />}
     >
       {mixed && <p className={styles.hint}>Click + to replace mixed layout guides</p>}

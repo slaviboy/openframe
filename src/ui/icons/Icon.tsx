@@ -103,6 +103,15 @@ const PATHS = {
     </>
   ),
   plus: <path d="M12 6.5v11M6.5 12h11" />,
+  styles: (
+    <>
+      <circle cx="8.5" cy="8.5" r="1.8" />
+      <circle cx="15.5" cy="8.5" r="1.8" />
+      <circle cx="8.5" cy="15.5" r="1.8" />
+      <circle cx="15.5" cy="15.5" r="1.8" />
+    </>
+  ),
+  detach: <path d="M12 4.5l3 3M19.5 12l-3 3M12 19.5l-3-3M4.5 12l3-3M6 6l12 12" />,
   more: (
     <>
       <circle cx="7" cy="12" r="1" fill="currentColor" stroke="none" />
