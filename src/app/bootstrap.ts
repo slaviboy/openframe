@@ -25,7 +25,8 @@ import { Autosaver, LocalPersistence, StorageError, type FileRecord, type SaveSt
 import { createReplicaId } from '@/platform/replica';
 
 export const APP_VERSION = '0.1.0';
-const LAST_FILE_KEY = 'lastFileId';
+/** The setting naming the local file the app opens on start. */
+export const LAST_FILE_KEY = 'lastFileId';
 
 export interface SessionState {
   readonly file: FileRecord;

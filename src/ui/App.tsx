@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { isPackageFile, openLocalFile, saveLocalCopy } from '@/app/local-files';
+import { PackageError } from '@/platform/package';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { bootstrap, type AppSession } from '@/app/bootstrap';
 import type { Vec2 } from '@/core/math/vec';
@@ -117,6 +119,36 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
   const closeDialog = useCallback(() => editor.state.openDialog(null), [editor]);
   const restoreUi = useCallback(() => setUiMode('full'), []);
   const [notice, setNotice] = useState<string | null>(null);
+  const openInput = useRef<HTMLInputElement>(null);
+  // Opening an .openframe file makes it a new local file and reloads into it.
+  const openPackage = useCallback(
+    async (file: File) => {
+      try {
+        await openLocalFile(session, file);
+      } catch (error) {
+        setNotice(error instanceof PackageError ? error.message : 'The file could not be opened.');
+      }
+    },
+    [session],
+  );
+  useEffect(
+    () =>
+      editor.commands.register(
+        {
+          id: 'file.saveLocalCopy',
+          label: 'Save local copy…',
+          category: 'File',
+          run: () => void saveLocalCopy(session).catch(() => setNotice('The file could not be saved.')),
+        },
+        {
+          id: 'file.open',
+          label: 'Open file…',
+          category: 'File',
+          run: () => openInput.current?.click(),
+        },
+      ),
+    [editor, session],
+  );
   const closeNotice = useCallback(() => {
     setNotice(null);
     editor.state.setNotice(null);
@@ -139,6 +171,11 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
   /** Imports image files and places them at a world point (default: the center of the visible canvas). */
   const placeFiles = useCallback(
     async (files: File[], world?: Vec2) => {
+      const packageFile = files.find(isPackageFile);
+      if (packageFile) {
+        await openPackage(packageFile);
+        return;
+      }
       const { images, errors } = await importImageFiles(editor, files);
       if (errors.length > 0) setNotice(errors.join(' '));
       if (images.length === 0) return;
@@ -146,7 +183,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
       const center = { x: (insets.left + editor.canvasSize.width - insets.right) / 2, y: (insets.top + editor.canvasSize.height - insets.bottom) / 2 };
       placeImages(editor, images, world ?? screenToWorld(editor.state.viewport, center));
     },
-    [editor],
+    [editor, openPackage],
   );
   const dropFiles = useCallback((files: File[], world: Vec2) => void placeFiles(files, world), [placeFiles]);
 
@@ -308,6 +345,18 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
       {editorState.dialog === 'batchRename' && <BatchRenameDialog editor={editor} onClose={closeDialog} />}
       {editorState.dialog === 'nudgeAmount' && <NudgeDialog onClose={closeDialog} />}
       {editorState.dialog === 'export' && <ExportDialog editor={editor} onClose={closeDialog} />}
+      <input
+        ref={openInput}
+        type="file"
+        accept=".openframe"
+        aria-label="Open an Openframe file"
+        hidden
+        onChange={(e) => {
+          const file = e.currentTarget.files?.[0];
+          e.currentTarget.value = '';
+          if (file) void openPackage(file);
+        }}
+      />
       {editorState.tool === 'image' && <PlaceImageHint tools={tools} />}
       {editorState.tool === 'pickLayer' && <ToolHint text="Click a layer to use as the pattern source · Esc to cancel" />}
       {editorState.tool === 'eyedropper' && <ToolHint text="Click to apply a color from the canvas · Esc to cancel" />}

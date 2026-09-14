@@ -308,3 +308,16 @@ A ZIP container:
 - `sidecar/`: optional comments and version history
 
 Until M9, documents live only in IndexedDB.
+
+## Openframe files (`.openframe`)
+
+Files saved to disk (File > Save local copy…) are ZIP archives:
+
+| Entry | Contents |
+| --- | --- |
+| `manifest.json` | `{ "kind": "openframe-package", "version": 1, "images": [{ "hash", "mime", "width", "height" }] }` |
+| `document.json` | The document as canonical JSON (the format above). |
+| `images/<hash>` | The encoded bytes of each image the document uses (image paints in layers, vector regions, text ranges and color styles), named by the lowercase hex SHA-256 of the bytes. |
+
+Opening a file (File > Open file…, or dropping it on the canvas) reads only these entries, each at most 512 MB. It validates the manifest, loads the document like any saved document (validation and migrations), and checks every image against its hash. The document then becomes a new local file with its images.
+

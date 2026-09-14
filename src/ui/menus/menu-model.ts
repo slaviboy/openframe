@@ -51,7 +51,7 @@ export function commandSections(editor: Editor, sections: readonly (readonly str
 }
 
 const MAIN_MENU: readonly (readonly [string, readonly (readonly string[])[]])[] = [
-  ['File', [['file.export'], ['file.colorProfileSrgb', 'file.colorProfileP3']]],
+  ['File', [['file.saveLocalCopy', 'file.open'], ['file.export'], ['file.colorProfileSrgb', 'file.colorProfileP3']]],
   [
     'Edit',
     [
