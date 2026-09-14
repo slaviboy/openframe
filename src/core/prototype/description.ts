@@ -128,3 +128,65 @@ export function formatDescription(text: string, start: number, end: number, form
   const next = `${text.slice(0, lineStart)}${formatted}${text.slice(lineEnd)}`;
   return { text: next, start: lineStart, end: lineStart + formatted.length };
 }
+
+/**
+ * Formatted inlines written out as a description holds them: `**bold**` runs and `[text](address)` links (a link showing
+ * its own address is written as the address).
+ */
+export function inlineText(inlines: readonly DescriptionInline[]): string {
+  let out = '';
+  let bold = false;
+  for (const inline of inlines) {
+    if (inline.text === '') continue;
+    if (inline.bold !== bold) {
+      out += '**';
+      bold = inline.bold;
+    }
+    out += inline.type === 'link' ? (inline.text === inline.href ? inline.href : `[${inline.text}](${inline.href})`) : inline.text;
+  }
+  return bold ? `${out}**` : out;
+}
+
+const escapeHtml = (value: string) => value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+function inlinesHtml(inlines: readonly DescriptionInline[]): string {
+  return inlines
+    .map((inline) => {
+      const content = inline.type === 'link' ? `<a href="${escapeHtml(inline.href)}">${escapeHtml(inline.text)}</a>` : escapeHtml(inline.text);
+      return inline.bold ? `<strong>${content}</strong>` : content;
+    })
+    .join('');
+}
+
+/** A paragraph's inlines split into its lines. */
+function inlineLines(inlines: readonly DescriptionInline[]): DescriptionInline[][] {
+  const lines: DescriptionInline[][] = [[]];
+  for (const inline of inlines) {
+    const parts = inline.type === 'text' ? inline.text.split('\n') : [inline.text];
+    parts.forEach((part, i) => {
+      if (i > 0) lines.push([]);
+      if (part) lines[lines.length - 1]!.push(inline.type === 'text' ? { ...inline, text: part } : inline);
+    });
+  }
+  return lines;
+}
+
+/**
+ * A description as the rich text editor shows it (HTML, its text escaped): each line of a paragraph in a `div`, an empty
+ * one between paragraphs, lists as `ul` or `ol`, bold text as `strong` and links as `a`.
+ */
+export function descriptionHtml(text: string): string {
+  let html = '';
+  let previous: DescriptionBlock['type'] | null = null;
+  for (const block of parseDescription(text)) {
+    if (block.type === 'paragraph') {
+      if (previous === 'paragraph') html += '<div><br></div>';
+      for (const line of inlineLines(block.inlines)) html += `<div>${line.length > 0 ? inlinesHtml(line) : '<br>'}</div>`;
+    } else {
+      const tag = block.ordered ? 'ol' : 'ul';
+      html += `<${tag}>${block.items.map((item) => `<li>${inlinesHtml(item) || '<br>'}</li>`).join('')}</${tag}>`;
+    }
+    previous = block.type;
+  }
+  return html;
+}

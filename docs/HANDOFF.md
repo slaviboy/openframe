@@ -220,6 +220,11 @@ This file is how work continues after a pause (for example, a usage limit). Read
   - Renaming a flow on its canvas tag (the commit after Share prototype):
     - double-clicking a tag's name sets `flowRename` in the editor store (the move tool's `flow-tag` gesture, `clickCount >= 2`)
     - `FlowRenamePopover` (`src/ui/canvas/FlowRenamePopover.tsx`) sits on the tag at `flowTagRect`; Enter calls `updateFlowStartingPoint`, Escape or blur closes
+  - Editing flow descriptions as formatted text (the commit after renaming a flow on its tag):
+    - `DescriptionEditor` moved to `src/ui/panels/prototype/DescriptionEditor.tsx`: a contentEditable area filled from `descriptionHtml`, read back with `textOf` into the same `**bold**` / `- ` / `1. ` / `[text](url)` text; the Bold and list buttons use `document.execCommand`
+    - `inlineText` and `descriptionHtml` in `src/core/prototype/description.ts` (the old `formatDescription` stays for its unit tests)
+    - browser traps: Firefox's Bold reads the text's weight (the area sets `font-weight: 400`, and a span's explicit weight turns bold off); WebKit ends each list item with a placeholder `<br>` (ignored inside `li`)
+    - the group's `data-description` holds the text, for tests
 
 ## In progress (uncommitted)
 
@@ -230,7 +235,6 @@ This file is how work continues after a pause (for example, a usage limit). Read
 1. The pending sub-items left in the M10 rows of `docs/FEATURE_MATRIX.md`:
    - 160 Video / GIF fills: video crop, video from the fill picker, GIF label next to the dimensions, GIF metadata on export
    - 200 Interactive components: the Variant interactions section, animating Change to, sharing states between matching instances
-   - 237 Flows: WYSIWYG description editing
    - 239 Variables: extended collections' modes, library variables, variable picker in expressions
    - 240 Presentation view: responsive scaling, device frames, comments, sharing links
    - 241 Inline preview: flow preview icon, Responsive, Resize to 100%, Respect aspect ratio

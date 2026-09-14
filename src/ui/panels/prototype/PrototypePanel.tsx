@@ -15,9 +15,8 @@
  * limitations under the License.
  */
 
-import { useLayoutEffect, useRef, useState, type DragEvent, type KeyboardEvent } from 'react';
+import { useState, type DragEvent, type KeyboardEvent } from 'react';
 import { moveAction, type ActionPath } from '@/core/prototype/action-paths';
-import { formatDescription, type DescriptionFormat } from '@/core/prototype/description';
 import { gamepadCode, gamepadLabel } from '@/core/prototype/gamepad';
 import { FlowDescription } from '../../present/FlowDescription';
 import type { Id } from '@/core/ids/ids';
@@ -91,6 +90,7 @@ import { IconButton } from '../../primitives/IconButton';
 import primitives from '../../primitives/primitives.module.css';
 import inspector from '../inspector/Inspector.module.css';
 import styles from './PrototypePanel.module.css';
+import { DescriptionEditor } from './DescriptionEditor';
 import { EasingGraph } from './EasingGraph';
 
 const SPRING_TYPES: ReadonlySet<EasingType> = new Set(['GENTLE', 'QUICK', 'BOUNCY', 'SLOW', 'CUSTOM_SPRING']);
@@ -903,81 +903,6 @@ function FlowStartingPointSection({ frameId, pageId }: { frameId: Id; pageId: Id
         </div>
       )}
     </section>
-  );
-}
-
-/** Links a description can hold: web pages and email. */
-const LINK_ADDRESS = /^(https?:\/\/\S+|mailto:\S+)$/i;
-
-/**
- * Edit description: the flow's description with formatting buttons (bold, bulleted and numbered lists, links) and a
- * preview of how it shows; closing the panel saves it. The text holds its formatting as light markup.
- */
-function DescriptionEditor({ value, onSave }: { value: string; onSave: (value: string) => void }) {
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState(value);
-  const [href, setHref] = useState('https://');
-  const area = useRef<HTMLTextAreaElement>(null);
-  const selection = useRef<{ start: number; end: number } | null>(null);
-  // After formatting, the formatted text stays selected.
-  useLayoutEffect(() => {
-    const range = selection.current;
-    if (!range || !area.current) return;
-    selection.current = null;
-    area.current.focus();
-    area.current.setSelectionRange(range.start, range.end);
-  });
-  if (!open) {
-    return (
-      <button
-        type="button"
-        className={styles.textButton}
-        onClick={() => {
-          setDraft(value);
-          setOpen(true);
-        }}
-      >
-        Edit description
-      </button>
-    );
-  }
-  const format = (kind: DescriptionFormat) => {
-    const start = area.current?.selectionStart ?? draft.length;
-    const end = area.current?.selectionEnd ?? draft.length;
-    const next = formatDescription(draft, start, end, kind, href.trim());
-    selection.current = { start: next.start, end: next.end };
-    setDraft(next.text);
-  };
-  return (
-    <div className={styles.details} role="group" aria-label="Description">
-      <div className={styles.row}>
-        <button type="button" className={styles.textButton} onClick={() => format('bold')}>
-          Bold
-        </button>
-        <button type="button" className={styles.textButton} onClick={() => format('bullets')}>
-          Bulleted list
-        </button>
-        <button type="button" className={styles.textButton} onClick={() => format('numbers')}>
-          Numbered list
-        </button>
-        <IconButton
-          icon="close"
-          label="Close description"
-          onClick={() => {
-            if (draft !== value) onSave(draft);
-            setOpen(false);
-          }}
-        />
-      </div>
-      <textarea ref={area} className={primitives.textInput} aria-label="Flow description" rows={5} value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={stopKeys} />
-      <div className={styles.row}>
-        <input className={primitives.textInput} aria-label="Link address" value={href} spellCheck={false} onChange={(e) => setHref(e.target.value)} onKeyDown={stopKeys} />
-        <button type="button" className={styles.textButton} disabled={!LINK_ADDRESS.test(href.trim())} onClick={() => format('link')}>
-          Add link
-        </button>
-      </div>
-      {draft.trim() && <FlowDescription text={draft} className={styles.flowDescription} label="Description preview" />}
-    </div>
   );
 }
 

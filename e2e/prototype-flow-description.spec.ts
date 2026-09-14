@@ -15,9 +15,35 @@
  * limitations under the License.
  */
 
+import type { Locator } from '@playwright/test';
 import { expect, test } from './fixtures';
 
-test('a flow description is formatted with bold text, lists and links, in the Prototype tab and presentation view', async ({ page }) => {
+/** Selects text in a rich text editor: from the start of `from` to the end of `to` (or of `from`). */
+async function select(text: Locator, from: string, to = from) {
+  await text.evaluate(
+    (root, [start, end]) => {
+      const find = (needle: string) => {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const at = node.textContent!.indexOf(needle);
+          if (at >= 0) return { node, at };
+        }
+        throw new Error(`No text ${needle}`);
+      };
+      const a = find(start!);
+      const b = find(end!);
+      const range = document.createRange();
+      range.setStart(a.node, a.at);
+      range.setEnd(b.node, b.at + end!.length);
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+    },
+    [from, to],
+  );
+}
+
+test('a flow description is edited as formatted text, with bold text, lists and links, and shows formatted everywhere', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
   const box = (await page.getByTestId('canvas').boundingBox())!;
@@ -33,29 +59,42 @@ test('a flow description is formatted with bold text, lists and links, in the Pr
   await panel.getByRole('button', { name: 'Add starting point' }).click();
   await panel.getByRole('button', { name: 'Edit description' }).click();
   const editor = panel.getByRole('group', { name: 'Description' });
-  const text = editor.getByLabel('Flow description');
-  await text.fill('Tap Buy now\nOpen the cart\nPay');
-  // Bold: "Buy now".
-  await text.evaluate((area: HTMLTextAreaElement) => area.setSelectionRange(4, 11));
-  await editor.getByRole('button', { name: 'Bold' }).click();
-  await expect(text).toHaveValue('Tap **Buy now**\nOpen the cart\nPay');
-  // A bulleted list of the last two lines.
-  await text.evaluate((area: HTMLTextAreaElement) => area.setSelectionRange(16, 33));
-  await editor.getByRole('button', { name: 'Bulleted list' }).click();
-  await expect(text).toHaveValue('Tap **Buy now**\n- Open the cart\n- Pay');
-  // A link.
-  await text.evaluate((area: HTMLTextAreaElement) => area.setSelectionRange(37, 37));
+  const text = editor.getByRole('textbox', { name: 'Flow description' });
+  await text.click();
+  await text.pressSequentially('Tap Buy now');
+  await text.press('Enter');
+  await text.pressSequentially('Open the cart');
+  await text.press('Enter');
+  await text.pressSequentially('Pay');
   await text.press('Enter');
   await text.pressSequentially('Guide');
-  await text.evaluate((area: HTMLTextAreaElement) => area.setSelectionRange(38, 43));
+  await expect(editor).toHaveAttribute('data-description', 'Tap Buy now\nOpen the cart\nPay\nGuide');
+
+  // Bold: "Buy now".
+  await select(text, 'Buy now');
+  await editor.getByRole('button', { name: 'Bold' }).click();
+  await expect(text.locator('b, strong')).toHaveText('Buy now');
+  await expect(editor).toHaveAttribute('data-description', 'Tap **Buy now**\nOpen the cart\nPay\nGuide');
+  // A bulleted list of the next two lines.
+  await select(text, 'Open the cart', 'Pay');
+  await editor.getByRole('button', { name: 'Bulleted list' }).click();
+  await expect(text.getByRole('listitem')).toHaveText(['Open the cart', 'Pay']);
+  await expect(editor).toHaveAttribute('data-description', 'Tap **Buy now**\n- Open the cart\n- Pay\nGuide');
+  // A link on "Guide" (selecting the address field keeps the text's selection).
+  await select(text, 'Guide');
   await editor.getByLabel('Link address').fill('https://example.com/guide');
   await editor.getByRole('button', { name: 'Add link' }).click();
-  await expect(text).toHaveValue('Tap **Buy now**\n- Open the cart\n- Pay\n[Guide](https://example.com/guide)');
-  const preview = editor.getByRole('group', { name: 'Description preview' });
-  await expect(preview.locator('strong')).toHaveText('Buy now');
-  await expect(preview.getByRole('listitem')).toHaveText(['Open the cart', 'Pay']);
+  await expect(text.getByRole('link', { name: 'Guide' })).toHaveAttribute('href', 'https://example.com/guide');
+  await expect(editor).toHaveAttribute('data-description', 'Tap **Buy now**\n- Open the cart\n- Pay\n[Guide](https://example.com/guide)');
   await editor.getByRole('button', { name: 'Close description' }).click();
   await expect(editor).toHaveCount(0);
+
+  // Opened again, it shows formatted.
+  await panel.getByRole('button', { name: 'Edit description' }).click();
+  await expect(text.locator('strong')).toHaveText('Buy now');
+  await expect(text.getByRole('listitem')).toHaveText(['Open the cart', 'Pay']);
+  await expect(editor).toHaveAttribute('data-description', 'Tap **Buy now**\n- Open the cart\n- Pay\n[Guide](https://example.com/guide)');
+  await editor.getByRole('button', { name: 'Close description' }).click();
 
   // The Flows section, with nothing selected, shows it formatted.
   await page.keyboard.press('Escape');
