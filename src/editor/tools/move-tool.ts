@@ -23,6 +23,7 @@ import { fromPoints, transformRect, unionAll, type Rect } from '@/core/math/rect
 import { edgeValues, guidesFor, snapBounds, snapValue, type SnapGuide } from '@/core/scene/snapping';
 import { isLayoutGuideRect, SNAP_THRESHOLD_PX, snapCandidatesFor } from '../interactions/snap-candidates';
 import { adoptCoveredLayers, duplicateNodes } from '../commands/structure';
+import { setLayoutSizing } from '../commands/auto-layout';
 import { applySpacing, captureSpacingStarts, smartSelectionInfo, spacingHandleAt, type SmartSelectionInfo } from '../commands/smart-selection';
 import { canParent } from '@/core/document/containment';
 import type { DuplicateMemory } from '../editor';
@@ -261,6 +262,15 @@ export class MoveTool implements Tool {
         const candidates = snapCandidatesFor(editor, [frame.nodeId]);
         this.gesture = { kind: 'line-end', tx, id: frame.nodeId, moving, fixedWorld, last: p, candidates, guides: [] };
         return;
+      }
+      // Double-clicking an edge sets that axis to hug contents; with ⌥, to fill container.
+      if (handle && this.id === 'move' && p.clickCount >= 2 && frame.nodeId && (handle === 'n' || handle === 's' || handle === 'e' || handle === 'w')) {
+        const node = editor.doc.get(frame.nodeId);
+        if (node && node.type !== 'DOCUMENT' && node.type !== 'PAGE') {
+          const axis = handle === 'e' || handle === 'w' ? 'horizontal' : 'vertical';
+          editor.history.run(p.alt ? 'Fill container' : 'Hug contents', (tx) => setLayoutSizing(tx, tx.store.getOrThrow(node.id) as SceneNode, axis, p.alt ? 'FILL' : 'HUG'));
+          return;
+        }
       }
       if (handle) {
         const tx = editor.history.begin('Resize');
