@@ -55,6 +55,8 @@ interface Session {
   readonly key: string;
   /** The layer was created for this session (removed without a trace if left empty). */
   readonly created: boolean;
+  /** Multi-edit: the other selected text layers, which take every change to this layer's text. */
+  readonly mirrors: readonly Id[];
   /** Text states (with their style runs) before each edit, for undo and redo while editing. */
   readonly undo: Snapshot[];
   readonly redo: Snapshot[];
@@ -66,14 +68,20 @@ interface Snapshot extends TextEdit {
   readonly runs: readonly TextStyleRun[] | undefined;
   readonly listType: ListType | undefined;
   readonly indentation: number | undefined;
+  /** The text and styles of the other layers of a multi-edit. */
+  readonly mirrors: readonly { readonly id: Id; readonly text: string; readonly runs: readonly TextStyleRun[] | undefined }[];
 }
 
-const snapshotOf = (node: TextNode, selection: TextSelection): Snapshot => ({
+const snapshotOf = (editor: Editor, session: Session, node: TextNode, selection: TextSelection): Snapshot => ({
   text: node.characters,
   selection,
   runs: node.styleRuns,
   listType: node.listType,
   indentation: node.indentation,
+  mirrors: session.mirrors.flatMap((id) => {
+    const mirror = textNode(editor, id);
+    return mirror ? [{ id, text: mirror.characters, runs: mirror.styleRuns }] : [];
+  }),
 });
 
 const sessions = new WeakMap<Editor, Session>();
@@ -103,14 +111,16 @@ function active(editor: Editor): { session: Session; node: TextNode; selection: 
 
 /**
  * Starts editing a text layer (Return, double-click, or a new layer from the Text tool). The layer
- * becomes the only selection; the text selection defaults to all of the text.
+ * becomes the only selection; the text selection defaults to all of the text. With `mirrors` (a
+ * multi-edit), the other text layers stay selected and take every change to the text.
  */
-export function beginTextEdit(editor: Editor, id: Id, options: { created?: boolean; key?: string; selection?: TextSelection } = {}): boolean {
+export function beginTextEdit(editor: Editor, id: Id, options: { created?: boolean; key?: string; selection?: TextSelection; mirrors?: readonly Id[] } = {}): boolean {
   const node = textNode(editor, id);
   if (!node || node.locked || editor.history.inTransaction) return false;
   endTextEdit(editor);
-  editor.state.select([id]);
-  sessions.set(editor, { nodeId: id, key: options.key ?? newTextEditKey(), created: options.created ?? false, undo: [], redo: [], goalX: null });
+  const mirrors = (options.mirrors ?? []).filter((m) => m !== id && textNode(editor, m) !== null && !textNode(editor, m)!.locked);
+  editor.state.select([id, ...mirrors]);
+  sessions.set(editor, { nodeId: id, key: options.key ?? newTextEditKey(), created: options.created ?? false, mirrors, undo: [], redo: [], goalX: null });
   const selection = clampSelection(node.characters, options.selection ?? { anchor: 0, focus: node.characters.length });
   editor.state.setTextEdit({ nodeId: id, ...selection });
   editor.requestRender();
@@ -140,11 +150,14 @@ export function endTextEdit(editor: Editor): boolean {
 }
 
 function finish(editor: Editor, session: Session): void {
+  if (editor.history.inTransaction) return;
   const node = textNode(editor, session.nodeId);
-  if (!node || node.characters !== '' || editor.history.inTransaction) return;
-  // A new layer left empty disappears without an undo step; an existing one is deleted.
-  if (session.created && editor.history.revert(session.key)) return;
-  editor.history.run('Delete empty text', (tx) => tx.delete(node.id));
+  // Layers left empty are removed, including the other layers of a multi-edit.
+  const empty = [...(node && node.characters === '' ? [node.id] : []), ...session.mirrors.filter((id) => textNode(editor, id)?.characters === '')];
+  if (empty.length === 0) return;
+  // A new layer left empty disappears without an undo step; existing ones are deleted.
+  if (session.created && session.mirrors.length === 0 && node?.characters === '' && editor.history.revert(session.key)) return;
+  editor.history.run('Delete empty text', (tx) => empty.forEach((id) => tx.delete(id)));
   editor.state.select(editor.selection.filter((id) => editor.doc.has(id)));
 }
 
@@ -170,10 +183,12 @@ export function watchTextEdit(editor: Editor): () => void {
 function apply(editor: Editor, session: Session, node: TextNode, selection: TextSelection, edit: TextEdit | Snapshot, record = true): void {
   const restoring = 'runs' in edit;
   const changed =
-    edit.text !== node.characters || (restoring && (!valuesEqual(edit.runs, node.styleRuns) || edit.listType !== node.listType || edit.indentation !== node.indentation));
+    edit.text !== node.characters ||
+    (restoring &&
+      (!valuesEqual(edit.runs, node.styleRuns) || edit.listType !== node.listType || edit.indentation !== node.indentation || edit.mirrors.some((m) => textNode(editor, m.id)?.characters !== m.text)));
   if (changed) {
     if (editor.history.inTransaction) return;
-    if (record) remember(session, node, selection);
+    if (record) remember(editor, session, node, selection);
     const change = textChange(node.characters, edit.text);
     const runs = restoring ? edit.runs : runsAfterEdit(node, change.start, change.end, change.insertedLength);
     editor.history.run(
@@ -185,6 +200,23 @@ function apply(editor: Editor, session: Session, node: TextNode, selection: Text
           tx.set(node.id, 'listType', edit.listType);
           tx.set(node.id, 'indentation', edit.indentation);
         }
+        // Multi-edit: the other layers take the same text. Undo and redo restore each layer's own text and styles;
+        // a typed change keeps a layer's styles when its text matched, and replaces its text as it is otherwise.
+        if (restoring) {
+          for (const mirror of edit.mirrors) {
+            if (tx.store.get(mirror.id)?.type !== 'TEXT') continue;
+            tx.set(mirror.id, 'characters', mirror.text);
+            tx.set(mirror.id, 'styleRuns', mirror.runs);
+          }
+        } else {
+          for (const id of session.mirrors) {
+            const mirror = tx.store.get(id);
+            if (mirror?.type !== 'TEXT' || mirror.locked) continue;
+            const mirrorRuns = mirror.characters === node.characters ? runsAfterEdit(mirror, change.start, change.end, change.insertedLength) : undefined;
+            tx.set(id, 'characters', edit.text);
+            tx.set(id, 'styleRuns', mirrorRuns);
+          }
+        }
       },
       { mergeKey: session.key },
     );
@@ -194,8 +226,8 @@ function apply(editor: Editor, session: Session, node: TextNode, selection: Text
   editor.requestRender();
 }
 
-function remember(session: Session, node: TextNode, selection: TextSelection): void {
-  session.undo.push(snapshotOf(node, selection));
+function remember(editor: Editor, session: Session, node: TextNode, selection: TextSelection): void {
+  session.undo.push(snapshotOf(editor, session, node, selection));
   if (session.undo.length > UNDO_LIMIT) session.undo.shift();
   session.redo.length = 0;
 }
@@ -205,7 +237,7 @@ type Active = { session: Session; node: TextNode; selection: TextSelection };
 /** Commits a change of list properties (no text change) within the session's undo step. */
 function changeList(editor: Editor, a: Active, change: (tx: Transaction) => void): void {
   if (editor.history.inTransaction) return;
-  remember(a.session, a.node, a.selection);
+  remember(editor, a.session, a.node, a.selection);
   editor.history.run('Edit text', change, { mergeKey: a.session.key });
   a.session.goalX = null;
   editor.requestRender();
@@ -414,7 +446,7 @@ export function undoTextEdit(editor: Editor): boolean {
   const a = active(editor);
   const previous = a?.session.undo.pop();
   if (!a || !previous) return false;
-  a.session.redo.push(snapshotOf(a.node, a.selection));
+  a.session.redo.push(snapshotOf(editor, a.session, a.node, a.selection));
   apply(editor, a.session, a.node, a.selection, previous, false);
   return true;
 }
@@ -423,7 +455,7 @@ export function redoTextEdit(editor: Editor): boolean {
   const a = active(editor);
   const next = a?.session.redo.pop();
   if (!a || !next) return false;
-  a.session.undo.push(snapshotOf(a.node, a.selection));
+  a.session.undo.push(snapshotOf(editor, a.session, a.node, a.selection));
   apply(editor, a.session, a.node, a.selection, next, false);
   return true;
 }

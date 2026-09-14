@@ -107,6 +107,43 @@ describe('lists while editing', () => {
   });
 });
 
+describe('multi-edit text', () => {
+  test('Return with several text layers selected edits them together; undo restores each; empty layers go at the end', () => {
+    editor.state.setTool('text');
+    click(100, 100);
+    insertText(editor, 'first');
+    endTextEdit(editor);
+    editor.state.setTool('text');
+    click(100, 300);
+    insertText(editor, 'second one');
+    endTextEdit(editor);
+    const [a, b] = texts();
+    editor.state.select([a!.id, b!.id]);
+    expect(editor.commands.run('text.edit')).toBe(true);
+    // Both stay selected; typing over the selected text replaces it in every layer.
+    expect(editor.selection).toEqual([a!.id, b!.id]);
+    insertText(editor, 'Shared');
+    expect(texts().map((t) => t.characters)).toEqual(['Shared', 'Shared']);
+    insertText(editor, '!');
+    expect(texts().map((t) => t.characters)).toEqual(['Shared!', 'Shared!']);
+    expect(undoTextEdit(editor)).toBe(true);
+    expect(undoTextEdit(editor)).toBe(true);
+    expect(texts().map((t) => t.characters)).toEqual(['first', 'second one']);
+    // The whole session is one undo step after it ends.
+    insertText(editor, 'Done');
+    endTextEdit(editor);
+    expect(texts().map((t) => t.characters)).toEqual(['Done', 'Done']);
+    editor.history.undo();
+    expect(texts().map((t) => t.characters)).toEqual(['first', 'second one']);
+    // Emptied layers are removed when editing ends.
+    editor.state.select(texts().map((t) => t.id));
+    editor.commands.run('text.edit');
+    deleteText(editor, 'backward');
+    endTextEdit(editor);
+    expect(texts()).toHaveLength(0);
+  });
+});
+
 describe('smart quotes and symbols', () => {
   test('typing converts sequences and quotes only with the preference on', () => {
     editor.state.setTool('text');

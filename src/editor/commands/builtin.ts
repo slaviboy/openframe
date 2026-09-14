@@ -469,9 +469,17 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     label: 'Edit text',
     category: 'Edit',
     shortcuts: ['Enter'],
-    enabled: (e) => e.state.getSnapshot().textEdit === null && e.selection.length === 1 && e.doc.get(e.selection[0]!)?.type === 'TEXT',
+    // Several selected text layers are edited together (multi-edit): they all take the typed text.
+    enabled: (e) =>
+      e.state.getSnapshot().textEdit === null &&
+      e.selection.length > 0 &&
+      e.selection.every((id) => {
+        const node = e.doc.get(id);
+        return node?.type === 'TEXT' && !node.locked;
+      }),
     run: (e) => {
-      beginTextEdit(e, e.selection[0]!);
+      const [first, ...rest] = e.selection;
+      if (first) beginTextEdit(e, first, { mirrors: rest });
     },
   },
   ...TOOL_COMMANDS,

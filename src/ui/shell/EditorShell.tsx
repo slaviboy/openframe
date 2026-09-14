@@ -197,6 +197,20 @@ function UpdateNotice() {
   );
 }
 
+/** Multi-edit text: shown while several text layers are selected; edits them all at once (also Return). */
+function MultiEditTextButton() {
+  const editor = useEditor();
+  const selection = useEditorState((s) => s.selection);
+  const editing = useEditorState((s) => s.textEdit !== null);
+  const allText = selection.length > 1 && selection.every((id) => editor.doc.get(id)?.type === 'TEXT');
+  if (!allText || editing) return null;
+  return (
+    <button type="button" className={styles.zoomButton} disabled={!editor.commands.isEnabled('text.edit')} onClick={() => editor.commands.run('text.edit')}>
+      Multi-edit text
+    </button>
+  );
+}
+
 function RightHeader() {
   const editor = useEditor();
   const zoom = useEditorState((s) => s.viewports[s.activePageId]?.zoom ?? 1);
@@ -209,6 +223,7 @@ function RightHeader() {
           Design
         </span>
       </div>
+      <MultiEditTextButton />
       <button
         type="button"
         className={styles.zoomButton}
