@@ -18,6 +18,7 @@
 import { DocumentStore } from '../document/store';
 import { ROOT_ID, type Id } from '../ids/ids';
 import type { Node, Paint, SceneNode } from '../schema/document';
+import { blendPaint } from './fill-blend';
 
 /**
  * Smart animate: layers that match between two frames (the same name at the same place in the hierarchy) animate the
@@ -103,18 +104,10 @@ export function blendTransform(a: Transform, b: Transform, t: number): Transform
   return [cos * sx, sin * sx, -sin * sy, cos * sy, lerp(p.x, q.x, t), lerp(p.y, q.y, t)];
 }
 
-/** Fills blended between two lists: matching solid paints blend their colors and opacity; otherwise the destination's. */
+/** Fills blended between two lists of as many paints, each paint with the one in its place; otherwise the destination's. */
 function blendFills(a: readonly Paint[] | undefined, b: readonly Paint[] | undefined, t: number): readonly Paint[] | undefined {
   if (!a || !b || a.length !== b.length) return b;
-  return b.map((paint, i) => {
-    const start = a[i]!;
-    if (paint.type !== 'SOLID' || start.type !== 'SOLID') return paint;
-    return {
-      ...paint,
-      opacity: lerp(start.opacity, paint.opacity, t),
-      color: { r: lerp(start.color.r, paint.color.r, t), g: lerp(start.color.g, paint.color.g, t), b: lerp(start.color.b, paint.color.b, t), a: lerp(start.color.a, paint.color.a, t) },
-    };
-  });
+  return b.flatMap((paint, i) => blendPaint(a[i]!, paint, t));
 }
 
 function blendLayer(from: SceneNode, to: SceneNode, t: number): SceneNode {

@@ -199,6 +199,11 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - in PresentationView, an On drag transition sets `press.scrub`, and the pointer sets `Playing.drag` in place of the time
     - letting go (or a cancelled pointer) finishes it past halfway, or runs it back with `Playing.back` and restores the previous player state
     - the stage's `data-drag` is `dragging` or `returning`
+  - Gradient and image fills in Smart animate (the commit after dragging through a transition):
+    - `blendPaint` in `src/core/prototype/fill-blend.ts`, used by `blendFills` in smart-animate.ts
+    - gradients resample both stop lists with `colorAt`; a solid meeting a gradient becomes a one-color gradient
+    - any other change cross-fades, with the old paint's opacity chosen so the pair's alpha follows the blend
+    - fill lists of different lengths still show the destination's
 
 ## In progress (uncommitted)
 
@@ -209,7 +214,6 @@ This file is how work continues after a pause (for example, a usage limit). Read
 1. The pending sub-items left in the M10 rows of `docs/FEATURE_MATRIX.md`:
    - 160 Video / GIF fills: video crop, video from the fill picker, GIF label next to the dimensions, GIF metadata on export
    - 200 Interactive components: the Variant interactions section, animating Change to, sharing states between matching instances
-   - 233 Smart animate: gradient and image fill blending
    - 236 State memorization: sharing interactive component and video states between matching layers
    - 237 Flows: WYSIWYG description editing, starting point badge on the canvas, preview / present / copy links to flows
    - 239 Variables: extended collections' modes, library variables, variable picker in expressions
