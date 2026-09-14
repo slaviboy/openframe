@@ -24,10 +24,14 @@ import { DEFAULT_SHAPE_FILL, solid } from '@/core/document/factory';
 import type { Paint, Transform, VectorNode } from '@/core/schema/document';
 import { cutVertex, deleteVertices, healVertices, moveVertices, nearestOnSegments, splitSegment } from '@/core/vector/vector-edit';
 import { bendVertex, oppositeEnd, setTangent, tangentAt, type SegmentEnd } from '@/core/vector/vector-bend';
+import { keyBetween } from '@/core/ids/fractional-index';
+import { matrixOf } from '@/core/scene/scene-index';
+import { cutAlongLine, splitComponents } from '@/core/vector/vector-divide';
 import { eraseNetwork } from '@/core/vector/vector-erase';
 import { addWidthPoint, chainPointAt, nearestOnChain, snapPosition, strokeChain, widthAt, type StrokeChain, type WidthPoint } from '@/core/vector/vector-width';
 import { regionAt, setRegionFills } from '@/core/vector/vector-paint';
-import type { VectorNetwork } from '@/core/vector/vector-network';
+import { networkBounds, transformNetwork, type VectorNetwork } from '@/core/vector/vector-network';
+import { nextKeyAbove } from '../commands/selection-helpers';
 import { paintsEqual } from '../commands/properties';
 import type { Editor } from '../editor';
 import { refitVector } from '../tools/vector-draw';
@@ -183,6 +187,12 @@ interface WidthDrag {
   moved: boolean;
 }
 
+/** A press with the Cut tool: a click cuts at a point, a drag cuts along the line from the press. */
+interface CutDrag {
+  readonly down: PointerInfo;
+  current: PointerInfo;
+}
+
 interface PointDrag {
   tx: Transaction;
   start: VectorNetwork;
@@ -197,7 +207,8 @@ interface PointDrag {
  * point to select it (Shift adds or removes), drag selected points to move them, double-click a path
  * to add a point, click inside the layer to clear the point selection, and click elsewhere to leave.
  * With the Lasso (Q), a drag draws an outline that selects the points inside it (Shift adds); a click clears.
- * With Cut (X), clicking a point or a path breaks the path there, leaving its ends selected.
+ * With Cut (X), clicking a point or a path breaks the path there, leaving its ends selected; dragging across paths
+ * cuts them along the line, and the pieces that come apart move to layers of their own.
  * With Bend, pressing on a point (or a path, adding a point) and dragging pulls out mirrored handles.
  * The handles of selected points can be dragged; handles that mirrored each other keep mirroring.
  * With Paint (⇧B), clicking a closed region fills it with the paint, or removes a fill that already matches it; a drag paints every region it crosses.
@@ -212,6 +223,7 @@ export class VectorEditController implements Tool {
   private painting: PaintDrag | null = null;
   private erasing: EraseDrag | null = null;
   private widthDrag: WidthDrag | null = null;
+  private cutDrag: CutDrag | null = null;
   private widthHover: Vec2 | null = null;
   private hover: { readonly region: number; readonly remove: boolean } | null = null;
 
@@ -221,7 +233,7 @@ export class VectorEditController implements Tool {
   ) {}
 
   get active(): boolean {
-    return this.drag !== null || this.lasso !== null || this.handle !== null || this.painting !== null || this.erasing !== null || this.widthDrag !== null;
+    return this.drag !== null || this.lasso !== null || this.handle !== null || this.painting !== null || this.erasing !== null || this.widthDrag !== null || this.cutDrag !== null;
   }
 
   /** Screen outline of the lasso being drawn, for the overlay. */
@@ -232,6 +244,12 @@ export class VectorEditController implements Tool {
   /** The region under the pointer with the Paint tool, and whether a click there removes its fill. */
   get paintHover(): { readonly region: number; readonly remove: boolean } | null {
     return this.editor.state.getSnapshot().vectorEdit?.tool === 'paint' ? this.hover : null;
+  }
+
+  /** The cut line on screen while dragging the Cut tool. */
+  get cutLine(): readonly [Vec2, Vec2] | null {
+    const g = this.cutDrag;
+    return g && this.cutMoved(g) ? [g.down.screen, g.current.screen] : null;
   }
 
   /** Where a click would add a width point (screen), while the Variable width tool hovers the stroke. */
@@ -354,7 +372,12 @@ export class VectorEditController implements Tool {
       this.handle = { kind: 'bend', tx, start, startTransform: node.transform, startInverse, down: p, moved: false, vertex, added: split !== null };
       return;
     }
+    if (state.tool === 'cut' && !this.cutDrag) {
+      this.cutDrag = { down: p, current: p };
+      return;
+    }
     if (state.tool === 'cut') {
+      this.cutDrag = null;
       const inverseCut = invert(toWorld);
       const localCut = inverseCut ? apply(inverseCut, p.world) : null;
       const nearest = hit === -1 && localCut ? nearestOnSegments(node.vectorNetwork, localCut) : null;
@@ -395,6 +418,11 @@ export class VectorEditController implements Tool {
   }
 
   pointerMove(p: PointerInfo): void {
+    if (this.cutDrag) {
+      this.cutDrag.current = p;
+      if (this.cutMoved(this.cutDrag)) this.editor.requestRender();
+      return;
+    }
     if (this.widthDrag) {
       this.dragWidth(this.widthDrag, p);
       return;
@@ -445,6 +473,18 @@ export class VectorEditController implements Tool {
   }
 
   pointerUp(): void {
+    const cutDrag = this.cutDrag;
+    if (cutDrag) {
+      if (this.cutMoved(cutDrag)) {
+        this.cutDrag = null;
+        this.divide(cutDrag);
+      } else {
+        // A click: cut at the point pressed (the Cut branch of pointerDown, now that the press is over).
+        this.pointerDown(cutDrag.down);
+      }
+      this.editor.requestRender();
+      return;
+    }
     const widthDrag = this.widthDrag;
     if (widthDrag) {
       this.widthDrag = null;
@@ -484,6 +524,51 @@ export class VectorEditController implements Tool {
     this.drag = null;
     if (d.moved) this.editor.history.commit(d.tx);
     else this.editor.history.cancel(d.tx);
+  }
+
+  private cutMoved(g: CutDrag): boolean {
+    return Math.hypot(g.current.screen.x - g.down.screen.x, g.current.screen.y - g.down.screen.y) >= 3;
+  }
+
+  /**
+   * Divides the edited vector along a Cut drag: the path is cut where the line crosses it, the piece with
+   * the first point stays in the layer, and each other piece becomes a vector layer of its own directly
+   * above, with the same name and appearance; one undo step.
+   */
+  private divide(g: CutDrag): void {
+    const { editor } = this;
+    const state = editor.state.getSnapshot().vectorEdit;
+    const node = editedVector(editor);
+    if (!state || !node) return;
+    const inverse = invert(editor.scene.worldTransform(node.id));
+    if (!inverse) return;
+    const { network, cuts } = cutAlongLine(node.vectorNetwork, apply(inverse, g.down.world), apply(inverse, g.current.world));
+    if (cuts === 0) return;
+    const [kept, ...divided] = splitComponents(network);
+    editor.history.run('Divide path', (tx) => {
+      refitVector(tx, node.id, kept ?? network);
+      // Width points were placed along the whole path; the pieces start without them.
+      if (node.strokeWidths) tx.set(node.id, 'strokeWidths', undefined);
+      let below = node.id;
+      for (const piece of divided) {
+        const bounds = networkBounds(piece) ?? { x: 0, y: 0, width: 0, height: 0 };
+        const offset = applyLinear(matrixOf(node.transform), { x: bounds.x, y: bounds.y });
+        const t = node.transform;
+        const id = editor.ids.next();
+        const key = keyBetween((tx.store.getOrThrow(below) as VectorNode).parent.key, nextKeyAbove(tx.store, below));
+        tx.create({
+          ...node,
+          id,
+          parent: { id: node.parent.id, key },
+          transform: [t[0], t[1], t[2], t[3], t[4] + offset.x, t[5] + offset.y],
+          size: { width: bounds.width, height: bounds.height },
+          vectorNetwork: transformNetwork(piece, { x: bounds.x, y: bounds.y }, 1, 1),
+        } as VectorNode);
+        if (node.strokeWidths) tx.set(id, 'strokeWidths', undefined);
+        below = id;
+      }
+    });
+    editor.state.setVectorEdit({ ...state, vertices: [], widthPoints: [] });
   }
 
   /** The width point under a layer-space point: one of its knobs (to change its width) or the point on the path (to move it). */
@@ -611,6 +696,11 @@ export class VectorEditController implements Tool {
   }
 
   cancel(): boolean {
+    if (this.cutDrag) {
+      this.cutDrag = null;
+      this.editor.requestRender();
+      return true;
+    }
     if (this.widthDrag) {
       this.editor.history.cancel(this.widthDrag.tx);
       this.widthDrag = null;

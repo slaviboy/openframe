@@ -76,6 +76,8 @@ export interface OverlayInput {
   readonly vectorEraser?: { readonly points: readonly Vec2[]; readonly width: number } | null;
   /** Where the Variable width tool would add a width point (screen). */
   readonly vectorWidthHover?: Vec2 | null;
+  /** The Cut tool's cut line on screen, while dragging it across paths. */
+  readonly vectorCutLine?: readonly [Vec2, Vec2] | null;
   /** Text editing chrome; `caretVisible` is the blink phase. */
   readonly textEdit?: { readonly caretVisible: boolean } | null;
   /** Snapping guides of the current move, in world coordinates. */
@@ -712,6 +714,17 @@ function drawVectorEdit(ctx: CanvasRenderingContext2D, input: OverlayInput): voi
     ctx.globalAlpha = 1;
     ctx.lineCap = 'butt';
     ctx.lineJoin = 'miter';
+  }
+  const cutLine = input.vectorCutLine;
+  if (cutLine) {
+    ctx.beginPath();
+    ctx.moveTo(cutLine[0].x, cutLine[0].y);
+    ctx.lineTo(cutLine[1].x, cutLine[1].y);
+    ctx.setLineDash([4, 3]);
+    ctx.strokeStyle = theme.selection;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.setLineDash([]);
   }
   const lasso = input.vectorLasso;
   if (lasso && lasso.length > 1) {
