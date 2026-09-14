@@ -125,6 +125,7 @@ const VERTICAL_CONSTRAINTS: readonly (readonly [Constraint, string])[] = [
 ];
 import { ImageSettings, ImageSwatch } from './ImageSettings';
 import { AppliedStyle, LocalStylesSection, StyleButton } from './StylesPanel';
+import { BoundPaint, VariableModeButton, VariableNumberField } from './VariableFields';
 import { PatternSettings } from './PatternSettings';
 import { PAINT_BLEND_OPTIONS } from './blend-modes';
 import { ColorControl } from './ColorControl';
@@ -514,7 +515,7 @@ function PageSection() {
   const gesture = useGesture('Change page color');
   if (!page || page.type !== 'PAGE') return null;
   return (
-    <Section title="Page">
+    <Section title="Page" actions={<VariableModeButton ids={[pageId]} />}>
       <ColorControl
         label="Page background"
         color={page.backgroundColor}
@@ -674,7 +675,9 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       </Section>
       <Section title="Layout">
         <div className={styles.grid2}>
-          <NumberField
+          <VariableNumberField
+            nodes={nodes}
+            field="width"
             label="W"
             ariaLabel="Width"
             testId="field-w"
@@ -684,7 +687,9 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             onGestureEnd={resize.end}
             onChange={(v) => resize.change((tx) => nodes.forEach((n) => setSize(tx, n, 'width', v)))}
           />
-          <NumberField
+          <VariableNumberField
+            nodes={nodes}
+            field="height"
             label="H"
             ariaLabel="Height"
             testId="field-h"
@@ -738,9 +743,11 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         )}
       </Section>
       {!allSlices && (
-      <Section title="Appearance" actions={bindable && single ? <PropertyBinding layerId={single.id} type="BOOLEAN" /> : undefined}>
+      <Section title="Appearance" styleAction={<VariableModeButton ids={nodes.map((n) => n.id)} />} actions={bindable && single ? <PropertyBinding layerId={single.id} type="BOOLEAN" /> : undefined}>
         <div className={styles.grid2}>
-          <NumberField
+          <VariableNumberField
+            nodes={nodes}
+            field="opacity"
             label={<Icon name="opacity" size={16} />}
             ariaLabel="Opacity"
             testId="field-opacity"
@@ -769,7 +776,9 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             ))}
           </select>
           {radiusNodes.length === nodes.length && (
-            <NumberField
+            <VariableNumberField
+              nodes={radiusNodes}
+              field="cornerRadius"
               label={<Icon name="radius" size={16} />}
               ariaLabel="Corner radius"
               testId="field-radius"
@@ -1895,7 +1904,9 @@ function PaintSection({
                     </option>
                   ))}
                 </select>
-                {paint.type === 'SOLID' ? (
+                {paint.type === 'SOLID' && paint.boundVariables ? (
+                  <BoundPaint ids={nodes.map((n) => n.id)} field={field} index={index} paint={paint} label={`${title} ${list.length - index}`} />
+                ) : paint.type === 'SOLID' ? (
                   <ColorControl
                     label={`${title} ${list.length - index}`}
                     color={paint.color}
@@ -2091,7 +2102,9 @@ function PaintSection({
               <option value="OUTSIDE">Outside</option>
             </select>
           )}
-          <NumberField
+          <VariableNumberField
+            nodes={nodes}
+            field="strokeWeight"
             label="≡"
             ariaLabel="Stroke weight"
             testId="field-stroke-weight"

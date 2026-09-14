@@ -326,3 +326,31 @@
 .alignCell:focus-visible {
   outline: 1px solid var(--color-accent, #0d99ff);
 }
+
+/* A solid paint whose color comes from a variable. */
+.boundPaint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  height: var(--control-h);
+  padding-inline-start: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--bg-control);
+}
+
+.boundSwatch {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+}
+
+.boundName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

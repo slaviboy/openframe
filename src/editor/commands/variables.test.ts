@@ -24,6 +24,7 @@ import { Editor } from '../editor';
 import { BUILTIN_COMMANDS } from './builtin';
 import {
   addMode,
+  applyPaintVariable,
   bindPaintVariable,
   bindVariable,
   createCollection,
@@ -209,6 +210,24 @@ describe('variables', () => {
     expect(variable(small).codeSyntax).toEqual({ WEB: 'var(--radius-sm)' });
     setVariableCodeSyntax(editor, small, 'WEB', '');
     expect(variable(small).codeSyntax).toBeUndefined();
+  });
+
+  test('a color variable from the fill picker replaces the fills with one bound paint', () => {
+    const tokens = createCollection(editor);
+    const mode = collection(tokens).modes[0]!.modeId;
+    const brand = createVariable(editor, tokens, 'COLOR', 'brand')!;
+    setVariableValue(editor, brand, mode, blue);
+    editor.history.run('Two fills', (tx) =>
+      tx.set(rect, 'fills', [
+        { type: 'SOLID', color: red, opacity: 0.5, visible: true, blendMode: 'MULTIPLY' },
+        { type: 'SOLID', color: green, opacity: 1, visible: true, blendMode: 'NORMAL' },
+      ]),
+    );
+    expect(applyPaintVariable(editor, [rect, frame], 'fills', brand)).toBe(true);
+    expect(node(rect).fills).toEqual([{ type: 'SOLID', color: blue, opacity: 0.5, visible: true, blendMode: 'MULTIPLY', boundVariables: { color: { type: 'VARIABLE_ALIAS', id: brand } } }]);
+    expect(node(frame).fills).toEqual([{ type: 'SOLID', color: blue, opacity: 1, visible: true, blendMode: 'NORMAL', boundVariables: { color: { type: 'VARIABLE_ALIAS', id: brand } } }]);
+    const count = createVariable(editor, tokens, 'FLOAT')!;
+    expect(applyPaintVariable(editor, [rect], 'strokes', count)).toBe(false);
   });
 
   test('design tokens import as a new mode or into a mode, and a mode exports as tokens', () => {

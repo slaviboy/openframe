@@ -19,6 +19,7 @@ import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { evaluateMath, formatNumber } from './math';
 import captionStyles from './PropertyCaption.module.css';
 import { PropertyLabelsContext } from './property-labels';
+import { Icon } from '../icons/Icon';
 import styles from './primitives.module.css';
 
 export interface NumberFieldProps {
@@ -41,6 +42,10 @@ export interface NumberFieldProps {
   testId?: string;
   /** Offered the typed text before it is evaluated; return true when handled (e.g. padding shorthand). */
   onText?: (text: string) => boolean;
+  /** The variable bound to the property: the field shows its name, with Detach variable. */
+  variable?: { readonly name: string; readonly onDetach: () => void } | undefined;
+  /** Opens the variable picker: typing = in the field, or clicking a bound variable's name. */
+  onApplyVariable?: (() => void) | undefined;
 }
 
 const clamp = (v: number, min?: number, max?: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, v));
@@ -117,7 +122,35 @@ export function NumberField(props: NumberFieldProps) {
     target.addEventListener('pointercancel', up);
   };
 
-  const field = (
+  const bound = props.variable;
+  const field = bound ? (
+    <div className={styles.numberField} data-disabled={disabled || undefined}>
+      <span className={styles.numberLabel} aria-hidden="true">
+        {label}
+      </span>
+      <button
+        type="button"
+        className={styles.variableName}
+        aria-label={`${ariaLabel} variable ${bound.name}`}
+        title="Change variable"
+        disabled={disabled}
+        onClick={() => props.onApplyVariable?.()}
+        onKeyDown={(e) => {
+          e.stopPropagation();
+          // Delete detaches a number variable, as in the field it replaces.
+          if (e.key === 'Backspace' || e.key === 'Delete') {
+            e.preventDefault();
+            bound.onDetach();
+          }
+        }}
+      >
+        {bound.name}
+      </button>
+      <button type="button" className={styles.variableDetach} aria-label={`Detach variable from ${ariaLabel.toLowerCase()}`} title="Detach variable" disabled={disabled} onClick={bound.onDetach}>
+        <Icon name="detach" size={16} />
+      </button>
+    </div>
+  ) : (
     <label className={styles.numberField} data-disabled={disabled || undefined}>
       <span className={styles.numberLabel} onPointerDown={onScrubStart} aria-hidden="true">
         {label}
@@ -142,6 +175,10 @@ export function NumberField(props: NumberFieldProps) {
           } else if (e.key === 'Escape') {
             setDraft(null);
             e.currentTarget.blur();
+          } else if (e.key === '=' && props.onApplyVariable) {
+            e.preventDefault();
+            setDraft(null);
+            props.onApplyVariable();
           } else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
             e.preventDefault();
             setDraft(null);

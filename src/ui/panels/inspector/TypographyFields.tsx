@@ -84,6 +84,7 @@ import { useEditor, useEditorState } from '../../hooks/useEditor';
 import { useGesture } from '../../hooks/useGesture';
 import { IconButton } from '../../primitives/IconButton';
 import { NumberField } from '../../primitives/NumberField';
+import { VariableNumberField } from './VariableFields';
 import primitives from '../../primitives/primitives.module.css';
 import styles from './Inspector.module.css';
 
@@ -198,7 +199,9 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
             </option>
           ))}
         </select>
-        <NumberField
+        <VariableNumberField
+          nodes={nodes}
+          field="fontSize"
           label="Aa"
           ariaLabel="Font size"
           testId="field-font-size"

@@ -129,3 +129,15 @@
   padding: var(--space-1) var(--space-2) 0;
   color: var(--fg-secondary);
 }
+
+.pickerHeading {
+  margin: var(--space-2) 0 0;
+  color: var(--fg-secondary);
+  font-size: inherit;
+  font-weight: 500;
+}
+
+/* Variables have square swatches; styles round ones. */
+.square {
+  border-radius: var(--radius-xs);
+}

@@ -423,6 +423,39 @@ export function unbindPaintVariable(editor: Editor, ids: readonly Id[], field: V
   return true;
 }
 
+/**
+ * Applies a color variable from the fill or stroke picker: the fills or strokes of layers become one solid paint whose
+ * color follows the variable (keeping the first solid paint's opacity and blend mode). One undo step.
+ */
+export function applyPaintVariable(editor: Editor, ids: readonly Id[], field: VariablePaintField, variableId: Id): boolean {
+  const variable = variableOf(editor.doc, variableId);
+  const layers = ids.filter((id) => {
+    const node = editor.doc.get(id);
+    return node !== undefined && isSceneNode(node) && hasGeometry(node);
+  });
+  if (!variable || variable.resolvedType !== 'COLOR' || layers.length === 0) return false;
+  const lookup = variableLookup(editor.doc);
+  editor.history.run('Apply variable', (tx) =>
+    layers.forEach((id) => {
+      const value = resolveForLayer(tx.store, lookup, id, variableId);
+      if (value === null || typeof value !== 'object') return;
+      const node = tx.store.get(id) as SceneNode & Record<VariablePaintField, Paint[]>;
+      const solid = node[field].find((paint) => paint.type === 'SOLID');
+      tx.set(id, field, [
+        {
+          type: 'SOLID',
+          color: { r: value.r, g: value.g, b: value.b, a: value.a },
+          opacity: solid?.opacity ?? 1,
+          visible: true,
+          blendMode: solid?.blendMode ?? 'NORMAL',
+          boundVariables: { color: { type: 'VARIABLE_ALIAS', id: variableId } },
+        },
+      ]);
+    }),
+  );
+  return true;
+}
+
 /** Sets the variable mode of a collection on layers or pages; null sets it back to Auto. One undo step. */
 export function setExplicitVariableMode(editor: Editor, ids: readonly Id[], collectionId: Id, modeId: string | null): boolean {
   const collection = collectionOf(editor.doc, collectionId);

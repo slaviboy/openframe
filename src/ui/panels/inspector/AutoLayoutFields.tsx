@@ -28,6 +28,7 @@ import { useEditor } from '../../hooks/useEditor';
 import { useGesture } from '../../hooks/useGesture';
 import { IconButton } from '../../primitives/IconButton';
 import { NumberField } from '../../primitives/NumberField';
+import { VariableNumberField } from './VariableFields';
 import primitives from '../../primitives/primitives.module.css';
 import styles from './Inspector.module.css';
 
@@ -115,8 +116,10 @@ export function LayoutSizingFields({ nodes }: { nodes: SceneNode[] }) {
       {canLimit && shown.length > 0 && (
         <div className={styles.grid2}>
           {shown.map(([field, label]) => (
-            <NumberField
+            <VariableNumberField
               key={field}
+              nodes={nodes}
+              field={field}
               label={label.replace('width', 'W').replace('height', 'H')}
               ariaLabel={label}
               min={0}
@@ -222,19 +225,20 @@ export function AutoLayoutFields({ frames }: { frames: FrameNode[] }) {
     });
     return true;
   };
-  const paddingField = (label: string, ariaLabel: string, fields: readonly PaddingField[], value: number | undefined) => (
-    <NumberField
-      key={ariaLabel}
-      label={label}
-      ariaLabel={ariaLabel}
-      min={0}
-      value={value}
-      onGestureStart={paddingGesture.start}
-      onGestureEnd={paddingGesture.end}
-      onText={applyShorthand}
-      onChange={(v) => setPadding(uniformPadding ? allSides : fields, Math.max(0, v))}
-    />
-  );
+  const paddingField = (label: string, ariaLabel: string, fields: readonly PaddingField[], value: number | undefined) => {
+    const props = {
+      label,
+      ariaLabel,
+      min: 0,
+      value,
+      onGestureStart: paddingGesture.start,
+      onGestureEnd: paddingGesture.end,
+      onText: applyShorthand,
+      onChange: (v: number) => setPadding(uniformPadding ? allSides : fields, Math.max(0, v)),
+    };
+    // A variable binds to one side; fields that edit several sides at once take numbers only.
+    return fields.length === 1 && !uniformPadding ? <VariableNumberField key={ariaLabel} nodes={frames} field={fields[0]!} {...props} /> : <NumberField key={ariaLabel} {...props} />;
+  };
 
   // With a fixed gap every cell sets both axes; with an Auto gap only the position across the flow applies.
   const horizontal = direction === 'HORIZONTAL';
@@ -323,7 +327,9 @@ export function AutoLayoutFields({ frames }: { frames: FrameNode[] }) {
           ))}
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <NumberField
+          <VariableNumberField
+            nodes={frames}
+            field="itemSpacing"
             label={horizontal ? '↔' : '↕'}
             ariaLabel="Gap between items"
             disabled={autoGap}
@@ -348,7 +354,9 @@ export function AutoLayoutFields({ frames }: { frames: FrameNode[] }) {
             ))}
           </select>
           {horizontal && wrap && (
-            <NumberField
+            <VariableNumberField
+              nodes={frames}
+              field="counterAxisSpacing"
               label="↕"
               ariaLabel="Gap between rows"
               value={valueOf(shared(frames, (f) => f.counterAxisSpacing ?? 0))}

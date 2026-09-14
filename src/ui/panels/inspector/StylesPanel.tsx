@@ -40,6 +40,8 @@ import {
   stylesInFolder,
   ungroupStyleFolder,
 } from '@/editor/commands/styles';
+import { resolveForLayer, variableLookup } from '@/core/variables/document';
+import { applyPaintVariable, variablesFor } from '@/editor/commands/variables';
 import { Icon } from '../../icons/Icon';
 import { useDocumentRevision, useEditor } from '../../hooks/useEditor';
 import { IconButton } from '../../primitives/IconButton';
@@ -192,6 +194,10 @@ function StylePicker({ slot, ids, onClose }: { slot: StyleSlot; ids: readonly Id
   const type = STYLE_SLOTS[slot].styleType;
   const needle = query.trim().toLowerCase();
   const found = localStyles(editor.doc, type).filter((style) => style.name.toLowerCase().includes(needle));
+  // Fills and strokes also take color variables (square swatches), from the same picker.
+  const paintField = slot === 'fill' ? 'fills' : slot === 'stroke' ? 'strokes' : undefined;
+  const colorVariables = paintField ? variablesFor(editor, ids, paintField).filter((variable) => variable.name.toLowerCase().includes(needle)) : [];
+  const lookup = variableLookup(editor.doc);
   if (creating) {
     return (
       <StyleDialog
@@ -248,6 +254,33 @@ function StylePicker({ slot, ids, onClose }: { slot: StyleSlot; ids: readonly Id
             );
           })}
         </ul>
+      )}
+      {paintField && colorVariables.length > 0 && (
+        <>
+          <h3 className={css.pickerHeading}>Color variables</h3>
+          <ul className={findStyles.results} aria-label="Color variables">
+            {colorVariables.map((variable) => {
+              const value = ids[0] === undefined ? null : resolveForLayer(editor.doc, lookup, ids[0], variable.id);
+              const color = value !== null && typeof value === 'object' ? value : undefined;
+              return (
+                <li key={variable.id}>
+                  <button
+                    type="button"
+                    className={`${findStyles.result} ${css.pickerRow}`}
+                    title={variable.description}
+                    onClick={() => {
+                      applyPaintVariable(editor, ids, paintField, variable.id);
+                      onClose();
+                    }}
+                  >
+                    <span className={`${css.swatch} ${css.square}`} style={color ? { background: `rgb(${color.r * 255} ${color.g * 255} ${color.b * 255} / ${color.a})` } : undefined} aria-hidden="true" />
+                    {variable.name}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </Dialog>
   );
