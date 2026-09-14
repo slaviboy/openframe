@@ -18,6 +18,7 @@
 import type { Id } from '@/core/ids/ids';
 import type { Rect } from '@/core/math/rect';
 import type { Vec2 } from '@/core/math/vec';
+import { distanceToNoodle, noodleBetween, visibleConnections, type Connection } from '@/core/prototype/connections';
 import { topLevelFrame } from '@/core/prototype/reactions';
 import { hitTestDeepest } from '@/core/scene/hit-test';
 import type { Editor } from '../editor';
@@ -56,6 +57,23 @@ export function connectHandle(editor: Editor): { readonly sourceIds: readonly Id
 export function hitConnectHandle(editor: Editor, screen: Vec2): boolean {
   const handle = connectHandle(editor);
   return handle !== null && Math.hypot(screen.x - handle.center.x, screen.y - handle.center.y) <= CONNECT_HANDLE_SIZE / 2 + 2;
+}
+
+/** How close (screen pixels) a click must be to a noodle to select its connection. */
+export const CONNECTION_HIT_PX = 6;
+
+/** The visible connection whose noodle is under a screen point (the closest one), while the Prototype tab is open. */
+export function connectionAt(editor: Editor, screen: Vec2): Connection | null {
+  if (editor.state.getSnapshot().rightTab !== 'prototype') return null;
+  let best: { connection: Connection; distance: number } | null = null;
+  for (const connection of visibleConnections(editor.doc, editor.pageId, editor.selection)) {
+    const source = screenBounds(editor, connection.sourceId);
+    const destination = screenBounds(editor, connection.destinationId);
+    if (!source || !destination) continue;
+    const distance = distanceToNoodle(noodleBetween(source, destination), screen);
+    if (distance <= CONNECTION_HIT_PX && (!best || distance < best.distance)) best = { connection, distance };
+  }
+  return best?.connection ?? null;
 }
 
 /** The top-level frame a connection dragged from the sources would end on at a world point (not their own frame). */

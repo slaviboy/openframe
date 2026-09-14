@@ -489,6 +489,7 @@ export function PrototypePanel() {
   const editor = useEditor();
   useDocumentRevision();
   const selection = useEditorState((s) => s.selection);
+  const selectedConnections = useEditorState((s) => s.selectedConnections);
   const [open, setOpen] = useState<number | null>(null);
   const nodes = selection.map((id) => editor.doc.get(id)).filter((node): node is SceneNode => node !== undefined && 'transform' in node);
 
@@ -503,6 +504,9 @@ export function PrototypePanel() {
   const mixed = new Set(nodes.map((node) => JSON.stringify(node.reactions ?? []))).size > 1;
   const reactions = mixed ? [] : (nodes[0]!.reactions ?? []);
   const frame = nodes.length === 1 && topLevelFrame(editor.doc, nodes[0]!.id) === nodes[0]!.id ? nodes[0]! : null;
+  // A connection selected on the canvas opens its interaction's details.
+  const focused = selectedConnections.length === 1 && nodes.length === 1 && selectedConnections[0]!.sourceId === nodes[0]!.id ? selectedConnections[0]!.reactionIndex : null;
+  const openIndex = focused ?? open;
 
   return (
     <div className={styles.panel} role="tabpanel" aria-label="Prototype">
@@ -515,6 +519,7 @@ export function PrototypePanel() {
               icon="plus"
               label="Add interaction"
               onClick={() => {
+                editor.state.selectConnections([]);
                 if (addInteraction(editor, ids) && !mixed) setOpen(reactions.length);
               }}
             />
@@ -526,7 +531,15 @@ export function PrototypePanel() {
             <ul className={styles.list} aria-label="Interaction list">
               {reactions.map((reaction, index) => (
                 <li key={index} className={styles.item}>
-                  <button type="button" className={styles.summary} aria-expanded={open === index} onClick={() => setOpen(open === index ? null : index)}>
+                  <button
+                    type="button"
+                    className={styles.summary}
+                    aria-expanded={openIndex === index}
+                    onClick={() => {
+                      editor.state.selectConnections([]);
+                      setOpen(openIndex === index ? null : index);
+                    }}
+                  >
                     {reactionSummary(editor.doc, reaction)}
                   </button>
                   <IconButton
@@ -537,7 +550,7 @@ export function PrototypePanel() {
                       setOpen(null);
                     }}
                   />
-                  {open === index && <InteractionDetails ids={ids} hotspotId={ids[0]!} reactions={reactions} index={index} />}
+                  {openIndex === index && <InteractionDetails ids={ids} hotspotId={ids[0]!} reactions={reactions} index={index} />}
                 </li>
               ))}
             </ul>

@@ -32,8 +32,8 @@ import { canParent } from '@/core/document/containment';
 import type { DuplicateMemory } from '../editor';
 import type { Vec2 } from '@/core/math/vec';
 import { hitTestDeepest, isArtboardWithChildren, isInteractive, marqueeSelect, selectionTarget } from '@/core/scene/hit-test';
-import { connectDestinationAt, connectHandle, hitConnectHandle } from '../chrome/prototype-geometry';
-import { addInteraction } from '../commands/prototype';
+import { connectDestinationAt, connectHandle, connectionAt, hitConnectHandle } from '../chrome/prototype-geometry';
+import { addInteraction, removeConnections, setConnectionsDestination, type ConnectionRef } from '../commands/prototype';
 import { snapEqualGaps, type GapIndicator } from '@/core/scene/equal-gaps';
 import { measureBetween, type MeasureLine } from '@/core/scene/measure';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
@@ -185,7 +185,9 @@ type Gesture =
       toWorld: Matrix;
     }
   /** Prototype tab: dragging the selection's + to a destination frame connects the selection to it. */
-  | { kind: 'connect'; sourceIds: readonly Id[]; start: Vec2; current: PointerInfo; destination: Id | null };
+  | { kind: 'connect'; sourceIds: readonly Id[]; start: Vec2; current: PointerInfo; destination: Id | null }
+  /** Prototype tab: pressing a connection's noodle selects it; dragging the selected connections moves their destination. */
+  | { kind: 'connection'; refs: readonly ConnectionRef[]; down: PointerInfo; current: PointerInfo; dragged: boolean; destination: Id | null; overEmpty: boolean };
 
 /**
  * Move tool (V): selection, dragging, marquee selection, and resizing via handles.
@@ -300,6 +302,12 @@ export class MoveTool implements Tool {
   }
 
   /** Current marquee in world space (for the overlay), or null. */
+  /** Selected connections being dragged: the pointer (screen) and the frame they would lead to. */
+  get connectionDrag(): { readonly refs: readonly ConnectionRef[]; readonly end: Vec2; readonly destination: Id | null } | null {
+    const g = this.gesture;
+    return g.kind === 'connection' && g.dragged ? { refs: g.refs, end: g.current.screen, destination: g.destination } : null;
+  }
+
   /** The connection being dragged from the + handle: where it starts and the pointer (screen), and the frame under it. */
   get connectDrag(): { readonly start: Vec2; readonly end: Vec2; readonly destination: Id | null } | null {
     const g = this.gesture;
@@ -314,7 +322,7 @@ export class MoveTool implements Tool {
   cursor(): CursorKind {
     if (this.gesture.kind === 'resize') return handleCursor(this.gesture.frame, this.gesture.handle);
     if (this.gesture.kind === 'rotate') return rotateCursor(this.gesture.frame, this.gesture.corner);
-    if (this.gesture.kind === 'line-end' || this.gesture.kind === 'connect') return 'crosshair';
+    if (this.gesture.kind === 'line-end' || this.gesture.kind === 'connect' || (this.gesture.kind === 'connection' && this.gesture.dragged)) return 'crosshair';
     if (this.gesture.kind === 'grid-track') return this.gesture.axis === 'column' ? 'ew-resize' : 'ns-resize';
     if (this.gesture.kind === 'layout-handle') return isUprightHandle(this.gesture.handle, this.gesture.direction) ? 'ew-resize' : 'ns-resize';
     if (this.gesture.kind === 'spacing') return this.gesture.info.selection.axis === 'x' ? 'ew-resize' : 'ns-resize';
@@ -325,11 +333,23 @@ export class MoveTool implements Tool {
     if (p.button !== 0) return;
     const { editor } = this.env;
     const frame = selectionFrame(editor);
-    // Prototype tab: the + on the selection's edge starts a connection (it covers the resize handle there).
+    // Prototype tab: the + on the selection's edge starts a connection (it covers the resize handle, and the start of the selection's noodles).
     const connect = this.id === 'move' ? connectHandle(editor) : null;
     if (connect && hitConnectHandle(editor, p.screen)) {
       editor.scene.ensure(editor.pageId);
       this.gesture = { kind: 'connect', sourceIds: connect.sourceIds, start: connect.center, current: p, destination: null };
+      return;
+    }
+    // Prototype tab: pressing a connection's noodle selects it (⇧ adds or removes it); dragging moves the selected connections.
+    const hitConnection = this.id === 'move' ? connectionAt(editor, p.screen) : null;
+    if (hitConnection) {
+      const ref: ConnectionRef = { sourceId: hitConnection.sourceId, reactionIndex: hitConnection.reactionIndex, actionIndex: hitConnection.actionIndex };
+      const same = (other: ConnectionRef) => other.sourceId === ref.sourceId && other.reactionIndex === ref.reactionIndex && other.actionIndex === ref.actionIndex;
+      const selected = editor.state.getSnapshot().selectedConnections;
+      const refs = p.shift ? (selected.some(same) ? selected.filter((other) => !same(other)) : [...selected, ref]) : selected.some(same) ? selected : [ref];
+      editor.state.selectConnections(refs);
+      this.gesture = { kind: 'connection', refs, down: p, current: p, dragged: false, destination: null, overEmpty: false };
+      editor.requestRender();
       return;
     }
     if (frame && !p.shift) {
@@ -580,6 +600,16 @@ export class MoveTool implements Tool {
         g.destination = connectDestinationAt(this.env.editor, g.sourceIds, p.world);
         this.env.editor.requestRender();
         return;
+      case 'connection': {
+        g.current = p;
+        if (!g.dragged && Math.hypot(p.screen.x - g.down.screen.x, p.screen.y - g.down.screen.y) < this.env.dragThresholdPx) return;
+        g.dragged = true;
+        const { editor } = this.env;
+        g.destination = connectDestinationAt(editor, g.refs.map((ref) => ref.sourceId), p.world);
+        g.overEmpty = hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, { tolerance: 0 }) === null;
+        editor.requestRender();
+        return;
+      }
       case 'spacing': {
         g.last = p;
         const delta = g.info.selection.axis === 'x' ? p.world.x - g.down.world.x : p.world.y - g.down.world.y;
@@ -649,6 +679,16 @@ export class MoveTool implements Tool {
       case 'connect':
         // Dropped on a frame: each source gets an interaction navigating to it.
         if (g.destination) addInteraction(editor, g.sourceIds, g.destination);
+        editor.requestRender();
+        break;
+      case 'connection':
+        // Dropped on a frame, the connections lead there; dropped on empty canvas, they are removed.
+        if (g.dragged && g.destination) {
+          setConnectionsDestination(editor, g.refs, g.destination);
+        } else if (g.dragged && g.overEmpty) {
+          removeConnections(editor, g.refs);
+          editor.state.selectConnections([]);
+        }
         editor.requestRender();
         break;
       case 'layout-handle':

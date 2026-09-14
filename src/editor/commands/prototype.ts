@@ -91,6 +91,55 @@ export function removeInteraction(editor: Editor, ids: readonly Id[], index: num
   return true;
 }
 
+/** A connection on the canvas: one action of one interaction on a hotspot. */
+export interface ConnectionRef {
+  readonly sourceId: Id;
+  readonly reactionIndex: number;
+  readonly actionIndex: number;
+}
+
+/** Points connections at another destination (dragging them to a frame). One undo step; false when none applies. */
+export function setConnectionsDestination(editor: Editor, refs: readonly ConnectionRef[], destinationId: Id): boolean {
+  const applicable = refs.filter((ref) => {
+    const action = (editor.doc.get(ref.sourceId) as SceneNode | undefined)?.reactions?.[ref.reactionIndex]?.actions[ref.actionIndex];
+    return action?.type === 'NODE';
+  });
+  if (applicable.length === 0) return false;
+  editor.history.run('Change destination', (tx) => {
+    for (const ref of applicable) {
+      const reactions = reactionsOf(tx.store.get(ref.sourceId) as SceneNode);
+      tx.set(
+        ref.sourceId,
+        'reactions',
+        reactions.map((reaction, r) =>
+          r === ref.reactionIndex ? { ...reaction, actions: reaction.actions.map((action, a) => (a === ref.actionIndex && action.type === 'NODE' ? { ...action, destinationId } : action)) } : reaction,
+        ),
+      );
+    }
+  });
+  return true;
+}
+
+/**
+ * Removes connections (dragging them off onto empty canvas): their actions go, and an interaction left without actions
+ * goes with them. One undo step.
+ */
+export function removeConnections(editor: Editor, refs: readonly ConnectionRef[]): boolean {
+  const bySource = new Map<Id, ConnectionRef[]>();
+  for (const ref of refs) bySource.set(ref.sourceId, [...(bySource.get(ref.sourceId) ?? []), ref]);
+  const applicable = [...bySource].filter(([sourceId, list]) => list.some((ref) => (editor.doc.get(sourceId) as SceneNode | undefined)?.reactions?.[ref.reactionIndex]?.actions[ref.actionIndex] !== undefined));
+  if (applicable.length === 0) return false;
+  editor.history.run('Remove connection', (tx) => {
+    for (const [sourceId, list] of applicable) {
+      const reactions = reactionsOf(tx.store.get(sourceId) as SceneNode)
+        .map((reaction, r) => ({ ...reaction, actions: reaction.actions.filter((_, a) => !list.some((ref) => ref.reactionIndex === r && ref.actionIndex === a)) }))
+        .filter((reaction) => reaction.actions.length > 0);
+      tx.set(sourceId, 'reactions', reactions.length > 0 ? reactions : undefined);
+    }
+  });
+  return true;
+}
+
 /** The page a top-level frame is on; null for layers that aren't top-level frames. */
 function framePage(editor: Editor, frameId: Id): PageNode | null {
   if (topLevelFrame(editor.doc, frameId) !== frameId) return null;

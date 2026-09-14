@@ -20,7 +20,7 @@ import { createEmptyDocument, keyOnTop, makeFrame, makeRectangle } from '@/core/
 import { IdGenerator } from '@/core/ids/ids';
 import type { Reaction, SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
-import { addInteraction, removeInteraction, updateInteraction } from './prototype';
+import { addInteraction, removeConnections, removeInteraction, setConnectionsDestination, updateInteraction } from './prototype';
 
 let editor: Editor;
 const reactions = (id: string) => (editor.doc.getOrThrow(id) as SceneNode).reactions;
@@ -63,5 +63,22 @@ describe('prototype interaction commands', () => {
     removeInteraction(editor, ['a'], 0);
     removeInteraction(editor, ['a'], 0);
     expect(reactions('a')).toBeUndefined();
+  });
+
+  test('dragging connections changes their destination; dropping them on empty canvas removes them', () => {
+    addInteraction(editor, ['a', 'b'], 'about');
+    updateInteraction(editor, ['a'], 0, { trigger: { type: 'ON_CLICK' }, actions: [{ type: 'NODE', navigation: 'NAVIGATE', destinationId: 'about', transition: { type: 'INSTANT' } }, { type: 'BACK' }] });
+    expect(setConnectionsDestination(editor, [{ sourceId: 'a', reactionIndex: 0, actionIndex: 0 }, { sourceId: 'b', reactionIndex: 0, actionIndex: 0 }], 'home')).toBe(true);
+    expect(reactions('a')![0]!.actions[0]).toMatchObject({ destinationId: 'home' });
+    expect(reactions('b')![0]!.actions[0]).toMatchObject({ destinationId: 'home' });
+    // Back has no destination to change.
+    expect(setConnectionsDestination(editor, [{ sourceId: 'a', reactionIndex: 0, actionIndex: 1 }], 'home')).toBe(false);
+
+    removeConnections(editor, [{ sourceId: 'a', reactionIndex: 0, actionIndex: 0 }, { sourceId: 'b', reactionIndex: 0, actionIndex: 0 }]);
+    // A keeps its interaction with the Back action; B's interaction had only the connection, so it goes.
+    expect(reactions('a')).toEqual([{ trigger: { type: 'ON_CLICK' }, actions: [{ type: 'BACK' }] }]);
+    expect(reactions('b')).toBeUndefined();
+    editor.history.undo();
+    expect(reactions('b')).toHaveLength(1);
   });
 });

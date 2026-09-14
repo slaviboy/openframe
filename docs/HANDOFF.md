@@ -65,16 +65,24 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - the Scroll behavior section in the Prototype tab
     - presentation view scrolls frames (wheel, Scroll to, fixed and sticky layers, remembered offsets)
     - also fixed: the scene index is built before frames are drawn (earlier, presentation view showed blank frames)
+  - Selecting connections (the commit after scroll overflow):
+    - clicking a noodle selects its connection and opens its interaction
+    - dragging selected connections changes their destination, or removes them on empty canvas
+    - ⇧E toggles the Prototype tab
 
 ## In progress (uncommitted)
 
-1. **Selecting connections on the canvas.** Starting: clicking a noodle selects its hotspot and opens that interaction's details in the Prototype tab (editor state for the focused interaction); dragging a noodle's end to another frame changes its destination; dropping it on empty canvas removes that action.
+1. **Inline preview.** Starting:
+   - ⇧Space or Preview opens a resizable in-editor window that plays the prototype live from the editor's document
+   - it jumps to the frame selected on the canvas
+   - its keys (← → R) only act while it has focus
+   - the overflow menu has scaling options, Follow prototype, and Open in presentation view; it closes with X
+   - it reuses `PresentationView` with an `inline` variant, and the renderer must not replace the editor's text layout
 
 ## Next (M10, in order)
 
 1. The overlay badge on the canvas; dragging to scroll on touch; nested sticky layers.
 2. State memorization of scroll position; Animate matching layers on the moving transitions.
-3. Inline preview (⇧Space) and follow prototype.
 4. Device and background settings; the prototype settings panel with nothing selected.
 5. Interactive components (Change to), connections from main components, sections as destinations.
 6. Set variable, set variable mode, conditionals and expressions in actions (the evaluator exists in `src/core/prototype/expressions.ts`).

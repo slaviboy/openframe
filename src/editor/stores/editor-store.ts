@@ -36,12 +36,21 @@ export interface GuideRef {
   readonly index: number;
 }
 
+/** A prototype connection: one action of one interaction on a hotspot. */
+export interface SelectedConnection {
+  readonly sourceId: Id;
+  readonly reactionIndex: number;
+  readonly actionIndex: number;
+}
+
 export interface EditorState {
   readonly activePageId: Id;
   /** Selected node ids in selection order. Never contains both a node and its ancestor. */
   readonly selection: readonly Id[];
   /** Selected ruler guide. Selecting a guide clears the layer selection and vice versa. */
   readonly selectedGuide: GuideRef | null;
+  /** Prototype connections selected on the canvas (their hotspots are the layer selection). */
+  readonly selectedConnections: readonly SelectedConnection[];
   readonly hoverId: Id | null;
   readonly tool: ToolId;
   /** Tool to return to after a temporary tool (e.g. holding Space for hand). */
@@ -148,6 +157,7 @@ export class EditorStore extends Observable<EditorState> {
       selection: [],
       selectedGuide: null,
       hoverId: null,
+      selectedConnections: [],
       tool: 'move',
       spring: null,
       mode: 'design',
@@ -372,6 +382,7 @@ export class EditorStore extends Observable<EditorState> {
     this.setState({
       selection: normalized,
       selectedGuide: null,
+      selectedConnections: [],
       croppingId: keepCrop ? this.state.croppingId : null,
       gradientEdit: keepGradient ? this.state.gradientEdit : null,
       blurEdit: keepBlur ? this.state.blurEdit : null,
@@ -379,6 +390,12 @@ export class EditorStore extends Observable<EditorState> {
       multiEditSetId: keepMultiEdit ? multiEditSet : null,
     });
     this.revealInLayers(normalized);
+  }
+
+  /** Selects prototype connections (their hotspots become the layer selection); an empty list clears them. */
+  selectConnections(refs: readonly SelectedConnection[]): void {
+    if (refs.length > 0) this.select([...new Set(refs.map((ref) => ref.sourceId))]);
+    this.setState({ selectedConnections: refs });
   }
 
   /** Selects a ruler guide (clearing the layer selection), or clears the guide selection. */

@@ -65,3 +65,45 @@ test('the Prototype tab shows connections as noodles and flow starting points on
   await page.getByRole('tab', { name: 'Design' }).click();
   await expect.poll(() => blueNear(page, midX, midY)).toBe(false);
 });
+
+test('clicking a noodle selects its connection; dragging it changes the destination or removes it', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await drawFrame(page, 350, 200, 'Frame 1');
+  await drawFrame(page, 650, 200, 'Frame 2');
+  await drawFrame(page, 350, 420, 'Frame 3');
+  await page.getByRole('treeitem', { name: 'Frame 1' }).click();
+  // ⇧E shows the prototype connections.
+  await page.keyboard.press('Shift+E');
+  await expect(page.getByRole('tab', { name: 'Prototype' })).toHaveAttribute('aria-selected', 'true');
+  const panel = page.getByRole('tabpanel', { name: 'Prototype' });
+  await panel.getByRole('button', { name: 'Add interaction' }).click();
+  await panel.getByRole('combobox', { name: 'Destination', exact: true }).selectOption({ label: 'Frame 2' });
+  // With nothing selected, every connection shows.
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.mouse.click(box.x + 900, box.y + 650);
+  await expect(page.getByRole('treeitem', { name: 'Frame 1' })).toHaveAttribute('aria-selected', 'false');
+
+  // Frame 1 (350–490 × 200–320) to Frame 2 (650–790): the noodle runs straight along y 260.
+  await page.mouse.click(box.x + 570, box.y + 260);
+  await expect(page.getByRole('treeitem', { name: 'Frame 1' })).toHaveAttribute('aria-selected', 'true');
+  await expect(panel.getByRole('group', { name: 'Interaction details' }).getByRole('combobox', { name: 'Destination', exact: true })).toHaveValue(/.+/);
+
+  // Dragging the selected connection onto Frame 3 makes it lead there.
+  await page.mouse.move(box.x + 570, box.y + 260);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 500, box.y + 400, { steps: 5 });
+  await page.mouse.move(box.x + 420, box.y + 480, { steps: 5 });
+  await page.mouse.up();
+  await expect(panel.getByRole('button', { name: 'On click: Navigate to Frame 3' })).toBeVisible();
+
+  // Frame 1 to Frame 3 runs straight down x 420, from y 320 to 420: dropping it on empty canvas removes it.
+  await page.mouse.move(box.x + 420, box.y + 370);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 700, box.y + 520, { steps: 5 });
+  await page.mouse.move(box.x + 900, box.y + 600, { steps: 5 });
+  await page.mouse.up();
+  await expect(panel.getByRole('list', { name: 'Interaction list' })).toHaveCount(0);
+  await page.keyboard.press('ControlOrMeta+z');
+  await expect(panel.getByRole('button', { name: 'On click: Navigate to Frame 3' })).toBeVisible();
+});

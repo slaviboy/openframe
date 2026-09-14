@@ -103,6 +103,8 @@ export interface OverlayInput {
   readonly hoveredGuide?: GuideRef | null;
   /** Outline every mask on the page (View › Mask outlines). */
   readonly maskOutlines?: boolean;
+  /** Selected connections being dragged: the pointer (screen) and the frame they would lead to. */
+  readonly connectionDrag?: { readonly refs: readonly { readonly sourceId: Id; readonly reactionIndex: number; readonly actionIndex: number }[]; readonly end: Vec2; readonly destination: Id | null } | null;
   /** A connection being dragged from the + handle (screen points), and the frame it would connect to. */
   readonly connectDrag?: { readonly start: Vec2; readonly end: Vec2; readonly destination: Id | null } | null;
   /** Eyedropper loupe: the sampled color at a canvas point. */
@@ -164,15 +166,37 @@ function drawPrototypeChrome(ctx: CanvasRenderingContext2D, input: OverlayInput,
   ctx.strokeStyle = PROTOTYPE_COLOR;
   ctx.fillStyle = PROTOTYPE_COLOR;
   ctx.lineWidth = 2;
+  const selectedConnections = editor.state.getSnapshot().selectedConnections;
+  const dragging = input.connectionDrag;
+  const isRef = (refs: readonly { sourceId: Id; reactionIndex: number; actionIndex: number }[], connection: { sourceId: Id; reactionIndex: number; actionIndex: number }) =>
+    refs.some((ref) => ref.sourceId === connection.sourceId && ref.reactionIndex === connection.reactionIndex && ref.actionIndex === connection.actionIndex);
   for (const connection of visibleConnections(editor.doc, editor.pageId, selection)) {
     const source = screenRectOf(editor, connection.sourceId);
-    const destination = screenRectOf(editor, connection.destinationId);
-    if (!source || !destination) continue;
-    const noodle = noodleBetween(source, destination);
+    const moved = dragging && isRef(dragging.refs, connection);
+    // Dragged connections follow the pointer, or end on the frame under it.
+    const destinationRect = moved ? (dragging.destination ? screenRectOf(editor, dragging.destination) : { x: dragging.end.x, y: dragging.end.y, width: 0, height: 0 }) : screenRectOf(editor, connection.destinationId);
+    if (!source || !destinationRect) continue;
+    const noodle = noodleBetween(source, destinationRect);
+    const selectedNoodle = isRef(selectedConnections, connection);
+    if (selectedNoodle) {
+      // A selected connection is drawn thicker, with a light halo.
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.moveTo(noodle.start.x, noodle.start.y);
+      ctx.bezierCurveTo(noodle.c1.x, noodle.c1.y, noodle.c2.x, noodle.c2.y, noodle.end.x, noodle.end.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.lineWidth = selectedNoodle ? 3 : 2;
     ctx.beginPath();
     ctx.moveTo(noodle.start.x, noodle.start.y);
     ctx.bezierCurveTo(noodle.c1.x, noodle.c1.y, noodle.c2.x, noodle.c2.y, noodle.end.x, noodle.end.y);
     ctx.stroke();
+    if (moved && dragging.destination && destinationRect.width > 0) {
+      ctx.strokeRect(Math.round(destinationRect.x) + 0.5, Math.round(destinationRect.y) + 0.5, Math.round(destinationRect.width), Math.round(destinationRect.height));
+    }
     ctx.beginPath();
     ctx.arc(noodle.start.x, noodle.start.y, 3, 0, Math.PI * 2);
     ctx.fill();

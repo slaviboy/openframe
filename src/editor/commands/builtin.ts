@@ -653,6 +653,16 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     enabled: (e) => e.state.getSnapshot().vectorEdit !== null,
     run: (e) => setVectorEditTool(e, 'eraser'),
   },
+  // Outside vector edit mode, ⇧E shows the prototype connections (the Prototype tab) or hides them again.
+  {
+    id: 'view.togglePrototypeConnections',
+    label: 'Show prototyping connections',
+    category: 'View',
+    shortcuts: ['Shift+E'],
+    enabled: (e) => e.state.getSnapshot().vectorEdit === null,
+    checked: (e) => e.state.getSnapshot().rightTab === 'prototype',
+    run: (e) => e.state.setRightTab(e.state.getSnapshot().rightTab === 'prototype' ? 'design' : 'prototype'),
+  },
   // Variable width has no shortcut: it is picked from the secondary toolbar.
   {
     id: 'vector.toolWidth',
