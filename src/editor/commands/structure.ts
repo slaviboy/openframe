@@ -239,7 +239,7 @@ export function ungroupSelection(editor: Editor, options: UngroupOptions = {}): 
   return released;
 }
 
-function cloneSubtree(tx: Transaction, editor: Editor, sourceId: Id, parent: Id, key: string): Id {
+export function cloneSubtree(tx: Transaction, editor: Editor, sourceId: Id, parent: Id, key: string): Id {
   const source = tx.store.getOrThrow(sourceId) as Node;
   if (!isSceneNode(source)) throw new Error('Only layers can be duplicated');
   const id = editor.ids.next();

@@ -60,7 +60,7 @@ import gradientStyles from './Gradient.module.css';
 import { gradientCss } from './gradient-css';
 import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
 import { canCreateComponent, canCreateMultipleComponents, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
-import { canCombineAsVariants, combineAsVariants, deleteVariantProperty, instanceVariant, moveVariantProperty, renameVariantProperty, renameVariantValue, setInstanceVariant } from '@/editor/commands/variants';
+import { addVariant, canAddVariant, canCombineAsVariants, combineAsVariants, deleteVariantProperty, instanceVariant, moveVariantProperty, renameVariantProperty, renameVariantValue, setInstanceVariant } from '@/editor/commands/variants';
 import { componentSetProperties, defaultVariant, parseVariantName, variantErrors } from '@/core/document/variants';
 import { commandItem } from '../../menus/menu-model';
 import { Menu, type MenuEntry } from '../../primitives/Menu';
@@ -568,6 +568,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         </span>
         {canCreateComponent(editor) && <IconButton icon="component" label="Create component" onClick={() => createComponent(editor)} />}
         {canCreateMultipleComponents(editor) && <CreateComponentOptions />}
+        {canAddVariant(editor) && <IconButton icon="plus" label="Add variant" onClick={() => addVariant(editor)} />}
         {canCombineAsVariants(editor) && (
           <button type="button" className={gradientStyles.textButton} onClick={() => combineAsVariants(editor)}>
             Combine as variants

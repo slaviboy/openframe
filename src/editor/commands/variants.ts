@@ -16,17 +16,27 @@
  */
 
 import { isMainComponent } from '@/core/document/instances';
-import { componentSetProperties, isComponentSet, parseVariantName, renamedVariants, variantFor, variantNamesFromComponents } from '@/core/document/variants';
+import { componentSetProperties, isComponentSet, parseVariantName, renamedVariants, variantFor, variantNamesFromComponents, variantsOf } from '@/core/document/variants';
+import type { Transaction } from '@/core/history/history';
 import type { Id } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 import { selectedSceneNodes } from './selection-helpers';
-import { wrapNodes } from './structure';
+import { cloneSubtree, duplicateNodes, wrapNodes } from './structure';
 import { swapInstanceFor } from './swap-instance';
 
 /** Component sets have a dashed purple stroke and no fill by default. */
 const COMPONENT_SET_STROKE = { type: 'SOLID', color: { r: 0x97 / 255, g: 0x47 / 255, b: 1, a: 1 }, opacity: 1, visible: true, blendMode: 'NORMAL' } as const;
 const COMPONENT_SET_DASHES = [10, 5];
+
+/** Marks a new container as a component set named `name`, with the default dashed purple stroke and no fill. */
+function styleComponentSet(tx: Transaction, id: Id, name: string): void {
+  tx.set(id, 'name', name);
+  tx.set(id, 'fills', []);
+  tx.set(id, 'strokes', [COMPONENT_SET_STROKE]);
+  tx.set(id, 'strokeDashes', COMPONENT_SET_DASHES);
+  tx.set(id, 'componentSet', {});
+}
 
 /** Whether Combine as variants applies: two or more main components sharing a parent that isn't a component set already. */
 export function canCombineAsVariants(editor: Editor): boolean {
@@ -52,13 +62,7 @@ export function combineAsVariants(editor: Editor): Id | null {
   editor.history.run('Combine as variants', (tx) => {
     ids.forEach((id, i) => tx.set(id, 'name', variants[i]!));
     wrapNodes(tx, editor, ids, 'FRAME', setId, {
-      after: (t, container) => {
-        t.set(container, 'name', setName);
-        t.set(container, 'fills', []);
-        t.set(container, 'strokes', [COMPONENT_SET_STROKE]);
-        t.set(container, 'strokeDashes', COMPONENT_SET_DASHES);
-        t.set(container, 'componentSet', {});
-      },
+      after: (t, container) => styleComponentSet(t, container, setName),
     });
   });
   editor.state.select([setId]);
@@ -134,4 +138,60 @@ export function deleteVariantProperty(editor: Editor, setId: Id, property: strin
     return true;
   }
   return applyRenames(editor, 'Delete property', renamedVariants(editor.doc, setId, (values) => values.filter(([p]) => p !== property)));
+}
+
+/** Space between variants in the column new variants are added to. */
+const VARIANT_SPACING = 20;
+
+/** What Add variant works on: the selected component set (or the set of a selected variant), or a main component on its own. */
+function addVariantTarget(editor: Editor): { readonly setId: Id | null; readonly source: SceneNode } | null {
+  const ids = selectedSceneNodes(editor);
+  const node = ids.length === 1 ? (editor.doc.get(ids[0]!) as SceneNode) : undefined;
+  if (!node) return null;
+  if (isComponentSet(node)) {
+    // The bottom variant (the last one in layer order on a tie) is copied.
+    const source = variantsOf(editor.doc, node.id).reduce<SceneNode | null>((low, v) => (!low || v.transform[5] + v.size.height >= low.transform[5] + low.size.height ? v : low), null);
+    return source ? { setId: node.id, source } : null;
+  }
+  if (!isMainComponent(node)) return null;
+  const parent = editor.doc.parentOf(node.id);
+  return { setId: parent !== null && isComponentSet(editor.doc.get(parent) as SceneNode | undefined) ? parent : null, source: node };
+}
+
+export const canAddVariant = (editor: Editor): boolean => addVariantTarget(editor) !== null;
+
+/**
+ * Add variant: on a component set (or one of its variants), adds a copy of the bottom (or selected) variant
+ * below the others, growing the set to fit. On a main component on its own, makes an identical component
+ * below it and puts both in a new component set. The new variant is selected; one undo step.
+ */
+export function addVariant(editor: Editor): Id | null {
+  const target = addVariantTarget(editor);
+  if (!target) return null;
+  const { setId, source } = target;
+  const t = source.transform;
+  let copy: Id | null = null;
+  editor.history.run('Add variant', (tx) => {
+    if (setId !== null) {
+      const variants = variantsOf(tx.store, setId);
+      const bottom = Math.max(...variants.map((v) => v.transform[5] + v.size.height));
+      const set = tx.store.getOrThrow(setId) as SceneNode;
+      const padding = Math.max(0, set.size.height - bottom);
+      copy = duplicateNodes(tx, editor, [source.id]).clones[0]!;
+      const y = bottom + VARIANT_SPACING;
+      tx.set(copy, 'transform', [t[0], t[1], t[2], t[3], t[4], y]);
+      tx.set(setId, 'size', { width: set.size.width, height: y + source.size.height + padding });
+      return;
+    }
+    const parent = source.parent;
+    const newSet = editor.ids.next();
+    copy = cloneSubtree(tx, editor, source.id, parent.id, source.parent.key);
+    tx.set(copy, 'transform', [t[0], t[1], t[2], t[3], t[4], t[5] + source.size.height + VARIANT_SPACING]);
+    const { setName, variants } = variantNamesFromComponents([source.name, source.name]);
+    tx.set(source.id, 'name', variants[0]!);
+    tx.set(copy, 'name', variants[1]!);
+    wrapNodes(tx, editor, [source.id, copy], 'FRAME', newSet, { after: (t2, container) => styleComponentSet(t2, container, setName) });
+  });
+  if (copy !== null) editor.state.select([copy]);
+  return copy;
 }
