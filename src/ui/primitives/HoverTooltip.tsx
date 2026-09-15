@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import { useState, type FocusEvent, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type FocusEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import styles from './HoverTooltip.module.css';
 
-export type TooltipPlacement = 'right' | 'above';
+export type TooltipPlacement = 'right' | 'above' | 'below';
 
 interface TooltipAnchor {
   readonly x: number;
@@ -32,9 +32,20 @@ interface TooltipAnchor {
  */
 export function useHoverTooltip(label: string, shortcut: string | undefined, placement: TooltipPlacement) {
   const [anchor, setAnchor] = useState<TooltipAnchor | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+  // Keep the tooltip inside the window (e.g. under a button at its right edge); the arrow stays on the control.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.style.removeProperty('--shift');
+    const r = el.getBoundingClientRect();
+    const margin = 8;
+    const shift = r.right > window.innerWidth - margin ? window.innerWidth - margin - r.right : r.left < margin ? margin - r.left : 0;
+    el.style.setProperty('--shift', `${shift}px`);
+  }, [anchor]);
   const show = (el: HTMLElement) => {
     const r = el.getBoundingClientRect();
-    setAnchor(placement === 'right' ? { x: r.right + 8, y: r.top + r.height / 2 } : { x: r.left + r.width / 2, y: r.top - 8 });
+    setAnchor(placement === 'right' ? { x: r.right + 8, y: r.top + r.height / 2 } : placement === 'above' ? { x: r.left + r.width / 2, y: r.top - 8 } : { x: r.left + r.width / 2, y: r.bottom + 8 });
   };
   const hide = () => setAnchor(null);
   const handlers = {
@@ -49,7 +60,7 @@ export function useHoverTooltip(label: string, shortcut: string | undefined, pla
   const tooltip: ReactNode =
     anchor &&
     createPortal(
-      <div className={styles.tooltip} data-placement={placement} role="tooltip" style={{ left: anchor.x, top: anchor.y }}>
+      <div ref={ref} className={styles.tooltip} data-placement={placement} role="tooltip" style={{ left: anchor.x, top: anchor.y }}>
         <span>{label}</span>
         {shortcut && <span className={styles.shortcut}>{shortcut}</span>}
       </div>,

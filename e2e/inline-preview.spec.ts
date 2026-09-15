@@ -67,7 +67,8 @@ test('Preview (⇧Space) plays the prototype inline, jumps to the frame selected
 
   await preview.getByRole('button', { name: 'Close preview' }).click();
   await expect(preview).toHaveCount(0);
-  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page.getByRole('button', { name: 'Prototype view' }).click();
+  await page.getByRole('menuitem', { name: /^Preview/ }).click();
   await expect(page.getByRole('region', { name: 'Preview' }).getByTestId('presentation')).toHaveAttribute('data-ready', 'true');
 });
 

@@ -36,7 +36,9 @@
   transform: translateY(-50%);
 }
 
+/* --shift moves the tooltip back inside the window; its arrow moves the other way to stay on the control. */
 .tooltip[data-placement='above'] {
+  margin-left: var(--shift, 0px);
   transform: translate(-50%, -100%);
 }
 
@@ -56,8 +58,19 @@
 }
 
 .tooltip[data-placement='above']::before {
-  left: 50%;
+  left: calc(50% - var(--shift, 0px));
   bottom: -4px;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.tooltip[data-placement='below'] {
+  margin-left: var(--shift, 0px);
+  transform: translateX(-50%);
+}
+
+.tooltip[data-placement='below']::before {
+  left: calc(50% - var(--shift, 0px));
+  top: -4px;
   transform: translateX(-50%) rotate(45deg);
 }
 

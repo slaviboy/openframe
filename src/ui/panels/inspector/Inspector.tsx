@@ -172,7 +172,10 @@ import {
 import { ANCHOR_LABELS, SCALE_ANCHORS, scaleLayersInTx } from '@/editor/commands/scale';
 import { setSpacingInTx, smartSelectionInfo } from '@/editor/commands/smart-selection';
 import { toTransform } from '@/editor/interactions/transform';
-import { Icon } from '../../icons/Icon';
+import { Icon, type IconName } from '../../icons/Icon';
+import { formatShortcut } from '@/editor/keymap/keymap';
+import { IS_MAC } from '../../keyboard/keyboard-controller';
+import { useHoverTooltip } from '../../primitives/HoverTooltip';
 import { LAYER_BLEND_OPTIONS } from './blend-modes';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import { useGesture } from '../../hooks/useGesture';
@@ -560,6 +563,71 @@ function MaskSection({ nodes }: { nodes: SceneNode[] }) {
   );
 }
 
+/** A native select laid invisibly over a glyph, so it looks like an icon button (with a tooltip) and opens its options on click. */
+function IconSelect({ label, icon, narrow, children }: { label: string; icon: IconName; narrow?: boolean; children: ReactNode }) {
+  const { handlers, tooltip } = useHoverTooltip(label, undefined, 'below');
+  return (
+    <>
+      <label className={narrow ? `${styles.iconSelect} ${styles.paintType}` : styles.iconSelect} onPointerEnter={handlers.onPointerEnter} onPointerLeave={handlers.onPointerLeave} onPointerDown={handlers.onPointerDown}>
+        <Icon name={icon} size={narrow ? 16 : 24} />
+        {children}
+      </label>
+      {tooltip}
+    </>
+  );
+}
+
+const ALIGN_GROUPS = [
+  [
+    ['arrange.alignLeft', 'alignLeft'],
+    ['arrange.alignHorizontalCenters', 'alignHorizontalCenter'],
+    ['arrange.alignRight', 'alignRight'],
+  ],
+  [
+    ['arrange.alignTop', 'alignTopEdge'],
+    ['arrange.alignVerticalCenters', 'alignVerticalCenter'],
+    ['arrange.alignBottom', 'alignBottomEdge'],
+  ],
+] as const;
+
+/**
+ * A button in a segmented group: its tooltip gives the name and, for a command, its shortcut. With `command` it runs that
+ * command (and is disabled while it can't run); otherwise `onClick`.
+ */
+function SegmentButton({ icon, label, command, onClick }: { icon: IconName; label: string; command?: string; onClick?: () => void }) {
+  const editor = useEditor();
+  const key = command ? editor.commands.get(command)?.shortcuts?.[0] : undefined;
+  const { handlers, tooltip } = useHoverTooltip(label, key ? formatShortcut(key, IS_MAC) : undefined, 'below');
+  return (
+    <>
+      <button type="button" aria-label={label} disabled={command ? !editor.commands.isEnabled(command) : false} onClick={command ? () => editor.commands.run(command) : onClick} {...handlers}>
+        <Icon name={icon} />
+      </button>
+      {tooltip}
+    </>
+  );
+}
+
+/** Position's alignment row: the six align commands in two groups, and More actions (distribute spacing, tidy up). */
+function AlignRow() {
+  const editor = useEditor();
+  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const entries = anchor ? ['arrange.distributeHorizontal', 'arrange.distributeVertical', 'arrange.tidyUp'].map((id) => commandItem(editor, id)).filter((e): e is MenuEntry => e !== null) : [];
+  return (
+    <div className={styles.row} role="group" aria-label="Align layers">
+      {ALIGN_GROUPS.map((group, i) => (
+        <div key={i} className={styles.segmented}>
+          {group.map(([id, icon]) => (
+            <SegmentButton key={id} icon={icon} label={editor.commands.get(id)?.label ?? id} command={id} />
+          ))}
+        </div>
+      ))}
+      <IconButton icon="alignMore" label="More alignment actions" tooltip="More actions" aria-haspopup="menu" aria-expanded={anchor !== null} onClick={(e) => setAnchor(e.currentTarget.getBoundingClientRect())} />
+      {anchor && <Menu label="More alignment actions" entries={entries} anchor={anchor} placement="bottom-start" onClose={() => setAnchor(null)} />}
+    </div>
+  );
+}
+
 /** A sidebar section; `styleAction` (the Apply styles button) sits before the actions, and `applied` (the applied style) above the body. */
 function Section({ title, actions, styleAction, applied, children }: { title: string; actions?: ReactNode; styleAction?: ReactNode; applied?: ReactNode; children?: ReactNode }) {
   return (
@@ -743,22 +811,45 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       {single && <ComponentSection node={single} />}
       {tool === 'scale' && <ScaleSection nodes={nodes} />}
       <Section title="Position">
+        <AlignRow />
         <div className={styles.grid2}>
-          <NumberField label="X" ariaLabel="X position" testId="field-x" value={x} onGestureStart={move.start} onGestureEnd={move.end} onChange={(v) => setAxis('x', v)} />
-          <NumberField label="Y" ariaLabel="Y position" testId="field-y" value={y} onGestureStart={move.start} onGestureEnd={move.end} onChange={(v) => setAxis('y', v)} />
-          {!hasSection && (
-          <NumberField
-            label={<Icon name="rotation" size={16} />}
-            ariaLabel="Rotation"
-            testId="field-rotation"
-            suffix="°"
-            value={val(shared(nodes, rotationDegrees))}
-            onGestureStart={rotate.start}
-            onGestureEnd={rotate.end}
-            onChange={(deg) => rotate.change((tx) => nodes.forEach((n) => setRotation(tx, tx.store.getOrThrow(n.id) as SceneNode, deg)))}
-          />
-          )}
+          <NumberField label="X" ariaLabel="X position" tooltip="X-position" testId="field-x" value={x} onGestureStart={move.start} onGestureEnd={move.end} onChange={(v) => setAxis('x', v)} />
+          <NumberField label="Y" ariaLabel="Y position" tooltip="Y-position" testId="field-y" value={y} onGestureStart={move.start} onGestureEnd={move.end} onChange={(v) => setAxis('y', v)} />
         </div>
+        {/* Sections never rotate or flip. */}
+        {!hasSection && (
+          <div className={styles.row}>
+            <NumberField
+              label={<Icon name="rotation" />}
+              ariaLabel="Rotation"
+              testId="field-rotation"
+              suffix="°"
+              value={val(shared(nodes, rotationDegrees))}
+              onGestureStart={rotate.start}
+              onGestureEnd={rotate.end}
+              onChange={(deg) => rotate.change((tx) => nodes.forEach((n) => setRotation(tx, tx.store.getOrThrow(n.id) as SceneNode, deg)))}
+            />
+            <div className={styles.segmented}>
+              <SegmentButton
+                icon="rotate90"
+                label="Rotate 90° right"
+                onClick={() =>
+                  editor.history.run('Rotate 90° right', (tx) =>
+                    nodes.forEach((n) => {
+                      const node = tx.store.getOrThrow(n.id) as SceneNode;
+                      // Clockwise is negative; keep the angle in (-180, 180].
+                      const next = rotationDegrees(node) - 90;
+                      setRotation(tx, node, next <= -180 ? next + 360 : next);
+                    }),
+                  )
+                }
+              />
+              <SegmentButton icon="flipHorizontal" label="Flip horizontal" command="object.flipHorizontal" />
+              <SegmentButton icon="flipVertical" label="Flip vertical" command="object.flipVertical" />
+            </div>
+            <span />
+          </div>
+        )}
         {constrainable && (
           <div className={styles.grid2}>
             <select className={primitives.select} aria-label="Horizontal constraint" value={horizontalConstraint ?? ''} onChange={(e) => changeConstraint('horizontal', e.target.value as Constraint)}>
@@ -793,7 +884,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         <GridChildFields nodes={nodes} />
       </Section>
       <Section title="Layout">
-        <div className={styles.grid2}>
+        <div className={styles.row}>
           <VariableNumberField
             nodes={nodes}
             field="width"
@@ -819,6 +910,23 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             onGestureEnd={resize.end}
             onChange={(v) => resize.change((tx) => nodes.forEach((n) => setSize(tx, n, 'height', v)))}
           />
+          {/* Lines have no height, so no proportions to keep. */}
+          {lines.length === 0 ? (
+            <IconButton
+              icon="lockAspect"
+              label="Constrain proportions"
+              tooltip="Lock aspect ratio"
+              pressed={nodes.every((n) => n.constrainProportions)}
+              onClick={() => {
+                const on = !nodes.every((n) => n.constrainProportions);
+                editor.history.run(on ? 'Constrain proportions' : 'Unconstrain proportions', (tx) =>
+                  nodes.forEach((n) => setConstrainProportions(tx, tx.store.getOrThrow(n.id) as SceneNode, on)),
+                );
+              }}
+            />
+          ) : (
+            <span />
+          )}
         </div>
         <LayoutSizingFields nodes={nodes} />
         {frames.length === nodes.length && <AutoLayoutFields frames={frames as FrameNode[]} />}
@@ -837,19 +945,6 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
           </div>
         )}
         {texts.length === nodes.length && <TextResizingButtons nodes={texts} />}
-        {lines.length === 0 && (
-          <IconButton
-            icon={nodes.every((n) => n.constrainProportions) ? 'lock' : 'unlock'}
-            label="Constrain proportions"
-            pressed={nodes.every((n) => n.constrainProportions)}
-            onClick={() => {
-              const on = !nodes.every((n) => n.constrainProportions);
-              editor.history.run(on ? 'Constrain proportions' : 'Unconstrain proportions', (tx) =>
-                nodes.forEach((n) => setConstrainProportions(tx, tx.store.getOrThrow(n.id) as SceneNode, on)),
-              );
-            }}
-          />
-        )}
         {frames.length === nodes.length && <FramePresetSelect frames={frames} />}
         {frames.length === nodes.length && (
           <label className={styles.checkbox}>
@@ -867,12 +962,28 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         title="Appearance"
         styleAction={
           <>
-            <VisibilityControl nodes={nodes} />
             <VariableModeButton ids={nodes.map((n) => n.id)} />
+            <VisibilityControl nodes={nodes} />
+            <IconSelect label="Apply blend mode" icon="blendMode">
+              <select
+                aria-label="Layer blend mode"
+                value={val(shared(nodes, (n) => n.blendMode)) ?? ''}
+                onChange={(e) =>
+                  editor.history.run('Change blend mode', (tx) => nodes.forEach((n) => setBlendMode(tx, tx.store.getOrThrow(n.id) as SceneNode, e.target.value as BlendMode)))
+                }
+              >
+                {shared(nodes, (n) => n.blendMode) === MIXED && <option value="">Mixed</option>}
+                {LAYER_BLEND_OPTIONS.map(([mode, label]) => (
+                  <option key={mode} value={mode}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </IconSelect>
           </>
         }
         actions={bindable && single ? <PropertyBinding layerId={single.id} type="BOOLEAN" /> : undefined}>
-        <div className={styles.grid2}>
+        <div className={styles.row}>
           <VariableNumberField
             nodes={nodes}
             field="opacity"
@@ -888,22 +999,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             onGestureEnd={appearance.end}
             onChange={(v) => appearance.change((tx) => nodes.forEach((n) => setOpacity(tx, n, v)))}
           />
-          <select
-            className={primitives.select}
-            aria-label="Layer blend mode"
-            value={val(shared(nodes, (n) => n.blendMode)) ?? ''}
-            onChange={(e) =>
-              editor.history.run('Change blend mode', (tx) => nodes.forEach((n) => setBlendMode(tx, tx.store.getOrThrow(n.id) as SceneNode, e.target.value as BlendMode)))
-            }
-          >
-            {shared(nodes, (n) => n.blendMode) === MIXED && <option value="">Mixed</option>}
-            {LAYER_BLEND_OPTIONS.map(([mode, label]) => (
-              <option key={mode} value={mode}>
-                {label}
-              </option>
-            ))}
-          </select>
-          {radiusNodes.length === nodes.length && (
+          {radiusNodes.length === nodes.length ? (
             <VariableNumberField
               nodes={radiusNodes}
               field="cornerRadius"
@@ -916,7 +1012,28 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
               onGestureEnd={radius.end}
               onChange={(v) => radius.change((tx) => radiusNodes.forEach((n) => setCornerRadius(tx, n, v)))}
             />
+          ) : (
+            <span />
           )}
+          {boxNodes.length === nodes.length ? (
+            <IconButton
+              icon="radius"
+              label="Independent corners"
+              pressed={independentCorners}
+              onClick={() =>
+                editor.history.run(independentCorners ? 'Uniform corners' : 'Independent corners', (tx) =>
+                  boxNodes.forEach((n) => {
+                    const r = n.cornerRadius;
+                    setCornerRadii(tx, n, independentCorners ? undefined : { topLeft: r, topRight: r, bottomRight: r, bottomLeft: r });
+                  }),
+                )
+              }
+            />
+          ) : (
+            <span />
+          )}
+        </div>
+        <div className={styles.grid2}>
           {pointed.length === nodes.length && (
             <NumberField
               label="#"
@@ -947,21 +1064,6 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             />
           )}
         </div>
-        {boxNodes.length === nodes.length && (
-          <IconButton
-            icon="radius"
-            label="Independent corners"
-            pressed={independentCorners}
-            onClick={() =>
-              editor.history.run(independentCorners ? 'Uniform corners' : 'Independent corners', (tx) =>
-                boxNodes.forEach((n) => {
-                  const r = n.cornerRadius;
-                  setCornerRadii(tx, n, independentCorners ? undefined : { topLeft: r, topRight: r, bottomRight: r, bottomLeft: r });
-                }),
-              )
-            }
-          />
-        )}
         {independentCorners && (
           <div className={styles.grid2}>
             {CORNERS.map(([corner, label]) => (
@@ -2022,25 +2124,27 @@ function PaintSection({
                     )
                   }
                 />
-                <select
-                  className={`${primitives.select} ${gradientStyles.type}`}
-                  aria-label={`${title} ${list.length - index} type`}
-                  value={paint.type}
-                  onChange={(e) =>
-                    editor.history.run(`Change ${title.toLowerCase()} type`, (tx) =>
-                      nodes.forEach((n) =>
-                        write(tx, n, read(tx, n).map((p, i) => (i === index ? convertPaint(p, e.target.value as PaintType) : p))),
-                      ),
-                    )
-                  }
-                >
-                  {/* Video is shown for a video fill; other fills become videos by importing one. */}
-                  {(paint.type === 'VIDEO' ? [...PAINT_TYPES, 'VIDEO' as const] : PAINT_TYPES).map((type) => (
-                    <option key={type} value={type}>
-                      {PAINT_TYPE_LABELS[type]}
-                    </option>
-                  ))}
-                </select>
+                {/* The paint type is a chevron whose select opens on click, so the color control keeps the row's width. */}
+                <IconSelect label={PAINT_TYPE_LABELS[paint.type]} icon="caretDown" narrow>
+                  <select
+                    aria-label={`${title} ${list.length - index} type`}
+                    value={paint.type}
+                    onChange={(e) =>
+                      editor.history.run(`Change ${title.toLowerCase()} type`, (tx) =>
+                        nodes.forEach((n) =>
+                          write(tx, n, read(tx, n).map((p, i) => (i === index ? convertPaint(p, e.target.value as PaintType) : p))),
+                        ),
+                      )
+                    }
+                  >
+                    {/* Video is shown for a video fill; other fills become videos by importing one. */}
+                    {(paint.type === 'VIDEO' ? [...PAINT_TYPES, 'VIDEO' as const] : PAINT_TYPES).map((type) => (
+                      <option key={type} value={type}>
+                        {PAINT_TYPE_LABELS[type]}
+                      </option>
+                    ))}
+                  </select>
+                </IconSelect>
                 {paint.type === 'SOLID' && paint.boundVariables ? (
                   <BoundPaint ids={nodes.map((n) => n.id)} field={field} index={index} paint={paint} label={`${title} ${list.length - index}`} />
                 ) : paint.type === 'SOLID' ? (
@@ -2097,8 +2201,9 @@ function PaintSection({
                   </span>
                 )}
                 <IconButton
-                  icon={paint.visible ? 'eye' : 'eyeOff'}
+                  icon={paint.visible ? 'visibility' : 'eyeOff'}
                   label={paint.visible ? `Hide ${title.toLowerCase()}` : `Show ${title.toLowerCase()}`}
+                  tooltip="Toggle visibility"
                   onClick={() =>
                     editor.history.run(`Toggle ${title.toLowerCase()}`, (tx) =>
                       nodes.forEach((n) =>
@@ -2110,6 +2215,7 @@ function PaintSection({
                 <IconButton
                   icon="minus"
                   label={`Remove ${title.toLowerCase()}`}
+                  tooltip="Remove"
                   onClick={() =>
                     editor.history.run(`Remove ${title.toLowerCase()}`, (tx) =>
                       nodes.forEach((n) => write(tx, n, read(tx, n).filter((_, i) => i !== index))),
@@ -2362,7 +2468,7 @@ function EffectsSection({ nodes }: { nodes: SceneNode[] }) {
                   </select>
                   <span />
                   <IconButton
-                    icon={effect.visible ? 'eye' : 'eyeOff'}
+                    icon={effect.visible ? 'visibility' : 'eyeOff'}
                     label={effect.visible ? `Hide ${name.toLowerCase()}` : `Show ${name.toLowerCase()}`}
                     onClick={() => write('Toggle effect', (cur) => cur.map((x, i) => (i === index ? { ...x, visible: !x.visible } : x)))}
                   />
@@ -2547,7 +2653,7 @@ function LayoutGuideSection({ nodes }: { nodes: SceneNode[] }) {
                     ))}
                   </select>
                   <span />
-                  <IconButton icon={guide.visible ? 'eye' : 'eyeOff'} label={guide.visible ? `Hide ${lower}` : `Show ${lower}`} onClick={() => edit(index, { visible: !guide.visible })} />
+                  <IconButton icon={guide.visible ? 'visibility' : 'eyeOff'} label={guide.visible ? `Hide ${lower}` : `Show ${lower}`} onClick={() => edit(index, { visible: !guide.visible })} />
                   <IconButton icon="minus" label={`Remove ${lower}`} onClick={() => write('Remove layout guide', (cur) => cur.filter((_, i) => i !== index))} />
                 </li>
                 <li className={gradientStyles.stops} aria-label={`${name} settings`}>

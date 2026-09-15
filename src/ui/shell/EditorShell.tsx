@@ -15,10 +15,13 @@
  * limitations under the License.
  */
 
-import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import type { AppSession } from '@/app/bootstrap';
+import { formatShortcut } from '@/editor/keymap/keymap';
 import { applyUpdate, updates } from '@/platform/sw-register';
-import { Icon } from '../icons/Icon';
+import { Icon, type IconName } from '../icons/Icon';
+import { IS_MAC } from '../keyboard/keyboard-controller';
+import { useHoverTooltip } from '../primitives/HoverTooltip';
 import { SessionContext, useEditor, useEditorState, useSession } from '../hooks/useEditor';
 import { commandSections, mainMenuEntries } from '../menus/menu-model';
 import { FindPanel } from '../panels/find/FindPanel';
@@ -30,7 +33,7 @@ import { VariablesView } from '../panels/variables/VariablesView';
 import { VersionHistoryPanel } from '../panels/versions/VersionHistoryPanel';
 import { PrototypePanel } from '../panels/prototype/PrototypePanel';
 import { InlinePreview } from '../present/InlinePreview';
-import { Menu } from '../primitives/Menu';
+import { Menu, type MenuEntry } from '../primitives/Menu';
 import { PropertyLabelsContext } from '../primitives/property-labels';
 import { viewPrefs } from '../view/view-prefs';
 import type { Box } from '../primitives/position';
@@ -310,14 +313,77 @@ function MultiEditVariantsButton() {
   );
 }
 
+/** An icon button in the properties panel header, with its name (and shortcut) in a tooltip below. */
+function HeaderIconButton({ icon, label, shortcut, className, ...rest }: { icon: IconName; label: string; shortcut?: string | undefined } & Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'>) {
+  const { handlers, tooltip } = useHoverTooltip(label, shortcut, 'below');
+  return (
+    <>
+      <button type="button" className={className ?? styles.headerIconButton} aria-label={label} {...handlers} {...rest}>
+        <Icon name={icon} />
+      </button>
+      {tooltip}
+    </>
+  );
+}
+
+/** Present, and the Prototype view menu: present in a new tab, or preview in a window over the canvas. */
+function PrototypeViewGroup() {
+  const editor = useEditor();
+  const [anchor, setAnchor] = useState<Box | null>(null);
+  const close = useCallback(() => setAnchor(null), []);
+  const shortcut = (id: string) => {
+    const key = editor.commands.get(id)?.shortcuts?.[0];
+    return key ? formatShortcut(key, IS_MAC) : undefined;
+  };
+  const item = (id: string, command: string, label: string): MenuEntry => {
+    const key = shortcut(command);
+    return { kind: 'item', id, label, ...(key ? { shortcut: key } : {}), onSelect: () => void editor.commands.run(command) };
+  };
+  return (
+    <div className={styles.prototypeView} role="group" aria-label="Prototype view">
+      <HeaderIconButton icon="present" label="Present" shortcut={shortcut('view.present')} onClick={() => editor.commands.run('view.present')} />
+      <HeaderIconButton
+        icon="dropdown"
+        label="Prototype view"
+        className={styles.headerChevron}
+        aria-haspopup="menu"
+        aria-expanded={anchor !== null}
+        data-menu-root=""
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
+        }}
+      />
+      {anchor && (
+        <Menu
+          label="Prototype view"
+          entries={[item('present', 'view.present', 'Present in new tab'), item('preview', 'view.inlinePreview', 'Preview')]}
+          anchor={anchor}
+          placement="bottom-start"
+          onClose={close}
+        />
+      )}
+    </div>
+  );
+}
+
 function RightHeader() {
   const editor = useEditor();
   const zoom = useEditorState((s) => s.viewports[s.activePageId]?.zoom ?? 1);
   const rightTab = useEditorState((s) => s.rightTab);
   const [anchor, setAnchor] = useState<Box | null>(null);
+  const zoomTip = useHoverTooltip('Zoom/view options', undefined, 'below');
   const close = useCallback(() => setAnchor(null), []);
   return (
     <div className={styles.rightHeader}>
+      <div className={styles.headerControls}>
+        <div className={styles.headerLeft}>
+          <MultiEditTextButton />
+          <MultiEditVariantsButton />
+        </div>
+        <PrototypeViewGroup />
+      </div>
+      <div className={styles.tabsRow}>
       <div className={styles.tabs} role="tablist" aria-label="Properties panel">
         {(['design', 'prototype'] as const).map((tab) => (
           <button key={tab} type="button" role="tab" aria-selected={rightTab === tab} className={styles.tab} data-active={rightTab === tab || undefined} onClick={() => editor.state.setRightTab(tab)}>
@@ -325,18 +391,11 @@ function RightHeader() {
           </button>
         ))}
       </div>
-      <MultiEditTextButton />
-      <MultiEditVariantsButton />
-      <button type="button" className={styles.zoomButton} title="Preview (⇧Space)" onClick={() => editor.commands.run('view.inlinePreview')}>
-        Preview
-      </button>
-      <button type="button" className={styles.zoomButton} title="Present (opens a new tab)" onClick={() => editor.commands.run('view.present')}>
-        Present
-      </button>
       <button
         type="button"
         className={styles.zoomButton}
         data-testid="zoom-level"
+        {...zoomTip.handlers}
         aria-label="Zoom and view options"
         aria-haspopup="menu"
         aria-expanded={anchor !== null}
@@ -349,6 +408,7 @@ function RightHeader() {
         {Math.round(zoom * 100)}%
         <Icon name="chevronDown" size={16} />
       </button>
+      {!anchor && zoomTip.tooltip}
       {anchor && (
         <Menu
           label="Zoom and view options"
@@ -364,6 +424,7 @@ function RightHeader() {
           onClose={close}
         />
       )}
+      </div>
     </div>
   );
 }

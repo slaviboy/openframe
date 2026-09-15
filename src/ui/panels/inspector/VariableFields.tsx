@@ -160,7 +160,7 @@ export function VariableModeButton({ ids }: { ids: readonly Id[] }) {
   });
   return (
     <>
-      <IconButton icon="variables" label="Apply variable mode" aria-haspopup="menu" onClick={(e) => setAnchor(e.currentTarget.getBoundingClientRect())} />
+      <IconButton icon="variableMode" label="Apply variable mode" aria-haspopup="menu" onClick={(e) => setAnchor(e.currentTarget.getBoundingClientRect())} />
       {anchor && <Menu label="Variable modes" entries={entries} anchor={anchor} placement="bottom-start" onClose={() => setAnchor(null)} />}
     </>
   );
@@ -281,8 +281,9 @@ export function VisibilityControl({ nodes }: { nodes: readonly SceneNode[] }) {
           }}
         >
           <IconButton
-            icon={hidden ? 'eyeOff' : 'eye'}
+            icon={hidden ? 'eyeOff' : 'visibility'}
             label={hidden ? 'Show layers' : 'Hide layers'}
+            tooltip={hidden ? 'Show' : 'Hide'}
             onClick={() => editor.history.run(hidden ? 'Show layers' : 'Hide layers', (tx) => ids.forEach((id) => tx.set(id, 'visible', hidden)))}
           />
         </span>

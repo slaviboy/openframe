@@ -17,6 +17,7 @@
 
 import type { ButtonHTMLAttributes } from 'react';
 import { Icon, type IconName } from '../icons/Icon';
+import { useHoverTooltip } from './HoverTooltip';
 import styles from './primitives.module.css';
 
 export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -25,20 +26,26 @@ export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>
   /** Pressed/active state (e.g. current tool); exposed as aria-pressed. */
   pressed?: boolean;
   size?: 'md' | 'lg';
+  /** The hover tooltip's text, when it differs from the accessible label (The reference's wording, e.g. "Remove"). */
+  tooltip?: string;
 }
 
-export function IconButton({ icon, label, pressed, size = 'md', className, ...rest }: IconButtonProps) {
+export function IconButton({ icon, label, pressed, size = 'md', tooltip, className, ...rest }: IconButtonProps) {
+  const { handlers, tooltip: tip } = useHoverTooltip(tooltip ?? label, undefined, 'below');
   return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      aria-pressed={pressed}
-      data-pressed={pressed || undefined}
-      className={[styles.iconButton, size === 'lg' ? styles.iconButtonLg : '', className ?? ''].join(' ')}
-      {...rest}
-    >
-      <Icon name={icon} size={24} />
-    </button>
+    <>
+      <button
+        type="button"
+        aria-label={label}
+        aria-pressed={pressed}
+        data-pressed={pressed || undefined}
+        className={[styles.iconButton, size === 'lg' ? styles.iconButtonLg : '', className ?? ''].join(' ')}
+        {...handlers}
+        {...rest}
+      >
+        <Icon name={icon} size={24} />
+      </button>
+      {tip}
+    </>
   );
 }

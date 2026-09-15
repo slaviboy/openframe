@@ -507,7 +507,7 @@ export function StyleButton({ slot, ids }: { slot: StyleSlot; ids: readonly Id[]
   const [open, setOpen] = useState(false);
   return (
     <>
-      <IconButton icon="styles" label={`Apply ${SLOT_LABELS[slot]} style`} aria-haspopup="dialog" onClick={() => setOpen(true)} />
+      <IconButton icon="styles" label={`Apply ${SLOT_LABELS[slot]} style`} tooltip="Apply styles and variables" aria-haspopup="dialog" onClick={() => setOpen(true)} />
       {open && <StylePicker slot={slot} ids={ids} onClose={() => setOpen(false)} />}
     </>
   );

@@ -77,17 +77,9 @@ const STROKE = {
     </>
   ),
   detach: <path d="M12 4.5l3 3M19.5 12l-3 3M12 19.5l-3-3M4.5 12l3-3M6 6l12 12" />,
-  more: (
-    <>
-      <circle cx="7" cy="12" r="1" fill="currentColor" stroke="none" />
-      <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
-      <circle cx="17" cy="12" r="1" fill="currentColor" stroke="none" />
-    </>
-  ),
   collapse: <path d="m8.5 6.5 3.5 3.5 3.5-3.5M8.5 17.5 12 14l3.5 3.5" />,
   group: <path d="M6 8V6h2m8 0h2v2m0 8v2h-2m-8 0H6v-2m0-6v4m12-4v4M10 6h4m-4 12h4" />,
   page: <path d="M8 4.5h8v15H8z" />,
-  rotation: <path d="M7 17V9.5a2.5 2.5 0 0 1 2.5-2.5H17M14.5 4.5 17 7l-2.5 2.5" />,
   target: (
     <>
       <circle cx="12" cy="12" r="6.5" />
@@ -125,6 +117,18 @@ const STROKE = {
 } as const;
 
 const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: ReactElement }> = {
+  more: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M7 11.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m6 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m4.5 1.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3" /> },
+  rotation: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M9 8.5a.5.5 0 0 0-1 0v7a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 0-1H13a4 4 0 0 0-4-4zM9 12v3h3a3 3 0 0 0-3-3" /> },
+  rotate90: { viewBox: 24, body: <path fill="currentColor" d="M11.054 9.543a1.5 1.5 0 0 1 2.007.103l3.293 3.293a1.5 1.5 0 0 1 0 2.121l-3.293 3.293a1.5 1.5 0 0 1-2.121 0L7.647 15.06a1.5 1.5 0 0 1 0-2.121l3.293-3.293zm1.3.81a.5.5 0 0 0-.707 0l-3.293 3.293a.5.5 0 0 0 0 .707l3.293 3.293a.5.5 0 0 0 .629.064l.078-.064 3.293-3.293a.5.5 0 0 0 .064-.629l-.064-.078zM9.526 5.767a3.5 3.5 0 0 1 4.949 0L16 7.292V6a.5.5 0 0 1 1 0v2.5a.5.5 0 0 1-.5.5H14a.5.5 0 0 1 0-1h1.293l-1.525-1.526a2.5 2.5 0 0 0-3.535 0l-2.38 2.379a.5.5 0 0 1-.706-.707z" /> },
+  flipHorizontal: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M12 6.5a.5.5 0 0 0-1 0v11a.5.5 0 0 0 1 0zM6 9.604a.75.75 0 0 1 1.28-.53l2.22 2.219a1 1 0 0 1 0 1.414l-2.22 2.22a.75.75 0 0 1-1.28-.53zm1 4.189L8.793 12 7 10.207zm10-4.19a.75.75 0 0 0-1.28-.53l-2.22 2.22a1 1 0 0 0 0 1.414l2.22 2.22a.75.75 0 0 0 1.28-.53zm-1 4.19L14.207 12 16 10.207z" /> },
+  flipVertical: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M17.5 12a.5.5 0 0 0 0-1h-11a.5.5 0 0 0 0 1zm-3.104-6a.75.75 0 0 1 .53 1.28L12.708 9.5a1 1 0 0 1-1.414 0l-2.22-2.22A.75.75 0 0 1 9.603 6zm-4.189 1L12 8.793 13.793 7zm4.19 10a.75.75 0 0 0 .53-1.28l-2.22-2.22a1 1 0 0 0-1.414 0l-2.22 2.22a.75.75 0 0 0 .53 1.28zm-4.19-1L12 14.207 13.793 16z" /> },
+  visibility: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M6 12c0-.066.054-.358.313-.825a5.9 5.9 0 0 1 1.12-1.414C8.443 8.816 9.956 8 12 8s3.558.816 4.566 1.76c.508.477.88.98 1.121 1.415.258.467.313.76.313.825 0 .066-.055.358-.313.825-.24.435-.613.938-1.12 1.414C15.557 15.184 14.044 16 12 16s-3.558-.816-4.566-1.76a5.9 5.9 0 0 1-1.121-1.415C6.055 12.358 6 12.065 6 12m-1 0c0-1.25 2.333-5 7-5s7 3.75 7 5-2.333 5-7 5-7-3.75-7-5m8 0a1 1 0 1 1-2 0 1 1 0 0 1 2 0m1 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0" /> },
+  present: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M6 5.903C6 4.43 7.604 3.517 8.87 4.269l10.15 6.028c1.307.776 1.305 2.669-.003 3.442l-10.15 5.995c-1.228.724-2.768-.11-2.863-1.5L6 18.098zm1 12.195a.9.9 0 0 0 1.357.774l10.152-5.995a1 1 0 0 0 .002-1.72L8.359 5.129A.9.9 0 0 0 7 5.903z" /> },
+  dropdown: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M9.146 11.146a.5.5 0 0 1 .708 0l1.646 1.647 1.646-1.647a.5.5 0 0 1 .708.708l-2 2a.5.5 0 0 1-.708 0l-2-2a.5.5 0 0 1 0-.708" /> },
+  alignMore: { viewBox: 24, body: <><path fill="currentColor" d="M9 12.25c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-.5a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75z" /><path fill="var(--fg-tertiary)" fillRule="evenodd" clipRule="evenodd" d="M19 6.5a.5.5 0 0 0-.5-.5h-12a.5.5 0 0 0 0 1h12a.5.5 0 0 0 .5-.5m0 11a.5.5 0 0 0-.5-.5h-12a.5.5 0 0 0 0 1h12a.5.5 0 0 0 .5-.5" /></> },
+  lockAspect: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M7.5 7h9a.5.5 0 0 1 .5.5v9a.5.5 0 0 1-.5.5h-9a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5M6 7.5A1.5 1.5 0 0 1 7.5 6h9A1.5 1.5 0 0 1 18 7.5v9a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 16.5zM9.5 9a.5.5 0 0 0-.5.5v2a.5.5 0 0 0 1 0V10h1.5a.5.5 0 0 0 0-1zm5.5 3.5a.5.5 0 0 0-1 0V14h-1.5a.5.5 0 0 0 0 1h2a.5.5 0 0 0 .5-.5z" /> },
+  variableMode: { viewBox: 24, body: <path fill="currentColor" d="M9.154 5.004A3 3 0 0 1 12 8v7a3 3 0 0 1-5.996.154L6 15V8a3 3 0 0 1 3-3zm7.953 7.544a.41.41 0 0 1 .512-.07A2.99 2.99 0 0 1 19 15a3 3 0 0 1-3 3h-3.29c-.371 0-.574-.492-.37-.802a.43.43 0 0 1 .356-.198H16a2 2 0 0 0 1.24-3.57c-.269-.211-.374-.64-.133-.882M9 6a2 2 0 0 0-2 2v7a2 2 0 0 0 4 0V8a2 2 0 0 0-2-2m0 8a1 1 0 1 1 0 2 1 1 0 0 1 0-2m4.305-6.918a3 3 0 0 1 2.816.797l.107.112a3 3 0 0 1 0 4.018l-.107.112-2.267 2.268a.5.5 0 0 1-.707-.707l2.267-2.268a2 2 0 0 0-1.68-3.394c-.344.046-.734-.184-.734-.53 0-.19.12-.364.305-.408" /> },
+  blendMode: { viewBox: 24, body: <path fill="currentColor" d="M11.353 5.623a.91.91 0 0 1 1.295 0C14 6.978 17 10.29 17 13.001c0 3.5-2.5 5-5 5s-5-1.5-5-5c0-2.711 3-6.023 4.352-7.378m.647.77c-.658.663-1.663 1.75-2.507 2.977C8.597 10.673 8 11.965 8 13.001c0 1.49.522 2.453 1.218 3.057.72.623 1.72.943 2.782.943s2.063-.32 2.782-.943C15.478 15.454 16 14.492 16 13c0-1.036-.597-2.328-1.493-3.63-.844-1.227-1.85-2.315-2.507-2.978" /> },
   check: {
     viewBox: 16,
     body: <path fill="currentColor" d="M11.584 3.723a.5.5 0 0 1 .832.554l-5 7.5a.502.502 0 0 1-.77.077l-3-3a.5.5 0 0 1 .708-.708l2.568 2.569z" />,
@@ -572,6 +576,18 @@ const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: Rea
 };
 
 type FilledName =
+  | 'more'
+  | 'rotation'
+  | 'rotate90'
+  | 'flipHorizontal'
+  | 'flipVertical'
+  | 'visibility'
+  | 'present'
+  | 'dropdown'
+  | 'alignMore'
+  | 'lockAspect'
+  | 'variableMode'
+  | 'blendMode'
   | 'check'
   | 'textTool'
   | 'comment'

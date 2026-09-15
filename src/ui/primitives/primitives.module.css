@@ -81,6 +81,11 @@
   user-select: none;
 }
 
+/* A field without a label (a paint's opacity) keeps a narrow strip to scrub from. */
+.numberLabel[data-empty] {
+  width: var(--space-2);
+}
+
 .numberInput {
   flex: 1;
   min-width: 0;

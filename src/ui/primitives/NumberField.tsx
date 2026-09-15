@@ -20,6 +20,7 @@ import { evaluateMath, formatNumber } from './math';
 import captionStyles from './PropertyCaption.module.css';
 import { PropertyLabelsContext } from './property-labels';
 import { Icon } from '../icons/Icon';
+import { useHoverTooltip } from './HoverTooltip';
 import styles from './primitives.module.css';
 
 export interface NumberFieldProps {
@@ -46,6 +47,8 @@ export interface NumberFieldProps {
   variable?: { readonly name: string; readonly onDetach: () => void } | undefined;
   /** Opens the variable picker: typing = in the field, or clicking a bound variable's name. */
   onApplyVariable?: (() => void) | undefined;
+  /** The hover tooltip's text, when it differs from the accessible label (The reference's "X-position"). */
+  tooltip?: string;
 }
 
 const clamp = (v: number, min?: number, max?: number) => Math.min(max ?? Infinity, Math.max(min ?? -Infinity, v));
@@ -58,6 +61,7 @@ const clamp = (v: number, min?: number, max?: number) => Math.min(max ?? Infinit
 export function NumberField(props: NumberFieldProps) {
   const { label, ariaLabel, value, min, max, step = 1, suffix = '', decimals = 2, disabled } = props;
   const showCaption = useContext(PropertyLabelsContext);
+  const { handlers: tooltipHandlers, tooltip } = useHoverTooltip(props.tooltip ?? ariaLabel, undefined, 'below');
   const display = value === undefined ? '' : `${formatNumber(value, decimals)}${suffix}`;
   // While focused the user's draft is shown; otherwise the field always reflects the document.
   const [draft, setDraft] = useState<string | null>(null);
@@ -124,7 +128,7 @@ export function NumberField(props: NumberFieldProps) {
 
   const bound = props.variable;
   const field = bound ? (
-    <div className={styles.numberField} data-disabled={disabled || undefined}>
+    <div className={styles.numberField} data-disabled={disabled || undefined} onPointerEnter={tooltipHandlers.onPointerEnter} onPointerLeave={tooltipHandlers.onPointerLeave}>
       <span className={styles.numberLabel} aria-hidden="true">
         {label}
       </span>
@@ -151,8 +155,8 @@ export function NumberField(props: NumberFieldProps) {
       </button>
     </div>
   ) : (
-    <label className={styles.numberField} data-disabled={disabled || undefined}>
-      <span className={styles.numberLabel} onPointerDown={onScrubStart} aria-hidden="true">
+    <label className={styles.numberField} data-disabled={disabled || undefined} onPointerEnter={tooltipHandlers.onPointerEnter} onPointerLeave={tooltipHandlers.onPointerLeave} onPointerDown={tooltipHandlers.onPointerDown}>
+      <span className={styles.numberLabel} data-empty={label === '' || undefined} onPointerDown={onScrubStart} aria-hidden="true">
         {label}
       </span>
       <input
@@ -189,13 +193,20 @@ export function NumberField(props: NumberFieldProps) {
     </label>
   );
 
-  if (!showCaption) return field;
+  if (!showCaption)
+    return (
+      <>
+        {field}
+        {tooltip}
+      </>
+    );
   return (
     <div className={captionStyles.captioned}>
       <span className={captionStyles.caption} aria-hidden="true" data-testid={props.testId ? `${props.testId}-caption` : undefined}>
         {ariaLabel}
       </span>
       {field}
+      {tooltip}
     </div>
   );
 }

@@ -25,13 +25,13 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 48px;
-  padding: 0 var(--section-pad-x);
+  height: 40px;
+  padding: 0 var(--space-2) 0 var(--space-4);
   border-bottom: 1px solid var(--border);
 }
 
 .typeLabel {
-  font-size: var(--text-lg);
+  font-size: var(--text-sm);
   font-weight: var(--weight-strong);
 }
 
@@ -39,8 +39,9 @@
   color: var(--fg-secondary);
 }
 
+/* The reference's panel grid: 16px in from the left, 8px from the right, where each row's last column holds a 24px icon button. */
 .section {
-  padding: var(--space-1) var(--section-pad-x) var(--section-pad-y);
+  padding: 0 var(--space-2) var(--space-2) var(--space-4);
   border-bottom: 1px solid var(--border);
 }
 
@@ -48,7 +49,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 32px;
+  height: 40px;
 }
 
 .sectionTitle {
@@ -59,8 +60,7 @@
 
 .sectionActions {
   display: flex;
-  gap: var(--space-0-5);
-  margin-right: calc(-1 * var(--space-1));
+  gap: 0;
 }
 
 .sectionBody {
@@ -69,10 +69,81 @@
   gap: var(--space-2);
 }
 
+/* Two fields, leaving the icon column free so they line up with the rows that have one. */
 .grid2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: var(--space-2);
+  margin-right: calc(var(--control-h) + var(--space-2));
+}
+
+/* Two fields and an icon button (Lock aspect ratio, Individual corners, More actions). */
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--control-h);
+  align-items: center;
+  column-gap: var(--space-2);
+}
+
+/* A group of icon buttons on one control-colored surface (the align buttons). */
+.segmented {
+  display: flex;
+  height: var(--control-h);
+  border-radius: var(--radius-md);
+  background: var(--bg-control);
+}
+
+.segmented > button {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--fg-primary);
+}
+
+.segmented > button:hover:not(:disabled) {
+  background: var(--bg-control-hover);
+}
+
+.segmented > button:disabled {
+  color: var(--fg-disabled);
+}
+
+/* An icon button whose native select opens on click (Apply blend mode): the select covers the glyph, invisible. */
+.iconSelect {
+  position: relative;
+  width: var(--control-h);
+  height: var(--control-h);
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+}
+
+.iconSelect:hover {
+  background: var(--bg-hover);
+}
+
+.iconSelect > select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+}
+
+.iconSelect:has(> select:focus-visible) {
+  outline: 2px solid var(--border-focus);
+}
+
+/* A paint row's type: a 16px chevron before the color. */
+.paintType {
+  width: 16px;
+  color: var(--fg-secondary);
 }
 
 .checkbox {
@@ -80,6 +151,29 @@
   align-items: center;
   gap: var(--space-2);
   height: var(--control-h);
+}
+
+/* The reference's checkbox: a rounded 16px box, filled with the accent and a white check when on. */
+.checkbox input[type='checkbox'] {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-panel) center / 16px 16px no-repeat;
+  appearance: none;
+}
+
+.checkbox input[type='checkbox']:checked {
+  border-color: var(--accent);
+  background-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none'%3E%3Cpath d='M5 8.5 7.5 11l4-6' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+.checkbox input[type='checkbox']:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 1px;
 }
 
 .hint {
@@ -149,14 +243,20 @@
   opacity: 0.5;
 }
 
+/* Swatch, hex and opacity on one surface, the opacity set off by a thin line of the panel color. */
 .colorControl {
   display: grid;
-  grid-template-columns: 24px 1fr 64px;
+  grid-template-columns: 24px 1fr 48px;
   align-items: center;
   height: var(--control-h);
   border-radius: var(--radius-md);
   background: var(--bg-control);
   overflow: hidden;
+}
+
+.colorControl > :last-child {
+  border-left: 1px solid var(--bg-panel);
+  border-radius: 0;
 }
 
 .swatch {
