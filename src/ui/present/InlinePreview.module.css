@@ -18,7 +18,7 @@
 .window {
   position: absolute;
   top: 56px;
-  right: calc(var(--sidebar-right-w) + var(--panel-gap) * 2 + 12px);
+  right: calc(var(--right-w, var(--sidebar-right-w)) + 12px);
   z-index: var(--z-panels);
   max-width: calc(100% - 32px);
   max-height: calc(100% - 120px);

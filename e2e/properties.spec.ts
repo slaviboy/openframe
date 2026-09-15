@@ -55,7 +55,8 @@ test('a highlighted fill row copies just that fill onto another layer', async ({
   await draw(page, 'o', [600, 300], [700, 400]);
   await page.getByRole('treeitem', { name: /Rectangle 1/ }).click();
   const row = page.locator('[data-copy-property="fills:0"]');
-  await row.click({ position: { x: 2, y: 2 } });
+  // A click on the row itself (a click in its type select keeps focus in the select, so its dropdown stays open).
+  await row.dispatchEvent('click');
   await expect(row).toBeFocused();
 
   // The same copy event a ⌘C shortcut fires on the focused row.

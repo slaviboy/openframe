@@ -26,26 +26,26 @@
   inset: 0;
 }
 
+/* The sidebars run the full height of the window, flush with its side, with square corners. */
 .panel {
   position: absolute;
-  top: var(--panel-gap);
-  bottom: var(--panel-gap);
+  top: 0;
+  bottom: 0;
   z-index: var(--z-panels);
   display: flex;
-  border-radius: var(--panel-radius);
   background: var(--bg-panel);
   box-shadow: var(--shadow-panel);
   overflow: hidden;
 }
 
 .left {
-  left: var(--panel-gap);
+  left: 0;
   width: calc(var(--nav-rail-w) + var(--left-w));
 }
 
 .right {
-  right: var(--panel-gap);
-  width: var(--sidebar-right-w);
+  right: 0;
+  width: var(--right-w, var(--sidebar-right-w));
   flex-direction: column;
 }
 
@@ -195,6 +195,12 @@
   bottom: 0;
   width: 6px;
   cursor: ew-resize;
+}
+
+/* The properties panel is resized from its left edge. */
+.resizeHandleStart {
+  right: auto;
+  left: 0;
 }
 
 .resizeHandle:hover,

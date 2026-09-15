@@ -34,7 +34,7 @@ import { Menu } from '../primitives/Menu';
 import { PropertyLabelsContext } from '../primitives/property-labels';
 import { viewPrefs } from '../view/view-prefs';
 import type { Box } from '../primitives/position';
-import { NAV_RAIL_W, PANEL_GAP, SIDEBAR_LEFT_DEFAULT, SIDEBAR_LEFT_MAX, SIDEBAR_LEFT_MIN, SIDEBAR_RIGHT_W } from '../tokens';
+import { NAV_RAIL_W, SIDEBAR_LEFT_DEFAULT, SIDEBAR_LEFT_MAX, SIDEBAR_LEFT_MIN, SIDEBAR_RIGHT_MAX, SIDEBAR_RIGHT_MIN, SIDEBAR_RIGHT_W } from '../tokens';
 import styles from './EditorShell.module.css';
 import { Toolbar } from './Toolbar';
 import { MissingFontsNotice } from '../dialogs/MissingFontsDialog';
@@ -55,6 +55,7 @@ interface EditorShellProps {
 
 export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorShellProps) {
   const [leftWidth, setLeftWidth] = useState(SIDEBAR_LEFT_DEFAULT);
+  const [rightWidth, setRightWidth] = useState(SIDEBAR_RIGHT_W);
   const [mainMenuAnchor, setMainMenuAnchor] = useState<Box | null>(null);
   const closeMainMenu = useCallback(() => setMainMenuAnchor(null), []);
   const editorState = session.editor.state;
@@ -74,19 +75,19 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
   const showLeft = uiMode === 'full';
   const showRight = uiMode === 'full' || (uiMode === 'minimized' && (hasSelection || inVersionHistory));
 
-  // Panels float over the canvas; tell the editor which edges they cover (rulers sit beside them).
+  // Panels sit over the canvas at its sides; tell the editor which edges they cover (rulers sit beside them).
   useLayoutEffect(() => {
     session.editor.setCanvasInsets({
-      left: showLeft ? PANEL_GAP * 2 + NAV_RAIL_W + leftWidth : 0,
-      right: showRight ? PANEL_GAP * 2 + SIDEBAR_RIGHT_W : 0,
+      left: showLeft ? NAV_RAIL_W + leftWidth : 0,
+      right: showRight ? rightWidth : 0,
       top: 0,
       bottom: 0,
     });
-  }, [session, showLeft, showRight, leftWidth]);
+  }, [session, showLeft, showRight, leftWidth, rightWidth]);
 
   return (
     <SessionContext.Provider value={session}>
-      <div className={styles.shell} style={{ ['--left-w' as string]: `${leftWidth}px` }}>
+      <div className={styles.shell} style={{ ['--left-w' as string]: `${leftWidth}px`, ['--right-w' as string]: `${rightWidth}px` }}>
         <div className={styles.canvasArea}>{children}</div>
         {showLeft && (
           <aside className={`${styles.panel} ${styles.left}`} aria-label="File navigation">
@@ -152,7 +153,7 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
                 </>
               )}
             </div>
-            <ResizeHandle width={leftWidth} onWidth={setLeftWidth} />
+            <ResizeHandle label="Resize sidebar" side="end" width={leftWidth} min={SIDEBAR_LEFT_MIN} max={SIDEBAR_LEFT_MAX} onWidth={setLeftWidth} />
           </aside>
         )}
         {uiMode === 'minimized' && (
@@ -176,6 +177,7 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
                 )}
               </>
             )}
+            <ResizeHandle label="Resize properties panel" side="start" width={rightWidth} min={SIDEBAR_RIGHT_MIN} max={SIDEBAR_RIGHT_MAX} onWidth={setRightWidth} />
           </aside>
         )}
         {uiMode !== 'hidden' && <Toolbar />}
@@ -373,21 +375,27 @@ function RightHeader() {
   );
 }
 
-function ResizeHandle({ width, onWidth }: { width: number; onWidth: (w: number) => void }) {
+/**
+ * A sidebar's resize edge: on its end (right) side for the left sidebar, on its start (left) side for the properties
+ * panel, which grows as it is dragged left.
+ */
+function ResizeHandle({ label, side, width, min, max, onWidth }: { label: string; side: 'start' | 'end'; width: number; min: number; max: number; onWidth: (w: number) => void }) {
   const start = useRef<{ x: number; w: number } | null>(null);
+  const clamp = (w: number) => Math.min(max, Math.max(min, w));
+  const grow = side === 'end' ? 1 : -1;
   return (
     <div
-      className={styles.resizeHandle}
+      className={side === 'end' ? styles.resizeHandle : `${styles.resizeHandle} ${styles.resizeHandleStart}`}
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize sidebar"
+      aria-label={label}
       aria-valuenow={width}
-      aria-valuemin={SIDEBAR_LEFT_MIN}
-      aria-valuemax={SIDEBAR_LEFT_MAX}
+      aria-valuemin={min}
+      aria-valuemax={max}
       tabIndex={0}
       onKeyDown={(e) => {
-        if (e.key === 'ArrowLeft') onWidth(Math.max(SIDEBAR_LEFT_MIN, width - 10));
-        if (e.key === 'ArrowRight') onWidth(Math.min(SIDEBAR_LEFT_MAX, width + 10));
+        if (e.key === 'ArrowLeft') onWidth(clamp(width - 10 * grow));
+        if (e.key === 'ArrowRight') onWidth(clamp(width + 10 * grow));
       }}
       onPointerDown={(e) => {
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -395,7 +403,7 @@ function ResizeHandle({ width, onWidth }: { width: number; onWidth: (w: number) 
       }}
       onPointerMove={(e) => {
         if (!start.current) return;
-        onWidth(Math.min(SIDEBAR_LEFT_MAX, Math.max(SIDEBAR_LEFT_MIN, start.current.w + e.clientX - start.current.x)));
+        onWidth(clamp(start.current.w + (e.clientX - start.current.x) * grow));
       }}
       onPointerUp={() => {
         start.current = null;

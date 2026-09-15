@@ -241,6 +241,8 @@ This file is how work continues after a pause (for example, a usage limit). Read
     - the Model select in Prototype settings; the stage's `data-device-model` is for tests
     - gate reruns with files both staged and unstaged: `git stash` would disturb the staged part, so save `git diff` to a patch, `git checkout --` those paths (the index stays), rerun, then `git apply` the patch
 
+- Editor UI fixes (after device models): property rows (fills, strokes, effects, layout guides) no longer take focus from their fields, so a type dropdown stays open (`focusPropertyRow` in `ReorderHandle.tsx`); a single row's hidden reorder handle takes no room; both sidebars run flush and square to the window's edges, and the properties panel is resizable from its left edge (`SIDEBAR_RIGHT_MIN` / `SIDEBAR_RIGHT_MAX`, `--right-w`).
+
 ## In progress (uncommitted)
 
 1. **The device switcher (rows 240 and 242): written, not committed.** The code is in the working tree:

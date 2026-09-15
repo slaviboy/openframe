@@ -38,7 +38,8 @@ test('a highlighted layout guide row copies that guide onto another frame', asyn
   await page.getByRole('button', { name: 'Add layout guide' }).click();
   await page.getByLabel('Layout guide 1 type').selectOption('COLUMNS');
   const row = page.locator('[data-copy-property="layoutGuides:0"]');
-  await row.click({ position: { x: 2, y: 2 } });
+  // A click on the row itself (a click in its type select keeps focus in the select, so its dropdown stays open).
+  await row.dispatchEvent('click');
   await expect(row).toBeFocused();
 
   // The same copy event a ⌘C shortcut fires on the focused row.

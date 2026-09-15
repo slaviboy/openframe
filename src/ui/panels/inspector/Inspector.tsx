@@ -42,7 +42,7 @@ import { moveItem } from '@/core/collections/move-item';
 import { IOS_CORNER_SMOOTHING } from '@/core/geometry/corners';
 import { backgroundColorBehind } from '@/core/color/contrast';
 import { useColorProfile } from '../../hooks/useColorProfile';
-import { ReorderHandle } from './ReorderHandle';
+import { focusPropertyRow, ReorderHandle } from './ReorderHandle';
 import { AutoLayoutFields, LayoutSizingFields } from './AutoLayoutFields';
 import { GridChildFields } from './GridLayoutFields';
 import { setIgnoreAutoLayout } from '@/editor/commands/auto-layout';
@@ -2007,7 +2007,7 @@ function PaintSection({
             .reverse()
             .map(({ paint, index }) => (
               <Fragment key={index}>
-              <li className={styles.paintRow} data-hidden={!paint.visible || undefined} data-reorder-row="" tabIndex={-1} data-copy-property={`${field}:${index}`} onClick={(e) => e.currentTarget.focus()}>
+              <li className={styles.paintRow} data-hidden={!paint.visible || undefined} data-reorder-row="" tabIndex={-1} data-copy-property={`${field}:${index}`} onClick={focusPropertyRow}>
                 {/* The list shows the top paint first, so display positions run opposite to indices. */}
                 <ReorderHandle
                   label={`Reorder ${title.toLowerCase()} ${list.length - index}`}
@@ -2346,7 +2346,7 @@ function EffectsSection({ nodes }: { nodes: SceneNode[] }) {
             const name = `Effect ${index + 1}`;
             return (
               <Fragment key={index}>
-                <li className={styles.paintRow} data-hidden={!effect.visible || undefined} data-reorder-row="" tabIndex={-1} data-copy-property={`effects:${index}`} onClick={(e) => e.currentTarget.focus()}>
+                <li className={styles.paintRow} data-hidden={!effect.visible || undefined} data-reorder-row="" tabIndex={-1} data-copy-property={`effects:${index}`} onClick={focusPropertyRow}>
                   <ReorderHandle label={`Reorder ${name.toLowerCase()}`} position={index} count={list.length} onMove={(from, to) => write('Reorder effects', (cur) => moveItem(cur, from, to))} />
                   <select
                     className={`${primitives.select} ${gradientStyles.type}`}
@@ -2532,7 +2532,7 @@ function LayoutGuideSection({ nodes }: { nodes: SceneNode[] }) {
             const stretch = guide.alignment === 'STRETCH';
             return (
               <Fragment key={index}>
-                <li className={styles.paintRow} data-hidden={!guide.visible || undefined} tabIndex={-1} data-copy-property={`layoutGuides:${index}`} onClick={(e) => e.currentTarget.focus()}>
+                <li className={styles.paintRow} data-hidden={!guide.visible || undefined} tabIndex={-1} data-copy-property={`layoutGuides:${index}`} onClick={focusPropertyRow}>
                   <span />
                   <select
                     className={`${primitives.select} ${gradientStyles.type}`}

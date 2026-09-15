@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { PointerEvent as ReactPointerEvent } from 'react';
+import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import styles from './Inspector.module.css';
 
 interface ReorderHandleProps {
@@ -25,6 +25,15 @@ interface ReorderHandleProps {
   readonly count: number;
   /** Moves the row at display position `from` to display position `to`. */
   readonly onMove: (from: number, to: number) => void;
+}
+
+/**
+ * A click on a property row (fill, stroke, effect, layout guide) highlights the row, so ⌘C copies just it — unless the
+ * click is in one of its fields, which keep focus (the row taking it would close a select's dropdown or end typing).
+ */
+export function focusPropertyRow(e: ReactMouseEvent<HTMLElement>): void {
+  if ((e.target as HTMLElement).closest('input, select, textarea, [contenteditable="true"]')) return;
+  e.currentTarget.focus();
 }
 
 /**

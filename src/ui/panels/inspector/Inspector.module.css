@@ -117,8 +117,11 @@
   cursor: grab;
 }
 
+/* With a single row there is nothing to reorder: the handle hides and gives up its room (and the gap after it). */
 .reorderHandle:disabled {
   visibility: hidden;
+  width: 0;
+  margin-right: calc(-1 * var(--space-0-5));
 }
 
 .reorderHandle:focus-visible {
