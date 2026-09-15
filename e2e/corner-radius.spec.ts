@@ -47,7 +47,7 @@ test('independent corners on a rectangle and a radius on a star persist', async 
   await expect(page.getByTestId('field-radius')).toHaveValue('20');
 
   // Stars take a uniform radius.
-  await page.getByRole('button', { name: 'More tools' }).nth(2).click();
+  await page.getByRole('button', { name: 'Shape tools' }).click();
   await page.getByRole('menuitemradio', { name: /Star/ }).click();
   await page.mouse.move(box.x + 650, box.y + 300);
   await page.mouse.down();

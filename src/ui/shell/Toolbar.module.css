@@ -31,10 +31,16 @@
   box-shadow: var(--shadow-panel);
 }
 
+/* A tool button and its dropdown chevron, which share one hover surface. */
 .group {
   position: relative;
   display: flex;
   align-items: center;
+  border-radius: var(--radius-md);
+}
+
+.group:has(> .chevron:hover:not([aria-disabled])) {
+  background: var(--bg-hover);
 }
 
 .tool {
@@ -42,6 +48,7 @@
   height: var(--toolbar-item);
   display: grid;
   place-items: center;
+  flex: none;
   padding: 0;
   border: 0;
   border-radius: var(--radius-md);
@@ -49,7 +56,7 @@
   color: var(--fg-primary);
 }
 
-.tool:hover {
+.tool:hover:not([data-active]) {
   background: var(--bg-hover);
 }
 
@@ -58,21 +65,89 @@
   color: var(--fg-on-accent);
 }
 
+.tool[aria-disabled] {
+  cursor: default;
+}
+
+/* 16px wide; the 24px glyph is centered by pulling in its 4px sides (its drawing lies in the middle 8px). */
 .chevron {
   width: 16px;
   height: var(--toolbar-item);
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
   padding: 0;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
+  color: var(--fg-primary);
+}
+
+.chevron > svg {
+  flex: none;
+  margin: 0 -4px;
+}
+
+.chevron[aria-expanded='true'] {
+  background: var(--bg-hover);
+}
+
+.chevron[aria-disabled] {
+  cursor: default;
+}
+
+.divider {
+  flex: none;
+  width: 1px;
+  height: 24px;
+  margin: 0 var(--space-1);
+  background: var(--border);
+}
+
+/* Draw / Design / Motion / Dev Mode. */
+.modes {
+  display: flex;
+  align-items: center;
+  padding: 1px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-control);
+}
+
+.mode {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
   color: var(--fg-secondary);
 }
 
-.chevron:hover {
+.mode:hover:not([data-checked]) {
   color: var(--fg-primary);
-  background: var(--bg-hover);
+}
+
+.mode[data-checked] {
+  background: var(--bg-panel);
+  box-shadow: 0 0 0 1px var(--border);
+  color: var(--fg-primary);
+}
+
+.mode[data-unavailable] {
+  cursor: default;
+}
+
+.modeInput {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.mode:has(> .modeInput:focus-visible) {
+  outline: 2px solid var(--border-focus);
 }
 
 .menu {
@@ -100,12 +175,17 @@
   border-radius: var(--radius-md);
 }
 
-.menuItem[data-focus] {
+.menuItem[data-focus]:not([aria-disabled]) {
   background: var(--accent-design);
 }
 
+.menuItem[aria-disabled] {
+  color: var(--fg-menu-secondary);
+}
+
 .check {
-  font-size: var(--text-sm);
+  display: grid;
+  place-items: center;
 }
 
 .menuLabel {
@@ -117,7 +197,7 @@
   font-size: var(--text-sm);
 }
 
-.menuItem[data-focus] .menuShortcut {
+.menuItem[data-focus]:not([aria-disabled]) .menuShortcut {
   color: var(--fg-menu);
 }
 

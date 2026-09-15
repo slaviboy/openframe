@@ -24,7 +24,7 @@ test('F6 focuses the toolbar, arrows pick a tool, and Return places the object',
   const toolbar = page.getByRole('toolbar', { name: 'Tools' });
 
   await page.keyboard.press('F6');
-  await expect(toolbar.getByRole('button', { name: /^Move/ })).toBeFocused();
+  await expect(toolbar.getByRole('button', { name: /^Move \(/ })).toBeFocused();
   await page.keyboard.press('ArrowRight');
   await expect(toolbar.getByRole('button', { name: /^Frame/ })).toBeFocused();
   await page.keyboard.press('ArrowRight');
@@ -39,5 +39,5 @@ test('F6 focuses the toolbar, arrows pick a tool, and Return places the object',
   await page.keyboard.press('Enter');
   await expect(page.getByRole('treeitem', { name: /Rectangle 1/ })).toBeVisible();
   await expect(page.getByTestId('field-w')).toHaveValue('100');
-  await expect(toolbar.getByRole('button', { name: /^Move/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(toolbar.getByRole('button', { name: /^Move \(/ })).toHaveAttribute('aria-pressed', 'true');
 });

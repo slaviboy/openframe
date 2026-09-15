@@ -45,5 +45,5 @@ test('the eyedropper (I) applies a color sampled from the canvas to the selectio
   await expect(hex).toHaveValue('E03E1A');
   // The second rectangle stays selected and the Move tool is back.
   await expect(page.getByRole('treeitem', { name: /Rectangle 2/ })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.getByRole('button', { name: /^Move/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: /^Move \(/ })).toHaveAttribute('aria-pressed', 'true');
 });

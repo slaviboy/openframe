@@ -93,7 +93,7 @@ test('wrap in new section from the context menu', async ({ page }) => {
 });
 
 test('slice tool from the region tools menu', async ({ page }) => {
-  await page.getByRole('button', { name: 'More tools' }).nth(1).click();
+  await page.getByRole('button', { name: 'Region tools' }).click();
   await page.getByRole('menuitemradio', { name: /Slice/ }).click();
   await drag(page, [300, 300], [420, 380]);
   await expect(row(page, 'Slice 1')).toHaveAttribute('aria-selected', 'true');

@@ -59,8 +59,7 @@ test('Shift+L draws an arrow', async ({ page }) => {
 });
 
 test('polygon and star from the toolbar menu with editable count and ratio', async ({ page }) => {
-  // Dropdowns: Move tools, Region tools (frame/section/slice), Shape tools.
-  const shapeMenu = page.getByRole('button', { name: 'More tools' }).nth(2);
+  const shapeMenu = page.getByRole('button', { name: 'Shape tools' });
   await shapeMenu.click();
   await page.getByRole('menuitemradio', { name: /Polygon/ }).click();
   await drag(page, [300, 250], [400, 350]);

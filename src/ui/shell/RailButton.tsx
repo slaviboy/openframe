@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import { useState, type ButtonHTMLAttributes } from 'react';
-import { createPortal } from 'react-dom';
+import type { ButtonHTMLAttributes } from 'react';
 import { formatShortcut } from '@/editor/keymap/keymap';
 import { Icon, type IconName } from '../icons/Icon';
 import { IS_MAC } from '../keyboard/keyboard-controller';
+import { useHoverTooltip } from '../primitives/HoverTooltip';
 import styles from './EditorShell.module.css';
 
 interface RailButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
@@ -32,34 +32,13 @@ interface RailButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 
 
 /** An icon-only navigation rail button; hovering or focusing it shows its name (and shortcut) to the right. */
 export function RailButton({ icon, label, shortcut, selected, className, ...rest }: RailButtonProps) {
-  const [tip, setTip] = useState<{ x: number; y: number } | null>(null);
-  const show = (el: HTMLElement) => {
-    const r = el.getBoundingClientRect();
-    setTip({ x: r.right + 8, y: r.top + r.height / 2 });
-  };
+  const { handlers, tooltip } = useHoverTooltip(label, shortcut && formatShortcut(shortcut, IS_MAC), 'right');
   return (
     <>
-      <button
-        type="button"
-        className={[styles.railTab, className ?? ''].join(' ')}
-        aria-label={label}
-        aria-current={selected ? 'page' : undefined}
-        onPointerEnter={(e) => show(e.currentTarget)}
-        onPointerLeave={() => setTip(null)}
-        onFocus={(e) => e.currentTarget.matches(':focus-visible') && show(e.currentTarget)}
-        onBlur={() => setTip(null)}
-        {...rest}
-      >
+      <button type="button" className={[styles.railTab, className ?? ''].join(' ')} aria-label={label} aria-current={selected ? 'page' : undefined} {...handlers} {...rest}>
         <Icon name={icon} />
       </button>
-      {tip &&
-        createPortal(
-          <div className={styles.railTooltip} role="tooltip" style={{ left: tip.x, top: tip.y }}>
-            <span>{label}</span>
-            {shortcut && <span className={styles.railTooltipShortcut}>{formatShortcut(shortcut, IS_MAC)}</span>}
-          </div>,
-          document.body,
-        )}
+      {tooltip}
     </>
   );
 }

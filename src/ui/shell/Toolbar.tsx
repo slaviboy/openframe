@@ -15,72 +15,184 @@
  * limitations under the License.
  */
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import type { ToolId, VectorEditTool } from '@/editor/stores/editor-store';
+import { useEffect, useRef, useState, useSyncExternalStore, type ButtonHTMLAttributes } from 'react';
+import type { EditorMode, ToolId, VectorEditTool } from '@/editor/stores/editor-store';
 import { formatShortcut } from '@/editor/keymap/keymap';
 import { Icon, type IconName } from '../icons/Icon';
 import { useEditor, useEditorState, useSession } from '../hooks/useEditor';
 import { IS_MAC } from '../keyboard/keyboard-controller';
+import { useHoverTooltip } from '../primitives/HoverTooltip';
 import styles from './Toolbar.module.css';
 
+/** Tools shown in the toolbar that are not implemented yet: they appear, but can't be chosen. */
+type PendingTool = 'textOnPath' | 'comment';
+
 interface ToolItem {
-  readonly tool: ToolId;
+  readonly tool: ToolId | PendingTool;
   readonly label: string;
   readonly icon: IconName;
   /** The glyph in the tool's dropdown, when it differs from the toolbar button's. */
   readonly menuIcon?: IconName;
-  readonly command: string;
+  /** Absent for a pending tool. */
+  readonly command?: string;
 }
 
-const GROUPS: readonly (readonly ToolItem[])[] = [
-  [
-    { tool: 'move', label: 'Move', icon: 'move', menuIcon: 'moveMenu', command: 'tools.move' },
-    { tool: 'hand', label: 'Hand tool', icon: 'hand', command: 'tools.hand' },
-    { tool: 'scale', label: 'Scale', icon: 'scale', command: 'tools.scale' },
-  ],
-  [
-    { tool: 'frame', label: 'Frame', icon: 'frame', menuIcon: 'frameMenu', command: 'tools.frame' },
-    { tool: 'section', label: 'Section', icon: 'sectionTool', command: 'tools.section' },
-    { tool: 'slice', label: 'Slice', icon: 'slice', command: 'tools.slice' },
-  ],
-  [
-    { tool: 'rectangle', label: 'Rectangle', icon: 'rectangle', command: 'tools.rectangle' },
-    { tool: 'line', label: 'Line', icon: 'line', command: 'tools.line' },
-    { tool: 'arrow', label: 'Arrow', icon: 'arrow', command: 'tools.arrow' },
-    { tool: 'ellipse', label: 'Ellipse', icon: 'ellipse', command: 'tools.ellipse' },
-    { tool: 'polygon', label: 'Polygon', icon: 'polygon', command: 'tools.polygon' },
-    { tool: 'star', label: 'Star', icon: 'star', command: 'tools.star' },
-    { tool: 'image', label: 'Place image', icon: 'image', command: 'tools.image' },
-  ],
-  [{ tool: 'text', label: 'Text', icon: 'text', command: 'tools.text' }],
-  [
-    { tool: 'pen', label: 'Pen', icon: 'pen', menuIcon: 'penMenu', command: 'tools.pen' },
-    { tool: 'pencil', label: 'Pencil', icon: 'pencil', command: 'tools.pencil' },
-  ],
+interface ToolGroup {
+  /** Name of the group's dropdown. */
+  readonly label: string;
+  readonly items: readonly ToolItem[];
+}
+
+const GROUPS: readonly ToolGroup[] = [
+  {
+    label: 'Move tools',
+    items: [
+      {
+        tool: 'move',
+        label: 'Move',
+        icon: 'move',
+        menuIcon: 'moveMenu',
+        command: 'tools.move',
+      },
+      { tool: 'hand', label: 'Hand tool', icon: 'hand', command: 'tools.hand' },
+      { tool: 'scale', label: 'Scale', icon: 'scale', command: 'tools.scale' },
+    ],
+  },
+  {
+    label: 'Region tools',
+    items: [
+      {
+        tool: 'frame',
+        label: 'Frame',
+        icon: 'frame',
+        menuIcon: 'frameMenu',
+        command: 'tools.frame',
+      },
+      {
+        tool: 'section',
+        label: 'Section',
+        icon: 'sectionTool',
+        command: 'tools.section',
+      },
+      { tool: 'slice', label: 'Slice', icon: 'slice', command: 'tools.slice' },
+    ],
+  },
+  {
+    label: 'Shape tools',
+    items: [
+      {
+        tool: 'rectangle',
+        label: 'Rectangle',
+        icon: 'rectangle',
+        command: 'tools.rectangle',
+      },
+      { tool: 'line', label: 'Line', icon: 'line', command: 'tools.line' },
+      { tool: 'arrow', label: 'Arrow', icon: 'arrow', command: 'tools.arrow' },
+      {
+        tool: 'ellipse',
+        label: 'Ellipse',
+        icon: 'ellipse',
+        command: 'tools.ellipse',
+      },
+      {
+        tool: 'polygon',
+        label: 'Polygon',
+        icon: 'polygon',
+        command: 'tools.polygon',
+      },
+      { tool: 'star', label: 'Star', icon: 'star', command: 'tools.star' },
+      {
+        tool: 'image',
+        label: 'Place image',
+        icon: 'image',
+        command: 'tools.image',
+      },
+    ],
+  },
+  {
+    label: 'Creation tools',
+    items: [
+      {
+        tool: 'pen',
+        label: 'Pen',
+        icon: 'pen',
+        menuIcon: 'penMenu',
+        command: 'tools.pen',
+      },
+      {
+        tool: 'pencil',
+        label: 'Pencil',
+        icon: 'pencil',
+        command: 'tools.pencil',
+      },
+    ],
+  },
+  {
+    label: 'Type tools',
+    items: [
+      { tool: 'text', label: 'Text', icon: 'textTool', command: 'tools.text' },
+      { tool: 'textOnPath', label: 'Text on path', icon: 'textOnPath' },
+    ],
+  },
+  {
+    label: 'Comment tools',
+    items: [{ tool: 'comment', label: 'Comment', icon: 'comment' }],
+  },
+];
+
+/** The toolbar's mode switcher. Only Design is available; Draw, Motion and Dev Mode arrive with M11–M13. */
+const MODES: readonly {
+  readonly mode: EditorMode;
+  readonly label: string;
+  readonly icon: IconName;
+  readonly available: boolean;
+}[] = [
+  { mode: 'draw', label: 'Draw', icon: 'modeDraw', available: false },
+  { mode: 'design', label: 'Design', icon: 'modeDesign', available: true },
+  { mode: 'motion', label: 'Motion', icon: 'modeMotion', available: false },
+  { mode: 'dev', label: 'Dev Mode', icon: 'modeDev', available: false },
 ];
 
 /** Vector edit mode's secondary toolbar. */
-const VECTOR_TOOLS: readonly { readonly tool: VectorEditTool; readonly label: string; readonly icon: IconName; readonly command: string }[] = [
+const VECTOR_TOOLS: readonly {
+  readonly tool: VectorEditTool;
+  readonly label: string;
+  readonly icon: IconName;
+  readonly command: string;
+}[] = [
   { tool: 'move', label: 'Move', icon: 'move', command: 'vector.toolMove' },
   { tool: 'lasso', label: 'Lasso', icon: 'lasso', command: 'vector.toolLasso' },
   { tool: 'cut', label: 'Cut', icon: 'cut', command: 'vector.toolCut' },
   { tool: 'bend', label: 'Bend', icon: 'bend', command: 'vector.toolBend' },
   { tool: 'paint', label: 'Paint', icon: 'paint', command: 'vector.toolPaint' },
-  { tool: 'eraser', label: 'Eraser', icon: 'eraser', command: 'vector.toolEraser' },
-  { tool: 'width', label: 'Variable width', icon: 'width', command: 'vector.toolWidth' },
+  {
+    tool: 'eraser',
+    label: 'Eraser',
+    icon: 'eraser',
+    command: 'vector.toolEraser',
+  },
+  {
+    tool: 'width',
+    label: 'Variable width',
+    icon: 'width',
+    command: 'vector.toolWidth',
+  },
 ];
+
+const firstAvailable = (group: ToolGroup): ToolItem => group.items.find((i) => i.command) ?? group.items[0]!;
 
 /** Floating bottom toolbar. Each group remembers the last tool picked from its dropdown; vector edit mode shows its secondary toolbar instead. */
 export function Toolbar() {
   const editor = useEditor();
   const tool = useEditorState((s) => s.tool);
   // Tool last picked from each group's dropdown; shown when the group is not active.
-  const [picked, setPicked] = useState<ToolId[]>(GROUPS.map((g) => g[0]!.tool));
+  const [picked, setPicked] = useState<(ToolId | PendingTool)[]>(GROUPS.map((g) => firstAvailable(g).tool));
   const [openGroup, setOpenGroup] = useState<number | null>(null);
   const vectorTool = useEditorState((s) => (s.vectorEdit ? (s.vectorEdit.tool ?? 'move') : null));
+  const mode = useEditorState((s) => s.mode);
 
-  const shortcut = (command: string) => {
-    const first = editor.commands.get(command)?.shortcuts?.[0];
+  const shortcut = (command: string | undefined) => {
+    const first = command ? editor.commands.get(command)?.shortcuts?.[0] : undefined;
     return first ? formatShortcut(first, IS_MAC) : '';
   };
   const app = useSession();
@@ -127,18 +239,7 @@ export function Toolbar() {
         <>
           {VECTOR_TOOLS.map((item) => (
             <div key={item.command} className={styles.group}>
-              <button
-                type="button"
-                className={styles.tool}
-                aria-pressed={vectorTool === item.tool}
-                data-active={vectorTool === item.tool || undefined}
-                aria-label={shortcut(item.command) ? `${item.label} (${shortcut(item.command)})` : item.label}
-                title={`${item.label}  ${shortcut(item.command)}`.trim()}
-                data-tool-button=""
-                onClick={() => editor.commands.run(item.command)}
-              >
-                <Icon name={item.icon} />
-              </button>
+              <ToolButton icon={item.icon} label={item.label} shortcut={shortcut(item.command)} active={vectorTool === item.tool} onClick={() => editor.commands.run(item.command)} />
             </div>
           ))}
           <div className={styles.group}>
@@ -148,61 +249,117 @@ export function Toolbar() {
           </div>
         </>
       )}
-      {vectorTool === null && GROUPS.map((group, gi) => {
-        const active = group.some((t) => t.tool === tool);
-        const current = group.find((t) => t.tool === (active ? tool : picked[gi])) ?? group[0]!;
-        return (
-          <div key={current.command} className={styles.group}>
-            <button
-              type="button"
-              className={styles.tool}
-              aria-pressed={active}
-              data-active={active || undefined}
-              aria-label={`${current.label} (${shortcut(current.command)})`}
-              title={`${current.label}  ${shortcut(current.command)}`}
-              data-tool-button=""
-              onClick={(e) => {
-                editor.commands.run(current.command);
-                // Chosen from the keyboard: hand focus back to the canvas so Return places the object.
-                if (e.detail === 0) e.currentTarget.blur();
-              }}
-            >
-              <Icon name={current.icon} />
-            </button>
-            {group.length > 1 && (
-              <ToolMenu
-                items={group}
-                open={openGroup === gi}
-                onOpenChange={(open) => setOpenGroup(open ? gi : null)}
-                activeTool={tool}
-                shortcut={shortcut}
-                onPick={(item) => {
-                  editor.commands.run(item.command);
-                  setPicked((prev) => prev.map((t, i) => (i === gi ? item.tool : t)));
-                  setOpenGroup(null);
-                }}
-              />
-            )}
+      {vectorTool === null && (
+        <>
+          {GROUPS.map((group, gi) => {
+            const active = group.items.some((t) => t.tool === tool);
+            const current = group.items.find((t) => t.tool === (active ? tool : picked[gi])) ?? firstAvailable(group);
+            return (
+              <div key={group.label} className={styles.group} role="group" aria-label={current.label}>
+                <ToolButton
+                  icon={current.icon}
+                  label={current.label}
+                  shortcut={shortcut(current.command)}
+                  active={active}
+                  pending={!current.command}
+                  onClick={(e) => {
+                    if (!current.command) return;
+                    editor.commands.run(current.command);
+                    // Chosen from the keyboard: hand focus back to the canvas so Return places the object.
+                    if (e.detail === 0) e.currentTarget.blur();
+                  }}
+                />
+                <ToolMenu
+                  group={group}
+                  open={openGroup === gi}
+                  onOpenChange={(open) => setOpenGroup(open ? gi : null)}
+                  activeTool={tool}
+                  shortcut={shortcut}
+                  onPick={(item) => {
+                    if (!item.command) return;
+                    editor.commands.run(item.command);
+                    setPicked((prev) => prev.map((t, i) => (i === gi ? item.tool : t)));
+                    setOpenGroup(null);
+                  }}
+                />
+              </div>
+            );
+          })}
+          <ToolButton icon="actions" label="Actions" shortcut={shortcut('view.commandPalette')} onClick={() => editor.commands.run('view.commandPalette')} />
+          <div className={styles.divider} role="separator" aria-orientation="vertical" />
+          <div className={styles.modes} role="radiogroup" aria-label="Mode">
+            {MODES.map((m) => (
+              <ModeOption key={m.mode} label={m.label} icon={m.icon} checked={mode === m.mode} available={m.available} />
+            ))}
           </div>
-        );
-      })}
+        </>
+      )}
     </div>
   );
 }
 
+interface ToolButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'children'> {
+  readonly icon: IconName;
+  readonly label: string;
+  readonly shortcut: string;
+  readonly active?: boolean;
+  /** Shown but not implemented yet. */
+  readonly pending?: boolean;
+}
+
+/** A 32px toolbar button; hovering or focusing it shows its name and shortcut above it. */
+function ToolButton({ icon, label, shortcut, active = false, pending = false, ...rest }: ToolButtonProps) {
+  const { handlers, tooltip } = useHoverTooltip(label, shortcut || undefined, 'above');
+  return (
+    <>
+      <button
+        type="button"
+        className={styles.tool}
+        aria-pressed={active}
+        aria-disabled={pending || undefined}
+        data-active={active || undefined}
+        aria-label={shortcut ? `${label} (${shortcut})` : label}
+        data-tool-button=""
+        {...handlers}
+        {...rest}
+      >
+        <Icon name={icon} />
+      </button>
+      {tooltip}
+    </>
+  );
+}
+
+/** One option of the mode switcher; unavailable modes show but can't be chosen. */
+function ModeOption({ label, icon, checked, available }: { label: string; icon: IconName; checked: boolean; available: boolean }) {
+  const { handlers, tooltip } = useHoverTooltip(label, undefined, 'above');
+  return (
+    <>
+      <label className={styles.mode} data-checked={checked || undefined} data-unavailable={!available || undefined} {...handlers}>
+        <input type="radio" name="toolbar-mode" className={styles.modeInput} aria-label={label} checked={checked} disabled={!available} readOnly />
+        <Icon name={icon} />
+      </label>
+      {tooltip}
+    </>
+  );
+}
+
 interface ToolMenuProps {
-  items: readonly ToolItem[];
+  group: ToolGroup;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   activeTool: ToolId;
-  shortcut: (command: string) => string;
+  shortcut: (command: string | undefined) => string;
   onPick: (item: ToolItem) => void;
 }
 
-function ToolMenu({ items, open, onOpenChange, activeTool, shortcut, onPick }: ToolMenuProps) {
+function ToolMenu({ group, open, onOpenChange, activeTool, shortcut, onPick }: ToolMenuProps) {
+  const { items } = group;
   const [focus, setFocus] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const { handlers, tooltip } = useHoverTooltip(group.label, undefined, 'above');
+  const unavailable = items.every((i) => !i.command);
 
   useEffect(() => {
     if (!open) return;
@@ -222,19 +379,29 @@ function ToolMenu({ items, open, onOpenChange, activeTool, shortcut, onPick }: T
         className={styles.chevron}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label="More tools"
+        aria-label={group.label}
+        aria-disabled={unavailable || undefined}
+        {...handlers}
         onClick={() => {
-          setFocus(Math.max(0, items.findIndex((i) => i.tool === activeTool)));
+          if (unavailable) return;
+          setFocus(
+            Math.max(
+              0,
+              items.findIndex((i) => i.tool === activeTool),
+            ),
+          );
           onOpenChange(!open);
         }}
       >
-        <Icon name="chevronDown" size={16} />
+        <Icon name="toolChevron" />
       </button>
+      {!open && tooltip}
       {open && (
         <div
           ref={menuRef}
           className={styles.menu}
           role="menu"
+          aria-label={group.label}
           tabIndex={-1}
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') setFocus((f) => (f + 1) % items.length);
@@ -253,12 +420,13 @@ function ToolMenu({ items, open, onOpenChange, activeTool, shortcut, onPick }: T
               key={item.tool}
               role="menuitemradio"
               aria-checked={item.tool === activeTool}
+              aria-disabled={!item.command || undefined}
               className={styles.menuItem}
               data-focus={i === focus || undefined}
               onPointerEnter={() => setFocus(i)}
               onClick={() => onPick(item)}
             >
-              <span className={styles.check}>{item.tool === activeTool ? '✓' : ''}</span>
+              <span className={styles.check}>{item.tool === activeTool && <Icon name="check" size={16} />}</span>
               <Icon name={item.menuIcon ?? item.icon} size={24} />
               <span className={styles.menuLabel}>{item.label}</span>
               <span className={styles.menuShortcut}>{shortcut(item.command)}</span>

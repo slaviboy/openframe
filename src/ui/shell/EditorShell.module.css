@@ -107,39 +107,6 @@
   background: var(--border);
 }
 
-.railTooltip {
-  position: fixed;
-  z-index: var(--z-tooltip);
-  display: flex;
-  align-items: center;
-  gap: var(--space-4, 16px);
-  padding: var(--space-1-5, 6px) var(--space-2);
-  border-radius: var(--radius-md);
-  background: var(--bg-tooltip);
-  box-shadow: var(--shadow-menu);
-  color: #ffffff;
-  font-size: var(--text-md, 12px);
-  line-height: 16px;
-  white-space: nowrap;
-  pointer-events: none;
-  transform: translateY(-50%);
-}
-
-/* The arrow pointing back at the rail button. */
-.railTooltip::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: -4px;
-  width: 8px;
-  height: 8px;
-  background: inherit;
-  transform: translateY(-50%) rotate(45deg);
-}
-
-.railTooltipShortcut {
-  color: rgba(255, 255, 255, 0.7);
-}
 
 .railNotice {
   width: 40px;

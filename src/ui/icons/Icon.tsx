@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { ReactElement, SVGProps } from "react";
+import type { ReactElement, SVGProps } from 'react';
 
 /**
  * Openframe icon set. Glyphs matching the design-tool chrome are filled paths on their native 16×16 or 24×24 grid
@@ -23,42 +23,24 @@ import type { ReactElement, SVGProps } from "react";
  * grid with a 1px stroke. Icons inherit `currentColor`.
  */
 const STROKE = {
-  component: (
-    <path d="M12 4.5l2.5 2.5L12 9.5 9.5 7zm0 10l2.5 2.5-2.5 2.5-2.5-2.5zM7 9.5l2.5 2.5L7 14.5 4.5 12zm10 0l2.5 2.5-2.5 2.5-2.5-2.5z" />
-  ),
+  component: <path d="M12 4.5l2.5 2.5L12 9.5 9.5 7zm0 10l2.5 2.5-2.5 2.5-2.5-2.5zM7 9.5l2.5 2.5L7 14.5 4.5 12zm10 0l2.5 2.5-2.5 2.5-2.5-2.5z" />,
   instance: <path d="M12 5l7 7-7 7-7-7z" />,
   ellipse: <circle cx="12" cy="12" r="5.5" />,
   line: <path d="m6.5 17.5 11-11" />,
   arrow: <path d="m6.5 17.5 11-11M11.5 6.5h6v6" />,
   polygon: <path d="M12 6 18.5 17.5h-13z" />,
   underline: <path d="M8.5 6.5v5a3.5 3.5 0 0 0 7 0v-5M7 18.5h10" />,
-  textLtr: (
-    <path d="M10 5.5h7M14 5.5v8M11 5.5a2.75 2.75 0 0 0 0 5.5h3M6 18h12m0 0-2-2m2 2-2 2" />
-  ),
-  textRtl: (
-    <path d="M10 5.5h7M14 5.5v8M11 5.5a2.75 2.75 0 0 0 0 5.5h3M18 18H6m0 0 2-2m-2 2 2 2" />
-  ),
-  link: (
-    <path d="M10.5 13.5a3.5 3.5 0 0 0 5 0l2.5-2.5a3.5 3.5 0 0 0-5-5l-1 1M13.5 10.5a3.5 3.5 0 0 0-5 0L6 13a3.5 3.5 0 0 0 5 5l1-1" />
-  ),
-  unlink: (
-    <path d="M13 7l1-1a3.5 3.5 0 0 1 5 5l-1 1M11 17l-1 1a3.5 3.5 0 0 1-5-5l1-1M6 6l12 12" />
-  ),
-  indent: (
-    <path d="M6.5 6.5h11M11.5 10.5h6M11.5 14h6M6.5 18h11M6.5 10l2.5 2.25L6.5 14.5" />
-  ),
-  outdent: (
-    <path d="M6.5 6.5h11M11.5 10.5h6M11.5 14h6M6.5 18h11M9 10l-2.5 2.25L9 14.5" />
-  ),
-  strikethrough: (
-    <path d="M6.5 12h11M15 8.5c0-1.4-1.3-2.5-3-2.5s-3 1-3 2.3c0 1.4 1.3 2 3 2.3M9 15.5c0 1.4 1.3 2.5 3 2.5s3-1.1 3-2.5" />
-  ),
+  textLtr: <path d="M10 5.5h7M14 5.5v8M11 5.5a2.75 2.75 0 0 0 0 5.5h3M6 18h12m0 0-2-2m2 2-2 2" />,
+  textRtl: <path d="M10 5.5h7M14 5.5v8M11 5.5a2.75 2.75 0 0 0 0 5.5h3M18 18H6m0 0 2-2m-2 2 2 2" />,
+  link: <path d="M10.5 13.5a3.5 3.5 0 0 0 5 0l2.5-2.5a3.5 3.5 0 0 0-5-5l-1 1M13.5 10.5a3.5 3.5 0 0 0-5 0L6 13a3.5 3.5 0 0 0 5 5l1-1" />,
+  unlink: <path d="M13 7l1-1a3.5 3.5 0 0 1 5 5l-1 1M11 17l-1 1a3.5 3.5 0 0 1-5-5l1-1M6 6l12 12" />,
+  indent: <path d="M6.5 6.5h11M11.5 10.5h6M11.5 14h6M6.5 18h11M6.5 10l2.5 2.25L6.5 14.5" />,
+  outdent: <path d="M6.5 6.5h11M11.5 10.5h6M11.5 14h6M6.5 18h11M9 10l-2.5 2.25L9 14.5" />,
+  strikethrough: <path d="M6.5 12h11M15 8.5c0-1.4-1.3-2.5-3-2.5s-3 1-3 2.3c0 1.4 1.3 2 3 2.3M9 15.5c0 1.4 1.3 2.5 3 2.5s3-1.1 3-2.5" />,
   textAlignLeft: <path d="M6.5 7.5h11M6.5 10.5h7M6.5 13.5h11M6.5 16.5h7" />,
   textAlignCenter: <path d="M6.5 7.5h11M8.5 10.5h7M6.5 13.5h11M8.5 16.5h7" />,
   textAlignRight: <path d="M6.5 7.5h11M10.5 10.5h7M6.5 13.5h11M10.5 16.5h7" />,
-  textAlignJustify: (
-    <path d="M6.5 7.5h11M6.5 10.5h11M6.5 13.5h11M6.5 16.5h11" />
-  ),
+  textAlignJustify: <path d="M6.5 7.5h11M6.5 10.5h11M6.5 13.5h11M6.5 16.5h11" />,
   alignTop: <path d="M6.5 6.5h11M12 9.5v8M9.5 12 12 9.5l2.5 2.5" />,
   alignMiddle: <path d="M6.5 12h11M12 6.5v3M12 14.5v3" />,
   alignBottom: <path d="M6.5 17.5h11M12 6.5v8M9.5 12l2.5 2.5 2.5-2.5" />,
@@ -66,42 +48,22 @@ const STROKE = {
   layoutFreeform: <path d="M6.5 6.5h5v5h-5zM12.5 12.5h5v5h-5z" />,
   layoutVertical: <path d="M7.5 6.5h9v4h-9zM7.5 13.5h9v4h-9z" />,
   layoutHorizontal: <path d="M6.5 7.5h4v9h-4zM13.5 7.5h4v9h-4z" />,
-  wrap: (
-    <path d="M5.5 7.5h11a2.5 2.5 0 0 1 0 5H9.5m0 0 2-2m-2 2 2 2M5.5 16.5h6" />
-  ),
+  wrap: <path d="M5.5 7.5h11a2.5 2.5 0 0 1 0 5H9.5m0 0 2-2m-2 2 2 2M5.5 16.5h6" />,
   paddingSides: <path d="M5.5 5.5h13v13h-13zM9 9h6v6H9z" />,
-  vector: (
-    <path d="M6.5 17.5C8 10 16 14 17.5 6.5M5.5 16.5h2v2h-2zM16.5 5.5h2v2h-2z" />
-  ),
+  vector: <path d="M6.5 17.5C8 10 16 14 17.5 6.5M5.5 16.5h2v2h-2zM16.5 5.5h2v2h-2z" />,
   boolean: <path d="M5.5 5.5h9v9h-9zM9.5 9.5h9v9h-9z" />,
-  lasso: (
-    <path d="M12 5.5c4.1 0 7.5 2 7.5 4.5s-3.4 4.5-7.5 4.5-7.5-2-7.5-4.5 3.4-4.5 7.5-4.5zM7.5 13.8c-1.2 1.3-.9 3 .7 3.4 1.3.3 1.9 1.1 1.3 2.3" />
-  ),
-  width: (
-    <path d="M4.5 12c2.5-3 5-3 7.5 0s5 3 7.5 0M4.5 12c2.5 1.5 5 1.5 7.5 0s5-1.5 7.5 0" />
-  ),
+  lasso: <path d="M12 5.5c4.1 0 7.5 2 7.5 4.5s-3.4 4.5-7.5 4.5-7.5-2-7.5-4.5 3.4-4.5 7.5-4.5zM7.5 13.8c-1.2 1.3-.9 3 .7 3.4 1.3.3 1.9 1.1 1.3 2.3" />,
+  width: <path d="M4.5 12c2.5-3 5-3 7.5 0s5 3 7.5 0M4.5 12c2.5 1.5 5 1.5 7.5 0s5-1.5 7.5 0" />,
   eraser: <path d="M8.5 18.5h11M5.5 14.5l8-8 5 5-7 7h-3z" />,
-  paint: (
-    <path d="M11 4.5l7 7-6 6-7-7zM5 10.5h13M18.5 14.5s2 2.3 2 3.5a2 2 0 0 1-4 0c0-1.2 2-3.5 2-3.5z" />
-  ),
+  paint: <path d="M11 4.5l7 7-6 6-7-7zM5 10.5h13M18.5 14.5s2 2.3 2 3.5a2 2 0 0 1-4 0c0-1.2 2-3.5 2-3.5z" />,
   bend: <path d="M4.5 18.5C8 9 16 15 19.5 5.5M16.5 5.5h3v3" />,
-  cut: (
-    <path d="M8 8.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 11a2 2 0 1 1 0-4 2 2 0 0 1 0 4zM9.5 7.5l10 10M9.5 16.5l10-10" />
-  ),
-  layoutGrid: (
-    <path d="M6.5 6.5h4v4h-4zM13.5 6.5h4v4h-4zM6.5 13.5h4v4h-4zM13.5 13.5h4v4h-4z" />
-  ),
-  ignoreLayout: (
-    <path d="M6.5 9.5v-3h3M14.5 6.5h3v3M17.5 14.5v3h-3M9.5 17.5h-3v-3M10.5 10.5h3v3h-3z" />
-  ),
-  autoHeight: (
-    <path d="M12 5.5v13M9.5 8 12 5.5 14.5 8M9.5 16l2.5 2.5 2.5-2.5" />
-  ),
+  cut: <path d="M8 8.5a2 2 0 1 1 0-4 2 2 0 0 1 0 4zm0 11a2 2 0 1 1 0-4 2 2 0 0 1 0 4zM9.5 7.5l10 10M9.5 16.5l10-10" />,
+  layoutGrid: <path d="M6.5 6.5h4v4h-4zM13.5 6.5h4v4h-4zM6.5 13.5h4v4h-4zM13.5 13.5h4v4h-4z" />,
+  ignoreLayout: <path d="M6.5 9.5v-3h3M14.5 6.5h3v3M17.5 14.5v3h-3M9.5 17.5h-3v-3M10.5 10.5h3v3h-3z" />,
+  autoHeight: <path d="M12 5.5v13M9.5 8 12 5.5 14.5 8M9.5 16l2.5 2.5 2.5-2.5" />,
   fixedSize: <path d="M6.5 6.5h11v11h-11zM9.5 12h5" />,
   truncate: <path d="M6.5 9.5h11M6.5 13.5h6M15 13.5h.5M17.5 13.5h.5" />,
-  star: (
-    <path d="M12 6l1.53 4.4 4.65.09-3.71 2.81 1.35 4.46L12 15.1l-3.82 2.66 1.35-4.46-3.71-2.81 4.65-.09z" />
-  ),
+  star: <path d="M12 6l1.53 4.4 4.65.09-3.71 2.81 1.35 4.46L12 15.1l-3.82 2.66 1.35-4.46-3.71-2.81 4.65-.09z" />,
   eyeOff: (
     <>
       <path d="M6.3 9.6C5.2 10.8 4.5 12 4.5 12s2.8 4.5 7.5 4.5c1 0 2-.2 2.8-.5m2.9-1.7c1.2-1.1 1.8-2.3 1.8-2.3S16.7 7.5 12 7.5c-.6 0-1.2.1-1.8.2" />
@@ -114,9 +76,7 @@ const STROKE = {
       <path d="M9.5 11V9a2.5 2.5 0 0 1 5 0v2" />
     </>
   ),
-  detach: (
-    <path d="M12 4.5l3 3M19.5 12l-3 3M12 19.5l-3-3M4.5 12l3-3M6 6l12 12" />
-  ),
+  detach: <path d="M12 4.5l3 3M19.5 12l-3 3M12 19.5l-3-3M4.5 12l3-3M6 6l12 12" />,
   more: (
     <>
       <circle cx="7" cy="12" r="1" fill="currentColor" stroke="none" />
@@ -125,13 +85,9 @@ const STROKE = {
     </>
   ),
   collapse: <path d="m8.5 6.5 3.5 3.5 3.5-3.5M8.5 17.5 12 14l3.5 3.5" />,
-  group: (
-    <path d="M6 8V6h2m8 0h2v2m0 8v2h-2m-8 0H6v-2m0-6v4m12-4v4M10 6h4m-4 12h4" />
-  ),
+  group: <path d="M6 8V6h2m8 0h2v2m0 8v2h-2m-8 0H6v-2m0-6v4m12-4v4M10 6h4m-4 12h4" />,
   page: <path d="M8 4.5h8v15H8z" />,
-  rotation: (
-    <path d="M7 17V9.5a2.5 2.5 0 0 1 2.5-2.5H17M14.5 4.5 17 7l-2.5 2.5" />
-  ),
+  rotation: <path d="M7 17V9.5a2.5 2.5 0 0 1 2.5-2.5H17M14.5 4.5 17 7l-2.5 2.5" />,
   target: (
     <>
       <circle cx="12" cy="12" r="6.5" />
@@ -168,10 +124,79 @@ const STROKE = {
   ),
 } as const;
 
-const FILLED: Record<
-  FilledName,
-  { readonly viewBox: 16 | 24; readonly body: ReactElement }
-> = {
+const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: ReactElement }> = {
+  check: {
+    viewBox: 16,
+    body: <path fill="currentColor" d="M11.584 3.723a.5.5 0 0 1 .832.554l-5 7.5a.502.502 0 0 1-.77.077l-3-3a.5.5 0 0 1 .708-.708l2.568 2.569z" />,
+  },
+  textTool: {
+    viewBox: 24,
+    body: <path fill="currentColor" d="M19.5 4a.5.5 0 0 1 .5.5v3a.5.5 0 0 1-1 0V5h-6.5v14H15a.5.5 0 0 1 0 1H9a.5.5 0 0 1 0-1h2.5V5H5v2.5a.5.5 0 0 1-1 0v-3a.5.5 0 0 1 .5-.5z" />,
+  },
+  comment: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        d="M12.5 3a8.5 8.5 0 0 1 0 17H7.09c-.89 0-1.39 0-1.767-.121l-.154-.06a2 2 0 0 1-.906-.828l-.082-.16c-.136-.297-.17-.657-.178-1.248L4 16.909V11.5A8.5 8.5 0 0 1 12.5 3m0 1A7.5 7.5 0 0 0 5 11.5v5.41c0 .523 0 .861.02 1.12.018.247.05.34.07.385a1 1 0 0 0 .495.494c.045.02.138.053.386.072.258.019.596.019 1.12.019H12.5a7.5 7.5 0 0 0 0-15"
+      />
+    ),
+  },
+  actions: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        d="M9 13a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2zm7.5 0a.5.5 0 0 1 .5.5V16h2.5a.5.5 0 0 1 0 1H17v2.5a.5.5 0 0 1-1 0V17h-2.5a.5.5 0 0 1 0-1H16v-2.5a.5.5 0 0 1 .5-.5M6 14a1 1 0 0 0-1 1v3a1 1 0 0 0 .897.995L6 19h3a1 1 0 0 0 1-1v-3a1 1 0 0 0-1-1zm.87-10.275a1 1 0 0 1 1.337.068l3 3a1 1 0 0 1 0 1.414l-3 3a1 1 0 0 1-1.414 0l-3-3a1 1 0 0 1 0-1.414l3-3zM16.5 4a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7m-12 3.5 3 3 3-3-3-3zm12-2.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5"
+      />
+    ),
+  },
+  toolChevron: {
+    viewBox: 24,
+    body: (
+      <path fillRule="evenodd" clipRule="evenodd" fill="currentColor" d="M9.646 11.146a.5.5 0 0 1 .708 0L12 12.793l1.646-1.647a.5.5 0 0 1 .708.708l-2 2a.5.5 0 0 1-.708 0l-2-2a.5.5 0 0 1 0-.708" />
+    ),
+  },
+  modeDraw: {
+    viewBox: 24,
+    body: (
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        fill="currentColor"
+        d="M13.407 5.06c.61-.123 1.227-.079 1.657.343l.135.15c.277.361.316.79.208 1.204-.115.44-.397.887-.734 1.314-.68.86-1.74 1.829-2.748 2.76-1.031.952-2.01 1.867-2.606 2.662-.3.4-.466.724-.517.97-.044.21-.003.34.12.46l.065.052c.072.044.167.062.313.039.217-.034.505-.155.866-.378.72-.445 1.561-1.183 2.445-1.966.862-.763 1.768-1.571 2.57-2.076.4-.252.817-.457 1.221-.527.427-.074.87.002 1.223.346l.102.112c.22.271.296.593.266.918-.032.344-.183.684-.364.993-.363.617-.963 1.296-1.515 1.922-.574.651-1.1 1.251-1.403 1.767-.151.257-.218.449-.23.581-.01.106.012.163.072.22l.054.04c.074.038.214.062.474-.031.356-.128.853-.456 1.465-1.1a.5.5 0 0 1 .725.687c-.666.702-1.291 1.153-1.853 1.354-.535.192-1.08.173-1.485-.163l-.08-.071a1.23 1.23 0 0 1-.369-1.03c.033-.344.183-.684.364-.993.363-.617.964-1.297 1.516-1.923.574-.651 1.1-1.25 1.402-1.766.152-.258.22-.449.232-.581.007-.08-.004-.132-.035-.177l-.038-.045c-.07-.068-.162-.108-.353-.075-.213.037-.5.161-.858.388-.717.451-1.555 1.194-2.44 1.978-.862.764-1.774 1.57-2.584 2.07-.404.249-.826.45-1.237.514-.38.06-.767 0-1.095-.247l-.136-.118c-.402-.394-.502-.887-.399-1.38.097-.46.367-.923.696-1.363.663-.885 1.718-1.865 2.728-2.798 1.033-.954 2.023-1.862 2.642-2.645.31-.393.489-.71.55-.946.04-.152.028-.246-.017-.32l-.057-.069c-.082-.08-.284-.172-.76-.076-.468.094-1.091.352-1.863.803-1.537.898-3.552 2.496-5.893 4.786a.5.5 0 0 1-.699-.715c2.37-2.319 4.45-3.98 6.087-4.935.815-.476 1.55-.794 2.17-.92"
+      />
+    ),
+  },
+  modeDesign: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        d="M12.11 13.956c-.44-1.121.618-2.23 1.738-1.885l.108.038 4.15 1.63.115.051c1.136.556 1.027 2.254-.218 2.637l-1.205.372-.37 1.205c-.397 1.29-2.196 1.356-2.689.102zm1.48-.916a.425.425 0 0 0-.55.55l1.63 4.15c.138.35.618.356.775.038l.027-.068.526-1.711 1.711-.527a.425.425 0 0 0 .031-.802zM16.5 6A1.5 1.5 0 0 1 18 7.5v1a1.5 1.5 0 0 1-1.5 1.5H10v6.5A1.5 1.5 0 0 1 8.5 18h-1A1.5 1.5 0 0 1 6 16.5v-9A1.5 1.5 0 0 1 7.5 6zM7 16.5a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5V15h-.5a.5.5 0 0 1 0-1H9v-1h-.5a.5.5 0 0 1 0-1H9v-2H7zM7.5 7a.5.5 0 0 0-.5.5V9h2V7zM10 9h2v-.5a.5.5 0 0 1 1 0V9h1v-.5a.5.5 0 0 1 1 0V9h1.5a.5.5 0 0 0 .5-.5v-1a.5.5 0 0 0-.5-.5H10z"
+      />
+    ),
+  },
+  modeMotion: {
+    viewBox: 24,
+    body: (
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        fill="currentColor"
+        d="M10.94 5.44a1.5 1.5 0 0 1 2.12 0l5.502 5.5a1.5 1.5 0 0 1 0 2.121l-5.501 5.502a1.5 1.5 0 0 1-2.121 0l-5.502-5.502a1.5 1.5 0 0 1 0-2.121zm1.414.706a.5.5 0 0 0-.707 0l-5.501 5.501a.5.5 0 0 0 0 .707l5.5 5.502a.5.5 0 0 0 .707 0l5.502-5.502a.5.5 0 0 0 0-.707zm-1.207 2.001a.5.5 0 0 1 .707 0l3.5 3.5a.5.5 0 0 1 0 .707l-3.5 3.5a.5.5 0 1 1-.707-.707l3.146-3.146-3.146-3.147a.5.5 0 0 1 0-.707m-2 2a.5.5 0 0 1 .707 0l1.5 1.5a.5.5 0 0 1 0 .707l-1.5 1.5a.5.5 0 1 1-.707-.707l1.146-1.146-1.146-1.147a.5.5 0 0 1 0-.707"
+      />
+    ),
+  },
+  modeDev: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        d="M13.631 6.018a.5.5 0 0 1 .367.513l-.016.1-3 11-.036.095a.5.5 0 0 1-.93-.358l3-11 .037-.095a.5.5 0 0 1 .578-.255M8.224 8.582a.501.501 0 0 1 .693.693l-.064.079L6.206 12l2.647 2.646a.5.5 0 1 1-.707.707l-3-3a.5.5 0 0 1 0-.707l3-3zm6.922.064a.5.5 0 0 1 .707 0l3 3a.5.5 0 0 1 0 .707l-3 3-.078.065a.5.5 0 0 1-.694-.693l.065-.079L17.792 12l-2.646-2.646a.5.5 0 0 1 0-.707"
+      />
+    ),
+  },
   frameMenu: {
     viewBox: 24,
     body: (
@@ -347,25 +372,11 @@ const FILLED: Record<
   },
   plus: {
     viewBox: 24,
-    body: (
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        fill="currentColor"
-        d="M11.5 6a.5.5 0 0 1 .5.5V11h4.5a.5.5 0 0 1 0 1H12v4.5a.5.5 0 0 1-1 0V12H6.5a.5.5 0 0 1 0-1H11V6.5a.5.5 0 0 1 .5-.5"
-      />
-    ),
+    body: <path fillRule="evenodd" clipRule="evenodd" fill="currentColor" d="M11.5 6a.5.5 0 0 1 .5.5V11h4.5a.5.5 0 0 1 0 1H12v4.5a.5.5 0 0 1-1 0V12H6.5a.5.5 0 0 1 0-1H11V6.5a.5.5 0 0 1 .5-.5" />,
   },
   minus: {
     viewBox: 24,
-    body: (
-      <path
-        fillRule="evenodd"
-        clipRule="evenodd"
-        fill="currentColor"
-        d="M6 11.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5"
-      />
-    ),
+    body: <path fillRule="evenodd" clipRule="evenodd" fill="currentColor" d="M6 11.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5" />,
   },
   close: {
     viewBox: 24,
@@ -380,39 +391,19 @@ const FILLED: Record<
   },
   search: {
     viewBox: 24,
-    body: (
-      <path
-        fill="currentColor"
-        d="M11.5 6a5.5 5.5 0 0 1 4.226 9.019l2.127 2.127a.5.5 0 1 1-.707.707l-2.127-2.127A5.5 5.5 0 1 1 11.5 6m0 1a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9"
-      />
-    ),
+    body: <path fill="currentColor" d="M11.5 6a5.5 5.5 0 0 1 4.226 9.019l2.127 2.127a.5.5 0 1 1-.707.707l-2.127-2.127A5.5 5.5 0 1 1 11.5 6m0 1a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9" />,
   },
   chevronDown: {
     viewBox: 16,
-    body: (
-      <path
-        fill="currentColor"
-        d="M9.768 6.768a.5.5 0 0 1 .707.707l-2.12 2.121a.5.5 0 0 1-.708 0L5.525 7.475a.5.5 0 0 1 .708-.707l1.768 1.767z"
-      />
-    ),
+    body: <path fill="currentColor" d="M9.768 6.768a.5.5 0 0 1 .707.707l-2.12 2.121a.5.5 0 0 1-.708 0L5.525 7.475a.5.5 0 0 1 .708-.707l1.768 1.767z" />,
   },
   caretDown: {
     viewBox: 16,
-    body: (
-      <path
-        fill="currentColor"
-        d="M9.768 6.768a.5.5 0 0 1 .707.707l-2.12 2.121a.5.5 0 0 1-.708 0L5.525 7.475a.5.5 0 0 1 .708-.707l1.768 1.767z"
-      />
-    ),
+    body: <path fill="currentColor" d="M9.768 6.768a.5.5 0 0 1 .707.707l-2.12 2.121a.5.5 0 0 1-.708 0L5.525 7.475a.5.5 0 0 1 .708-.707l1.768 1.767z" />,
   },
   caretRight: {
     viewBox: 16,
-    body: (
-      <path
-        fill="currentColor"
-        d="M6.768 5.525a.5.5 0 0 1 .707 0l2.121 2.121a.5.5 0 0 1 0 .707l-2.121 2.122a.5.5 0 0 1-.707-.708L8.535 8 6.768 6.232a.5.5 0 0 1 0-.707"
-      />
-    ),
+    body: <path fill="currentColor" d="M6.768 5.525a.5.5 0 0 1 .707 0l2.121 2.121a.5.5 0 0 1 0 .707l-2.121 2.122a.5.5 0 0 1-.707-.708L8.535 8 6.768 6.232a.5.5 0 0 1 0-.707" />,
   },
   eye: {
     viewBox: 16,
@@ -504,10 +495,7 @@ const FILLED: Record<
           fill="currentColor"
           d="M17.25 10a.75.75 0 0 0 .75-.75v-.5a.75.75 0 0 0-.75-.75h-8.5a.75.75 0 0 0-.75.75v.5c0 .414.336.75.75.75zm-4 5a.75.75 0 0 0 .75-.75v-.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0-.75.75v.5c0 .414.336.75.75.75z"
         />
-        <path
-          fill="var(--fg-tertiary)"
-          d="M6 17.5a.5.5 0 0 1-1 0v-12a.5.5 0 0 1 1 0z"
-        />
+        <path fill="var(--fg-tertiary)" d="M6 17.5a.5.5 0 0 1-1 0v-12a.5.5 0 0 1 1 0z" />
       </>
     ),
   },
@@ -521,12 +509,7 @@ const FILLED: Record<
           fill="currentColor"
           d="M17.25 10a.75.75 0 0 0 .75-.75v-.5a.75.75 0 0 0-.75-.75h-9.5a.75.75 0 0 0-.75.75v.5c0 .414.336.75.75.75zm-2 5a.75.75 0 0 0 .75-.75v-.5a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v.5c0 .414.336.75.75.75z"
         />
-        <path
-          fillRule="evenodd"
-          clipRule="evenodd"
-          fill="var(--fg-tertiary)"
-          d="M13 17.5a.5.5 0 0 1-1 0V15h1zm0-4.5v-3h-1v3zm0-7.5V8h-1V5.5a.5.5 0 0 1 1 0"
-        />
+        <path fillRule="evenodd" clipRule="evenodd" fill="var(--fg-tertiary)" d="M13 17.5a.5.5 0 0 1-1 0V15h1zm0-4.5v-3h-1v3zm0-7.5V8h-1V5.5a.5.5 0 0 1 1 0" />
       </>
     ),
   },
@@ -540,10 +523,7 @@ const FILLED: Record<
           fill="currentColor"
           d="M6.75 10A.75.75 0 0 1 6 9.25v-.5A.75.75 0 0 1 6.75 8h8.5a.75.75 0 0 1 .75.75v.5a.75.75 0 0 1-.75.75zm4 5a.75.75 0 0 1-.75-.75v-.5a.75.75 0 0 1 .75-.75h4.5a.75.75 0 0 1 .75.75v.5a.75.75 0 0 1-.75.75z"
         />
-        <path
-          fill="var(--fg-tertiary)"
-          d="M18 17.5a.5.5 0 0 0 1 0v-12a.5.5 0 0 0-1 0z"
-        />
+        <path fill="var(--fg-tertiary)" d="M18 17.5a.5.5 0 0 0 1 0v-12a.5.5 0 0 0-1 0z" />
       </>
     ),
   },
@@ -557,10 +537,7 @@ const FILLED: Record<
           fill="currentColor"
           d="M10 17.25a.75.75 0 0 1-.75.75h-.5a.75.75 0 0 1-.75-.75v-8.5A.75.75 0 0 1 8.75 8h.5a.75.75 0 0 1 .75.75zm5-4a.75.75 0 0 1-.75.75h-.5a.75.75 0 0 1-.75-.75v-4.5a.75.75 0 0 1 .75-.75h.5a.75.75 0 0 1 .75.75z"
         />
-        <path
-          fill="var(--fg-tertiary)"
-          d="M17.5 6a.5.5 0 0 0 0-1h-12a.5.5 0 0 0 0 1z"
-        />
+        <path fill="var(--fg-tertiary)" d="M17.5 6a.5.5 0 0 0 0-1h-12a.5.5 0 0 0 0 1z" />
       </>
     ),
   },
@@ -574,12 +551,7 @@ const FILLED: Record<
           fill="currentColor"
           d="M10 6.75A.75.75 0 0 0 9.25 6h-.5a.75.75 0 0 0-.75.75v9.5c0 .414.336.75.75.75h.5a.75.75 0 0 0 .75-.75zm5 2a.75.75 0 0 0-.75-.75h-.5a.75.75 0 0 0-.75.75v5.5c0 .414.336.75.75.75h.5a.75.75 0 0 0 .75-.75z"
         />
-        <path
-          fillRule="evenodd"
-          clipRule="evenodd"
-          fill="var(--fg-tertiary)"
-          d="M17.5 11a.5.5 0 0 1 0 1H15v-1zM13 11h-3v1h3zm-7.5 0H8v1H5.5a.5.5 0 0 1 0-1"
-        />
+        <path fillRule="evenodd" clipRule="evenodd" fill="var(--fg-tertiary)" d="M17.5 11a.5.5 0 0 1 0 1H15v-1zM13 11h-3v1h3zm-7.5 0H8v1H5.5a.5.5 0 0 1 0-1" />
       </>
     ),
   },
@@ -593,58 +565,64 @@ const FILLED: Record<
           fill="currentColor"
           d="M10 6.75A.75.75 0 0 0 9.25 6h-.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h.5a.75.75 0 0 0 .75-.75zm5 4a.75.75 0 0 0-.75-.75h-.5a.75.75 0 0 0-.75.75v4.5c0 .414.336.75.75.75h.5a.75.75 0 0 0 .75-.75z"
         />
-        <path
-          fill="var(--fg-tertiary)"
-          d="M17.5 18a.5.5 0 0 1 0 1h-12a.5.5 0 0 1 0-1z"
-        />
+        <path fill="var(--fg-tertiary)" d="M17.5 18a.5.5 0 0 1 0 1h-12a.5.5 0 0 1 0-1z" />
       </>
     ),
   },
 };
 
 type FilledName =
-  | "frameMenu"
-  | "sectionTool"
-  | "slice"
-  | "penMenu"
-  | "pencil"
-  | "textOnPath"
-  | "moveMenu"
-  | "hand"
-  | "scale"
-  | "assets"
-  | "missingFonts"
-  | "move"
-  | "frame"
-  | "rectangle"
-  | "text"
-  | "pen"
-  | "section"
-  | "plus"
-  | "minus"
-  | "close"
-  | "search"
-  | "chevronDown"
-  | "caretDown"
-  | "caretRight"
-  | "eye"
-  | "unlock"
-  | "variables"
-  | "file"
-  | "styles"
-  | "opacity"
-  | "radius"
-  | "sidebar"
-  | "alignLeft"
-  | "alignHorizontalCenter"
-  | "alignRight"
-  | "alignTopEdge"
-  | "alignVerticalCenter"
-  | "alignBottomEdge";
+  | 'check'
+  | 'textTool'
+  | 'comment'
+  | 'actions'
+  | 'toolChevron'
+  | 'modeDraw'
+  | 'modeDesign'
+  | 'modeMotion'
+  | 'modeDev'
+  | 'frameMenu'
+  | 'sectionTool'
+  | 'slice'
+  | 'penMenu'
+  | 'pencil'
+  | 'textOnPath'
+  | 'moveMenu'
+  | 'hand'
+  | 'scale'
+  | 'assets'
+  | 'missingFonts'
+  | 'move'
+  | 'frame'
+  | 'rectangle'
+  | 'text'
+  | 'pen'
+  | 'section'
+  | 'plus'
+  | 'minus'
+  | 'close'
+  | 'search'
+  | 'chevronDown'
+  | 'caretDown'
+  | 'caretRight'
+  | 'eye'
+  | 'unlock'
+  | 'variables'
+  | 'file'
+  | 'styles'
+  | 'opacity'
+  | 'radius'
+  | 'sidebar'
+  | 'alignLeft'
+  | 'alignHorizontalCenter'
+  | 'alignRight'
+  | 'alignTopEdge'
+  | 'alignVerticalCenter'
+  | 'alignBottomEdge';
 
 export type IconName = keyof typeof STROKE | FilledName;
 
-export interface IconProps extends Omit<SVGProps<SVGSVGElement>, "name"> {
+export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
   name: IconName;
   size?: number;
 }
@@ -653,33 +631,13 @@ export function Icon({ name, size = 24, ...rest }: IconProps) {
   if (name in FILLED) {
     const { viewBox, body } = FILLED[name as FilledName];
     return (
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${viewBox} ${viewBox}`}
-        fill="none"
-        aria-hidden="true"
-        focusable="false"
-        {...rest}
-      >
+      <svg width={size} height={size} viewBox={`0 0 ${viewBox} ${viewBox}`} fill="none" aria-hidden="true" focusable="false" {...rest}>
         {body}
       </svg>
     );
   }
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      focusable="false"
-      {...rest}
-    >
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false" {...rest}>
       {STROKE[name as keyof typeof STROKE]}
     </svg>
   );
