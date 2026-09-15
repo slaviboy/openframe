@@ -78,14 +78,67 @@
 }
 
 .railTab {
-  width: 40px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: var(--space-1) 0;
-  border-radius: var(--radius-md);
-  background: var(--bg-control);
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-lg, 8px);
+  background: transparent;
   color: var(--fg-primary);
+  cursor: default;
+}
+
+.railTab:hover {
+  background: var(--bg-hover);
+}
+
+/* The open tab: a tinted accent square with an accent icon. */
+.railTab[aria-current='page'] {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+}
+
+.railSeparator {
+  flex: none;
+  width: 24px;
+  height: 1px;
+  background: var(--border);
+}
+
+.railTooltip {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4, 16px);
+  padding: var(--space-1-5, 6px) var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--bg-tooltip);
+  box-shadow: var(--shadow-menu);
+  color: #ffffff;
+  font-size: var(--text-md, 12px);
+  line-height: 16px;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translateY(-50%);
+}
+
+/* The arrow pointing back at the rail button. */
+.railTooltip::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -4px;
+  width: 8px;
+  height: 8px;
+  background: inherit;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.railTooltipShortcut {
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .railNotice {
@@ -103,11 +156,6 @@
 
 .railNotice:hover {
   background: var(--bg-control-hover, var(--bg-control));
-}
-
-.railLabel {
-  font-size: var(--text-xs);
-  line-height: 12px;
 }
 
 .sidebar {

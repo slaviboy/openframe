@@ -173,12 +173,12 @@ export function GridLayoutFields({ frames }: { frames: FrameNode[] }) {
 }
 
 const CELL_ALIGN: readonly (readonly [IconName, string, 'gridChildHorizontalAlign' | 'gridChildVerticalAlign', 'MIN' | 'CENTER' | 'MAX'])[] = [
-  ['textAlignLeft', 'Align left', 'gridChildHorizontalAlign', 'MIN'],
-  ['textAlignCenter', 'Align horizontal centers', 'gridChildHorizontalAlign', 'CENTER'],
-  ['textAlignRight', 'Align right', 'gridChildHorizontalAlign', 'MAX'],
-  ['alignTop', 'Align top', 'gridChildVerticalAlign', 'MIN'],
-  ['alignMiddle', 'Align vertical centers', 'gridChildVerticalAlign', 'CENTER'],
-  ['alignBottom', 'Align bottom', 'gridChildVerticalAlign', 'MAX'],
+  ['alignLeft', 'Align left', 'gridChildHorizontalAlign', 'MIN'],
+  ['alignHorizontalCenter', 'Align horizontal centers', 'gridChildHorizontalAlign', 'CENTER'],
+  ['alignRight', 'Align right', 'gridChildHorizontalAlign', 'MAX'],
+  ['alignTopEdge', 'Align top', 'gridChildVerticalAlign', 'MIN'],
+  ['alignVerticalCenter', 'Align vertical centers', 'gridChildVerticalAlign', 'CENTER'],
+  ['alignBottomEdge', 'Align bottom', 'gridChildVerticalAlign', 'MAX'],
 ];
 
 /** For children of grid auto layout frames: column and row span, and alignment within their cells. */

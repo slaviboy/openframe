@@ -36,6 +36,7 @@ import { viewPrefs } from '../view/view-prefs';
 import type { Box } from '../primitives/position';
 import { NAV_RAIL_W, SIDEBAR_LEFT_DEFAULT, SIDEBAR_LEFT_MAX, SIDEBAR_LEFT_MIN, SIDEBAR_RIGHT_MAX, SIDEBAR_RIGHT_MIN, SIDEBAR_RIGHT_W } from '../tokens';
 import styles from './EditorShell.module.css';
+import { RailButton } from './RailButton';
 import { Toolbar } from './Toolbar';
 import { MissingFontsNotice } from '../dialogs/MissingFontsDialog';
 
@@ -109,36 +110,28 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
               {mainMenuAnchor && (
                 <Menu label="Main menu" entries={mainMenuEntries(session.editor)} anchor={mainMenuAnchor} placement="bottom-start" onClose={closeMainMenu} />
               )}
-              <button
-                type="button"
-                className={styles.railTab}
-                aria-current={!assetsOpen && !variablesOpen ? 'page' : undefined}
-                title="File"
+              <div className={styles.railSeparator} role="separator" />
+              <RailButton
+                icon="file"
+                label="File"
+                selected={!assetsOpen && !variablesOpen}
                 onClick={() => {
                   editorState.setAssetsOpen(false);
                   editorState.setVariablesOpen(false);
                 }}
-              >
-                <Icon name="file" />
-                <span className={styles.railLabel}>File</span>
-              </button>
-              <button
-                type="button"
-                className={styles.railTab}
-                aria-current={assetsOpen && !variablesOpen ? 'page' : undefined}
-                title="Assets"
+              />
+              <RailButton
+                icon="assets"
+                label="Assets"
+                shortcut="Alt+2"
+                selected={assetsOpen && !variablesOpen}
                 onClick={() => {
                   editorState.setAssetsOpen(true);
                   editorState.setVariablesOpen(false);
                 }}
-              >
-                <Icon name="component" />
-                <span className={styles.railLabel}>Assets</span>
-              </button>
-              <button type="button" className={styles.railTab} aria-current={variablesOpen ? 'page' : undefined} title="Variables" onClick={() => editorState.setVariablesOpen(!variablesOpen)}>
-                <Icon name="variables" />
-                <span className={styles.railLabel}>Variables</span>
-              </button>
+              />
+              <div className={styles.railSeparator} role="separator" />
+              <RailButton icon="variables" label="Variables" selected={variablesOpen} onClick={() => editorState.setVariablesOpen(!variablesOpen)} />
               {/* File notifications sit at the bottom of the navigation bar. */}
               <MissingFontsNotice className={styles.railNotice} />
             </nav>

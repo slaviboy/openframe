@@ -243,6 +243,8 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 - Editor UI fixes (after device models): property rows (fills, strokes, effects, layout guides) no longer take focus from their fields, so a type dropdown stays open (`focusPropertyRow` in `ReorderHandle.tsx`); a single row's hidden reorder handle takes no room; both sidebars run flush and square to the window's edges, and the properties panel is resizable from its left edge (`SIDEBAR_RIGHT_MIN` / `SIDEBAR_RIGHT_MAX`, `--right-w`).
 
+- Reference-matched icons (after the editor UI fixes): `src/ui/icons/Icon.tsx` has two sets. `FILLED` holds glyphs copied from saved the reference editor HTML, each on its own 16×16 or 24×24 grid, with two-tone parts in `--fg-tertiary`. `STROKE` holds the Openframe drawings that have no the reference source yet (the remaining shape tools, the vector tools, the typography and layout icons, the logo, `more`, `lock` and `eyeOff`). Tool dropdowns can show a different glyph from the toolbar button via `ToolItem.menuIcon` (Move, Frame and Pen). `textOnPath` exists as an icon only. The grid-cell alignment buttons use the two-tone align icons. The navigation rail tabs are icon-only `RailButton`s, with a hover and focus tooltip giving the name and any registered shortcut, an accent-tinted selected state, and separators.
+
 ## In progress (uncommitted)
 
 1. **The device switcher (rows 240 and 242): written, not committed.** The code is in the working tree:

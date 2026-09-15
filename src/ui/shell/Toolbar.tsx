@@ -27,18 +27,20 @@ interface ToolItem {
   readonly tool: ToolId;
   readonly label: string;
   readonly icon: IconName;
+  /** The glyph in the tool's dropdown, when it differs from the toolbar button's. */
+  readonly menuIcon?: IconName;
   readonly command: string;
 }
 
 const GROUPS: readonly (readonly ToolItem[])[] = [
   [
-    { tool: 'move', label: 'Move', icon: 'move', command: 'tools.move' },
+    { tool: 'move', label: 'Move', icon: 'move', menuIcon: 'moveMenu', command: 'tools.move' },
     { tool: 'hand', label: 'Hand tool', icon: 'hand', command: 'tools.hand' },
     { tool: 'scale', label: 'Scale', icon: 'scale', command: 'tools.scale' },
   ],
   [
-    { tool: 'frame', label: 'Frame', icon: 'frame', command: 'tools.frame' },
-    { tool: 'section', label: 'Section', icon: 'section', command: 'tools.section' },
+    { tool: 'frame', label: 'Frame', icon: 'frame', menuIcon: 'frameMenu', command: 'tools.frame' },
+    { tool: 'section', label: 'Section', icon: 'sectionTool', command: 'tools.section' },
     { tool: 'slice', label: 'Slice', icon: 'slice', command: 'tools.slice' },
   ],
   [
@@ -52,7 +54,7 @@ const GROUPS: readonly (readonly ToolItem[])[] = [
   ],
   [{ tool: 'text', label: 'Text', icon: 'text', command: 'tools.text' }],
   [
-    { tool: 'pen', label: 'Pen', icon: 'pen', command: 'tools.pen' },
+    { tool: 'pen', label: 'Pen', icon: 'pen', menuIcon: 'penMenu', command: 'tools.pen' },
     { tool: 'pencil', label: 'Pencil', icon: 'pencil', command: 'tools.pencil' },
   ],
 ];
@@ -257,7 +259,7 @@ function ToolMenu({ items, open, onOpenChange, activeTool, shortcut, onPick }: T
               onClick={() => onPick(item)}
             >
               <span className={styles.check}>{item.tool === activeTool ? '✓' : ''}</span>
-              <Icon name={item.icon} size={24} />
+              <Icon name={item.menuIcon ?? item.icon} size={24} />
               <span className={styles.menuLabel}>{item.label}</span>
               <span className={styles.menuShortcut}>{shortcut(item.command)}</span>
             </div>

@@ -48,7 +48,7 @@ export function MissingFontsNotice({ className }: { className?: string | undefin
   const label = `Missing fonts: ${missing.length}`;
   return (
     <button type="button" className={className} title={label} aria-label={label} onClick={() => editor.state.openDialog('missingFonts')}>
-      <Icon name="text" />
+      <Icon name="missingFonts" />
     </button>
   );
 }
