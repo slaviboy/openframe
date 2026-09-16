@@ -145,16 +145,14 @@ const GROUPS: readonly ToolGroup[] = [
   },
 ];
 
-/**
- * Draw mode's toolbar: the move tools, then the illustration tools. The reference also has a Brush here, which comes with the
- * brush tools; until then the toolbar shows the tools that exist.
- */
+/** Draw mode's toolbar: the move tools, then the illustration tools. */
 const DRAW_GROUPS: readonly ToolGroup[] = [
   GROUPS[0]!,
   {
     label: 'Creation tools',
     items: [
       { tool: 'pen', label: 'Pen', icon: 'pen', menuIcon: 'penMenu', command: 'tools.pen' },
+      { tool: 'brush', label: 'Brush', icon: 'paint', command: 'tools.brush' },
       { tool: 'pencil', label: 'Pencil', icon: 'pencil', command: 'tools.pencil' },
     ],
   },
@@ -241,7 +239,7 @@ export function Toolbar() {
 
   return (
     <>
-      {tool === 'pencil' && <SketchToolbar />}
+      {(tool === 'pencil' || tool === 'brush') && <SketchToolbar brush={tool === 'brush'} />}
     <div
       className={styles.toolbar}
       role="toolbar"
@@ -321,8 +319,8 @@ export function Toolbar() {
   );
 }
 
-/** The Pencil's secondary toolbar: the stroke its sketches take. ⌘-clicking a stroke on the canvas fills it in. */
-function SketchToolbar() {
+/** The Pencil's and Brush's secondary toolbar: the stroke their sketches take. ⌘-clicking a stroke on the canvas fills it in. */
+function SketchToolbar({ brush }: { brush: boolean }) {
   const editor = useEditor();
   const stroke = useEditorState((s) => s.sketchStroke);
   const [anchor, setAnchor] = useState<Box | null>(null);
@@ -367,6 +365,26 @@ function SketchToolbar() {
         <option value="solid">Solid</option>
         <option value="dashed">Dashed</option>
       </select>
+      {/* The Brush paints a dynamic stroke: how many bumps it has, how far they go, and how rounded they are. */}
+      {brush &&
+        ([
+          ['Frequency', 'frequency'],
+          ['Wiggle', 'wiggle'],
+          ['Smoothen', 'smoothen'],
+        ] as const).map(([label, key]) => (
+          <label key={key} className={styles.sketchSlider}>
+            <span>{label}</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              aria-label={`Brush ${label.toLowerCase()}`}
+              value={stroke.dynamic[key]}
+              onChange={(e) => editor.state.setSketchStroke({ dynamic: { ...stroke.dynamic, [key]: Number(e.target.value) } })}
+            />
+          </label>
+        ))}
     </div>
   );
 }

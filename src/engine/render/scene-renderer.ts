@@ -25,6 +25,7 @@ import { maskRuns } from '@/core/scene/masks';
 import { arcCommands } from '@/core/geometry/arc';
 import { strokeChain, variableWidthOutline } from '@/core/vector/vector-width';
 import { networkStrokePath, regionFillPath, type VectorNetwork } from '@/core/vector/vector-network';
+import { dynamicStrokePath, hasDynamicStroke } from '@/core/vector/dynamic-stroke';
 import type { BooleanOperationNode, VectorNode } from '@/core/schema/document';
 import { stackingOrder } from '@/core/layout/auto-layout';
 import {
@@ -1410,7 +1411,9 @@ export class SceneRenderer {
       }
       outline.delete();
     } else if (node.strokeWeight > 0 && node.vectorNetwork.segments.length > 0) {
-      const strokePath = this.pathFrom(networkStrokePath(node.vectorNetwork));
+      // A dynamic stroke bumps the path before it is stroked; it follows the path, so it is the same on every draw.
+      const commands = networkStrokePath(node.vectorNetwork);
+      const strokePath = this.pathFrom(hasDynamicStroke(node.dynamicStroke) ? dynamicStrokePath(commands, node.dynamicStroke) : commands);
       this.applyStrokeStyle(node);
       const cap = node.endpointCap === 'ROUND' ? this.ck.StrokeCap.Round : node.endpointCap === 'SQUARE' ? this.ck.StrokeCap.Square : this.ck.StrokeCap.Butt;
       for (const paint of node.strokes) {

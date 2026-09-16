@@ -48,19 +48,23 @@ function sampleStroke(editor: Editor, world: Vec2): boolean {
   if (!node || !isSceneNode(node) || !('strokes' in node)) return false;
   const paint = node.strokes.find((s) => s.visible && s.type === 'SOLID');
   if (paint?.type !== 'SOLID') return false;
-  editor.state.setSketchStroke({ color: { ...paint.color, a: paint.opacity }, weight: node.strokeWeight, dashed: node.strokeDashes !== undefined });
+  editor.state.setSketchStroke({ color: { ...paint.color, a: paint.opacity }, weight: node.strokeWeight, dashed: node.strokeDashes !== undefined, ...(node.dynamicStroke ? { dynamic: node.dynamicStroke } : {}) });
   return true;
 }
 
 /**
- * Pencil (⇧P): drag to sketch a smoothed vector path with a round 3 px black stroke; hold Shift for a
- * straight line. The tool stays active for the next sketch until Escape or another tool.
+ * Pencil (⇧P) and Brush (B): drag to sketch a smoothed vector path with the stroke the sketch toolbar holds; hold Shift
+ * for a straight line. The Brush gives its sketches a dynamic stroke, for a hand-drawn, bumpy line. The tool stays
+ * active for the next sketch until Escape or another tool.
  */
 export class PencilTool implements Tool {
-  readonly id = 'pencil' as const;
   private sketch: Sketch | null = null;
 
-  constructor(private readonly env: ToolEnvironment) {}
+  /** The Brush is the same tool drawing with a dynamic stroke, so both sketch the same way. */
+  constructor(
+    private readonly env: ToolEnvironment,
+    readonly id: 'pencil' | 'brush' = 'pencil',
+  ) {}
 
   get active(): boolean {
     return this.sketch !== null;
@@ -87,6 +91,7 @@ export class PencilTool implements Tool {
       strokes: [solid(stroke.color)],
       strokeWeight: stroke.weight,
       ...(stroke.dashed ? { strokeDashes: [10, 10] } : {}),
+      ...(this.id === 'brush' ? { dynamicStroke: stroke.dynamic } : {}),
       strokeJoin: 'ROUND',
       endpointCap: 'ROUND',
     });

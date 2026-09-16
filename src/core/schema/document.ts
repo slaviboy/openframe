@@ -554,6 +554,13 @@ export const IndividualStrokeWeightsSchema = z.object({
   left: z.number().min(0),
 });
 
+/** A hand-drawn, bumpy stroke: how many bumps it has, how far they go, and how rounded rather than jagged they are. */
+export const DynamicStrokeSchema = z.object({
+  frequency: z.number().min(0).max(100),
+  wiggle: z.number().min(0).max(100),
+  smoothen: z.number().min(0).max(100),
+});
+
 const GeometryFields = {
   fills: z.array(PaintSchema).max(256),
   strokes: z.array(PaintSchema).max(256),
@@ -571,6 +578,8 @@ const GeometryFields = {
   strokeJoin: StrokeJoinSchema.optional(),
   /** Miter joins become bevels at corners sharper than this angle, in degrees; absent means 28.96. */
   strokeMiterAngle: z.number().min(0).max(180).optional(),
+  /** Dynamic stroke: a hand-drawn, bumpy stroke. Absent for a plain one. */
+  dynamicStroke: DynamicStrokeSchema.optional(),
 };
 
 const CornerFields = {
@@ -1125,6 +1134,7 @@ export type ImageFilters = z.infer<typeof ImageFiltersSchema>;
 export type PatternPaint = z.infer<typeof PatternPaintSchema>;
 export type StrokeAlign = z.infer<typeof StrokeAlignSchema>;
 export type StrokeJoin = z.infer<typeof StrokeJoinSchema>;
+export type DynamicStroke = z.infer<typeof DynamicStrokeSchema>;
 export type Effect = z.infer<typeof EffectSchema>;
 export type EffectType = Effect['type'];
 export type ShadowEffect = Extract<Effect, { offset: unknown }>;

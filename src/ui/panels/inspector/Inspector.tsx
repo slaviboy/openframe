@@ -39,6 +39,7 @@ import {
   type TextureEffect,
 } from '@/core/effects/effects';
 import { moveItem } from '@/core/collections/move-item';
+import { DEFAULT_DYNAMIC_STROKE } from '@/core/vector/dynamic-stroke';
 import { IOS_CORNER_SMOOTHING } from '@/core/geometry/corners';
 import { backgroundColorBehind } from '@/core/color/contrast';
 import { useColorProfile } from '../../hooks/useColorProfile';
@@ -166,6 +167,7 @@ import {
   setStrokeDashes,
   setStrokeJoin,
   setStrokeMiterAngle,
+  setDynamicStroke,
   setStrokeWeight,
   shared,
   type Mixed,
@@ -2866,6 +2868,8 @@ function StrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
   const run = (label: string, apply: (tx: Parameters<Parameters<typeof editor.history.run>[1]>[0], node: GeometryNode) => void) =>
     editor.history.run(label, (tx) => nodes.forEach((n) => apply(tx, tx.store.getOrThrow(n.id) as GeometryNode)));
 
+  const dynamicGesture = useGesture('Change dynamic stroke');
+  const dynamic = val(shared(nodes, (n) => n.dynamicStroke, (a, b) => a?.frequency === b?.frequency && a?.wiggle === b?.wiggle && a?.smoothen === b?.smoothen));
   const style = shared(nodes, (n) => (n.strokeDashes ? 'dashed' : 'solid'));
   const join = shared(nodes, (n) => n.strokeJoin ?? 'MITER');
   const dashes = style === 'dashed' ? nodes[0]!.strokeDashes : undefined;
@@ -2922,6 +2926,22 @@ function StrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
             <option value="SQUARE">Square</option>
           </select>
         </div>
+      )}
+      {/* Dynamic stroke: the hand-drawn look. It is drawn down the middle of the path, so it centers the stroke. */}
+      <label className={styles.checkbox}>
+        <input
+          type="checkbox"
+          checked={dynamic !== undefined}
+          onChange={(e) => run(e.target.checked ? 'Add dynamic stroke' : 'Remove dynamic stroke', (tx, n) => setDynamicStroke(tx, n, e.target.checked ? (dynamic ?? DEFAULT_DYNAMIC_STROKE) : undefined))}
+        />
+        Dynamic stroke
+      </label>
+      {dynamic && (
+        <>
+          <SliderRow label="Frequency" min={0} max={100} value={dynamic.frequency} gesture={dynamicGesture} onChange={(v) => dynamicGesture.change((tx) => nodes.forEach((n) => setDynamicStroke(tx, tx.store.getOrThrow(n.id) as GeometryNode, { ...dynamic, frequency: v })))} />
+          <SliderRow label="Wiggle" min={0} max={100} value={dynamic.wiggle} gesture={dynamicGesture} onChange={(v) => dynamicGesture.change((tx) => nodes.forEach((n) => setDynamicStroke(tx, tx.store.getOrThrow(n.id) as GeometryNode, { ...dynamic, wiggle: v })))} />
+          <SliderRow label="Smoothen" min={0} max={100} value={dynamic.smoothen} gesture={dynamicGesture} onChange={(v) => dynamicGesture.change((tx) => nodes.forEach((n) => setDynamicStroke(tx, tx.store.getOrThrow(n.id) as GeometryNode, { ...dynamic, smoothen: v })))} />
+        </>
       )}
       {join === 'MITER' && (
         <div className={styles.grid2}>

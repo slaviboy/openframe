@@ -62,3 +62,38 @@ test('the Pencil draws with the stroke its toolbar sets, and ⌘-click samples o
   await expect(page.getByRole('treeitem', { name: /Vector 2/ })).toBeVisible();
   await expect(page.getByTestId('field-stroke-weight')).toHaveValue('8');
 });
+
+test('the Brush paints a dynamic stroke, which the Stroke section adjusts', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  // The Brush lives in Draw's toolbar, next to the Pen and the Pencil.
+  await page.keyboard.press('Shift+D');
+  const toolbar = page.getByRole('toolbar', { name: 'Tools' });
+  await toolbar.getByRole('button', { name: 'Creation tools' }).click();
+  await page.getByRole('menuitemradio', { name: /Brush/ }).click();
+  const bar = page.getByRole('toolbar', { name: 'Sketch stroke' });
+  await expect(bar.getByRole('slider', { name: 'Brush wiggle' })).toBeVisible();
+  await bar.getByRole('slider', { name: 'Brush wiggle' }).fill('80');
+
+  await page.mouse.move(box.x + 420, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 620, box.y + 300, { steps: 10 });
+  await page.mouse.up();
+  await expect(page.getByRole('treeitem', { name: /Vector 1/ })).toBeVisible();
+
+  // Its stroke is dynamic, with the wiggle the brush was set to.
+  const dynamic = page.getByRole('checkbox', { name: 'Dynamic stroke' });
+  await expect(dynamic).toBeChecked();
+  await expect(page.getByRole('slider', { name: 'Wiggle slider' })).toHaveValue('80');
+
+  // Turning it off in the Stroke section leaves a plain stroke, and it stays off after a reload.
+  await dynamic.uncheck();
+  await expect(page.getByRole('slider', { name: 'Wiggle slider' })).toHaveCount(0);
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+  await page.reload();
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await page.getByRole('treeitem', { name: /Vector 1/ }).click();
+  await expect(page.getByRole('checkbox', { name: 'Dynamic stroke' })).not.toBeChecked();
+});

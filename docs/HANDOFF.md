@@ -265,6 +265,8 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 - The Pencil's secondary toolbar and stroke sampling (row 253, after Draw's UI): `sketchStroke` in the editor store (color, weight, dashed; `DEFAULT_SKETCH_STROKE` is the reference's thin black line) is what `PencilTool` gives a new sketch, and `SketchToolbar` in `Toolbar.tsx` sets it — it shows while the Pencil is the tool. ⌘-click with the Pencil calls `sampleStroke`, which hit-tests the layer under the pointer and takes its solid stroke's color, weight and style instead of drawing. The Brush tool waits for brush styles to mean something. The bar keeps its own CSS rather than importing `primitives.module.css`: pulling that (and ColorPicker and NumberField) into the toolbar's chunk shifted startup timing enough that `prototype-flow-tag.spec.ts` began failing in Chromium — it double-clicks a fixed canvas point and so races the prototype chrome's first draw. Worth remembering when a canvas test starts failing after an unrelated import.
 
+- Dynamic strokes and the Brush (rows 166 and 253, after the Pencil's toolbar): `dynamicStrokePath` (`src/core/vector/dynamic-stroke.ts`) samples a path and moves each point along its normal by an offset taken from its distance along the path, so the bumps are the same on every draw; Frequency is how many, Wiggle how far, Smoothen how rounded (it blends a cornered interpolation with a cosine one). `dynamicStroke` on a layer carries them, `setDynamicStroke` centers the stroke as the reference requires, and the scene renderer bumps the path before stroking a vector network. The Brush is `PencilTool` with `id: 'brush'`, which gives its sketches the `sketchStroke.dynamic` settings its toolbar holds.
+
 ## In progress (uncommitted)
 
 Nothing. The working tree is clean apart from anything noted above.
@@ -282,8 +284,7 @@ To continue in a new session, tell the assistant: *Read `docs/HANDOFF.md`, check
 **M10 (prototyping): rows still In progress**
 
 **M11 (Draw mode): all Planned**
-- The Brush tool and its styles (the Pencil's half of this row is done)
-- Brushes with dynamic strokes (frequency, wiggle, smoothen); custom stretch and scatter brushes
+- Custom stretch and scatter brushes
 - Text on a path
 - Transforms: radial and linear repeat, apply transforms
 

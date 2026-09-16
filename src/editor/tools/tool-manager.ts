@@ -150,6 +150,7 @@ export class ToolManager {
       pickLayer: new LayerPickTool(this.env),
       pen: new PenTool(this.env),
       pencil: new PencilTool(this.env),
+      brush: new PencilTool(this.env, 'brush'),
     };
     let previous = editor.state.getSnapshot().tool;
     editor.state.subscribe(() => {

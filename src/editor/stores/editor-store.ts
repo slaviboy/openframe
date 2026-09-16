@@ -18,26 +18,29 @@
 import type { DocumentStore } from '@/core/document/store';
 import type { Id } from '@/core/ids/ids';
 import type { CropAspect } from '@/core/image/crop';
-import type { Color, Paint } from '@/core/schema/document';
+import type { Color, DynamicStroke, Paint } from '@/core/schema/document';
+import { DEFAULT_DYNAMIC_STROKE } from '@/core/vector/dynamic-stroke';
 import type { SegmentEnd } from '@/core/vector/vector-bend';
 import { DEFAULT_VIEWPORT, type Viewport } from '../viewport/viewport';
 import { Observable } from './observable';
 
-export type ToolId = 'move' | 'hand' | 'scale' | 'frame' | 'section' | 'slice' | 'rectangle' | 'line' | 'arrow' | 'ellipse' | 'polygon' | 'star' | 'text' | 'image' | 'eyedropper' | 'pickLayer' | 'pen' | 'pencil';
+export type ToolId = 'move' | 'hand' | 'scale' | 'frame' | 'section' | 'slice' | 'rectangle' | 'line' | 'arrow' | 'ellipse' | 'polygon' | 'star' | 'text' | 'image' | 'eyedropper' | 'pickLayer' | 'pen' | 'pencil' | 'brush';
 
 /** Fixed point for the Scale panel: one of nine positions on the selection bounds. */
 export type ScaleAnchor = 'nw' | 'n' | 'ne' | 'w' | 'c' | 'e' | 'sw' | 's' | 'se';
 export type EditorMode = 'design' | 'draw' | 'dev' | 'motion';
 
-/** A sketch's stroke: its color, how thick it is, and whether it is dashed. */
+/** A sketch's stroke: its color, how thick it is, whether it is dashed, and the Brush's hand-drawn bumps. */
 export interface SketchStroke {
   readonly color: Color;
   readonly weight: number;
   readonly dashed: boolean;
+  /** What the Brush gives its strokes; the Pencil draws a plain line. */
+  readonly dynamic: DynamicStroke;
 }
 
 /** A new sketch's stroke until it is changed: a thin black line, as the reference's Pencil draws. */
-export const DEFAULT_SKETCH_STROKE: SketchStroke = { color: { r: 0, g: 0, b: 0, a: 1 }, weight: 3, dashed: false };
+export const DEFAULT_SKETCH_STROKE: SketchStroke = { color: { r: 0, g: 0, b: 0, a: 1 }, weight: 3, dashed: false, dynamic: DEFAULT_DYNAMIC_STROKE };
 export type RightPanelTab = 'design' | 'prototype';
 
 /** A ruler guide: its owner (the page or a frame) and its index in the owner's `guides`. */

@@ -23,6 +23,7 @@ import { matrixOf } from '@/core/scene/scene-index';
 import type { Constraint, LayoutGuide } from '@/core/schema/document';
 import {
   DEFAULT_MITER_ANGLE,
+  type DynamicStroke,
   hasGeometry,
   isSceneNode,
   type BlendMode,
@@ -227,6 +228,17 @@ export function setStrokeMiterAngle(tx: Transaction, node: SceneNode, degrees: n
   if (!hasGeometry(node)) return;
   const angle = Math.min(180, Math.max(0, Math.round(degrees * 100) / 100));
   tx.set(node.id, 'strokeMiterAngle', angle === DEFAULT_MITER_ANGLE ? undefined : angle);
+}
+
+/**
+ * A layer's dynamic stroke — the hand-drawn, bumpy look. Turning it on centers the stroke, which is the only position
+ * a dynamic stroke takes; `undefined` turns it off again.
+ */
+export function setDynamicStroke(tx: Transaction, node: SceneNode, dynamic: DynamicStroke | undefined): void {
+  if (!hasGeometry(node)) return;
+  const clamp = (v: number) => Math.min(100, Math.max(0, Math.round(v)));
+  tx.set(node.id, 'dynamicStroke', dynamic ? { frequency: clamp(dynamic.frequency), wiggle: clamp(dynamic.wiggle), smoothen: clamp(dynamic.smoothen) } : undefined);
+  if (dynamic) tx.set(node.id, 'strokeAlign', 'CENTER');
 }
 
 /**
