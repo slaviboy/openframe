@@ -33,6 +33,7 @@ import type { DuplicateMemory } from '../editor';
 import type { Vec2 } from '@/core/math/vec';
 import { hitTestDeepest, isArtboardWithChildren, isInteractive, marqueeSelect, selectionTarget } from '@/core/scene/hit-test';
 import { connectDestinationAt, connectHandle, connectionAt, connectionsInScreenRect, flowTagAt, hitConnectHandle, overlayBadgeAt, variantDestinationAt } from '../chrome/prototype-geometry';
+import { hitTextPathHandle, textPathHandle, textPathPositionAt } from '../chrome/text-path-handle';
 import { variantSetOf } from '@/core/prototype/reactions';
 import { addInteraction, moveFlowStartingPoint, removeConnections, removeFlowStartingPoint, setConnectionsDestination, type ConnectionRef } from '../commands/prototype';
 import { snapEqualGaps, type GapIndicator } from '@/core/scene/equal-gaps';
@@ -187,6 +188,7 @@ type Gesture =
     }
   /** Prototype tab: dragging the selection's + to a destination frame connects the selection to it. */
   | { kind: 'connect'; sourceIds: readonly Id[]; start: Vec2; current: PointerInfo; destination: Id | null }
+  | { kind: 'text-path-start'; nodeId: Id; tx: Transaction }
   /** Prototype tab: pressing a connection's noodle selects it; dragging the selected connections moves their destination. */
   | { kind: 'connection'; refs: readonly ConnectionRef[]; down: PointerInfo; current: PointerInfo; dragged: boolean; destination: Id | null; overEmpty: boolean }
   | { kind: 'flow-tag'; nodeId: Id; down: PointerInfo; current: PointerInfo; dragged: boolean; destination: Id | null; overEmpty: boolean };
@@ -347,6 +349,12 @@ export class MoveTool implements Tool {
     if (connect && hitConnectHandle(editor, p.screen)) {
       editor.scene.ensure(editor.pageId);
       this.gesture = { kind: 'connect', sourceIds: connect.sourceIds, start: connect.center, current: p, destination: null };
+      return;
+    }
+    // Text on a path: the handle that moves the text along its path.
+    if (this.id === 'move' && hitTextPathHandle(editor, p.screen)) {
+      const handle = textPathHandle(editor)!;
+      this.gesture = { kind: 'text-path-start', nodeId: handle.nodeId, tx: editor.history.begin('Move text on path') };
       return;
     }
     // Prototype tab: a flow starting point's tag. Its preview icon opens inline preview at the flow; its name is dragged
@@ -638,6 +646,16 @@ export class MoveTool implements Tool {
         g.last = p;
         this.applyLayoutHandle(p);
         return;
+      case 'text-path-start': {
+        const position = textPathPositionAt(this.env.editor, g.nodeId, p.world);
+        const node = this.env.editor.doc.get(g.nodeId);
+        if (position !== null && node?.type === 'TEXT' && node.textPath) {
+          g.tx.set(g.nodeId, 'textPath', { ...node.textPath, start: position });
+          g.tx.flushPreview();
+          this.env.editor.requestRender();
+        }
+        return;
+      }
       case 'connect':
         g.current = p;
         // From a variant, another variant of its set is a Change to destination; otherwise a top-level frame.
@@ -730,6 +748,9 @@ export class MoveTool implements Tool {
       case 'grid-track':
         editor.history.commit(g.tx);
         break;
+      case 'text-path-start':
+        this.env.editor.history.commit(g.tx);
+        return;
       case 'connect':
         // Dropped on a frame: each source gets an interaction navigating to it.
         if (g.destination) {

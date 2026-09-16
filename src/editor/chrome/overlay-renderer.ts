@@ -60,6 +60,7 @@ import { noodleBetween, type Noodle } from '@/core/prototype/connections';
 import { flowsOf } from '@/core/prototype/flows';
 import { CONNECT_HANDLE_SIZE, connectHandle, FLOW_TAG_ICON_WIDTH, overlayBadgeRect, overlayFrames, screenBounds, setFlowTags, shownConnections, type FlowTagRect } from './prototype-geometry';
 import { animatedGifHash } from '../images/animated-gif';
+import { TEXT_PATH_HANDLE_SIZE, textPathHandle } from './text-path-handle';
 
 /** The label an animated GIF gets next to its size. */
 const GIF_TAG = 'GIF';
@@ -347,6 +348,17 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
     drawSizeLabel(ctx, quad, frame, theme, isLineFrame(editor, frame), animatedGifHash(editor, frame.nodeId) !== undefined);
     const addVariant = addVariantButtonRect(editor);
     if (addVariant) drawAddVariantButton(ctx, addVariant, theme);
+    // Text on a path: the handle that moves the text along its path.
+    const textPath = textPathHandle(editor);
+    if (textPath) {
+      ctx.beginPath();
+      ctx.arc(textPath.center.x, textPath.center.y, TEXT_PATH_HANDLE_SIZE / 2, 0, Math.PI * 2);
+      ctx.fillStyle = theme.handleFill;
+      ctx.fill();
+      ctx.strokeStyle = theme.selection;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
   }
 
   if (input.insertion) {

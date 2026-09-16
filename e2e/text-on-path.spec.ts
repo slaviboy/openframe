@@ -46,10 +46,20 @@ test('text placed on a vector path follows it, and can be flipped or moved along
   await text.click();
   await expect(page.getByTestId('field-x')).toHaveValue(pathX);
 
+  // The handle on the path drags the text along it.
+  const start = page.getByRole('slider', { name: 'Text start on path' });
+  await expect(start).toHaveValue('0');
+  await page.mouse.move(box.x + 380, box.y + 320);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 560, box.y + 320, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => Number(await start.inputValue())).toBeGreaterThan(20);
+  await page.keyboard.press('ControlOrMeta+Z');
+  await expect.poll(async () => Number(await start.inputValue())).toBe(0);
+
   // The path controls belong to text on a path only.
   const flip = page.getByRole('checkbox', { name: 'Flip text orientation' });
   await expect(flip).not.toBeChecked();
-  const start = page.getByRole('slider', { name: 'Text start on path' });
   await start.fill('30');
   await flip.check();
 
