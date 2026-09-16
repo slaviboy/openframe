@@ -269,6 +269,8 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 - Custom brushes (row 254, after dynamic strokes): a `BRUSH` node holds a closed vector layer's network and the size it was made at, beside the file's styles; `brushId` on a layer says which brush paints its stroke. `brushStrokeOutlines` (`src/core/vector/brush.ts`) turns a stroke chain into filled polygons: a stretch brush maps the shape's x to distance along the path and its y across it, a scatter brush repeats the shape along the path facing its direction, and both scale to the stroke's weight. `createBrush` (Create brush on a layer's menu) needs a closed network — every vertex of degree 2 — and the renderer fills those polygons with the stroke's paints instead of stroking the path.
 
+- Text on a path (row 146, after custom brushes): `textPath` on a text layer names the vector it follows, where it starts (0–1) and whether it is flipped; the text layer copies the path's transform, so the path's own coordinates lay it out. `TextShaper.drawOnPath` shapes the text as one line and draws each character clipped out of that line at the point along the path its place falls, turned to the path's direction — kerning and ligatures survive, since the line is shaped whole. `pathRunFor` (`src/core/vector/text-path.ts`) walks the path. `TextPathTool` places it, and Typography has Flip text orientation and Start. The blue handle on the canvas for the start is still to come.
+
 ## In progress (uncommitted)
 
 Nothing. The working tree is clean apart from anything noted above.
@@ -286,7 +288,7 @@ To continue in a new session, tell the assistant: *Read `docs/HANDOFF.md`, check
 **M10 (prototyping): rows still In progress**
 
 **M11 (Draw mode): all Planned**
-- Text on a path
+- Text on a path: the blue start handle on the canvas (the rest of the row is done)
 - Transforms: radial and linear repeat, apply transforms
 
 **M12 (Motion mode)**

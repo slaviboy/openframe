@@ -27,6 +27,7 @@ import { strokeChain, variableWidthOutline } from '@/core/vector/vector-width';
 import { networkStrokePath, regionFillPath, type VectorNetwork } from '@/core/vector/vector-network';
 import { dynamicStrokePath, hasDynamicStroke } from '@/core/vector/dynamic-stroke';
 import { brushStrokeOutlines, isBrush } from '@/core/vector/brush';
+import { pathRunFor } from '@/core/vector/text-path';
 import type { BooleanOperationNode, VectorNode } from '@/core/schema/document';
 import { stackingOrder } from '@/core/layout/auto-layout';
 import {
@@ -564,6 +565,7 @@ export class SceneRenderer {
           },
           // Underlines once, over the top fill.
           i === layers - 1,
+          store,
         );
       }
       return;
@@ -1068,7 +1070,7 @@ export class SceneRenderer {
   }
 
   /** Draws a text layer's glyphs, each mixed-style segment painted with the paint `paintFor` returns. */
-  private drawText(canvas: Canvas, node: TextNode, paintFor: (segment: TextSegment) => CkPaint, decorations = true): void {
+  private drawText(canvas: Canvas, node: TextNode, paintFor: (segment: TextSegment) => CkPaint, decorations = true, store?: DocumentStore): void {
     const shaper = this.textShaper;
     if (!shaper || node.characters === '') return;
     const painter = {
@@ -1085,7 +1087,10 @@ export class SceneRenderer {
         return this.ck.BLACK;
       },
     };
-    shaper.draw(canvas, node, painter);
+    // Text on a path follows the vector it was placed on; the two share a transform, so the path is read as it is.
+    const run = node.textPath && store ? pathRunFor(store, node.textPath.pathId) : null;
+    if (run && node.textPath) shaper.drawOnPath(canvas, node, painter, run, node.textPath.start, node.textPath.flipped);
+    else shaper.draw(canvas, node, painter);
   }
 
   /** Outline mode: a hairline (one device pixel at any zoom) along the layer's geometry. */

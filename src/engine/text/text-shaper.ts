@@ -127,6 +127,12 @@ interface CachedLayout {
  * the layer's paragraph spacing and offset by its first-line indent. Implements the editor's text
  * layout service and draws for the renderer, so what is measured is exactly what is drawn.
  */
+/** A path text is drawn along: how long it is, and the point and direction at a distance along it. */
+export interface PathRun {
+  readonly length: number;
+  at(distance: number): { readonly point: { readonly x: number; readonly y: number }; readonly tangent: { readonly x: number; readonly y: number } };
+}
+
 export class TextShaper implements TextLayoutService {
   private readonly provider: TypefaceFontProvider;
   private readonly families: string[] = [];
@@ -665,6 +671,44 @@ export class TextShaper implements TextLayoutService {
     builder.delete();
     paragraph.layout(UNBOUNDED);
     return paragraph;
+  }
+
+  /**
+   * Draws a text layer along a path: the text is laid out as one line, and each character is drawn where its place in
+   * that line falls along the path, turned to face the way the path goes. The character is clipped out of the line as
+   * it was shaped, so kerning and ligatures hold; `start` moves the text along the path, and `flipped` puts it on the
+   * other side, reading the other way.
+   */
+  drawOnPath(canvas: Canvas, node: TextNode, painter: TextPainter, path: PathRun, start: number, flipped: boolean): void {
+    if (node.characters === '') return;
+    const block = this.stack({ ...node, textAlignHorizontal: 'LEFT' }, null, painter);
+    const first = block.paragraphs.find((p) => !p.hidden);
+    if (!first) {
+      deleteBlock(block);
+      return;
+    }
+    const paragraph = first.paragraph;
+    const baseline = paragraph.getAlphabeticBaseline();
+    const offset = start * path.length;
+    for (let i = 0; i < node.characters.length; i++) {
+      const rect = paragraph.getRectsForRange(i, i + 1, this.ck.RectHeightStyle.Max, this.ck.RectWidthStyle.Tight)[0];
+      if (!rect) continue;
+      const [x0 = 0, top = 0, x1 = 0, bottom = 0] = rect.rect;
+      const center = (x0 + x1) / 2;
+      const distance = flipped ? path.length - (offset + center) : offset + center;
+      if (distance < 0 || distance > path.length) continue;
+      const at = path.at(distance);
+      const angle = (Math.atan2(at.tangent.y, at.tangent.x) * 180) / Math.PI + (flipped ? 180 : 0);
+      canvas.save();
+      canvas.translate(at.point.x, at.point.y);
+      canvas.rotate(angle, 0, 0);
+      canvas.translate(-center, -baseline);
+      // Only this character of the line is drawn, so the rest of it stays off the path.
+      canvas.clipRect(this.ck.LTRBRect(x0 - 0.5, top - 1, x1 + 0.5, bottom + 1), this.ck.ClipOp.Intersect, true);
+      canvas.drawParagraph(paragraph, 0, 0);
+      canvas.restore();
+    }
+    deleteBlock(block);
   }
 
   /** Draws a text layer's glyphs and list markers, each mixed-style segment painted by `painter`. */

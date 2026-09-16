@@ -968,6 +968,11 @@ export const TextNodeSchema = z.object({
   ...GeometryFields,
   type: z.literal('TEXT'),
   characters: z.string().max(1_000_000),
+  /**
+   * Text on a path: the vector layer whose path the text follows (the two share a transform, so the path is read in
+   * this layer's own space), where along it the text starts (0–1), and whether it sits on the other side.
+   */
+  textPath: z.object({ pathId: IdSchema, start: z.number().min(0).max(1), flipped: z.boolean() }).optional(),
   fontName: FontNameSchema,
   /** The text style the typography comes from, while it is applied. */
   textStyleId: IdSchema.optional(),

@@ -35,6 +35,7 @@ import { LineTool } from './line-tool';
 import { VectorEditController } from '../interactions/vector-edit';
 import { PenTool } from './pen-tool';
 import { PencilTool } from './pencil-tool';
+import { TextPathTool } from './text-path-tool';
 import { TextTool } from './text-tool';
 import { TextEditController, watchTextEdit } from '../interactions/text-edit';
 import { MoveTool } from './move-tool';
@@ -151,6 +152,7 @@ export class ToolManager {
       pen: new PenTool(this.env),
       pencil: new PencilTool(this.env),
       brush: new PencilTool(this.env, 'brush'),
+      textOnPath: new TextPathTool(this.env),
     };
     let previous = editor.state.getSnapshot().tool;
     editor.state.subscribe(() => {

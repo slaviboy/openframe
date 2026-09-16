@@ -91,6 +91,7 @@ const TOOL_COMMANDS: CommandDefinition[] = (
     ['tools.pen', 'Pen', 'pen', ['P']],
     ['tools.pencil', 'Pencil', 'pencil', ['Shift+P']],
     ['tools.brush', 'Brush', 'brush', ['B']],
+    ['tools.textOnPath', 'Text on a path', 'textOnPath', []],
   ] as const
 ).map(([id, label, tool, shortcuts]) => ({
   id,

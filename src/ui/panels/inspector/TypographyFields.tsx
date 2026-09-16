@@ -89,6 +89,7 @@ import { unbindVariable } from '@/editor/commands/variables';
 import { sharedBoundVariable, VariableBindingControl, VariableNumberField, VariablePicker } from './VariableFields';
 import primitives from '../../primitives/primitives.module.css';
 import styles from './Inspector.module.css';
+import gradientStyles from './Gradient.module.css';
 
 const H_ALIGN: readonly (readonly [TextAlignHorizontal, IconName, string])[] = [
   ['LEFT', 'textAlignLeft', 'Align left'],
@@ -195,8 +196,39 @@ export function TypographyFields({ nodes }: { nodes: readonly TextNode[] }) {
     return variable ? { name: variable.name, onDetach: () => unbindVariable(editor, nodes.map((n) => n.id), field) } : undefined;
   };
 
+  // Text on a path: where along the path it starts, and which side of it the text sits on.
+  const onPath = nodes.length > 0 && nodes.every((n) => n.textPath !== undefined) ? nodes[0]!.textPath : undefined;
+  const editPath = (patch: Partial<NonNullable<TextNode['textPath']>>, label: string) =>
+    editor.history.run(label, (tx) =>
+      nodes.forEach((n) => {
+        const current = (tx.store.getOrThrow(n.id) as TextNode).textPath;
+        if (current) tx.set(n.id, 'textPath', { ...current, ...patch });
+      }),
+    );
+
   return (
     <>
+      {onPath && (
+        <>
+          <label className={styles.checkbox}>
+            <input type="checkbox" checked={onPath.flipped} onChange={(e) => editPath({ flipped: e.target.checked }, 'Flip text orientation')} />
+            Flip text orientation
+          </label>
+          <div className={gradientStyles.adjustRow}>
+            <span aria-hidden="true">Start</span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={1}
+              aria-label="Text start on path"
+              value={Math.round(onPath.start * 100)}
+              onChange={(e) => editPath({ start: Number(e.target.value) / 100 }, 'Move text on path')}
+            />
+            <output>{Math.round(onPath.start * 100)}%</output>
+          </div>
+        </>
+      )}
       <FamilyControl nodes={nodes} range={range} family={family} available={available} />
       {/* Labelled so they don't share a name with the Font family and Font style controls. */}
       <div className={styles.buttonRow}>

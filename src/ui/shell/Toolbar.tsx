@@ -30,7 +30,7 @@ import { useHoverTooltip } from '../primitives/HoverTooltip';
 import styles from './Toolbar.module.css';
 
 /** Tools shown in the toolbar that are not implemented yet: they appear, but can't be chosen. */
-type PendingTool = 'textOnPath' | 'comment';
+type PendingTool = 'comment';
 
 interface ToolItem {
   readonly tool: ToolId | PendingTool;
@@ -136,7 +136,7 @@ const GROUPS: readonly ToolGroup[] = [
     label: 'Type tools',
     items: [
       { tool: 'text', label: 'Text', icon: 'textTool', command: 'tools.text' },
-      { tool: 'textOnPath', label: 'Text on path', icon: 'textOnPath' },
+      { tool: 'textOnPath', label: 'Text on a path', icon: 'textOnPath', command: 'tools.textOnPath' },
     ],
   },
   {
