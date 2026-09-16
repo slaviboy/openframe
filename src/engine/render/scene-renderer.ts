@@ -26,6 +26,7 @@ import { arcCommands } from '@/core/geometry/arc';
 import { strokeChain, variableWidthOutline } from '@/core/vector/vector-width';
 import { networkStrokePath, regionFillPath, type VectorNetwork } from '@/core/vector/vector-network';
 import { dynamicStrokePath, hasDynamicStroke } from '@/core/vector/dynamic-stroke';
+import { brushStrokeOutlines, isBrush } from '@/core/vector/brush';
 import type { BooleanOperationNode, VectorNode } from '@/core/schema/document';
 import { stackingOrder } from '@/core/layout/auto-layout';
 import {
@@ -457,7 +458,7 @@ export class SceneRenderer {
 
     if (node.id === ctx.cropping && node.type !== 'GROUP' && node.type !== 'LINE') this.drawCropPreview(canvas, node);
     if (node.type !== 'GROUP') {
-      this.drawGeometry(canvas, node, ctx.pixelSize);
+      this.drawGeometry(canvas, node, ctx.pixelSize, ctx.store);
       ctx.stats.drawn++;
     }
 
@@ -543,7 +544,7 @@ export class SceneRenderer {
     path.delete();
   }
 
-  private drawGeometry(canvas: Canvas, node: GeometryNode, _pixelSize: number): void {
+  private drawGeometry(canvas: Canvas, node: GeometryNode, _pixelSize: number, store: DocumentStore): void {
     if (node.type === 'LINE') {
       this.drawLine(canvas, node);
       return;
@@ -568,7 +569,7 @@ export class SceneRenderer {
       return;
     }
     if (node.type === 'VECTOR') {
-      this.drawVector(canvas, node);
+      this.drawVector(canvas, node, store);
       return;
     }
     if (node.type === 'BOOLEAN_OPERATION') {
@@ -808,7 +809,7 @@ export class SceneRenderer {
 
   /** The layer's own geometry, children and frame strokes, without its effects (the source of a blended shadow). */
   private drawSilhouette(canvas: Canvas, node: SceneNode, children: readonly Id[], clips: boolean, ctx: DrawContext): void {
-    if (node.type !== 'GROUP' && node.type !== 'SLICE') this.drawGeometry(canvas, node, ctx.pixelSize);
+    if (node.type !== 'GROUP' && node.type !== 'SLICE') this.drawGeometry(canvas, node, ctx.pixelSize, ctx.store);
     if (children.length > 0) {
       if (clips) {
         canvas.save();
@@ -1376,7 +1377,7 @@ export class SceneRenderer {
   }
 
   /** A vector layer: fills over its closed regions, strokes along every segment with the endpoint cap. */
-  private drawVector(canvas: Canvas, node: VectorNode): void {
+  private drawVector(canvas: Canvas, node: VectorNode, store: DocumentStore): void {
     const fillPath = this.vectorFillPath(node);
     const network = node.vectorNetwork;
     if (fillPath && network.regions.some((r) => r.fills)) {
@@ -1399,7 +1400,20 @@ export class SceneRenderer {
     }
     const widths = node.strokeWidths;
     const chain = widths && widths.length > 0 && !node.strokeDashes ? strokeChain(node.vectorNetwork) : null;
-    if (widths && chain) {
+    // A custom brush paints the stroke as its own shape along the path, filled with the stroke's paints.
+    const brush = node.brushId === undefined ? undefined : store.get(node.brushId);
+    const brushChain = isBrush(brush) && node.strokeWeight > 0 ? strokeChain(node.vectorNetwork) : null;
+    if (isBrush(brush) && brushChain) {
+      const builder = new this.ck.PathBuilder();
+      for (const polygon of brushStrokeOutlines(brushChain, brush.vectorNetwork, brush.size, brush.brushKind, node.strokeWeight)) builder.addPolygon(polygon.flatMap((q) => [q.x, q.y]), true);
+      const outline = builder.detachAndDelete();
+      for (const paint of node.strokes) {
+        if (!paint.visible || paint.opacity <= 0) continue;
+        this.configurePaint(this.fillPaint, paint, node.size);
+        canvas.drawPath(outline, this.fillPaint);
+      }
+      outline.delete();
+    } else if (widths && chain) {
       // A variable-width stroke is its outline, filled with the stroke paints.
       const builder = new this.ck.PathBuilder();
       for (const polygon of variableWidthOutline(chain, widths, node.strokeWeight)) builder.addPolygon(polygon.flatMap((q) => [q.x, q.y]), true);

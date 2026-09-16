@@ -267,6 +267,8 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 - Dynamic strokes and the Brush (rows 166 and 253, after the Pencil's toolbar): `dynamicStrokePath` (`src/core/vector/dynamic-stroke.ts`) samples a path and moves each point along its normal by an offset taken from its distance along the path, so the bumps are the same on every draw; Frequency is how many, Wiggle how far, Smoothen how rounded (it blends a cornered interpolation with a cosine one). `dynamicStroke` on a layer carries them, `setDynamicStroke` centers the stroke as the reference requires, and the scene renderer bumps the path before stroking a vector network. The Brush is `PencilTool` with `id: 'brush'`, which gives its sketches the `sketchStroke.dynamic` settings its toolbar holds.
 
+- Custom brushes (row 254, after dynamic strokes): a `BRUSH` node holds a closed vector layer's network and the size it was made at, beside the file's styles; `brushId` on a layer says which brush paints its stroke. `brushStrokeOutlines` (`src/core/vector/brush.ts`) turns a stroke chain into filled polygons: a stretch brush maps the shape's x to distance along the path and its y across it, a scatter brush repeats the shape along the path facing its direction, and both scale to the stroke's weight. `createBrush` (Create brush on a layer's menu) needs a closed network — every vertex of degree 2 — and the renderer fills those polygons with the stroke's paints instead of stroking the path.
+
 ## In progress (uncommitted)
 
 Nothing. The working tree is clean apart from anything noted above.
@@ -284,7 +286,6 @@ To continue in a new session, tell the assistant: *Read `docs/HANDOFF.md`, check
 **M10 (prototyping): rows still In progress**
 
 **M11 (Draw mode): all Planned**
-- Custom stretch and scatter brushes
 - Text on a path
 - Transforms: radial and linear repeat, apply transforms
 

@@ -40,6 +40,7 @@ import {
 } from '@/core/effects/effects';
 import { moveItem } from '@/core/collections/move-item';
 import { DEFAULT_DYNAMIC_STROKE } from '@/core/vector/dynamic-stroke';
+import { applyBrush, localBrushes } from '@/editor/commands/brushes';
 import { IOS_CORNER_SMOOTHING } from '@/core/geometry/corners';
 import { backgroundColorBehind } from '@/core/color/contrast';
 import { useColorProfile } from '../../hooks/useColorProfile';
@@ -2868,6 +2869,7 @@ function StrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
   const run = (label: string, apply: (tx: Parameters<Parameters<typeof editor.history.run>[1]>[0], node: GeometryNode) => void) =>
     editor.history.run(label, (tx) => nodes.forEach((n) => apply(tx, tx.store.getOrThrow(n.id) as GeometryNode)));
 
+  const brushes = localBrushes(editor.doc);
   const dynamicGesture = useGesture('Change dynamic stroke');
   const dynamic = val(shared(nodes, (n) => n.dynamicStroke, (a, b) => a?.frequency === b?.frequency && a?.wiggle === b?.wiggle && a?.smoothen === b?.smoothen));
   const style = shared(nodes, (n) => (n.strokeDashes ? 'dashed' : 'solid'));
@@ -2926,6 +2928,22 @@ function StrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
             <option value="SQUARE">Square</option>
           </select>
         </div>
+      )}
+      {/* A custom brush paints the stroke with its own shape; brushes are made from a closed vector layer. */}
+      {brushes.length > 0 && (
+        <select
+          className={primitives.select}
+          aria-label="Brush"
+          value={val(shared(nodes, (n) => n.brushId ?? '')) ?? ''}
+          onChange={(e) => applyBrush(editor, nodes.map((n) => n.id), e.target.value || undefined)}
+        >
+          <option value="">No brush</option>
+          {brushes.map((brush) => (
+            <option key={brush.id} value={brush.id}>
+              {brush.name}
+            </option>
+          ))}
+        </select>
       )}
       {/* Dynamic stroke: the hand-drawn look. It is drawn down the middle of the path, so it centers the stroke. */}
       <label className={styles.checkbox}>

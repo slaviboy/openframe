@@ -20,6 +20,7 @@ import type { Editor } from '@/editor/editor';
 import { formatShortcut } from '@/editor/keymap/keymap';
 import { IS_MAC } from '../keyboard/keyboard-controller';
 import type { MenuEntry } from '../primitives/Menu';
+import { canCreateBrush, createBrush } from '@/editor/commands/brushes';
 import { relatedComponents, swapInstanceFor } from '@/editor/commands/swap-instance';
 
 /** A menu item bound to a registered command; null when the command is not registered. */
@@ -109,7 +110,25 @@ export function mainMenuEntries(editor: Editor): MenuEntry[] {
 
 /** Context menu for selected layers (canvas and layers panel). */
 export function objectMenuEntries(editor: Editor): MenuEntry[] {
-  return [...objectCommandEntries(editor), ...swapInstanceEntries(editor)];
+  return [...objectCommandEntries(editor), ...swapInstanceEntries(editor), ...createBrushEntries(editor)];
+}
+
+/** "Create brush" for a single closed vector layer: the shape becomes a brush strokes can be painted with. */
+function createBrushEntries(editor: Editor): MenuEntry[] {
+  const [id, ...rest] = editor.selection;
+  if (id === undefined || rest.length > 0 || !canCreateBrush(editor, id)) return [];
+  return [
+    { kind: 'separator', id: 'create-brush-separator' },
+    {
+      kind: 'submenu',
+      id: 'create-brush',
+      label: 'Create brush',
+      entries: [
+        { kind: 'item', id: 'stretch-brush', label: 'Stretch brush', onSelect: () => void createBrush(editor, id, 'STRETCH') },
+        { kind: 'item', id: 'scatter-brush', label: 'Scatter brush', onSelect: () => void createBrush(editor, id, 'SCATTER') },
+      ],
+    },
+  ];
 }
 
 /** "Swap instance" for a single selected instance: the related components, with its own checked. */

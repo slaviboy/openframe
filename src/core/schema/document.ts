@@ -580,6 +580,8 @@ const GeometryFields = {
   strokeMiterAngle: z.number().min(0).max(180).optional(),
   /** Dynamic stroke: a hand-drawn, bumpy stroke. Absent for a plain one. */
   dynamicStroke: DynamicStrokeSchema.optional(),
+  /** The custom brush the stroke is painted with, while one is applied. */
+  brushId: IdSchema.optional(),
 };
 
 const CornerFields = {
@@ -1027,6 +1029,19 @@ export const TextNodeSchema = z.object({
  * A local style: named properties layers reuse. Color styles hold paints (for fills or strokes), text styles typography (not
  * alignment), effect styles effects, and layout guide styles layout guides. Styles are children of the document.
  */
+/**
+ * A custom brush, made from a closed vector layer: its shape, and how that shape follows a stroke — stretched along its
+ * length, or repeated along it.
+ */
+export const BrushNodeSchema = z.object({
+  ...BaseNodeFields,
+  type: z.literal('BRUSH'),
+  brushKind: z.enum(['STRETCH', 'SCATTER']),
+  vectorNetwork: VectorNetworkSchema,
+  /** The size the shape was made at, which its outline is measured against. */
+  size: SizeSchema,
+});
+
 export const StyleNodeSchema = z.object({
   ...BaseNodeFields,
   type: z.literal('STYLE'),
@@ -1088,6 +1103,7 @@ export const NodeSchema = z.discriminatedUnion('type', [
   DocumentNodeSchema,
   PageNodeSchema,
   StyleNodeSchema,
+  BrushNodeSchema,
   VariableCollectionNodeSchema,
   VariableNodeSchema,
   FrameNodeSchema,
@@ -1149,6 +1165,8 @@ export type CornerRadii = z.infer<typeof CornerRadiiSchema>;
 export type DocumentNode = z.infer<typeof DocumentNodeSchema>;
 export type PageNode = z.infer<typeof PageNodeSchema>;
 export type StyleNode = z.infer<typeof StyleNodeSchema>;
+export type BrushNode = z.infer<typeof BrushNodeSchema>;
+export type BrushKind = BrushNode['brushKind'];
 export type VariableCollectionNode = z.infer<typeof VariableCollectionNodeSchema>;
 export type VariableNode = z.infer<typeof VariableNodeSchema>;
 export type FrameNode = z.infer<typeof FrameNodeSchema>;
