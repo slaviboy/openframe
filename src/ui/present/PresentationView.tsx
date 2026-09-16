@@ -43,22 +43,26 @@ import {
 import { DRAG_FINISH_AT, dragDirection, dragProgress } from '@/core/prototype/drag-transition';
 import { sharedVariants, sharedVideos } from '@/core/prototype/state-sharing';
 import { composeScene, frameAtPoint, layerRects, responsiveSize, SCALING_LABELS, SCALING_MODES, screenArea, scrollOffsetOf, type DeviceScreen, type PresentedScene, type ScalingMode } from '@/core/prototype/presentation';
-import { deviceBodyColors, deviceLayout, deviceOuterSize, deviceScreenSize, effectiveDevice, type PrototypeDevice } from '@/core/prototype/device';
-import { MOBILE_DEVICE_CATEGORIES } from '@/core/document/frame-presets';
+import { DEVICE_FIT_LABELS, DEVICE_FITS, deviceBodyColors, deviceLayout, deviceOuterSize, deviceScreenSize, effectiveDevice, type DeviceFit, type PrototypeDevice } from '@/core/prototype/device';
+import { MOBILE_DEVICE_CATEGORIES, presetsIn, type FramePreset } from '@/core/document/frame-presets';
 import type { Size } from '@/core/schema/document';
 
 type DevicePreset = Extract<PrototypeDevice, { kind: 'PRESET' }>;
 
 /** The device laid out in the window, if the prototype plays in one. */
-const deviceScreenIn = (device: DevicePreset | null, viewport: Size): DeviceScreen | null => {
+const deviceScreenIn = (device: DevicePreset | null, viewport: Size, fit: DeviceFit = 'FIT', frame = true, preset: FramePreset | null = null): DeviceScreen | null => {
   if (!device) return null;
-  const colors = deviceBodyColors(device.model);
-  return { name: device.preset.name, ...deviceLayout(device, viewport), bodyColor: colors.body, edgeColor: colors.edge };
+  const shown = shownDevice(device, preset);
+  const colors = deviceBodyColors(shown.model);
+  return { name: shown.preset.name, ...deviceLayout(shown, viewport, 24, { fit, frame }), bodyColor: colors.body, edgeColor: colors.edge, frame };
 };
 
+/** The page's device as the device switcher shows it: another preset of its kind, or its own. */
+const shownDevice = (device: DevicePreset, preset: FramePreset | null): DevicePreset => (preset && preset.id !== device.preset.id ? { ...device, preset } : device);
+
 /** How far a screen of `size` scrolls in the window or its device. */
-function screenScrollLimit(state: { readonly viewport: Size; readonly scaling: ScalingMode; readonly deviceScaling: ScalingMode | null; readonly device: DevicePreset | null }, size: Size): number {
-  const { scale, area } = screenArea(state.deviceScaling ?? state.scaling, state.viewport, size, deviceScreenIn(state.device, state.viewport));
+function screenScrollLimit(state: { readonly viewport: Size; readonly scaling: ScalingMode; readonly deviceScaling: ScalingMode | null; readonly device: DevicePreset | null; readonly deviceFit: DeviceFit; readonly deviceFrame: boolean; readonly devicePreset: FramePreset | null }, size: Size): number {
+  const { scale, area } = screenArea(state.deviceScaling ?? state.scaling, state.viewport, size, deviceScreenIn(state.device, state.viewport, state.deviceFit, state.deviceFrame, state.devicePreset));
   return Math.max(0, size.height * scale - area.height) / scale;
 }
 import { toEasing, topLevelFrame, transitionDurationMs } from '@/core/prototype/reactions';
@@ -159,8 +163,14 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
   const page = doc.get(pageId);
   // The prototype settings: the background behind the prototype, and the device it plays in (inline, only phones, tablets and watches).
   const background = page?.type === 'PAGE' ? (page.prototypeBackground ?? page.backgroundColor) : { r: 0.12, g: 0.12, b: 0.12, a: 1 };
+  // The device switcher (presentation view, for this session only; the file keeps its device): a similar device, how the
+  // device fits the window, and whether its frame shows.
+  const [deviceChoice, setDeviceChoice] = useState<FramePreset | null>(null);
+  const [deviceFit, setDeviceFit] = useState<DeviceFit>('FIT');
+  const [deviceFrame, setDeviceFrame] = useState(true);
   const resolvedDevice = effectiveDevice(doc, pageId);
   const device = resolvedDevice.kind === 'PRESET' && (!inlineMode || MOBILE_DEVICE_CATEGORIES.has(resolvedDevice.preset.category)) ? resolvedDevice : null;
+  const shownPreset = device && deviceChoice && !inlineMode && deviceChoice.category === device.preset.category ? deviceChoice : (device?.preset ?? null);
   // Custom size and Presentation fit the prototype to the window.
   const deviceScaling: ScalingMode | null = !inlineMode && (resolvedDevice.kind === 'CUSTOM' || resolvedDevice.kind === 'PRESENTATION') ? 'FILL' : null;
 
@@ -184,6 +194,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<Box | null>(null);
   const [shareAnchor, setShareAnchor] = useState<Box | null>(null);
+  const [deviceAnchor, setDeviceAnchor] = useState<Box | null>(null);
   const inlineHeaderRef = useRef<HTMLElement>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [screenBox, setScreenBox] = useState<Rect | null>(null);
@@ -225,6 +236,9 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
     accessibleKey: '',
     follow,
     device: null as DevicePreset | null,
+    deviceFit: 'FIT' as DeviceFit,
+    deviceFrame: true,
+    devicePreset: null as FramePreset | null,
     /** Responsive: the screen's frame laid out at another size in the prototype's copy, and which size that was. */
     frameSizes: [] as ReadonlyArray<readonly [Id, Size]>,
     responsiveKey: '',
@@ -259,7 +273,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
       const current = state.player;
       const frame = current ? (editor.doc.get(current.frameId) as SceneNode | undefined) : undefined;
       const on = (state.deviceScaling ?? state.scaling) === 'RESPONSIVE' && state.viewport.width > 0;
-      const size = on && current && frame ? responsiveSize(state.device ? deviceScreenSize(state.device) : state.viewport, frame.size) : null;
+      const size = on && current && frame ? responsiveSize(state.device ? deviceScreenSize(shownDevice(state.device, state.devicePreset)) : state.viewport, frame.size) : null;
       const key = size && current ? `${current.frameId}:${size.width}x${size.height}` : '';
       if (key === state.responsiveKey) return;
       state.responsiveKey = key;
@@ -413,9 +427,12 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
     state.follow = follow;
     state.device = device;
     state.deviceScaling = deviceScaling;
+    state.deviceFit = deviceFit;
+    state.deviceFrame = deviceFrame;
+    state.devicePreset = shownPreset;
     responsiveRef.current();
     schedule();
-  }, [scaling, showHints, accessible, follow, device, deviceScaling, schedule]);
+  }, [scaling, showHints, accessible, follow, device, deviceScaling, deviceFit, deviceFrame, shownPreset, schedule]);
 
   // Inline preview: edits redraw the frames, and selecting another frame on the canvas jumps to it.
   useEffect(() => {
@@ -489,7 +506,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
         state.frameScroll.set(nested.frameId, { x: nested.from.x + (nested.to.x - nested.from.x) * progress, y: nested.from.y + (nested.to.y - nested.from.y) * progress });
         if (t >= 1) state.nestedScrolling = null;
       }
-      const scene = composeScene(doc, current, state.viewport, state.deviceScaling ?? state.scaling, state.scrollY, playing, deviceScreenIn(state.device, state.viewport));
+      const scene = composeScene(doc, current, state.viewport, state.deviceScaling ?? state.scaling, state.scrollY, playing, deviceScreenIn(state.device, state.viewport, state.deviceFit, state.deviceFrame, state.devicePreset));
       state.scene = scene;
       // Accessibility mode places its content on the scene whenever the frames drawn or their places change.
       if (state.accessible) {
@@ -636,7 +653,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [doc, run, shownKey]);
 
-  // Keyboard interactions, and R (restart), ← and → (screens) and F (fullscreen). Inline, only while the preview has focus.
+  // Keyboard interactions, and R (restart), ← and → (screens), F (fullscreen) and Z (device scaling). Inline, only while the preview has focus.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
@@ -657,6 +674,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
       else if (e.code === 'ArrowRight') step(1);
       else if (e.code === 'ArrowLeft') step(-1);
       else if (e.code === 'KeyF' && !inlineMode) toggleFullscreen();
+      else if (e.code === 'KeyZ' && live.current.device && !inlineMode) setDeviceFit((fit) => DEVICE_FITS[(DEVICE_FITS.indexOf(fit) + 1) % DEVICE_FITS.length]!);
       else return;
       e.preventDefault();
       // Inline, the keys don't reach the editor's shortcuts.
@@ -907,6 +925,16 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
     );
   };
   const shareEntries: MenuEntry[] = [{ kind: 'item', id: 'copy-link', label: 'Copy link', onSelect: copyLink }];
+  // The device switcher: devices like this one, the device scaling options, and the device's frame.
+  const deviceEntries: MenuEntry[] = device
+    ? [
+        ...presetsIn(device.preset.category).map((preset): MenuEntry => ({ kind: 'item', id: preset.id, label: preset.name, checked: preset.id === shownPreset?.id, onSelect: () => setDeviceChoice(preset) })),
+        { kind: 'separator', id: 'fit-separator' },
+        ...DEVICE_FITS.map((fit): MenuEntry => ({ kind: 'item', id: fit, label: DEVICE_FIT_LABELS[fit], checked: deviceFit === fit, onSelect: () => setDeviceFit(fit) })),
+        { kind: 'separator', id: 'frame-separator' },
+        { kind: 'item', id: 'frame', label: 'Show device frame', checked: deviceFrame, onSelect: () => setDeviceFrame((on) => !on) },
+      ]
+    : [];
 
   return (
     <div ref={rootRef} className={inlineMode ? styles.inlineRoot : styles.root} {...(inlineMode ? { role: 'region', 'aria-label': 'Preview', tabIndex: 0 } : {})}>
@@ -986,8 +1014,10 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
           data-screen={player ? nameOf(player.frameId) : undefined}
           data-overlays={player ? player.overlays.map(nameOf).join(',') : undefined}
           data-scroll={scrollLabel}
-          data-device={device?.preset.name}
+          data-device={shownPreset?.name}
           data-device-model={device?.model}
+          data-device-fit={device ? deviceFit : undefined}
+          data-device-frame={device ? String(deviceFrame) : undefined}
           data-variants={variantLabel}
           data-variables={variableLabel}
           data-videos={videoLabel}
@@ -1024,6 +1054,22 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
           <button type="button" className={styles.button} aria-label="Next screen" disabled={screenIndex < 0 || screenIndex >= screens.length - 1} onClick={() => step(1)}>
             →
           </button>
+          {device && !inlineMode && (
+            <button
+              type="button"
+              className={styles.button}
+              aria-haspopup="menu"
+              aria-expanded={deviceAnchor !== null}
+              aria-label="Switch device"
+              data-menu-root=""
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                setDeviceAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
+              }}
+            >
+              {shownPreset?.name}
+            </button>
+          )}
           {!inlineMode && (
             <button type="button" className={styles.button} onClick={() => restartAt(start)}>
               Restart
@@ -1039,6 +1085,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
       <AccessibilityMessage text={accessibleMessage} />
       {menuAnchor && <Menu label="Options" entries={menuEntries} anchor={menuAnchor} placement="bottom-start" onClose={closeMenu} />}
       {shareAnchor && <Menu label="Share prototype" entries={shareEntries} anchor={shareAnchor} placement="bottom-start" onClose={() => setShareAnchor(null)} />}
+      {deviceAnchor && device && <Menu label="Switch device" entries={deviceEntries} anchor={deviceAnchor} placement="bottom-start" onClose={() => setDeviceAnchor(null)} />}
     </div>
   );
 }

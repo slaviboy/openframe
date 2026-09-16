@@ -98,19 +98,38 @@ export function deviceOuterSize(device: Extract<PrototypeDevice, { kind: 'PRESET
   return { width: screen.width + bezel * 2, height: screen.height + bezel * 2 };
 }
 
-/** A device scaled to fit in the window with a margin around it, centered. */
-export function deviceLayout(device: Extract<PrototypeDevice, { kind: 'PRESET' }>, viewport: Size, margin = 24): DeviceLayout {
+/** How presentation view's device switcher shows the device: fitting the window, filling it, or at its own size. */
+export type DeviceFit = 'FIT' | 'FILL' | 'ACTUAL';
+
+/** The device scaling options, in the order Z moves through them. */
+export const DEVICE_FITS: readonly DeviceFit[] = ['FIT', 'FILL', 'ACTUAL'];
+
+export const DEVICE_FIT_LABELS: Readonly<Record<DeviceFit, string>> = { FIT: 'Fit device on screen', FILL: 'Zoom device to fill screen', ACTUAL: 'Show device at 100%' };
+
+/**
+ * A device laid out in the window, centered: scaled to fit with a margin around it (Fit device on screen), to fill the
+ * window (Zoom device to fill screen, cropped where it overflows) or at 100%. Without its frame, the screen alone shows.
+ */
+export function deviceLayout(device: Extract<PrototypeDevice, { kind: 'PRESET' }>, viewport: Size, margin = 24, options: { readonly fit?: DeviceFit; readonly frame?: boolean } = {}): DeviceLayout {
   const screen = deviceScreenSize(device);
   const body = BODY[device.preset.category];
+  const frame = options.frame ?? true;
   const short = Math.min(screen.width, screen.height);
-  const bezel = short * body.bezel;
+  const bezel = frame ? short * body.bezel : 0;
+  const radius = frame ? short * body.radius : 0;
   const outer = { width: screen.width + bezel * 2, height: screen.height + bezel * 2 };
-  const scale = Math.max(0.01, Math.min((viewport.width - margin * 2) / outer.width, (viewport.height - margin * 2) / outer.height));
+  const fit = options.fit ?? 'FIT';
+  const scale =
+    fit === 'ACTUAL'
+      ? 1
+      : fit === 'FILL'
+        ? Math.max(viewport.width / outer.width, viewport.height / outer.height)
+        : Math.max(0.01, Math.min((viewport.width - margin * 2) / outer.width, (viewport.height - margin * 2) / outer.height));
   const bodyRect = { x: (viewport.width - outer.width * scale) / 2, y: (viewport.height - outer.height * scale) / 2, width: outer.width * scale, height: outer.height * scale };
   return {
     body: bodyRect,
-    bodyRadius: short * body.radius * scale,
+    bodyRadius: radius * scale,
     screen: { x: bodyRect.x + bezel * scale, y: bodyRect.y + bezel * scale, width: screen.width * scale, height: screen.height * scale },
-    screenRadius: Math.max(0, short * body.radius - bezel) * scale,
+    screenRadius: Math.max(0, radius - bezel) * scale,
   };
 }

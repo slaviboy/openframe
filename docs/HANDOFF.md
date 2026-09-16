@@ -249,15 +249,11 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 - Properties panel aligned to the reference's (after the toolbar): the header has two rows. The top row holds Present and the Prototype view menu (Present in new tab, Preview); the second holds the Design / Prototype tabs and the zoom. Multi-player, Share and Resize to fit are left out, since Openframe has no such features. Sections follow the reference's grid: 40 px title rows, 16 px in from the left and 8 px from the right, and rows of two fields plus a 24 px icon column (`.row`; `.grid2` leaves that column free). Position starts with the align row (`AlignRow`: the six `arrange.align*` commands and a More alignment actions menu for distribute and tidy up). Constrain proportions (The reference's Lock aspect ratio glyph) sits after W / H. Independent corners sits after opacity and radius. Appearance's header holds Apply variable mode, Hide and Apply blend mode. The blend mode and a paint's type are native selects laid invisibly over a glyph (`.iconSelect`), so they keep their combobox roles. A `NumberField` without a label keeps an 8 px scrub strip. Tooltips shift back inside the window, and `useHoverTooltip` also places them `below`. New the reference glyphs: `present`, `dropdown`, `alignMore`, `lockAspect`, `variableMode`, `blendMode`, then `visibility` (the panel's 24 px eye), `more` (three dots), `rotation`, `rotate90`, `flipHorizontal` and `flipVertical`; `more` and `rotation` replaced our stroke drawings. Every `IconButton` and `NumberField` shows a hover tooltip below it (no native `title`). An optional `tooltip` prop gives the reference's wording where it differs from the accessible label: "Hide", "Toggle visibility", "Remove", "Lock aspect ratio", "Apply styles and variables", "X-position". `SegmentButton` adds a command's shortcut to its tooltip. Position's rotation row adds Rotate 90° right (`setRotation` −90) and the flip commands (not for sections). Checkboxes in the panel use the reference's accent-filled style.
 
+- Device frames and the device switcher (after the properties panel): `deviceLayout(device, viewport, margin, { fit, frame })` in `src/core/prototype/device.ts` lays a device out by `DeviceFit` (`FIT` Fit device on screen, `FILL` Zoom device to fill screen, `ACTUAL` Show device at 100%); without its frame only the screen shows. `frame` rides on `DeviceScreen` and the scene's device item, and the renderer paints the body only while it is on. In `PresentationView` the switcher is session-only state (`deviceChoice`, `deviceFit`, `deviceFrame`) over the page's own device, shown as Switch device in the footer, with Z stepping through the fits and `data-device-fit` / `data-device-frame` for the tests.
+
 ## In progress (uncommitted)
 
-1. **The device switcher (rows 240 and 242): written, not committed.** The code is in the working tree:
-   - `src/core/prototype/device.ts`: `DeviceFit`, `DEVICE_FITS`, `DEVICE_FIT_LABELS`, and `deviceLayout(device, viewport, margin, { fit, frame })` (Fit device on screen, Zoom device to fill screen, Show device at 100%; without the frame, no bezel)
-   - `src/core/prototype/presentation.ts` and `src/ui/present/presentation-renderer.ts`: `frame` on `DeviceScreen` and on the scene's device item; the body is painted only while the frame shows
-   - `src/ui/present/PresentationView.tsx`: session-only `deviceChoice`, `deviceFit` and `deviceFrame` (the file keeps its device); `shownPreset` and `shownDevice`; `devicePreset` in live state; the Switch device footer menu (similar devices, the fits, Show device frame); Z moves through the fits; `data-device-fit` and `data-device-frame`
-   - tests: `src/core/prototype/device.test.ts` (fit, fill, 100%, bare screen), `src/core/prototype/presentation.test.ts` (`frame` flag), `e2e/presentation-device-switcher.spec.ts` (new, untracked)
-   - status: typecheck passed before the last rework, and lint then warned that `device` changed every render; the rework keeps `device` as the page's device and the switcher's choice in `shownPreset`. **Nothing has been run since the rework**: run `npm run check`, then the device specs in all three browsers (`e2e/presentation-device-switcher.spec.ts`, `e2e/prototype-device.spec.ts`), then the full gate
-   - then: rows 240 (device frames) and 242 (the device switcher) in the matrix, this list, and a commit
+Nothing. The working tree is clean apart from anything noted above.
 
 ## Next (M10, in order)
 
@@ -265,8 +261,6 @@ This file is how work continues after a pause (for example, a usage limit). Read
    - 160 Video / GIF fills: video crop, video from the fill picker, GIF label next to the dimensions, GIF metadata on export
    - 200 Interactive components: the Variant interactions section, animating Change to
    - 239 Variables: extended collections' modes, library variables, variable picker in expressions
-   - 240 Presentation view: device frames, comments, sharing links
-   - 242 Device settings: the device switcher
    - 244 Accessible prototypes: the Accessibility settings dialog
 
 **Stop after M10.** When every M10 row is finished and committed, stop and report to the user. Don't start M11 until the user says to continue. After that, M11–M15 follow `docs/FEATURE_MATRIX.md` (the rows marked Planned or In progress) in milestone order.
@@ -279,8 +273,6 @@ To continue in a new session, tell the assistant: *Read `docs/HANDOFF.md`, check
 - 160 Video / GIF fills: video crop; adding a video from the fill picker; a GIF label next to the dimensions; GIF metadata on export
 - 200 Interactive components: the Variant interactions section; animating Change to (it is instant)
 - 239 Variables in prototypes: modes of extended collections; a variable picker in expressions; library variables (needs accounts and a server: record as not possible offline)
-- 240 Presentation view: device frames (Show device frame and device scaling, in the uncommitted switcher above); comments and sharing links, including the Hide UI link (not possible offline: record as such)
-- 242 Device settings: the device switcher (uncommitted, above)
 - 244 Accessible prototypes: the Accessibility settings dialog
 
 **M11 (Draw mode): all Planned**

@@ -476,15 +476,17 @@ export class PresentationRenderer {
     let clipped = false;
     for (const item of scene?.items ?? []) {
       if (item.kind === 'device') {
-        // The device: a body in its model's color with a thin edge, and its screen.
-        const body = ck.RRectXY(ck.XYWHRect(item.body.x, item.body.y, item.body.width, item.body.height), item.bodyRadius, item.bodyRadius);
-        paint.setColor(ck.Color4f(item.bodyColor.r, item.bodyColor.g, item.bodyColor.b, item.bodyColor.a));
-        canvas.drawRRect(body, paint);
-        paint.setStyle(ck.PaintStyle.Stroke);
-        paint.setStrokeWidth(1.5);
-        paint.setColor(ck.Color4f(item.edgeColor.r, item.edgeColor.g, item.edgeColor.b, item.edgeColor.a));
-        canvas.drawRRect(body, paint);
-        paint.setStyle(ck.PaintStyle.Fill);
+        // The device: a body in its model's color with a thin edge (unless its frame is hidden), and its screen.
+        if (item.frame) {
+          const body = ck.RRectXY(ck.XYWHRect(item.body.x, item.body.y, item.body.width, item.body.height), item.bodyRadius, item.bodyRadius);
+          paint.setColor(ck.Color4f(item.bodyColor.r, item.bodyColor.g, item.bodyColor.b, item.bodyColor.a));
+          canvas.drawRRect(body, paint);
+          paint.setStyle(ck.PaintStyle.Stroke);
+          paint.setStrokeWidth(1.5);
+          paint.setColor(ck.Color4f(item.edgeColor.r, item.edgeColor.g, item.edgeColor.b, item.edgeColor.a));
+          canvas.drawRRect(body, paint);
+          paint.setStyle(ck.PaintStyle.Fill);
+        }
         paint.setColor(ck.Color4f(0, 0, 0, 1));
         canvas.drawRRect(ck.RRectXY(ck.XYWHRect(item.screen.x, item.screen.y, item.screen.width, item.screen.height), item.screenRadius, item.screenRadius), paint);
         continue;

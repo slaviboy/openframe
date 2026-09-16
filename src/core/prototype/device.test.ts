@@ -90,3 +90,21 @@ describe('device models', () => {
     expect(bodies.size).toBe(DEVICE_MODELS.length);
   });
 });
+
+describe('the device switcher', () => {
+  test('the device fits the window, fills it, or shows at 100%; without its frame, its screen is all that shows', () => {
+    const device = { kind: 'PRESET', preset: presetById('phone-iphone-16')!, landscape: false, model: 'BLACK', explicit: true } as const;
+    const viewport = { width: 1000, height: 1000 };
+    // Fit device on screen: the taller side fits within the margins.
+    expect(deviceLayout(device, viewport).body.height).toBeCloseTo(1000 - 48);
+    // Zoom device to fill screen: the narrower side fills the window, the other overflows.
+    const fill = deviceLayout(device, viewport, 24, { fit: 'FILL' });
+    expect(fill.body.width).toBeCloseTo(1000);
+    expect(fill.body.height).toBeGreaterThan(1000);
+    // Show device at 100%.
+    expect(deviceLayout(device, viewport, 24, { fit: 'ACTUAL' }).body.width).toBeCloseTo(deviceOuterSize(device).width);
+    const bare = deviceLayout(device, viewport, 24, { frame: false });
+    expect(bare.screen).toEqual(bare.body);
+    expect(bare.screenRadius).toBe(0);
+  });
+});
