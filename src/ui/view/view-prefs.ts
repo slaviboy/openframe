@@ -44,6 +44,8 @@ export interface ViewPrefs {
   readonly nudgeSmall: number;
   /** Shift + arrow-key nudge distance, in canvas pixels. */
   readonly nudgeBig: number;
+  /** The mode the editor opens in: Design or Draw (Motion and Dev Mode arrive with M12 and M13). */
+  readonly mode: 'design' | 'draw';
 }
 
 type BooleanPref = { [K in keyof ViewPrefs]: ViewPrefs[K] extends boolean ? K : never }[keyof ViewPrefs];
@@ -63,6 +65,7 @@ export const VIEW_PREF_DEFAULTS: ViewPrefs = {
   spellCheck: true,
   nudgeSmall: 1,
   nudgeBig: 10,
+  mode: 'design',
 };
 
 /** Nudge amounts must be positive, finite and at most 10,000 px. */
@@ -93,6 +96,7 @@ function readStored(): ViewPrefs {
       spellCheck: flag('spellCheck'),
       nudgeSmall: amount('nudgeSmall'),
       nudgeBig: amount('nudgeBig'),
+      mode: record['mode'] === 'draw' ? 'draw' : VIEW_PREF_DEFAULTS.mode,
     };
   } catch {
     return VIEW_PREF_DEFAULTS;

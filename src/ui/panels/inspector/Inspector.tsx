@@ -41,6 +41,7 @@ import {
 import { moveItem } from '@/core/collections/move-item';
 import { DEFAULT_DYNAMIC_STROKE } from '@/core/vector/dynamic-stroke';
 import { applyBrush, localBrushes } from '@/editor/commands/brushes';
+import { addRepeatTransform, applyTransforms, removeRepeatTransform, setRepeatTransform } from '@/editor/commands/transforms';
 import { IOS_CORNER_SMOOTHING } from '@/core/geometry/corners';
 import { backgroundColorBehind } from '@/core/color/contrast';
 import { useColorProfile } from '../../hooks/useColorProfile';
@@ -531,6 +532,62 @@ function SelectionColorsSection({ nodes }: { nodes: SceneNode[] }) {
   );
 }
 
+/**
+ * Transforms (Draw mode): the selection repeats around a center or along a line, without layers for the copies. The
+ * settings say how many there are and how they are spread; Apply transforms turns them into layers.
+ */
+function TransformSection({ nodes }: { nodes: SceneNode[] }) {
+  const editor = useEditor();
+  const single = nodes.length === 1 ? nodes[0]! : null;
+  const group = single?.type === 'GROUP' && single.repeat ? single : null;
+  const repeat = group?.repeat;
+  return (
+    <Section title="Transform">
+      {!repeat && (
+        <select
+          className={primitives.select}
+          aria-label="Additional transform modifier"
+          value=""
+          onChange={(e) => {
+            if (e.target.value === 'RADIAL' || e.target.value === 'LINEAR') addRepeatTransform(editor, e.target.value);
+          }}
+        >
+          <option value="">Add transform</option>
+          <option value="RADIAL">Radial repeat</option>
+          <option value="LINEAR">Linear repeat</option>
+        </select>
+      )}
+      {group && repeat && (
+        <>
+          <div className={styles.row}>
+            <NumberField label="#" ariaLabel="Repeat count" testId="field-repeat-count" min={1} max={200} decimals={0} value={repeat.count} onChange={(v) => setRepeatTransform(editor, group.id, { count: Math.round(v) })} />
+            {repeat.kind === 'LINEAR' ? (
+              <NumberField label="↔" ariaLabel="Repeat spacing" testId="field-repeat-spacing" value={repeat.spacing} onChange={(v) => setRepeatTransform(editor, group.id, { spacing: v })} />
+            ) : (
+              <NumberField label={<Icon name="rotation" />} ariaLabel="Repeat angle" suffix="°" min={-360} max={360} decimals={0} value={repeat.angle ?? 360} onChange={(v) => setRepeatTransform(editor, group.id, { angle: v })} />
+            )}
+            <IconButton icon="minus" label="Remove transform" onClick={() => removeRepeatTransform(editor, group.id)} />
+          </div>
+          {repeat.kind === 'LINEAR' && (
+            <select
+              className={primitives.select}
+              aria-label="Repeat direction"
+              value={repeat.direction ?? 'HORIZONTAL'}
+              onChange={(e) => setRepeatTransform(editor, group.id, { direction: e.target.value as 'HORIZONTAL' | 'VERTICAL' })}
+            >
+              <option value="HORIZONTAL">Horizontal</option>
+              <option value="VERTICAL">Vertical</option>
+            </select>
+          )}
+          <button type="button" className={gradientStyles.textButton} onClick={() => applyTransforms(editor)}>
+            Apply transforms to selection
+          </button>
+        </>
+      )}
+    </Section>
+  );
+}
+
 /** Mask section: shown when every selected layer is a mask. */
 function MaskSection({ nodes }: { nodes: SceneNode[] }) {
   const editor = useEditor();
@@ -987,6 +1044,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
           </label>
         )}
       </Section>
+      {draw && <TransformSection nodes={nodes} />}
       {!allSlices && (
       <Section
         title="Appearance"

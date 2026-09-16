@@ -28,6 +28,7 @@ import { networkStrokePath, regionFillPath, type VectorNetwork } from '@/core/ve
 import { dynamicStrokePath, hasDynamicStroke } from '@/core/vector/dynamic-stroke';
 import { brushStrokeOutlines, isBrush } from '@/core/vector/brush';
 import { pathRunFor } from '@/core/vector/text-path';
+import { repeatMatrices, repeats } from '@/core/geometry/repeat';
 import type { BooleanOperationNode, VectorNode } from '@/core/schema/document';
 import { stackingOrder } from '@/core/layout/auto-layout';
 import {
@@ -469,7 +470,17 @@ export class SceneRenderer {
         canvas.save();
         if (node.type === 'FRAME') this.clipToFrame(canvas, node);
       }
-      this.drawChildren(canvas, children, ctx);
+      // A transform group repeats its contents without holding layers for the copies.
+      if (node.type === 'GROUP' && repeats(node.repeat)) {
+        for (const copy of repeatMatrices(node.repeat, node.size)) {
+          canvas.save();
+          canvas.concat([copy.a, copy.c, copy.e, copy.b, copy.d, copy.f, 0, 0, 1]);
+          this.drawChildren(canvas, children, ctx);
+          canvas.restore();
+        }
+      } else {
+        this.drawChildren(canvas, children, ctx);
+      }
       if (clips) canvas.restore();
     }
 

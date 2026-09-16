@@ -74,10 +74,21 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
   const inlinePreviewKey = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().inlinePreviewKey);
   const viewingVersion = useSyncExternalStore(session.session.subscribe, () => session.session.getSnapshot().viewing !== null);
   const mode = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().mode);
-  // Draw mode has its own accent, from the mode on the root element (as the theme is).
+  // Draw mode has its own accent, from the mode on the root element (as the theme is), and is where the editor opens again.
+  const modeRestored = useRef(false);
   useLayoutEffect(() => {
+    // The file opens in the mode it was left in; only then does the switcher start saving it.
+    if (!modeRestored.current) {
+      modeRestored.current = true;
+      const stored = viewPrefs.getSnapshot().mode;
+      if (stored !== mode) {
+        editorState.setMode(stored);
+        return;
+      }
+    }
     document.documentElement.dataset['mode'] = mode;
-  }, [mode]);
+    if (mode === 'design' || mode === 'draw') viewPrefs.set({ mode });
+  }, [mode, editorState]);
   // Version history replaces the properties panel while it is open, and while an earlier version is shown.
   const inVersionHistory = versionHistoryOpen || viewingVersion;
 

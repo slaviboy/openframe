@@ -748,7 +748,23 @@ export const FrameNodeSchema = z.object({
   gridAutoPositioning: z.literal(false).optional(),
 });
 
-export const GroupNodeSchema = z.object({ ...SceneFields, type: z.literal('GROUP') });
+/**
+ * A transform on a group: its contents are repeated without adding layers, around a center (radial) or along a line
+ * (linear). Apply transforms turns the copies into real layers.
+ */
+export const RepeatTransformSchema = z.object({
+  kind: z.enum(['RADIAL', 'LINEAR']),
+  /** How many copies there are, the original included. */
+  count: z.number().int().min(1).max(200),
+  /** LINEAR: how far apart the copies sit, in the group's units. */
+  spacing: z.number().min(-100_000).max(100_000),
+  /** LINEAR: the line the copies run along; absent means horizontal. */
+  direction: z.enum(['HORIZONTAL', 'VERTICAL']).optional(),
+  /** RADIAL: the angle the copies spread over, in degrees; absent means the full circle. */
+  angle: z.number().min(-3600).max(3600).optional(),
+});
+
+export const GroupNodeSchema = z.object({ ...SceneFields, type: z.literal('GROUP'), repeat: RepeatTransformSchema.optional() });
 
 export const RectangleNodeSchema = z.object({
   ...SceneFields,
@@ -1169,6 +1185,7 @@ export type GridTrack = z.infer<typeof GridTrackSchema>;
 export type CornerRadii = z.infer<typeof CornerRadiiSchema>;
 export type DocumentNode = z.infer<typeof DocumentNodeSchema>;
 export type PageNode = z.infer<typeof PageNodeSchema>;
+export type RepeatTransform = z.infer<typeof RepeatTransformSchema>;
 export type StyleNode = z.infer<typeof StyleNodeSchema>;
 export type BrushNode = z.infer<typeof BrushNodeSchema>;
 export type BrushKind = BrushNode['brushKind'];

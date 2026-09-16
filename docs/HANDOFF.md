@@ -271,6 +271,8 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 - Text on a path (row 146, after custom brushes): `textPath` on a text layer names the vector it follows, where it starts (0–1) and whether it is flipped; the text layer copies the path's transform, so the path's own coordinates lay it out. `TextShaper.drawOnPath` shapes the text as one line and draws each character clipped out of that line at the point along the path its place falls, turned to the path's direction — kerning and ligatures survive, since the line is shaped whole. `pathRunFor` (`src/core/vector/text-path.ts`) walks the path. `TextPathTool` places it, and Typography has Flip text orientation and Start. The blue handle on the canvas for the start is still to come.
 
+- Transforms (row 255, finishing M11's planned rows): `repeat` on a group says how its contents repeat — `repeatMatrices` (`src/core/geometry/repeat.ts`) gives the copies' matrices, radial turning about the middle of the group over an angle (the full circle shared between the copies), linear stepping along x or y. The renderer draws the children once per matrix, so no layers are made until `applyTransforms` duplicates them into place. Draw mode's Transform section holds the modifier menu, the settings and Apply transforms to selection. Two things to know: a group's `children` array is live, so `applyTransforms` snapshots it before duplicating (otherwise each pass repeats the previous pass's copies), and the editor now opens in the mode it was left in (`mode` in view prefs; `EditorShell` restores it before it starts saving it, or the first render would overwrite the stored value).
+
 ## In progress (uncommitted)
 
 Nothing. The working tree is clean apart from anything noted above.
@@ -289,7 +291,6 @@ To continue in a new session, tell the assistant: *Read `docs/HANDOFF.md`, check
 
 **M11 (Draw mode): all Planned**
 - Text on a path: the blue start handle on the canvas (the rest of the row is done)
-- Transforms: radial and linear repeat, apply transforms
 
 **M12 (Motion mode)**
 - Timeline panel: play (Space), auto-keyframe, current time, duration (2000 ms by default), ms/s, loop, once or ping-pong

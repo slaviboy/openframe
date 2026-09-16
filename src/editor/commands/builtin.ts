@@ -32,6 +32,7 @@ import { hasInteractions, removeAllInteractions, removeOverlayInteractions } fro
 import { canTidyUp, tidyUpSelection } from './tidy';
 import { canToggleMask, toggleMask } from './masks';
 import { canFlatten, flattenSelection } from './flatten';
+import { addRepeatTransform, applyTransforms, canApplyTransforms } from './transforms';
 import { beginVectorEdit, canBeginVectorEdit, deleteSelectedPoints, deleteSelectedWidthPoints, healSelectedPoints, setVectorEditTool, endVectorEdit } from '../interactions/vector-edit';
 import { isInFlow, moveInFlow } from '@/core/layout/flow-order';
 import { addAutoLayout, canAddAutoLayout, canRemoveAutoLayout, removeAutoLayout, suggestAutoLayoutForSelection } from './auto-layout';
@@ -334,6 +335,27 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     shortcuts: ['Mod+Delete'],
     enabled: hasSectionSelected,
     run: (e) => ungroupSelection(e, { types: ['SECTION'], label: 'Remove section', allowEmpty: true }),
+  },
+  {
+    id: 'object.radialRepeat',
+    label: 'Add radial repeat',
+    category: 'Object',
+    enabled: hasLayerSelection,
+    run: (e) => void addRepeatTransform(e, 'RADIAL'),
+  },
+  {
+    id: 'object.linearRepeat',
+    label: 'Add linear repeat',
+    category: 'Object',
+    enabled: hasLayerSelection,
+    run: (e) => void addRepeatTransform(e, 'LINEAR'),
+  },
+  {
+    id: 'object.applyTransforms',
+    label: 'Apply transforms to selection',
+    category: 'Object',
+    enabled: canApplyTransforms,
+    run: (e) => void applyTransforms(e),
   },
   {
     id: 'object.flipHorizontal',
