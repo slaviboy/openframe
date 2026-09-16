@@ -289,6 +289,15 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
         run: () => setPalette('commands'),
       },
       {
+        id: 'view.drawMode',
+        label: 'Draw mode',
+        category: 'View',
+        shortcuts: ['Shift+D'],
+        checked: () => editor.state.getSnapshot().mode === 'draw',
+        // Draw and Design share the editor; the toolbar and the panels change with the mode.
+        run: () => editor.state.setMode(editor.state.getSnapshot().mode === 'draw' ? 'design' : 'draw'),
+      },
+      {
         id: 'view.assetsTab',
         label: 'Assets',
         category: 'View',

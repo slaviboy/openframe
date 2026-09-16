@@ -138,12 +138,16 @@
   cursor: default;
 }
 
+/* Invisible, but it covers its option and takes the click, so the switcher works from pointer and keyboard alike. */
 .modeInput {
   position: absolute;
   inset: 0;
   margin: 0;
   opacity: 0;
-  pointer-events: none;
+}
+
+.modeInput:not(:disabled) {
+  cursor: pointer;
 }
 
 .mode:has(> .modeInput:focus-visible) {

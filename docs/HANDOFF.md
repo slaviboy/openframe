@@ -259,6 +259,8 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 - The Accessibility settings dialog (after the variables work, finishing M10): Options > Accessibility settings opens a dialog over the prototype (`dialogScrim` / `dialog` in `PresentationView.module.css`) holding Adapt content for screen readers, replacing the Options item that toggled it. Skip to content still turns the mode on.
 
+- **M11 began here.** The mode switcher (row 36, after M10): `view.drawMode` (⇧D) toggles Design and Draw, the switcher's options set the mode, and `EditorShell` puts it on the root element as `data-mode`, which turns the accent green in Draw. `DRAW_GROUPS` in `Toolbar.tsx` is Draw's toolbar (the move tools and the illustration tools; Brush joins them with the brush tools). The toolbar remembers each group's last-picked tool by group label rather than index, so a mode change keeps it. The mode radio is invisible but takes its own clicks.
+
 ## In progress (uncommitted)
 
 Nothing. The working tree is clean apart from anything noted above.
@@ -276,7 +278,6 @@ To continue in a new session, tell the assistant: *Read `docs/HANDOFF.md`, check
 **M10 (prototyping): rows still In progress**
 
 **M11 (Draw mode): all Planned**
-- Mode switcher Draw / Design / Motion / Dev (⇧D), shared with M12 and M13
 - Draw mode UI: its toolbar, streamlined sliders, large layer thumbnails
 - Pencil and brush tools with a secondary toolbar; ⌘-click samples a stroke
 - Brushes with dynamic strokes (frequency, wiggle, smoothen); custom stretch and scatter brushes

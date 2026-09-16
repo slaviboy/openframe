@@ -73,6 +73,11 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
   const inlinePreviewOpen = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().inlinePreviewOpen);
   const inlinePreviewKey = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().inlinePreviewKey);
   const viewingVersion = useSyncExternalStore(session.session.subscribe, () => session.session.getSnapshot().viewing !== null);
+  const mode = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().mode);
+  // Draw mode has its own accent, from the mode on the root element (as the theme is).
+  useLayoutEffect(() => {
+    document.documentElement.dataset['mode'] = mode;
+  }, [mode]);
   // Version history replaces the properties panel while it is open, and while an earlier version is shown.
   const inVersionHistory = versionHistoryOpen || viewingVersion;
 

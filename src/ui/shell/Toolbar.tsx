@@ -140,14 +140,29 @@ const GROUPS: readonly ToolGroup[] = [
   },
 ];
 
-/** The toolbar's mode switcher. Only Design is available; Draw, Motion and Dev Mode arrive with M11–M13. */
+/**
+ * Draw mode's toolbar: the move tools, then the illustration tools. The reference also has a Brush here, which comes with the
+ * brush tools; until then the toolbar shows the tools that exist.
+ */
+const DRAW_GROUPS: readonly ToolGroup[] = [
+  GROUPS[0]!,
+  {
+    label: 'Creation tools',
+    items: [
+      { tool: 'pen', label: 'Pen', icon: 'pen', menuIcon: 'penMenu', command: 'tools.pen' },
+      { tool: 'pencil', label: 'Pencil', icon: 'pencil', command: 'tools.pencil' },
+    ],
+  },
+];
+
+/** The toolbar's mode switcher. Motion and Dev Mode arrive with M12 and M13. */
 const MODES: readonly {
   readonly mode: EditorMode;
   readonly label: string;
   readonly icon: IconName;
   readonly available: boolean;
 }[] = [
-  { mode: 'draw', label: 'Draw', icon: 'modeDraw', available: false },
+  { mode: 'draw', label: 'Draw', icon: 'modeDraw', available: true },
   { mode: 'design', label: 'Design', icon: 'modeDesign', available: true },
   { mode: 'motion', label: 'Motion', icon: 'modeMotion', available: false },
   { mode: 'dev', label: 'Dev Mode', icon: 'modeDev', available: false },
@@ -185,9 +200,9 @@ const firstAvailable = (group: ToolGroup): ToolItem => group.items.find((i) => i
 export function Toolbar() {
   const editor = useEditor();
   const tool = useEditorState((s) => s.tool);
-  // Tool last picked from each group's dropdown; shown when the group is not active.
-  const [picked, setPicked] = useState<(ToolId | PendingTool)[]>(GROUPS.map((g) => firstAvailable(g).tool));
-  const [openGroup, setOpenGroup] = useState<number | null>(null);
+  // Tool last picked from each group's dropdown, by group; shown when the group is not active.
+  const [picked, setPicked] = useState<Readonly<Record<string, ToolId | PendingTool>>>({});
+  const [openGroup, setOpenGroup] = useState<string | null>(null);
   const vectorTool = useEditorState((s) => (s.vectorEdit ? (s.vectorEdit.tool ?? 'move') : null));
   const mode = useEditorState((s) => s.mode);
 
@@ -251,9 +266,9 @@ export function Toolbar() {
       )}
       {vectorTool === null && (
         <>
-          {GROUPS.map((group, gi) => {
+          {(mode === 'draw' ? DRAW_GROUPS : GROUPS).map((group) => {
             const active = group.items.some((t) => t.tool === tool);
-            const current = group.items.find((t) => t.tool === (active ? tool : picked[gi])) ?? firstAvailable(group);
+            const current = group.items.find((t) => t.tool === (active ? tool : picked[group.label])) ?? firstAvailable(group);
             return (
               <div key={group.label} className={styles.group} role="group" aria-label={current.label}>
                 <ToolButton
@@ -271,14 +286,14 @@ export function Toolbar() {
                 />
                 <ToolMenu
                   group={group}
-                  open={openGroup === gi}
-                  onOpenChange={(open) => setOpenGroup(open ? gi : null)}
+                  open={openGroup === group.label}
+                  onOpenChange={(open) => setOpenGroup(open ? group.label : null)}
                   activeTool={tool}
                   shortcut={shortcut}
                   onPick={(item) => {
                     if (!item.command) return;
                     editor.commands.run(item.command);
-                    setPicked((prev) => prev.map((t, i) => (i === gi ? item.tool : t)));
+                    setPicked((prev) => ({ ...prev, [group.label]: item.tool }));
                     setOpenGroup(null);
                   }}
                 />
@@ -289,7 +304,7 @@ export function Toolbar() {
           <div className={styles.divider} role="separator" aria-orientation="vertical" />
           <div className={styles.modes} role="radiogroup" aria-label="Mode">
             {MODES.map((m) => (
-              <ModeOption key={m.mode} label={m.label} icon={m.icon} checked={mode === m.mode} available={m.available} />
+              <ModeOption key={m.mode} label={m.label} icon={m.icon} checked={mode === m.mode} available={m.available} shortcut={m.mode === 'draw' ? shortcut('view.drawMode') : undefined} onSelect={() => editor.state.setMode(m.mode)} />
             ))}
           </div>
         </>
@@ -331,12 +346,12 @@ function ToolButton({ icon, label, shortcut, active = false, pending = false, ..
 }
 
 /** One option of the mode switcher; unavailable modes show but can't be chosen. */
-function ModeOption({ label, icon, checked, available }: { label: string; icon: IconName; checked: boolean; available: boolean }) {
-  const { handlers, tooltip } = useHoverTooltip(label, undefined, 'above');
+function ModeOption({ label, icon, checked, available, shortcut, onSelect }: { label: string; icon: IconName; checked: boolean; available: boolean; shortcut?: string | undefined; onSelect: () => void }) {
+  const { handlers, tooltip } = useHoverTooltip(label, shortcut || undefined, 'above');
   return (
     <>
       <label className={styles.mode} data-checked={checked || undefined} data-unavailable={!available || undefined} {...handlers}>
-        <input type="radio" name="toolbar-mode" className={styles.modeInput} aria-label={label} checked={checked} disabled={!available} readOnly />
+        <input type="radio" name="toolbar-mode" className={styles.modeInput} aria-label={label} checked={checked} disabled={!available} onChange={onSelect} />
         <Icon name={icon} />
       </label>
       {tooltip}
