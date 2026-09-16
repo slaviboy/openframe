@@ -192,3 +192,11 @@
   padding-left: var(--space-2);
   border-left: 2px solid var(--border);
 }
+
+/* An expression and the list of variables that can go in it. */
+.expressionRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-1);
+}

@@ -56,6 +56,10 @@ test('Set variable and a Conditional run in order in presentation view', async (
   await details.getByRole('combobox', { name: 'Action', exact: true }).selectOption({ label: 'Set variable' });
   await details.getByRole('combobox', { name: 'Variable', exact: true }).selectOption({ label: 'Number' });
   const expression = details.getByRole('textbox', { name: 'Value', exact: true });
+  // The field lists the variables that can go in it, and picking one writes its reference.
+  const insert = details.getByRole('combobox', { name: 'Insert variable into Value' });
+  await insert.selectOption({ label: 'Number' });
+  await expect(expression).toHaveValue('{Number}');
   await expression.fill('{Number} +');
   await expect(expression).toHaveAttribute('aria-invalid', 'true');
   await expression.fill('{Number} + 1');

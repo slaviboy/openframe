@@ -56,7 +56,7 @@ import {
 import { DEFAULT_OVERLAY_BACKGROUND, flowsOf, isOverlayDestination, OVERLAY_POSITION_LABELS, overlaySettings } from '@/core/prototype/flows';
 import { isInheritedInteraction } from '@/core/prototype/connections';
 import { topLevelFrame } from '@/core/prototype/reactions';
-import type { Color, MediaAction, OverlaySettings, PrototypeAction, PrototypeEasing, PrototypeTransition, Reaction, SceneNode } from '@/core/schema/document';
+import type { Color, MediaAction, OverlaySettings, PrototypeAction, PrototypeEasing, PrototypeTransition, Reaction, SceneNode, VariableNode } from '@/core/schema/document';
 import {
   addFlowStartingPoint,
   addInteraction,
@@ -78,7 +78,7 @@ import { canonicalStringify } from '@/core/serialize/serialize';
 import { DEVICE_CATEGORIES, presetsIn } from '@/core/document/frame-presets';
 import { DEVICE_MODEL_LABELS, DEVICE_MODELS, effectiveDevice, type DeviceModel } from '@/core/prototype/device';
 import { parseExpression } from '@/core/prototype/expressions';
-import { collectionVariables, isVariableCollection, localCollections } from '@/core/variables/document';
+import { collectionVariables, isVariable, isVariableCollection, localCollections } from '@/core/variables/document';
 import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
 import { needsBiggerContent, OVERFLOW_DIRECTIONS, OVERFLOW_LABELS, overflowOf, SCROLL_BEHAVIOR_LABELS, SCROLL_BEHAVIORS, scrollFrameOf, type OverflowDirection, type ScrollBehavior } from '@/core/prototype/scroll';
 import { videoFillsOf, videoOptionsOf, type VideoOptions } from '@/core/prototype/video';
@@ -484,11 +484,33 @@ const isValidExpression = (text: string): boolean => {
 const HEX_COLOR = /^#?[0-9a-f]{6}([0-9a-f]{2})?$/i;
 
 /** An expression (or, for colors, a hex code) typed and committed on Enter or blur, outlined in red while it isn't valid. */
-function ExpressionInput({ label, value, color = false, onCommit }: { label: string; value: string; color?: boolean; onCommit: (value: string) => void }) {
+function ExpressionInput({
+  label,
+  value,
+  color = false,
+  editor,
+  variableType,
+  onCommit,
+}: {
+  label: string;
+  value: string;
+  color?: boolean;
+  /** With an editor, the field offers the variables that can go in it. */
+  editor?: Editor;
+  /** Only variables of this type are offered (the type the target variable takes). */
+  variableType?: VariableNode['resolvedType'] | undefined;
+  onCommit: (value: string) => void;
+}) {
   const [draft, setDraft] = useState<string | null>(null);
   const text = draft ?? value;
   const valid = text.trim() === '' || (color ? HEX_COLOR.test(text.trim()) : isValidExpression(text));
-  return (
+  // A hex code has no variables to offer; anywhere else the field takes the variables of a matching type.
+  const groups = !editor || color
+    ? []
+    : localCollections(editor.doc)
+        .map((collection) => ({ collection, options: collectionVariables(editor.doc, collection.id).filter((variable) => variableType === undefined || variable.resolvedType === variableType) }))
+        .filter((group) => group.options.length > 0);
+  const field = (
     <input
       className={`${primitives.textInput} ${valid ? '' : styles.invalid}`}
       aria-label={label}
@@ -506,6 +528,38 @@ function ExpressionInput({ label, value, color = false, onCommit }: { label: str
         if (e.key === 'Enter') e.currentTarget.blur();
       }}
     />
+  );
+  if (groups.length === 0) return field;
+  return (
+    <div className={styles.expressionRow}>
+      {field}
+      <select
+        className={primitives.select}
+        aria-label={`Insert variable into ${label}`}
+        value=""
+        onKeyDown={stopKeys}
+        onChange={(e) => {
+          const chosen = editor?.doc.get(e.target.value);
+          e.target.value = '';
+          if (!isVariable(chosen)) return;
+          // The reference goes after what is already there, as its own term.
+          const next = `${text.trim() === '' ? '' : `${text.trim()} `}{${chosen.name}}`;
+          setDraft(null);
+          onCommit(next);
+        }}
+      >
+        <option value="">Insert variable</option>
+        {groups.map(({ collection, options }) => (
+          <optgroup key={collection.id} label={collection.name}>
+            {options.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.name}
+              </option>
+            ))}
+          </optgroup>
+        ))}
+      </select>
+    </div>
   );
 }
 
@@ -527,7 +581,14 @@ function SetVariableFields({ editor, action, suffix, onChange }: { editor: Edito
           </optgroup>
         ))}
       </select>
-      <ExpressionInput label={`Value${suffix}`} value={action.expression} color={color} onCommit={(expression) => onChange({ ...action, expression })} />
+      <ExpressionInput
+        label={`Value${suffix}`}
+        value={action.expression}
+        color={color}
+        editor={editor}
+        variableType={variable?.type === 'VARIABLE' ? variable.resolvedType : undefined}
+        onCommit={(expression) => onChange({ ...action, expression })}
+      />
     </>
   );
 }
@@ -589,7 +650,7 @@ function ConditionalFields({
             ) : (
               <label className={styles.field}>
                 <span className={styles.fieldLabel}>If</span>
-                <ExpressionInput label={`Condition${suffix}`} value={block.condition} onCommit={(condition) => setBlock(index, { ...block, condition })} />
+                <ExpressionInput label={`Condition${suffix}`} value={block.condition} editor={editor} onCommit={(condition) => setBlock(index, { ...block, condition })} />
               </label>
             )}
             {block.actions.map((nested, i) => (

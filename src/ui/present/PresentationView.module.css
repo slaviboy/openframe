@@ -178,3 +178,38 @@
   gap: 4px;
   padding: 4px 8px;
 }
+
+/* Options > Accessibility settings, over the prototype. */
+.dialogScrim {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  background: rgb(0 0 0 / 40%);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 260px;
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+  background: var(--bg-panel);
+  color: var(--fg-primary);
+  box-shadow: var(--shadow-menu);
+}
+
+.dialogTitle {
+  margin: 0;
+  font-size: var(--text-lg);
+  font-weight: var(--weight-strong);
+}
+
+.dialogRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-md);
+}

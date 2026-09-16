@@ -63,8 +63,20 @@ test('accessibility mode presents a screen as sections and links a keyboard or s
   await expect(stage).toHaveAttribute('data-screen', 'Frame 2');
   await expect(present.getByRole('region', { name: 'Frame 2' })).toHaveCount(1);
 
-  // Options turns it off again.
+  // Options > Accessibility settings turns it off again.
   await present.getByRole('button', { name: 'Options' }).click();
-  await present.getByText('Adapt content for screen readers').click();
+  await present.getByRole('menuitem', { name: 'Accessibility settings' }).click();
+  const settings = present.getByRole('dialog', { name: 'Accessibility settings' });
+  const toggle = settings.getByRole('checkbox', { name: 'Adapt content for screen readers' });
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
   await expect(present.getByTestId('accessible-content')).toHaveCount(0);
+  await settings.getByRole('button', { name: 'Done' }).click();
+  await expect(settings).toHaveCount(0);
+
+  // And on again from the same dialog.
+  await present.getByRole('button', { name: 'Options' }).click();
+  await present.getByRole('menuitem', { name: 'Accessibility settings' }).click();
+  await present.getByRole('dialog', { name: 'Accessibility settings' }).getByRole('checkbox', { name: 'Adapt content for screen readers' }).check();
+  await expect(present.getByTestId('accessible-content')).toHaveCount(1);
 });

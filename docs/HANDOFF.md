@@ -255,6 +255,10 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 - The Variant interactions section and an animated Change to (after row 160): `blendVariantStore` (`src/core/prototype/variant-animate.ts`) blends the prototype's copy of the document before a variant switch with the copy after it. Swapping a variant gives the instance's layers new ids, so they are matched by their path of names (`layerPaths`, now exported with `blendLayer` and `blendFills` from smart-animate). `PresentationRenderer.setVariantAnimation` draws the frame from that blend while the switch runs, and `PresentationView` keeps the copy it animates from, advancing it like its other animations. A Change to offers Instant, Dissolve and Smart animate only, since it blends layers rather than moving a screen. An instance's inherited interactions are listed read-only in a Variant interactions section (`isInheritedInteraction`).
 
+- Variables in prototypes finished (after row 200): Set variable mode already carried extended collections (they are children of the root like any other, and the runtime resolves their overrides), which `prototype-variables.test.ts` now proves end to end. `ExpressionInput` takes an optional editor and variable type, and offers the variables that can go in the field, writing `{Name}` after what is there. Library variables stay out: they need accounts and a server.
+
+- The Accessibility settings dialog (after the variables work, finishing M10): Options > Accessibility settings opens a dialog over the prototype (`dialogScrim` / `dialog` in `PresentationView.module.css`) holding Adapt content for screen readers, replacing the Options item that toggled it. Skip to content still turns the mode on.
+
 ## In progress (uncommitted)
 
 Nothing. The working tree is clean apart from anything noted above.
@@ -262,8 +266,6 @@ Nothing. The working tree is clean apart from anything noted above.
 ## Next (M10, in order)
 
 1. The pending sub-items left in the M10 rows of `docs/FEATURE_MATRIX.md`:
-   - 239 Variables: extended collections' modes, library variables, variable picker in expressions
-   - 244 Accessible prototypes: the Accessibility settings dialog
 
 **Stop after M10.** When every M10 row is finished and committed, stop and report to the user. Don't start M11 until the user says to continue. After that, M11–M15 follow `docs/FEATURE_MATRIX.md` (the rows marked Planned or In progress) in milestone order.
 
@@ -272,8 +274,6 @@ Nothing. The working tree is clean apart from anything noted above.
 To continue in a new session, tell the assistant: *Read `docs/HANDOFF.md`, check `git status` and `git log --oneline -15`, then continue with "In progress (uncommitted)" and the M10 list below. Stop after M10.* The rows are in `docs/FEATURE_MATRIX.md` (Milestone and Status columns).
 
 **M10 (prototyping): rows still In progress**
-- 239 Variables in prototypes: modes of extended collections; a variable picker in expressions; library variables (needs accounts and a server: record as not possible offline)
-- 244 Accessible prototypes: the Accessibility settings dialog
 
 **M11 (Draw mode): all Planned**
 - Mode switcher Draw / Design / Motion / Dev (⇧D), shared with M12 and M13

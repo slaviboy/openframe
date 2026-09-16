@@ -21,7 +21,7 @@ import { IdGenerator } from '@/core/ids/ids';
 import { runReaction, startPlayer, type PlayerState } from '@/core/prototype/player';
 import { evaluateAt, NO_VARIABLES } from '@/core/prototype/variables-runtime';
 import type { PrototypeAction, Reaction, SceneNode, VariableCollectionNode } from '@/core/schema/document';
-import { bindVariable, createCollection, createVariable, setVariableValue } from './commands/variables';
+import { addMode, bindVariable, createCollection, createVariable, extendCollection, setVariableOverride, setVariableValue } from './commands/variables';
 import { Editor } from './editor';
 import { buildRuntime } from './prototype-runtime';
 
@@ -95,6 +95,23 @@ describe('variables in prototypes', () => {
     const switched = runReaction(editor.doc, state, on({ type: 'SET_VARIABLE_MODE', collectionId: collection, modeId: mode }), 'bar').state;
     expect(switched.variables?.pageModes).toEqual({ [collection]: mode });
     expect(runReaction(editor.doc, state, on({ type: 'SET_VARIABLE_MODE', collectionId: collection, modeId: 'nope' }), 'bar').state).toBe(state);
+  });
+
+  test('Set variable mode switches an extended collection, whose overrides reach the layers bound to it', () => {
+    // A second mode on the collection, and a collection extending it that overrides the count in that mode.
+    const second = addMode(editor, collection, 'Large')!;
+    setVariableValue(editor, count, second, 2);
+    const extension = extendCollection(editor, collection, 'Brand')!;
+    const extensionMode = (editor.doc.getOrThrow(extension) as VariableCollectionNode).modes.find((m) => m.name === 'Large')!.modeId;
+    expect(setVariableOverride(editor, extension, count, extensionMode, 9)).toBe(true);
+    bindVariable(editor, ['bar'], 'width', count);
+
+    const mode: PrototypeAction = { type: 'SET_VARIABLE_MODE', collectionId: extension, modeId: extensionMode };
+    const next = runReaction(editor.doc, state, on(mode)).state!;
+    expect(next.variables?.pageModes[extension]).toBe(extensionMode);
+
+    const runtime = buildRuntime(editor.doc, editor.pageId, { variants: [], variables: next.variables ?? NO_VARIABLES })!;
+    expect((runtime.doc.getOrThrow('bar') as SceneNode).size.width).toBe(9);
   });
 
   test('the runtime document gives bound layers the values set while playing', () => {

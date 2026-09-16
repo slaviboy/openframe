@@ -190,6 +190,8 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
   /** Accessibility mode: the content of the frames shown as HTML for screen readers (Skip to content, or Options). */
   const [accessible, setAccessible] = useState(false);
   const [accessibleMessage, setAccessibleMessage] = useState('');
+  /** Options > Accessibility settings: where accessibility mode is turned on and off. */
+  const [accessibilityOpen, setAccessibilityOpen] = useState(false);
   /** The scene the accessible content is placed on, updated as the frames shown or their places change. */
   const [accessibleScene, setAccessibleScene] = useState<PresentedScene | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -901,7 +903,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
   }, [aspectHeight, aspectWidth, onResizeWindow]);
   const menuEntries: MenuEntry[] = [
     { kind: 'item', id: 'hints', label: 'Show hints on click', checked: showHints, onSelect: () => setShowHints((on) => !on) },
-    { kind: 'item', id: 'accessible', label: 'Adapt content for screen readers', checked: accessible, onSelect: () => setAccessibility(!accessible) },
+    { kind: 'item', id: 'accessibility', label: 'Accessibility settings', onSelect: () => setAccessibilityOpen(true) },
     ...(inlineMode
       ? []
       : ([
@@ -1055,6 +1057,28 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
           <canvas ref={canvasRef} className={styles.canvas} />
           {screenBox && <div className={styles.screenBox} data-testid="presentation-screen" style={{ left: screenBox.x, top: screenBox.y, width: screenBox.width, height: screenBox.height }} />}
           {accessible && player && accessibleScene && <AccessibleContent doc={doc} index={sceneIndex} scene={accessibleScene} frameIds={shownFrames(player)} onActivate={activate} />}
+          {accessibilityOpen && (
+            <div
+              className={styles.dialogScrim}
+              role="presentation"
+              onPointerDown={() => setAccessibilityOpen(false)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Escape') setAccessibilityOpen(false);
+              }}
+            >
+              <div className={styles.dialog} role="dialog" aria-modal="true" aria-label="Accessibility settings" onPointerDown={(e) => e.stopPropagation()}>
+                <h2 className={styles.dialogTitle}>Accessibility settings</h2>
+                <label className={styles.dialogRow}>
+                  <input type="checkbox" autoFocus checked={accessible} onChange={(e) => setAccessibility(e.target.checked)} />
+                  Adapt content for screen readers
+                </label>
+                <button type="button" className={styles.button} onClick={() => setAccessibilityOpen(false)}>
+                  Done
+                </button>
+              </div>
+            </div>
+          )}
           {!player && <p className={styles.message}>Add a frame to this page to present it.</p>}
           {error && (
             <p className={styles.message} role="alert">
