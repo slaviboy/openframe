@@ -233,3 +233,16 @@
   place-items: center;
   color: var(--fg-secondary);
 }
+
+/* Draw mode: the layer's contents in place of its type icon. */
+.preview {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-panel);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+}

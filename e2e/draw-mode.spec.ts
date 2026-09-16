@@ -52,3 +52,38 @@ test('⇧D switches between Design and Draw, and Draw has its own toolbar', asyn
   await expect(page.getByRole('radio', { name: 'Draw' })).toBeChecked();
   await expect(toolbar.getByRole('button', { name: /^Frame/ })).toHaveCount(0);
 });
+
+test('Draw mode previews each layer and gives its properties sliders', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 420, box.y + 260);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 540, box.y + 340, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByRole('treeitem', { name: /Rectangle 1/ })).toBeVisible();
+
+  await page.keyboard.press('Shift+D');
+  // The layer's row shows what the layer looks like, drawn by the engine.
+  const preview = page.getByRole('img', { name: 'Rectangle 1 preview' });
+  await expect(preview).toBeVisible();
+  await expect(preview).toHaveAttribute('data-loaded', '');
+
+  // Opacity takes a slider here; dragging it changes the value the field shows.
+  const opacity = page.getByRole('slider', { name: 'Opacity slider' });
+  await expect(opacity).toBeVisible();
+  await opacity.fill('40');
+  await expect(page.getByTestId('field-opacity')).toHaveValue('40%');
+
+  // Double-clicking the preview zooms the canvas to that layer.
+  const zoom = page.getByTestId('zoom-level');
+  const before = await zoom.textContent();
+  await preview.dblclick();
+  await expect.poll(async () => zoom.textContent()).not.toBe(before);
+
+  // Design keeps its own list and fields.
+  await page.keyboard.press('Shift+D');
+  await expect(page.getByRole('img', { name: 'Rectangle 1 preview' })).toHaveCount(0);
+  await expect(page.getByRole('slider', { name: 'Opacity slider' })).toHaveCount(0);
+});

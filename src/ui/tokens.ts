@@ -20,6 +20,8 @@
  * sync with src/ui/tokens.css.
  */
 export const LAYER_ROW_HEIGHT = 32;
+/** Draw mode's Layers rows, which hold a preview of the layer rather than its type icon. */
+export const LAYER_ROW_HEIGHT_DRAW = 48;
 export const LAYER_INDENT = 16;
 export const SIDEBAR_LEFT_DEFAULT = 240;
 export const SIDEBAR_LEFT_MIN = 200;

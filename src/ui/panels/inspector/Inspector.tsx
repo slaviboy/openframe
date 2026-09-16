@@ -630,6 +630,29 @@ function AlignRow() {
   );
 }
 
+/** A property as a slider with its value, for Draw mode: dragging changes it, and the number says where it landed. */
+function SliderRow({ label, min, max, value, gesture, onChange }: { label: string; min: number; max: number; value: number | undefined; gesture: { start: () => void; end: () => void }; onChange: (value: number) => void }) {
+  return (
+    <div className={gradientStyles.adjustRow}>
+      <span aria-hidden="true">{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={1}
+        aria-label={`${label} slider`}
+        value={value ?? min}
+        onPointerDown={gesture.start}
+        onPointerUp={gesture.end}
+        onPointerCancel={gesture.end}
+        onBlur={gesture.end}
+        onChange={(e) => onChange(Number(e.target.value))}
+      />
+      <output>{value === undefined ? '–' : Math.round(value)}</output>
+    </div>
+  );
+}
+
 /** A sidebar section; `styleAction` (the Apply styles button) sits before the actions, and `applied` (the applied style) above the body. */
 function Section({ title, actions, styleAction, applied, children }: { title: string; actions?: ReactNode; styleAction?: ReactNode; applied?: ReactNode; children?: ReactNode }) {
   return (
@@ -729,6 +752,8 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
   const pointCount = useGesture('Change point count');
   const ratio = useGesture('Change star ratio');
   const tool = useEditorState((s) => s.tool);
+  // Draw mode: the illustration properties also take a slider, to balance feel against exact values.
+  const draw = useEditorState((s) => s.mode) === 'draw';
   const spacing = useGesture('Change spacing');
   const smart = smartSelectionInfo(editor);
 
@@ -1066,6 +1091,16 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             />
           )}
         </div>
+        {draw && (
+          <SliderRow
+            label="Opacity"
+            min={0}
+            max={100}
+            value={val(shared(nodes, (n) => Math.round(n.opacity * 100)))}
+            gesture={appearance}
+            onChange={(v) => appearance.change((tx) => nodes.forEach((n) => setOpacity(tx, n, v)))}
+          />
+        )}
         {independentCorners && (
           <div className={styles.grid2}>
             {CORNERS.map(([corner, label]) => (
@@ -2052,6 +2087,7 @@ function PaintSection({
   const gesture = useGesture(`Change ${title.toLowerCase()}`);
   const profile = useColorProfile();
   const strokeWeight = useGesture('Change stroke weight');
+  const draw = useEditorState((s) => s.mode) === 'draw';
   // While a text layer's characters are selected for editing, its fills apply to those characters;
   // otherwise a text layer's fills are Mixed when its style runs differ.
   useEditorState((s) => s.textEdit);
@@ -2423,6 +2459,16 @@ function PaintSection({
         <p role="alert" className={gradientStyles.error}>
           {videoError}
         </p>
+      )}
+      {field === 'strokes' && list.length > 0 && draw && (
+        <SliderRow
+          label="Weight"
+          min={0}
+          max={50}
+          value={val(shared(nodes, (n) => n.strokeWeight))}
+          gesture={strokeWeight}
+          onChange={(v) => strokeWeight.change((tx) => nodes.forEach((n) => setStrokeWeight(tx, n, v)))}
+        />
       )}
       {field === 'strokes' && list.length > 0 && <StrokeSettings nodes={nodes} />}
       {field === 'strokes' && list.length > 0 && nodes.every((n) => n.type === 'LINE') && (

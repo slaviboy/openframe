@@ -27,7 +27,11 @@ import { useImageMime } from '../../images/useImageUrl';
 import { objectMenuEntries } from '../../menus/menu-model';
 import { IconButton } from '../../primitives/IconButton';
 import { Menu } from '../../primitives/Menu';
-import { LAYER_INDENT, LAYER_ROW_HEIGHT } from '../../tokens';
+import { LAYER_INDENT, LAYER_ROW_HEIGHT, LAYER_ROW_HEIGHT_DRAW } from '../../tokens';
+
+/** The preview is square, a little smaller than the row it sits in. */
+const LAYER_PREVIEW_SIZE = 36;
+import { useLayerThumbnail } from '../../images/useLayerThumbnail';
 import { flattenLayers, rowRange, type LayerRow } from './layer-rows';
 import { renameLayer } from '@/core/text/text-resize';
 import styles from './LayersPanel.module.css';
@@ -65,9 +69,12 @@ export function LayersPanel() {
     [editor, pageId, expanded, revision],
   );
   const selected = useMemo(() => new Set(selection), [selection]);
+  // Draw mode shows each layer as a preview of its contents, in a taller row.
+  const draw = useEditorState((s) => s.mode) === 'draw';
+  const rowHeight = draw ? LAYER_ROW_HEIGHT_DRAW : LAYER_ROW_HEIGHT;
 
-  const first = Math.max(0, Math.floor(scroll.top / LAYER_ROW_HEIGHT) - OVERSCAN);
-  const last = Math.min(rows.length, Math.ceil((scroll.top + scroll.height) / LAYER_ROW_HEIGHT) + OVERSCAN);
+  const first = Math.max(0, Math.floor(scroll.top / rowHeight) - OVERSCAN);
+  const last = Math.min(rows.length, Math.ceil((scroll.top + scroll.height) / rowHeight) + OVERSCAN);
 
   const selectRow = (row: LayerRow, e: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean }) => {
     if (e.metaKey || e.ctrlKey) {
@@ -95,9 +102,9 @@ export function LayersPanel() {
     const el = scrollRef.current;
     if (!el) return null;
     const y = clientY - el.getBoundingClientRect().top + el.scrollTop;
-    const index = Math.floor(y / LAYER_ROW_HEIGHT);
+    const index = Math.floor(y / rowHeight);
     const row = rows[Math.max(0, Math.min(rows.length - 1, index))];
-    return row ? { row, offset: (y - index * LAYER_ROW_HEIGHT) / LAYER_ROW_HEIGHT } : null;
+    return row ? { row, offset: (y - index * rowHeight) / rowHeight } : null;
   };
 
   const onRowPointerDown = (row: LayerRow, e: PointerEvent<HTMLDivElement>) => {
@@ -191,9 +198,9 @@ export function LayersPanel() {
   const scrollIntoView = (index: number) => {
     const el = scrollRef.current;
     if (!el || index < 0) return;
-    const top = index * LAYER_ROW_HEIGHT;
+    const top = index * rowHeight;
     if (top < el.scrollTop) el.scrollTop = top;
-    else if (top + LAYER_ROW_HEIGHT > el.scrollTop + el.clientHeight) el.scrollTop = top + LAYER_ROW_HEIGHT - el.clientHeight;
+    else if (top + rowHeight > el.scrollTop + el.clientHeight) el.scrollTop = top + rowHeight - el.clientHeight;
   };
 
   return (
@@ -217,7 +224,7 @@ export function LayersPanel() {
         onPointerLeave={() => editor.state.setHover(null)}
       >
         {rows.length === 0 && <p className={styles.empty}>Layers you add to this page appear here.</p>}
-        <div style={{ height: rows.length * LAYER_ROW_HEIGHT, position: 'relative' }}>
+        <div style={{ height: rows.length * rowHeight, position: 'relative' }}>
           {rows.slice(first, last).map((row, i) => {
             const node = editor.doc.get(row.id);
             if (!node || !isSceneNode(node)) return null;
@@ -239,13 +246,20 @@ export function LayersPanel() {
                 data-hidden={!node.visible || undefined}
                 data-suggested={suggested.has(row.id) || undefined}
                 data-drop={drop}
-                style={{ top: (first + i) * LAYER_ROW_HEIGHT, paddingLeft: 8 + row.depth * LAYER_INDENT }}
+                style={{ top: (first + i) * rowHeight, height: rowHeight, paddingLeft: 8 + row.depth * LAYER_INDENT }}
                 onPointerEnter={() => editor.state.setHover(row.id)}
                 onPointerDown={(e) => onRowPointerDown(row, e)}
                 onPointerMove={onRowPointerMove}
                 onPointerUp={(e) => onRowPointerUp(row, e)}
                 onDoubleClick={(e) => {
-                  if (!(e.target as HTMLElement).closest('button')) editor.state.setRenaming(row.id);
+                  if ((e.target as HTMLElement).closest('button')) return;
+                  // The row captures the pointer while dragging layers, so the click lands on it: look under the pointer.
+                  if (document.elementFromPoint(e.clientX, e.clientY)?.closest('[data-layer-preview]')) {
+                    editor.state.select([row.id]);
+                    editor.commands.run('view.zoomToSelection');
+                    return;
+                  }
+                  editor.state.setRenaming(row.id);
                 }}
                 onContextMenu={(e) => {
                   e.preventDefault();
@@ -269,7 +283,11 @@ export function LayersPanel() {
                 >
                   <Icon name={row.expanded ? 'caretDown' : 'caretRight'} size={16} />
                 </button>
-                <Icon name={layerIcon(node)} size={16} className={styles.typeIcon} data-component={layerIcon(node) === 'component' || undefined} />
+                {draw ? (
+                  <LayerPreview pageId={pageId} id={row.id} name={node.name} />
+                ) : (
+                  <Icon name={layerIcon(node)} size={16} className={styles.typeIcon} data-component={layerIcon(node) === 'component' || undefined} />
+                )}
                 {renamingId === row.id ? (
                   <RenameInput
                     initial={node.name}
@@ -362,6 +380,12 @@ function RenameInput({ initial, onDone }: { initial: string; onDone: (value: str
       }}
     />
   );
+}
+
+/** Draw mode's layer preview: the layer as it is drawn now. Double-clicking it zooms the canvas to that layer (handled by its row). */
+function LayerPreview({ pageId, id, name }: { pageId: Id; id: Id; name: string }) {
+  const src = useLayerThumbnail(pageId, id, LAYER_PREVIEW_SIZE);
+  return <span className={styles.preview} role="img" aria-label={`${name} preview`} data-layer-preview="" data-loaded={src ? '' : undefined} style={src ? { backgroundImage: `url("${src}")` } : undefined} />;
 }
 
 /** GIF: a layer whose image fill is an animated GIF (kept out of the row's accessible name). */

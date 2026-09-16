@@ -15,30 +15,13 @@
  * limitations under the License.
  */
 
-import { useMemo } from 'react';
-import { documentColorProfile } from '@/core/color/color-profile';
 import type { LocalComponent } from '@/editor/commands/insert-instance';
-import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
+import { useLayerThumbnail } from '../../images/useLayerThumbnail';
 import assetStyles from './AssetsPanel.module.css';
-
-/** Base64 of binary data, in chunks so large images don't overflow the argument list. */
-function base64(bytes: Uint8Array): string {
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(binary);
-}
 
 /** A component's thumbnail, drawn by the rendering engine from its current state, at most `size` CSS pixels on each side. */
 export function ComponentThumbnail({ component, size = 64 }: { component: LocalComponent; size?: number }) {
-  const editor = useEditor();
-  const revision = useDocumentRevision();
-  const ready = useEditorState((s) => s.textLayoutReady);
-  const src = useMemo(() => {
-    const bytes = ready ? editor.thumbnails?.thumbnail(editor.doc, editor.scene, component.pageId, component.id, size, window.devicePixelRatio || 1, documentColorProfile(editor.doc)) : null;
-    return bytes ? `data:image/png;base64,${base64(bytes)}` : null;
-    // The document changes in place, so its revision is what says the thumbnail must be drawn again.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, component.pageId, component.id, size, revision, ready]);
+  const src = useLayerThumbnail(component.pageId, component.id, size);
   const box = { width: size, height: size };
   return src ? <img className={assetStyles.thumbnail} style={box} src={src} alt="" draggable={false} /> : <span className={assetStyles.thumbnail} style={box} />;
 }

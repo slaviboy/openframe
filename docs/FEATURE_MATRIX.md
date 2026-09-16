@@ -249,7 +249,7 @@ Its **Tests** column must then name the covering tests.
 
 | Feature | Documentation | Pri | Dependency | M | Status | Tests |
 |---|---|---:|---|---|---|---|
-| Draw mode UI: toolbar, streamlined sliders, large layer thumbnails | reference-draw/explore-reference-draw.html | P1 | Modes | M11 | Planned | |
+| Draw mode UI: toolbar, streamlined sliders, large layer thumbnails | reference-draw/explore-reference-draw.html | P1 | Modes | M11 | Implemented (Draw's toolbar holds the move tools and the illustration tools — Pen and Pencil, with Brush joining them in its own row; the Layers list shows each layer as a preview of its contents, drawn by the rendering engine, in a taller row, and double-clicking a preview zooms the canvas to that layer; the properties panel adds sliders beside the fields worth feeling out — a layer's opacity, and a stroke's weight. Reaching transforms from the panel comes with the transforms row) | e2e/draw-mode.spec.ts |
 | Pencil and brush tools with a secondary toolbar; ⌘-click samples a stroke | reference-draw/draw-with-illustration-tools.html | P1 | Vector model | M11 | Planned | |
 | Custom stretch and scatter brushes | reference-draw/draw-with-illustration-tools.html | P2 | Stroke geometry | M11 | Planned | |
 | Transforms: radial and linear repeat, apply transforms | reference-draw/create-patterns-with-transforms.html | P2 | Transform group node | M11 | Planned | |
