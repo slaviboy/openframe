@@ -109,7 +109,7 @@ import {
   type StrokeCap,
 } from '@/core/schema/document';
 
-const PAINT_TYPES: readonly PaintType[] = ['SOLID', 'GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND', 'IMAGE', 'PATTERN'];
+const PAINT_TYPES: readonly PaintType[] = ['SOLID', 'GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND', 'IMAGE', 'VIDEO', 'PATTERN'];
 const HORIZONTAL_CONSTRAINTS: readonly (readonly [Constraint, string])[] = [
   ['MIN', 'Left'],
   ['MAX', 'Right'],
@@ -125,6 +125,8 @@ const VERTICAL_CONSTRAINTS: readonly (readonly [Constraint, string])[] = [
   ['SCALE', 'Scale'],
 ];
 import { ImageSettings, ImageSwatch } from './ImageSettings';
+import { videoPaintFor } from '@/core/image/image-paint';
+import { readVideoFile, VIDEO_ACCEPT } from '../../images/import-video';
 import { AppliedStyle, LocalStylesSection, StyleButton } from './StylesPanel';
 import { ExportSection } from './ExportSection';
 import { FRAME_PRESET_CATEGORIES, presetById, presetForSize, presetsIn } from '@/core/document/frame-presets';
@@ -2086,6 +2088,29 @@ function PaintSection({
       nodes.forEach((n) => write(tx, n, read(tx, n).map((p, i) => (i === index && isGradientPaint(p) ? edit(p) : p)))),
     );
 
+  // Choosing Video in a paint's type menu asks for a file, then turns that paint into a video fill.
+  const videoInput = useRef<HTMLInputElement>(null);
+  const pickVideoFor = useRef<number | null>(null);
+  const [videoError, setVideoError] = useState<string | null>(null);
+  const chooseVideo = async (file: File | undefined) => {
+    const index = pickVideoFor.current;
+    pickVideoFor.current = null;
+    if (!file || index === null) return;
+    setVideoError(null);
+    try {
+      const { video, poster } = await readVideoFile(file);
+      await editor.images.add(poster);
+      await editor.images.add(video);
+      editor.history.run(`Change ${title.toLowerCase()} type`, (tx) =>
+        nodes.forEach((n) =>
+          write(tx, n, read(tx, n).map((p, i) => (i === index ? { ...videoPaintFor(poster, video.hash), opacity: p.opacity, visible: p.visible, blendMode: p.blendMode } : p))),
+        ),
+      );
+    } catch (e) {
+      setVideoError(e instanceof Error ? e.message : 'The video could not be added.');
+    }
+  };
+
   const add = () =>
     editor.history.run(`Add ${title.toLowerCase()}`, (tx) => {
       for (const n of nodes) {
@@ -2129,16 +2154,22 @@ function PaintSection({
                   <select
                     aria-label={`${title} ${list.length - index} type`}
                     value={paint.type}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      const type = e.target.value as PaintType;
+                      if (type === 'VIDEO' && paint.type !== 'VIDEO') {
+                        pickVideoFor.current = index;
+                        videoInput.current?.click();
+                        return;
+                      }
                       editor.history.run(`Change ${title.toLowerCase()} type`, (tx) =>
                         nodes.forEach((n) =>
-                          write(tx, n, read(tx, n).map((p, i) => (i === index ? convertPaint(p, e.target.value as PaintType) : p))),
+                          write(tx, n, read(tx, n).map((p, i) => (i === index ? convertPaint(p, type) : p))),
                         ),
-                      )
-                    }
+                      );
+                    }}
                   >
-                    {/* Video is shown for a video fill; other fills become videos by importing one. */}
-                    {(paint.type === 'VIDEO' ? [...PAINT_TYPES, 'VIDEO' as const] : PAINT_TYPES).map((type) => (
+                    {/* Choosing Video asks for a video file; the others convert the paint in place. */}
+                    {PAINT_TYPES.map((type) => (
                       <option key={type} value={type}>
                         {PAINT_TYPE_LABELS[type]}
                       </option>
@@ -2252,6 +2283,11 @@ function PaintSection({
                       ),
                     )
                   }
+                  onScrub={(edit) => writeAll((cur) => cur.map((p, i) => (i === index && p.type === 'VIDEO' ? edit(p) : p)))}
+                  onCrop={nodes.length === 1 ? () => beginCrop(editor, nodes[0]!.id, index) : undefined}
+                  cropLayer={nodes.length === 1 ? { id: nodes[0]!.id, size: nodes[0]!.size } : undefined}
+                  onGestureStart={gesture.start}
+                  onGestureEnd={gesture.end}
                 />
               )}
               {paint.type === 'PATTERN' && (
@@ -2371,6 +2407,22 @@ function PaintSection({
             onChange={(v) => strokeWeight.change((tx) => nodes.forEach((n) => setStrokeWeight(tx, n, v)))}
           />
         </div>
+      )}
+      <input
+        ref={videoInput}
+        type="file"
+        accept={VIDEO_ACCEPT}
+        hidden
+        aria-label={`${title} video file`}
+        onChange={(e) => {
+          void chooseVideo(e.currentTarget.files?.[0]);
+          e.currentTarget.value = '';
+        }}
+      />
+      {videoError && (
+        <p role="alert" className={gradientStyles.error}>
+          {videoError}
+        </p>
       )}
       {field === 'strokes' && list.length > 0 && <StrokeSettings nodes={nodes} />}
       {field === 'strokes' && list.length > 0 && nodes.every((n) => n.type === 'LINE') && (

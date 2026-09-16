@@ -36,21 +36,28 @@ export function cropTransformFor(imageToLayer: Matrix, image: Size, layer: Size)
 }
 
 /**
+ * What cropping reads and writes on a paint. A video fill crops like the frames it draws, so image and video paints
+ * both qualify, and the helpers below hand each one back with its own type.
+ */
+export type CroppablePaint = Pick<ImagePaint, 'scaleMode' | 'imageTransform' | 'scalingFactor' | 'rotation' | 'imageSize'>;
+
+/**
  * Where an image paint currently draws, as image pixels → layer coordinates, for any non-tile mode.
  * Used to switch a paint to CROP without moving the image.
  */
-export function imageToLayerMatrix(paint: ImagePaint, image: Size, layer: Size): Matrix | null {
+export function imageToLayerMatrix(paint: CroppablePaint, image: Size, layer: Size): Matrix | null {
   const placement = imagePlacement(paint.scaleMode === 'TILE' ? { ...paint, scaleMode: 'FILL' } : paint, image, layer);
   return placement?.matrix ?? null;
 }
 
 /** Converts an image paint to CROP mode keeping the image exactly where it draws now. */
-export function toCropPaint(paint: ImagePaint, image: Size, layer: Size): ImagePaint {
+export function toCropPaint<T extends CroppablePaint>(paint: T, image: Size, layer: Size): T {
   if (paint.scaleMode === 'CROP') return paint;
   const m = imageToLayerMatrix(paint, image, layer);
   const t = m && cropTransformFor(m, image, layer);
   const { scalingFactor: _tile, rotation: _rotation, ...rest } = paint;
-  return t ? { ...rest, scaleMode: 'CROP', imageTransform: t } : { ...rest, scaleMode: 'CROP' };
+  // The rest of the paint is untouched, so it keeps its own type (an image or a video fill).
+  return (t ? { ...rest, scaleMode: 'CROP', imageTransform: t } : { ...rest, scaleMode: 'CROP' }) as T;
 }
 
 /** Corners of the full image in layer coordinates (nw, ne, se, sw of the unrotated image). */
@@ -157,7 +164,7 @@ export function cropZoomPercent(imageToLayer: Matrix, image: Size, size: Size): 
 }
 
 /** A CROP paint zoomed to `percent` (see `cropZoomPercent`) about the center of the layer. */
-export function zoomCropPaint(paint: ImagePaint, size: Size, percent: number): ImagePaint {
+export function zoomCropPaint<T extends CroppablePaint>(paint: T, size: Size, percent: number): T {
   const image = paint.imageSize;
   const m = image && imagePlacement(paint, image, size)?.matrix;
   if (!image || !m || paint.scaleMode !== 'CROP') return paint;

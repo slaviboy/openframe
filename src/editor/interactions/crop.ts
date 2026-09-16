@@ -38,7 +38,7 @@ import { imagePlacement } from '@/core/image/image-fit';
 import { apply, invert, multiply, rotationOf, translation, type Matrix } from '@/core/math/matrix';
 import type { Vec2 } from '@/core/math/vec';
 import { matrixOf } from '@/core/scene/scene-index';
-import { hasGeometry, isSceneNode, type ImagePaint, type SceneNode, type Size } from '@/core/schema/document';
+import { hasGeometry, isSceneNode, type ImagePaint, type SceneNode, type Size, type VideoPaint } from '@/core/schema/document';
 import { handleCursor, hitHandle, selectionFrame } from '../chrome/selection-geometry';
 import type { Editor } from '../editor';
 import type { ToolId } from '../stores/editor-store';
@@ -52,11 +52,12 @@ type CroppableNode = Exclude<Extract<SceneNode, { fills: readonly unknown[] }>, 
 export interface CropTarget {
   readonly node: CroppableNode;
   readonly index: number;
-  readonly paint: ImagePaint;
+  /** The image or video fill being cropped (a video crops like the frames it draws). */
+  readonly paint: ImagePaint | VideoPaint;
   readonly image: Size;
 }
 
-/** The topmost visible image fill of a layer that has an image (or the fill at `index`), or null. */
+/** The topmost visible image or video fill of a layer that has one (or the fill at `index`), or null. */
 export function cropTarget(editor: Editor, id: Id, index?: number): CropTarget | null {
   const node = editor.doc.get(id);
   if (!node || !isSceneNode(node) || !hasGeometry(node) || node.type === 'LINE') return null;
@@ -65,11 +66,12 @@ export function cropTarget(editor: Editor, id: Id, index?: number): CropTarget |
   for (const i of indices) {
     const paint = fills[i];
     if (paint?.type === 'IMAGE' && paint.visible && paint.imageHash && paint.imageSize) return { node, index: i, paint, image: paint.imageSize };
+    if (paint?.type === 'VIDEO' && paint.visible && paint.imageSize) return { node, index: i, paint, image: paint.imageSize };
   }
   return null;
 }
 
-function setPaint(tx: Transaction, target: CropTarget, paint: ImagePaint): void {
+function setPaint(tx: Transaction, target: CropTarget, paint: ImagePaint | VideoPaint): void {
   const current = tx.store.getOrThrow(target.node.id) as CroppableNode;
   tx.set(target.node.id, 'fills', current.fills.map((p, i) => (i === target.index ? paint : p)));
 }
@@ -82,7 +84,7 @@ export function beginCrop(editor: Editor, id: Id, index?: number): boolean {
   const target = cropTarget(editor, id, index);
   if (!target) return false;
   if (target.paint.scaleMode !== 'CROP') {
-    editor.history.run('Crop image', (tx) => setPaint(tx, target, toCropPaint(target.paint, target.image, target.node.size)));
+    editor.history.run(target.paint.type === 'VIDEO' ? 'Crop video' : 'Crop image', (tx) => setPaint(tx, target, toCropPaint(target.paint, target.image, target.node.size)));
   }
   editor.state.select([id]);
   editor.state.setCropping(id);

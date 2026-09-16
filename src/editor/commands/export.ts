@@ -16,6 +16,7 @@
  */
 
 import { defaultExportSetting, EXPORT_MIME_TYPES, exportFileName, exportScale, uniqueFileNames, type ExportSetting } from '@/core/export/export-settings';
+import { animatedGifHash } from '../images/animated-gif';
 import { exportSvg } from '@/core/export/svg-document';
 import type { Id } from '@/core/ids/ids';
 import { isSceneNode, type SceneNode } from '@/core/schema/document';
@@ -79,7 +80,7 @@ export interface ExportedAsset {
 export function renderExports(editor: Editor, ids: readonly Id[], only?: ReadonlySet<string>): ExportedAsset[] | null {
   const engine = editor.thumbnails;
   const wanted = (node: SceneNode, index: number) => !only || only.has(`${node.id}:${index}`);
-  const needsEngine = layers(editor, ids).some((node) => settingsOf(node).some((setting, index) => setting.format !== 'SVG' && wanted(node, index)));
+  const needsEngine = layers(editor, ids).some((node) => settingsOf(node).some((setting, index) => setting.format !== 'SVG' && setting.format !== 'GIF' && wanted(node, index)));
   if (needsEngine && !engine) return null;
   const assets: ExportedAsset[] = [];
   for (const node of layers(editor, ids)) {
@@ -94,6 +95,13 @@ export function renderExports(editor: Editor, ids: readonly Id[], only?: Readonl
         const geometry = editor.geometry;
         const result = exportSvg(editor.doc, node.id, geometry ? { strokeOutline: (layer) => geometry.strokeOutline(layer) } : {});
         if (result) assets.push({ nodeId: node.id, setting, path: exportFileName(node.name, setting), type: EXPORT_MIME_TYPES.SVG, bytes: new TextEncoder().encode(result.svg), skipped: result.skipped });
+        return;
+      }
+      if (setting.format === 'GIF') {
+        // The original GIF, so its frame delays and loop count survive the export; at 1x, as the file was made.
+        const hash = animatedGifHash(editor, node.id);
+        const bytes = hash ? editor.images.get(hash)?.bytes : undefined;
+        if (bytes) assets.push({ nodeId: node.id, setting, path: exportFileName(node.name, setting), type: EXPORT_MIME_TYPES.GIF, bytes });
         return;
       }
       if (!engine) return;

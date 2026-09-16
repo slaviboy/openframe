@@ -251,6 +251,8 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 - Device frames and the device switcher (after the properties panel): `deviceLayout(device, viewport, margin, { fit, frame })` in `src/core/prototype/device.ts` lays a device out by `DeviceFit` (`FIT` Fit device on screen, `FILL` Zoom device to fill screen, `ACTUAL` Show device at 100%); without its frame only the screen shows. `frame` rides on `DeviceScreen` and the scene's device item, and the renderer paints the body only while it is on. In `PresentationView` the switcher is session-only state (`deviceChoice`, `deviceFit`, `deviceFrame`) over the page's own device, shown as Switch device in the footer, with Z stepping through the fits and `data-device-fit` / `data-device-frame` for the tests.
 
+- Video crop, video from the fill picker, the canvas GIF label and GIF export (after the device switcher): the crop helpers in `src/core/image/crop.ts` are generic over a `CroppablePaint`, so a video fill crops exactly like an image and keeps its type; `CropControls` is shared by `ImageSettings` and `VideoSettings`. Choosing Video for a fill in the Fill section asks for a file and replaces that paint. `animatedGifHash` (`src/editor/images/animated-gif.ts`) is the one place that says whether a layer's topmost visible fill is an animated GIF: the canvas draws its GIF pill next to the size label, and the Export section offers the GIF format only for such layers, writing the stored file itself (at 1x, like SVG), so its frame delays and loop count survive.
+
 ## In progress (uncommitted)
 
 Nothing. The working tree is clean apart from anything noted above.
@@ -258,7 +260,6 @@ Nothing. The working tree is clean apart from anything noted above.
 ## Next (M10, in order)
 
 1. The pending sub-items left in the M10 rows of `docs/FEATURE_MATRIX.md`:
-   - 160 Video / GIF fills: video crop, video from the fill picker, GIF label next to the dimensions, GIF metadata on export
    - 200 Interactive components: the Variant interactions section, animating Change to
    - 239 Variables: extended collections' modes, library variables, variable picker in expressions
    - 244 Accessible prototypes: the Accessibility settings dialog
@@ -270,7 +271,6 @@ Nothing. The working tree is clean apart from anything noted above.
 To continue in a new session, tell the assistant: *Read `docs/HANDOFF.md`, check `git status` and `git log --oneline -15`, then continue with "In progress (uncommitted)" and the M10 list below. Stop after M10.* The rows are in `docs/FEATURE_MATRIX.md` (Milestone and Status columns).
 
 **M10 (prototyping): rows still In progress**
-- 160 Video / GIF fills: video crop; adding a video from the fill picker; a GIF label next to the dimensions; GIF metadata on export
 - 200 Interactive components: the Variant interactions section; animating Change to (it is instant)
 - 239 Variables in prototypes: modes of extended collections; a variable picker in expressions; library variables (needs accounts and a server: record as not possible offline)
 - 244 Accessible prototypes: the Accessibility settings dialog

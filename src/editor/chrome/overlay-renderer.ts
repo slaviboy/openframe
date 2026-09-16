@@ -59,6 +59,10 @@ import { slotIndicators } from '@/core/document/component-properties';
 import { noodleBetween, type Noodle } from '@/core/prototype/connections';
 import { flowsOf } from '@/core/prototype/flows';
 import { CONNECT_HANDLE_SIZE, connectHandle, FLOW_TAG_ICON_WIDTH, overlayBadgeRect, overlayFrames, screenBounds, setFlowTags, shownConnections, type FlowTagRect } from './prototype-geometry';
+import { animatedGifHash } from '../images/animated-gif';
+
+/** The label an animated GIF gets next to its size. */
+const GIF_TAG = 'GIF';
 
 export interface OverlayInput {
   readonly editor: Editor;
@@ -340,7 +344,7 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
     strokeQuad(ctx, quad, theme.selection, theme.selectionWidth);
     ctx.setLineDash([]);
     drawHandles(ctx, editor, frame, theme);
-    drawSizeLabel(ctx, quad, frame, theme, isLineFrame(editor, frame));
+    drawSizeLabel(ctx, quad, frame, theme, isLineFrame(editor, frame), animatedGifHash(editor, frame.nodeId) !== undefined);
     const addVariant = addVariantButtonRect(editor);
     if (addVariant) drawAddVariantButton(ctx, addVariant, theme);
   }
@@ -1301,23 +1305,30 @@ function drawHandles(ctx: CanvasRenderingContext2D, editor: Editor, frame: Selec
   }
 }
 
-function drawSizeLabel(ctx: CanvasRenderingContext2D, quad: readonly Vec2[], frame: SelectionFrame, theme: ChromeTheme, lengthOnly = false): void {
+function drawSizeLabel(ctx: CanvasRenderingContext2D, quad: readonly Vec2[], frame: SelectionFrame, theme: ChromeTheme, lengthOnly = false, gif = false): void {
   // Lines show their length only.
   const text = lengthOnly ? formatNumber(frame.width) : `${formatNumber(frame.width)} × ${formatNumber(frame.height)}`;
   ctx.font = theme.font;
-  const metrics = ctx.measureText(text);
   const padX = 4;
+  const gap = 4;
   const h = 16;
-  const w = Math.ceil(metrics.width) + padX * 2;
+  const w = Math.ceil(ctx.measureText(text).width) + padX * 2;
+  // An animated GIF is labeled in a pill of its own, next to the size; the pair stays centered under the selection.
+  const tagWidth = gif ? Math.ceil(ctx.measureText(GIF_TAG).width) + padX * 2 : 0;
+  const total = w + (gif ? gap + tagWidth : 0);
   const bottom = Math.max(...quad.map((p) => p.y));
   const cx = quad.reduce((s, p) => s + p.x, 0) / 4;
-  const x = Math.round(cx - w / 2);
+  const x = Math.round(cx - total / 2);
   const y = Math.round(bottom + 6);
-  ctx.fillStyle = theme.selection;
-  ctx.beginPath();
-  ctx.roundRect(x, y, w, h, 2);
-  ctx.fill();
-  ctx.fillStyle = theme.labelText;
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, x + padX, y + h / 2 + 0.5);
+  const pill = (left: number, width: number, label: string) => {
+    ctx.fillStyle = theme.selection;
+    ctx.beginPath();
+    ctx.roundRect(left, y, width, h, 2);
+    ctx.fill();
+    ctx.fillStyle = theme.labelText;
+    ctx.fillText(label, left + padX, y + h / 2 + 0.5);
+  };
+  pill(x, w, text);
+  if (gif) pill(x + w + gap, tagWidth, GIF_TAG);
 }

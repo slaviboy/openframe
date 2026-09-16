@@ -106,3 +106,33 @@ describe('SVG exports', () => {
     expect(renderExports(editor, [icon])!.map((a) => a.path)).toEqual(['icons/close.svg']);
   });
 });
+
+describe('GIF exports', () => {
+  const gifBytes = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
+
+  const fillWithGif = (id: string, mime = 'image/gif') => {
+    void editor.images.add({ hash: 'gif-hash', bytes: gifBytes, mime, width: 80, height: 45 });
+    editor.history.run('fill', (tx) => tx.set(id, 'fills', [{ type: 'IMAGE', imageHash: 'gif-hash', imageSize: { width: 80, height: 45 }, scaleMode: 'FILL', opacity: 1, visible: true, blendMode: 'NORMAL' }]));
+  };
+
+  test('write the layer’s own GIF, so its frame delays and loop count are kept, without the rendering engine', () => {
+    fillWithGif(icon);
+    addExportSetting(editor, [icon]);
+    updateExportSetting(editor, [icon], 0, { format: 'GIF', constraint: { type: 'SCALE', value: 3 } });
+
+    const [asset] = renderExports(editor, [icon])!;
+    expect(asset).toMatchObject({ path: 'icons/close.gif', type: 'image/gif' });
+    expect(asset!.bytes).toEqual(gifBytes);
+    expect(rendered).toEqual([]);
+
+    editor.setThumbnails(null);
+    expect(renderExports(editor, [icon])!.map((a) => a.path)).toEqual(['icons/close.gif']);
+  });
+
+  test('are skipped for a layer whose fill is not an animated GIF', () => {
+    fillWithGif(icon, 'image/png');
+    addExportSetting(editor, [icon]);
+    updateExportSetting(editor, [icon], 0, { format: 'GIF' });
+    expect(renderExports(editor, [icon])).toEqual([]);
+  });
+});

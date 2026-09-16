@@ -48,3 +48,48 @@ test('a video file places as a layer with a video fill that previews in the Fill
   await expect(page.getByLabel('Fill 1 video mode')).toHaveValue('FIT');
   await expect(page.getByRole('img', { name: 'Fill 1 video' })).toHaveAttribute('data-loaded', '');
 });
+
+test('choosing Video for a fill asks for a file and plays it in the Fill section', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 520, box.y + 330, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByRole('treeitem', { name: /Rectangle 1/ })).toBeVisible();
+
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByLabel('Fill 1 type').selectOption('VIDEO');
+  await (await chooser).setFiles('e2e/media/clip.webm');
+
+  await expect(page.getByLabel('Fill 1 type')).toHaveValue('VIDEO');
+  await expect(page.getByRole('img', { name: 'Fill 1 video' })).toHaveAttribute('data-loaded', '');
+  // The layer keeps its own size: only its fill changed.
+  await expect(page.getByTestId('field-w')).toHaveValue('120');
+});
+
+test('a video fill crops like an image, and keeps the crop', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  const chooser = page.waitForEvent('filechooser');
+  await page.keyboard.press('ControlOrMeta+Shift+K');
+  await (await chooser).setFiles('e2e/media/clip.webm');
+  await expect(page.getByTestId('place-image-hint')).toContainText('Click to place clip');
+  await page.mouse.click(box.x + 500, box.y + 300);
+  const layer = page.getByRole('treeitem', { name: 'clip', exact: true });
+  await expect(layer).toBeVisible();
+
+  await page.getByLabel('Fill 1 video mode').selectOption('CROP');
+  await expect(page.getByTestId('crop-zoom')).toHaveText('100%');
+  await page.getByLabel('Fill 1 crop zoom').fill('200');
+  await expect(page.getByTestId('crop-zoom')).toHaveText('200%');
+
+  // Clicking empty canvas (clear of the side panels) applies the crop.
+  await page.mouse.click(box.x + 900, box.y + 600);
+  await expect(page.getByLabel('Fill 1 crop zoom')).toHaveCount(0);
+  await layer.click();
+  await expect(page.getByLabel('Fill 1 video mode')).toHaveValue('CROP');
+});

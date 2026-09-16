@@ -20,6 +20,7 @@ import { EXPORT_FORMAT_LABELS, EXPORT_FORMATS, EXPORT_SCALE_PRESETS, formatExpor
 import type { SceneNode } from '@/core/schema/document';
 import { addExportSetting, removeExportSetting, renderExports, updateExportSetting, type ExportedAsset } from '@/editor/commands/export';
 import { downloadBytes, zipFiles } from '@/platform/download';
+import { animatedGifHash } from '@/editor/images/animated-gif';
 import { useEditor } from '../../hooks/useEditor';
 import { IconButton } from '../../primitives/IconButton';
 import primitives from '../../primitives/primitives.module.css';
@@ -43,6 +44,7 @@ const SCALE_PRESETS_ID = 'export-scale-presets';
 /** A scale typed or picked from the presets, applied when it is committed. */
 function ScaleInput({ label, setting, onChange }: { label: string; setting: ExportSetting; onChange: (setting: Partial<ExportSetting>) => void }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const fixedScale = setting.format === 'SVG' || setting.format === 'GIF';
   const commit = () => {
     if (draft === null) return;
     const constraint = parseExportConstraint(draft);
@@ -54,11 +56,11 @@ function ScaleInput({ label, setting, onChange }: { label: string; setting: Expo
       className={primitives.textInput}
       aria-label={label}
       list={SCALE_PRESETS_ID}
-      // SVG exports at 1x.
-      disabled={setting.format === 'SVG'}
-      title={setting.format === 'SVG' ? 'SVG exports at 1x' : undefined}
-        value={setting.format === 'SVG' ? '1x' : (draft ?? formatExportConstraint(setting.constraint))}
-        spellCheck={false}
+      // SVG exports at 1x, and a GIF export is the original file.
+      disabled={fixedScale}
+      title={fixedScale ? `${setting.format} exports at 1x` : undefined}
+      value={fixedScale ? '1x' : (draft ?? formatExportConstraint(setting.constraint))}
+      spellCheck={false}
       onChange={(e) => setDraft(e.target.value)}
       onBlur={commit}
       onKeyDown={(e) => {
@@ -81,6 +83,8 @@ function ScaleInput({ label, setting, onChange }: { label: string; setting: Expo
 export function ExportSection({ nodes }: { nodes: readonly SceneNode[] }) {
   const editor = useEditor();
   const ids = nodes.map((n) => n.id);
+  // A GIF export copies the layer's own animated GIF, so it is offered only while every selected layer has one.
+  const canExportGif = nodes.length > 0 && nodes.every((n) => animatedGifHash(editor, n.id) !== undefined);
   const serialized = new Set(nodes.map((n) => JSON.stringify(n.exportSettings ?? [])));
   const mixed = serialized.size > 1;
   const settings: readonly ExportSetting[] = mixed ? [] : (nodes[0]?.exportSettings ?? []);
@@ -150,7 +154,7 @@ export function ExportSection({ nodes }: { nodes: readonly SceneNode[] }) {
                   }}
                 />
                 <select className={primitives.select} aria-label={`${name} format`} value={setting.format} onChange={(e) => change({ format: e.target.value as ExportFormat })}>
-                  {EXPORT_FORMATS.map((format) => (
+                  {EXPORT_FORMATS.filter((format) => format !== 'GIF' || canExportGif || setting.format === 'GIF').map((format) => (
                     <option key={format} value={format}>
                       {EXPORT_FORMAT_LABELS[format]}
                     </option>

@@ -29,15 +29,13 @@ import {
 } from '@/core/image/image-paint';
 import type { BlendMode, ImagePaint, ImageScaleMode, Size } from '@/core/schema/document';
 import type { Id } from '@/core/ids/ids';
-import { CROP_ASPECT_LABELS, CROP_ASPECTS, cropZoomPercent, zoomCropPaint, type CropAspect } from '@/core/image/crop';
-import { imagePlacement } from '@/core/image/image-fit';
-import { resizeCropToFit, setCropAspect } from '@/editor/interactions/crop';
 import { useEditor, useEditorState } from '../../hooks/useEditor';
 import { IconButton } from '../../primitives/IconButton';
 import { NumberField } from '../../primitives/NumberField';
 import primitives from '../../primitives/primitives.module.css';
 import { IMAGE_ACCEPT, readImageFile } from '../../images/import-image';
 import { useImageMime, useImageUrl } from '../../images/useImageUrl';
+import { CropControls } from './CropControls';
 import gradientStyles from './Gradient.module.css';
 import { PAINT_BLEND_OPTIONS } from './blend-modes';
 
@@ -81,11 +79,8 @@ export function ImageSettings({ label, paint, onEdit, onScrub, onGestureStart, o
   // Animated GIFs are labeled, and take no image adjustments.
   const gif = useImageMime(paint.imageHash) === 'image/gif';
   const croppingId = useEditorState((s) => s.croppingId);
-  const cropAspect = useEditorState((s) => s.cropAspect);
   const canCrop = onCrop !== undefined && paint.imageHash !== undefined && paint.imageSize !== undefined;
   const cropping = cropLayer !== undefined && croppingId === cropLayer.id && paint.scaleMode === 'CROP' && paint.imageSize !== undefined;
-  const placement = cropping ? imagePlacement(paint, paint.imageSize!, cropLayer.size) : null;
-  const zoom = placement ? Math.round(cropZoomPercent(placement.matrix, paint.imageSize!, cropLayer!.size)) : 0;
   const modes = paint.scaleMode === 'CROP' || canCrop ? [...MENU_MODES, 'CROP' as const] : MENU_MODES;
 
   const choose = async (file: File | undefined) => {
@@ -144,45 +139,7 @@ export function ImageSettings({ label, paint, onEdit, onScrub, onGestureStart, o
         )}
       </div>
       {cropping && cropLayer && (
-        <>
-          <div className={gradientStyles.stopsHeader}>
-            <select
-              className={primitives.select}
-              aria-label={`${label} crop aspect ratio`}
-              value={cropAspect}
-              onChange={(e) => setCropAspect(editor, e.target.value as CropAspect)}
-            >
-              {CROP_ASPECTS.map((aspect) => (
-                <option key={aspect} value={aspect}>
-                  {CROP_ASPECT_LABELS[aspect]}
-                </option>
-              ))}
-            </select>
-            <button type="button" className={gradientStyles.textButton} onClick={() => resizeCropToFit(editor)}>
-              Resize to fit
-            </button>
-          </div>
-          <div className={gradientStyles.adjustRow}>
-            <span aria-hidden="true">Zoom</span>
-            <input
-              type="range"
-              min={10}
-              max={500}
-              step={1}
-              aria-label={`${label} crop zoom`}
-              value={zoom}
-              onPointerDown={onGestureStart}
-              onPointerUp={onGestureEnd}
-              onPointerCancel={onGestureEnd}
-              onBlur={onGestureEnd}
-              onChange={(e) => {
-                const percent = Number(e.target.value);
-                onScrub((p) => zoomCropPaint(p, cropLayer.size, percent));
-              }}
-            />
-            <output data-testid="crop-zoom">{zoom}%</output>
-          </div>
-        </>
+        <CropControls label={label} paint={paint} imageSize={paint.imageSize!} layerSize={cropLayer.size} onScrub={onScrub} onGestureStart={onGestureStart} onGestureEnd={onGestureEnd} />
       )}
       {paint.scaleMode === 'TILE' && (
         <NumberField
