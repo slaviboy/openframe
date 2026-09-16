@@ -20,6 +20,11 @@ import type { EditorMode, ToolId, VectorEditTool } from '@/editor/stores/editor-
 import { formatShortcut } from '@/editor/keymap/keymap';
 import { Icon, type IconName } from '../icons/Icon';
 import { useEditor, useEditorState, useSession } from '../hooks/useEditor';
+import { useColorProfile } from '../hooks/useColorProfile';
+import { toCss } from '@/core/color/color';
+import { ColorPicker } from '../primitives/ColorPicker';
+import { NumberField } from '../primitives/NumberField';
+import type { Box } from '../primitives/position';
 import { IS_MAC } from '../keyboard/keyboard-controller';
 import { useHoverTooltip } from '../primitives/HoverTooltip';
 import styles from './Toolbar.module.css';
@@ -235,6 +240,8 @@ export function Toolbar() {
   }
 
   return (
+    <>
+      {tool === 'pencil' && <SketchToolbar />}
     <div
       className={styles.toolbar}
       role="toolbar"
@@ -309,6 +316,57 @@ export function Toolbar() {
           </div>
         </>
       )}
+    </div>
+    </>
+  );
+}
+
+/** The Pencil's secondary toolbar: the stroke its sketches take. ⌘-clicking a stroke on the canvas fills it in. */
+function SketchToolbar() {
+  const editor = useEditor();
+  const stroke = useEditorState((s) => s.sketchStroke);
+  const [anchor, setAnchor] = useState<Box | null>(null);
+  const profile = useColorProfile();
+  return (
+    <div className={styles.sketchToolbar} role="toolbar" aria-label="Sketch stroke">
+      <button
+        type="button"
+        className={styles.swatch}
+        aria-label="Stroke color"
+        aria-haspopup="dialog"
+        aria-expanded={anchor !== null}
+        style={{ background: toCss({ ...stroke.color, a: 1 }, profile) }}
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
+        }}
+      />
+      {anchor && (
+        <ColorPicker
+          label="Stroke"
+          color={{ ...stroke.color, a: 1 }}
+          opacity={stroke.color.a}
+          anchor={anchor}
+          colorProfile={profile}
+          onColor={(color) => editor.state.setSketchStroke({ color: { ...color, a: stroke.color.a } })}
+          onOpacity={(a) => editor.state.setSketchStroke({ color: { ...stroke.color, a } })}
+          onGestureStart={() => undefined}
+          onGestureEnd={() => undefined}
+          onClose={() => setAnchor(null)}
+        />
+      )}
+      <NumberField
+        label={<Icon name="strokeWeight" size={16} />}
+        ariaLabel="Sketch stroke weight"
+        min={0.1}
+        max={100}
+        value={stroke.weight}
+        onChange={(weight) => editor.state.setSketchStroke({ weight })}
+      />
+      <select className={styles.sketchSelect} aria-label="Sketch stroke style" value={stroke.dashed ? 'dashed' : 'solid'} onChange={(e) => editor.state.setSketchStroke({ dashed: e.target.value === 'dashed' })}>
+        <option value="solid">Solid</option>
+        <option value="dashed">Dashed</option>
+      </select>
     </div>
   );
 }

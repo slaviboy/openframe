@@ -117,6 +117,7 @@ const STROKE = {
 } as const;
 
 const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: ReactElement }> = {
+  strokeWeight: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M6 6.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5M7 10v1h10v-1zm-.25-1a.75.75 0 0 0-.75.75v1.5c0 .414.336.75.75.75h10.5a.75.75 0 0 0 .75-.75v-1.5a.75.75 0 0 0-.75-.75zM7 17v-2h10v2zm-1-2.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 .75.75v2.5a.75.75 0 0 1-.75.75H6.75a.75.75 0 0 1-.75-.75z" /> },
   more: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M7 11.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m6 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m4.5 1.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3" /> },
   rotation: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M9 8.5a.5.5 0 0 0-1 0v7a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 0-1H13a4 4 0 0 0-4-4zM9 12v3h3a3 3 0 0 0-3-3" /> },
   rotate90: { viewBox: 24, body: <path fill="currentColor" d="M11.054 9.543a1.5 1.5 0 0 1 2.007.103l3.293 3.293a1.5 1.5 0 0 1 0 2.121l-3.293 3.293a1.5 1.5 0 0 1-2.121 0L7.647 15.06a1.5 1.5 0 0 1 0-2.121l3.293-3.293zm1.3.81a.5.5 0 0 0-.707 0l-3.293 3.293a.5.5 0 0 0 0 .707l3.293 3.293a.5.5 0 0 0 .629.064l.078-.064 3.293-3.293a.5.5 0 0 0 .064-.629l-.064-.078zM9.526 5.767a3.5 3.5 0 0 1 4.949 0L16 7.292V6a.5.5 0 0 1 1 0v2.5a.5.5 0 0 1-.5.5H14a.5.5 0 0 1 0-1h1.293l-1.525-1.526a2.5 2.5 0 0 0-3.535 0l-2.38 2.379a.5.5 0 0 1-.706-.707z" /> },
@@ -576,6 +577,7 @@ const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: Rea
 };
 
 type FilledName =
+  | 'strokeWeight'
   | 'more'
   | 'rotation'
   | 'rotate90'

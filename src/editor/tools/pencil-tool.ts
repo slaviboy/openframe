@@ -15,7 +15,10 @@
  * limitations under the License.
  */
 
-import { keyOnTop, makeVector } from '@/core/document/factory';
+import { keyOnTop, makeVector, solid } from '@/core/document/factory';
+import { hitTestDeepest } from '@/core/scene/hit-test';
+import { isSceneNode } from '@/core/schema/document';
+import type { Editor } from '../editor';
 import type { Transaction } from '@/core/history/history';
 import type { Id } from '@/core/ids/ids';
 import type { Vec2 } from '@/core/math/vec';
@@ -32,6 +35,21 @@ interface Sketch {
   /** Pointer positions in the parent's space. */
   points: Vec2[];
   shift: boolean;
+}
+
+/**
+ * ⌘-click with the Pencil: the stroke of the layer under the pointer — its color, weight and style — becomes what the
+ * next sketches are drawn with. Layers without a stroke are left alone.
+ */
+function sampleStroke(editor: Editor, world: Vec2): boolean {
+  const tolerance = 4 / editor.state.viewport.zoom;
+  const id = hitTestDeepest(editor.doc, editor.scene, editor.pageId, world, { tolerance });
+  const node = id === null ? undefined : editor.doc.get(id);
+  if (!node || !isSceneNode(node) || !('strokes' in node)) return false;
+  const paint = node.strokes.find((s) => s.visible && s.type === 'SOLID');
+  if (paint?.type !== 'SOLID') return false;
+  editor.state.setSketchStroke({ color: { ...paint.color, a: paint.opacity }, weight: node.strokeWeight, dashed: node.strokeDashes !== undefined });
+  return true;
 }
 
 /**
@@ -56,14 +74,19 @@ export class PencilTool implements Tool {
     if (p.button !== 0) return;
     const { editor } = this.env;
     editor.scene.ensure(editor.pageId);
+    // ⌘-click takes the stroke of the layer under the pointer, for the sketches that follow.
+    if (p.mod && sampleStroke(editor, p.world)) return;
     const parent = containerAt(editor, p.world);
     const toLocal = parentToLocal(editor, parent);
     const start = toLocal(p.world);
     const tx = editor.history.begin('Sketch');
     const id = editor.ids.next();
+    const stroke = editor.state.getSnapshot().sketchStroke;
     tx.create({
       ...makeVector({ id, parent: { id: parent, key: keyOnTop(editor.doc, parent) }, name: nextLayerName(editor, 'Vector'), x: start.x, y: start.y, width: 0, height: 0 }, EMPTY_NETWORK),
-      strokeWeight: 3,
+      strokes: [solid(stroke.color)],
+      strokeWeight: stroke.weight,
+      ...(stroke.dashed ? { strokeDashes: [10, 10] } : {}),
       strokeJoin: 'ROUND',
       endpointCap: 'ROUND',
     });

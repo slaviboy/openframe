@@ -263,6 +263,8 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 - Draw mode's UI (row 252, after the mode switcher): `useLayerThumbnail` (`src/ui/images/useLayerThumbnail.ts`) draws a layer with the rendering engine and is shared by the Assets grid and the Layers list. In Draw mode the Layers rows are `LAYER_ROW_HEIGHT_DRAW` tall and show that preview in place of the type icon; the row (not the preview) handles the double-click that zooms to the layer, since a row captures the pointer for dragging and the click is delivered to it — `document.elementFromPoint` says what is really under it. `SliderRow` in the Inspector adds Draw's sliders (opacity, stroke weight).
 
+- The Pencil's secondary toolbar and stroke sampling (row 253, after Draw's UI): `sketchStroke` in the editor store (color, weight, dashed; `DEFAULT_SKETCH_STROKE` is the reference's thin black line) is what `PencilTool` gives a new sketch, and `SketchToolbar` in `Toolbar.tsx` sets it — it shows while the Pencil is the tool. ⌘-click with the Pencil calls `sampleStroke`, which hit-tests the layer under the pointer and takes its solid stroke's color, weight and style instead of drawing. The Brush tool waits for brush styles to mean something. The bar keeps its own CSS rather than importing `primitives.module.css`: pulling that (and ColorPicker and NumberField) into the toolbar's chunk shifted startup timing enough that `prototype-flow-tag.spec.ts` began failing in Chromium — it double-clicks a fixed canvas point and so races the prototype chrome's first draw. Worth remembering when a canvas test starts failing after an unrelated import.
+
 ## In progress (uncommitted)
 
 Nothing. The working tree is clean apart from anything noted above.
@@ -280,7 +282,7 @@ To continue in a new session, tell the assistant: *Read `docs/HANDOFF.md`, check
 **M10 (prototyping): rows still In progress**
 
 **M11 (Draw mode): all Planned**
-- Pencil and brush tools with a secondary toolbar; ⌘-click samples a stroke
+- The Brush tool and its styles (the Pencil's half of this row is done)
 - Brushes with dynamic strokes (frequency, wiggle, smoothen); custom stretch and scatter brushes
 - Text on a path
 - Transforms: radial and linear repeat, apply transforms

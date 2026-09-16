@@ -18,7 +18,7 @@
 import type { DocumentStore } from '@/core/document/store';
 import type { Id } from '@/core/ids/ids';
 import type { CropAspect } from '@/core/image/crop';
-import type { Paint } from '@/core/schema/document';
+import type { Color, Paint } from '@/core/schema/document';
 import type { SegmentEnd } from '@/core/vector/vector-bend';
 import { DEFAULT_VIEWPORT, type Viewport } from '../viewport/viewport';
 import { Observable } from './observable';
@@ -28,6 +28,16 @@ export type ToolId = 'move' | 'hand' | 'scale' | 'frame' | 'section' | 'slice' |
 /** Fixed point for the Scale panel: one of nine positions on the selection bounds. */
 export type ScaleAnchor = 'nw' | 'n' | 'ne' | 'w' | 'c' | 'e' | 'sw' | 's' | 'se';
 export type EditorMode = 'design' | 'draw' | 'dev' | 'motion';
+
+/** A sketch's stroke: its color, how thick it is, and whether it is dashed. */
+export interface SketchStroke {
+  readonly color: Color;
+  readonly weight: number;
+  readonly dashed: boolean;
+}
+
+/** A new sketch's stroke until it is changed: a thin black line, as the reference's Pencil draws. */
+export const DEFAULT_SKETCH_STROKE: SketchStroke = { color: { r: 0, g: 0, b: 0, a: 1 }, weight: 3, dashed: false };
 export type RightPanelTab = 'design' | 'prototype';
 
 /** A ruler guide: its owner (the page or a frame) and its index in the owner's `guides`. */
@@ -58,6 +68,8 @@ export interface EditorState {
   /** Tool to return to after a temporary tool (e.g. holding Space for hand). */
   readonly spring: ToolId | null;
   readonly mode: EditorMode;
+  /** The stroke the Pencil gives a new sketch: set in its secondary toolbar, or sampled from a stroke with ⌘-click. */
+  readonly sketchStroke: SketchStroke;
   readonly rightTab: RightPanelTab;
   readonly viewports: Readonly<Record<Id, Viewport>>;
   /** Layer rows expanded in the layers panel. */
@@ -170,6 +182,7 @@ export class EditorStore extends Observable<EditorState> {
       tool: 'move',
       spring: null,
       mode: 'design',
+      sketchStroke: DEFAULT_SKETCH_STROKE,
       rightTab: 'design',
       viewports: {},
       expanded: new Set(),
@@ -340,6 +353,10 @@ export class EditorStore extends Observable<EditorState> {
 
   releaseSpring(): void {
     if (this.state.spring) this.setState({ tool: this.state.spring, spring: null });
+  }
+
+  setSketchStroke(patch: Partial<SketchStroke>): void {
+    this.setState({ sketchStroke: { ...this.state.sketchStroke, ...patch } });
   }
 
   setMode(mode: EditorMode): void {
