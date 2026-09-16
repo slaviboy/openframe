@@ -54,6 +54,7 @@ import {
   type TriggerType,
 } from '@/core/prototype/reactions';
 import { DEFAULT_OVERLAY_BACKGROUND, flowsOf, isOverlayDestination, OVERLAY_POSITION_LABELS, overlaySettings } from '@/core/prototype/flows';
+import { isInheritedInteraction } from '@/core/prototype/connections';
 import { topLevelFrame } from '@/core/prototype/reactions';
 import type { Color, MediaAction, OverlaySettings, PrototypeAction, PrototypeEasing, PrototypeTransition, Reaction, SceneNode } from '@/core/schema/document';
 import {
@@ -171,9 +172,10 @@ function EasingFields({ easing, suffix, onChange }: { easing: PrototypeEasing; s
 }
 
 /** The animation of an action: its type, direction, matching layers, easing and duration (springs set their own). */
-function TransitionFields({ transition, suffix, scroll, onChange }: { transition: PrototypeTransition; suffix: string; scroll: boolean; onChange: (transition: PrototypeTransition) => void }) {
+function TransitionFields({ transition, suffix, scroll, variant, onChange }: { transition: PrototypeTransition; suffix: string; scroll: boolean; variant?: boolean; onChange: (transition: PrototypeTransition) => void }) {
   // Scroll to is instant or animated.
-  const types: readonly TransitionType[] = scroll ? ['INSTANT', 'SMART_ANIMATE'] : TRANSITION_TYPES;
+  // A Change to blends the instance's layers where they match, so it dissolves or smart animates; it can't move a screen in.
+  const types: readonly TransitionType[] = scroll ? ['INSTANT', 'SMART_ANIMATE'] : variant ? ['INSTANT', 'DISSOLVE', 'SMART_ANIMATE'] : TRANSITION_TYPES;
   const label = (type: TransitionType) => (scroll && type === 'SMART_ANIMATE' ? 'Animate' : TRANSITION_LABELS[type]);
   return (
     <>
@@ -363,7 +365,13 @@ function ActionFields({
               </div>
             </>
           )}
-          <TransitionFields transition={action.transition} suffix={suffix} scroll={action.navigation === 'SCROLL_TO'} onChange={(transition) => onChange({ ...action, transition })} />
+          <TransitionFields
+            transition={action.transition}
+            suffix={suffix}
+            scroll={action.navigation === 'SCROLL_TO'}
+            variant={action.navigation === 'CHANGE_TO'}
+            onChange={(transition) => onChange({ ...action, transition })}
+          />
           {action.navigation !== 'SCROLL_TO' && (
             <label className={inspector.checkbox}>
               <input
@@ -1098,7 +1106,11 @@ export function PrototypePanel() {
   const mixed = new Set(nodes.map((node) => JSON.stringify(node.reactions ?? []))).size > 1;
   // Matching interactions selected together are edited together.
   const matched = matchedSelection(editor.doc, nodes, selectedConnections);
-  const reactions = mixed ? [] : (nodes[0]!.reactions ?? []);
+  const own = mixed ? [] : (nodes[0]!.reactions ?? []);
+  // Interactions an instance mirrors from its variant are listed in their own section, to view rather than edit.
+  const fromVariant = !mixed && nodes.length === 1 && isInheritedInteraction(editor.doc, nodes[0]!.id);
+  const reactions = fromVariant ? [] : own;
+  const variantReactions = fromVariant ? own : [];
   const frame = nodes.length === 1 && topLevelFrame(editor.doc, nodes[0]!.id) === nodes[0]!.id ? nodes[0]! : null;
   // A connection selected on the canvas opens its interaction's details.
   const focused = selectedConnections.length === 1 && nodes.length === 1 && selectedConnections[0]!.sourceId === nodes[0]!.id ? selectedConnections[0]!.reactionIndex : null;
@@ -1107,6 +1119,23 @@ export function PrototypePanel() {
   return (
     <div className={styles.panel} role="tabpanel" aria-label="Prototype">
       {frame && <FlowStartingPointSection frameId={frame.id} pageId={editor.doc.pageOf(frame.id) ?? frame.parent.id} />}
+      {variantReactions.length > 0 && (
+        <section className={inspector.section} aria-label="Variant interactions">
+          <header className={inspector.sectionHeader}>
+            <h3 className={inspector.sectionTitle}>Variant interactions</h3>
+          </header>
+          <div className={inspector.sectionBody}>
+            <ul className={styles.list} aria-label="Variant interaction list">
+              {variantReactions.map((reaction, index) => (
+                <li key={index} className={styles.item}>
+                  <span className={styles.summary}>{reactionSummary(editor.doc, reaction)}</span>
+                </li>
+              ))}
+            </ul>
+            <p className={inspector.hint}>These come with the component set. Go to the main component to change them, or add an interaction here to give this instance its own.</p>
+          </div>
+        </section>
+      )}
       <section className={inspector.section} aria-label="Interactions">
         <header className={inspector.sectionHeader}>
           <h3 className={inspector.sectionTitle}>Interactions</h3>
@@ -1116,7 +1145,7 @@ export function PrototypePanel() {
               label="Add interaction"
               onClick={() => {
                 editor.state.selectConnections([]);
-                if (addInteraction(editor, ids) && !mixed) setOpen(reactions.length);
+                if (addInteraction(editor, ids) && !mixed) setOpen(own.length);
               }}
             />
           </div>

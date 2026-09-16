@@ -253,6 +253,8 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 - Video crop, video from the fill picker, the canvas GIF label and GIF export (after the device switcher): the crop helpers in `src/core/image/crop.ts` are generic over a `CroppablePaint`, so a video fill crops exactly like an image and keeps its type; `CropControls` is shared by `ImageSettings` and `VideoSettings`. Choosing Video for a fill in the Fill section asks for a file and replaces that paint. `animatedGifHash` (`src/editor/images/animated-gif.ts`) is the one place that says whether a layer's topmost visible fill is an animated GIF: the canvas draws its GIF pill next to the size label, and the Export section offers the GIF format only for such layers, writing the stored file itself (at 1x, like SVG), so its frame delays and loop count survive.
 
+- The Variant interactions section and an animated Change to (after row 160): `blendVariantStore` (`src/core/prototype/variant-animate.ts`) blends the prototype's copy of the document before a variant switch with the copy after it. Swapping a variant gives the instance's layers new ids, so they are matched by their path of names (`layerPaths`, now exported with `blendLayer` and `blendFills` from smart-animate). `PresentationRenderer.setVariantAnimation` draws the frame from that blend while the switch runs, and `PresentationView` keeps the copy it animates from, advancing it like its other animations. A Change to offers Instant, Dissolve and Smart animate only, since it blends layers rather than moving a screen. An instance's inherited interactions are listed read-only in a Variant interactions section (`isInheritedInteraction`).
+
 ## In progress (uncommitted)
 
 Nothing. The working tree is clean apart from anything noted above.
@@ -260,7 +262,6 @@ Nothing. The working tree is clean apart from anything noted above.
 ## Next (M10, in order)
 
 1. The pending sub-items left in the M10 rows of `docs/FEATURE_MATRIX.md`:
-   - 200 Interactive components: the Variant interactions section, animating Change to
    - 239 Variables: extended collections' modes, library variables, variable picker in expressions
    - 244 Accessible prototypes: the Accessibility settings dialog
 
@@ -271,7 +272,6 @@ Nothing. The working tree is clean apart from anything noted above.
 To continue in a new session, tell the assistant: *Read `docs/HANDOFF.md`, check `git status` and `git log --oneline -15`, then continue with "In progress (uncommitted)" and the M10 list below. Stop after M10.* The rows are in `docs/FEATURE_MATRIX.md` (Milestone and Status columns).
 
 **M10 (prototyping): rows still In progress**
-- 200 Interactive components: the Variant interactions section; animating Change to (it is instant)
 - 239 Variables in prototypes: modes of extended collections; a variable picker in expressions; library variables (needs accounts and a server: record as not possible offline)
 - 244 Accessible prototypes: the Accessibility settings dialog
 

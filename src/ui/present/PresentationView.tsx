@@ -42,6 +42,7 @@ import {
 } from '@/core/prototype/player';
 import { DRAG_FINISH_AT, dragDirection, dragProgress } from '@/core/prototype/drag-transition';
 import { sharedVariants, sharedVideos } from '@/core/prototype/state-sharing';
+import type { DocumentStore } from '@/core/document/store';
 import { composeScene, frameAtPoint, layerRects, responsiveSize, SCALING_LABELS, SCALING_MODES, screenArea, scrollOffsetOf, type DeviceScreen, type PresentedScene, type ScalingMode } from '@/core/prototype/presentation';
 import { DEVICE_FIT_LABELS, DEVICE_FITS, deviceBodyColors, deviceLayout, deviceOuterSize, deviceScreenSize, effectiveDevice, type DeviceFit, type PrototypeDevice } from '@/core/prototype/device';
 import { MOBILE_DEVICE_CATEGORIES, presetsIn, type FramePreset } from '@/core/document/frame-presets';
@@ -224,6 +225,8 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
     /** Scroll offsets of the frames that scroll (kept when leaving a screen, so returning shows it scrolled as it was). */
     frameScroll: new Map<Id, Vec2>(),
     nestedScrolling: null as { frameId: Id; from: Vec2; to: Vec2; start: number; duration: number; easing: Easing | null } | null,
+    /** An animated Change to: the document as it was before the switch, and how far along the switch is. */
+    variantAnimation: null as { doc: DocumentStore; instanceId: Id; start: number; duration: number; easing: Easing | null; smart: boolean } | null,
     hintRects: [] as Rect[],
     hintsUntil: 0,
     press: null as Press | null,
@@ -330,6 +333,12 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
           state.renderer?.controlVideo(effect.nodeId, effect.action, effect.amount);
         } else if (effect.type === 'changeTo') {
           // Interactive components: the instance switches variant in the prototype's copy of the document (the file isn't changed).
+          const duration = transitionDurationMs(effect.transition);
+          const animated = duration > 0 && effect.transition.type !== 'INSTANT' && state.variantChanges.get(effect.instanceId) !== effect.variantId;
+          // The switch animates from the copy in use now, which still shows the variant being left.
+          if (animated) {
+            state.variantAnimation = { doc, instanceId: effect.instanceId, start: now, duration, easing: toEasing(effect.transition.easing), smart: effect.transition.type === 'SMART_ANIMATE' };
+          }
           state.variantChanges.set(effect.instanceId, effect.variantId);
           rebuild = true;
         } else if (effect.type === 'openUrl') {
@@ -392,6 +401,8 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
       state.frameSizes = [];
       state.scrolling = null;
       state.scrollY = 0;
+      state.variantAnimation = null;
+      state.renderer?.setVariantAnimation(null);
       // Restarting resets interactive components to their variants in the file.
       if (state.runtime) {
         state.runtime = null;
@@ -499,6 +510,13 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
         state.scrollY = state.scrolling.from + (state.scrolling.to - state.scrolling.from) * progress;
         if (t >= 1) state.scrolling = null;
       }
+      if (state.variantAnimation) {
+        const variant = state.variantAnimation;
+        const t = Math.min(1, (now - variant.start) / variant.duration);
+        const progress = variant.easing ? evaluateEasing(variant.easing, t) : 1;
+        state.renderer.setVariantAnimation(t >= 1 ? null : { from: variant.doc, instanceId: variant.instanceId, progress, smart: variant.smart });
+        if (t >= 1) state.variantAnimation = null;
+      }
       if (state.nestedScrolling) {
         const nested = state.nestedScrolling;
         const t = Math.min(1, (now - nested.start) / nested.duration);
@@ -567,7 +585,7 @@ export function PresentationView({ session, startNodeId, inline, hideUi = false 
         state.box = box;
         setScreenBox({ x: scene.screen.x, y: scene.screen.y, width: scene.screen.width, height: scene.screen.height });
       }
-      if (state.playing || state.scrolling || state.nestedScrolling || now < state.hintsUntil + 50) schedule();
+      if (state.playing || state.scrolling || state.nestedScrolling || state.variantAnimation || now < state.hintsUntil + 50) schedule();
     };
   });
 

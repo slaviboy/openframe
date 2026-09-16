@@ -34,7 +34,7 @@ const scene = (store: DocumentStore, id: Id): SceneNode | undefined => {
 };
 
 /** Each layer in a frame by its path of names (a repeated name among siblings gets its occurrence number). */
-function layerPaths(store: DocumentStore, frameId: Id): Map<string, Id> {
+export function layerPaths(store: DocumentStore, frameId: Id): Map<string, Id> {
   const out = new Map<string, Id>();
   const visit = (parentId: Id, prefix: string) => {
     const seen = new Map<string, number>();
@@ -105,12 +105,12 @@ export function blendTransform(a: Transform, b: Transform, t: number): Transform
 }
 
 /** Fills blended between two lists of as many paints, each paint with the one in its place; otherwise the destination's. */
-function blendFills(a: readonly Paint[] | undefined, b: readonly Paint[] | undefined, t: number): readonly Paint[] | undefined {
+export function blendFills(a: readonly Paint[] | undefined, b: readonly Paint[] | undefined, t: number): readonly Paint[] | undefined {
   if (!a || !b || a.length !== b.length) return b;
   return b.flatMap((paint, i) => blendPaint(a[i]!, paint, t));
 }
 
-function blendLayer(from: SceneNode, to: SceneNode, t: number): SceneNode {
+export function blendLayer(from: SceneNode, to: SceneNode, t: number): SceneNode {
   const blended: Record<string, unknown> = {
     ...to,
     transform: blendTransform(from.transform as Transform, to.transform as Transform, t),

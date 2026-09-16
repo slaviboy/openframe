@@ -22,6 +22,7 @@ import type { Rect } from '@/core/math/rect';
 import type { DocumentStore } from '@/core/document/store';
 import type { PresentedScene } from '@/core/prototype/presentation';
 import { matchedLayersStore, smartAnimateStore, withoutMatchingLayersStore } from '@/core/prototype/smart-animate';
+import { blendVariantStore } from '@/core/prototype/variant-animate';
 import type { RuntimeDocument } from '@/editor/prototype-runtime';
 import { topLevelFrame } from '@/core/prototype/reactions';
 import { scrolledFrameStore } from '@/core/prototype/scroll';
@@ -88,6 +89,8 @@ export class PresentationRenderer {
   /** The animated GIFs in each frame. */
   private readonly gifFrames = new Map<Id, string[]>();
 
+  private variantAnimation: { readonly from: DocumentStore; readonly instanceId: Id; readonly progress: number; readonly smart: boolean } | null = null;
+
   private get doc(): DocumentStore {
     return this.runtime?.doc ?? this.editor.doc;
   }
@@ -100,6 +103,14 @@ export class PresentationRenderer {
   setDocument(runtime: RuntimeDocument | null): void {
     this.runtime = runtime;
     this.invalidate();
+  }
+
+  /**
+   * A Change to being animated: the document as it was before the switch, and how far along it is. While it is set, the
+   * frame is drawn from the two blended together rather than from a cached image.
+   */
+  setVariantAnimation(animation: { readonly from: DocumentStore; readonly instanceId: Id; readonly progress: number; readonly smart: boolean } | null): void {
+    this.variantAnimation = animation;
   }
   private size = { width: 0, height: 0, dpr: 1 };
   private disposed = false;
@@ -246,6 +257,18 @@ export class PresentationRenderer {
   /** The destination of a smart animate transition, `progress` of the way from the frame left (not cached). */
   private smartFrameImage(fromFrame: Id, toFrame: Id, progress: number, scale: number): CkImage | null {
     return this.storeFrameImage(smartAnimateStore(this.doc, fromFrame, toFrame, progress), toFrame, scale);
+  }
+
+  /** The top-level frame a layer is in, or null. */
+  private frameOf(id: Id): Id | null {
+    let current: Id | null = id;
+    let last: Id | null = null;
+    for (; current !== null && this.doc.has(current); current = this.doc.parentOf(current)) {
+      const node = this.doc.get(current);
+      if (!node || node.type === 'PAGE') break;
+      last = current;
+    }
+    return last;
   }
 
   /** A frame of a scratch document holding it (not cached). */
@@ -504,7 +527,10 @@ export class PresentationRenderer {
       }
       if (item.alpha <= 0) continue;
       // Smart animate, Animate matching layers and frames with videos are drawn fresh rather than cached.
-      const live = item.smart
+      const variant = this.variantAnimation;
+      const live = variant && this.doc.has(variant.instanceId) && this.frameOf(variant.instanceId) === item.frameId
+        ? this.storeFrameImage(blendVariantStore(variant.from, this.doc, variant.instanceId, variant.progress, variant.smart), item.frameId, item.scale)
+        : item.smart
         ? this.smartFrameImage(item.smart.from, item.frameId, item.smart.progress, item.scale)
         : item.matched
           ? this.storeFrameImage(matchedLayersStore(this.doc, item.matched.from, item.frameId, item.matched.progress), item.frameId, item.scale)
