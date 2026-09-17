@@ -15,11 +15,13 @@
  * limitations under the License.
  */
 
+import { canHaveDevStatus, devStatusLabel, setDevStatus, type DevStatusNode } from '@/editor/commands/dev-status';
 import { rotationDegrees } from '@/editor/commands/properties';
 import type { SceneNode } from '@/core/schema/document';
 import type { ReactNode } from 'react';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import { formatNumber } from '../../primitives/math';
+import primitives from '../../primitives/primitives.module.css';
 import { Icon } from '../../icons/Icon';
 import { layerIcon } from '../../icons/layer-icons';
 import styles from './InspectPanel.module.css';
@@ -63,8 +65,40 @@ function padding(node: SceneNode): string | null {
 }
 
 /**
- * Dev Mode's Inspect panel: what a layer is, and the measurements a developer builds it from. Nothing here changes the
- * file — Dev Mode reads the design rather than editing it.
+ * The handoff status of a design, and the buttons that set it. Marking a design that has changed since it was last
+ * marked is what settles it again.
+ */
+export function DevStatusControl({ node }: { node: DevStatusNode }) {
+  const editor = useEditor();
+  const status = node.devStatus;
+  return (
+    <section className={styles.group} aria-label="Status">
+      <h3 className={styles.groupTitle}>Status</h3>
+      {status && (
+        <p className={styles.status} data-changed={status.changed || undefined}>
+          {devStatusLabel(status)}
+        </p>
+      )}
+      <div className={styles.actions}>
+        <button type="button" className={primitives.button} onClick={() => setDevStatus(editor, [node.id], 'READY_FOR_DEV')}>
+          {status?.state === 'READY_FOR_DEV' && status.changed ? 'Mark as ready again' : 'Mark as ready for dev'}
+        </button>
+        <button type="button" className={primitives.button} onClick={() => setDevStatus(editor, [node.id], 'COMPLETED')}>
+          Mark as completed
+        </button>
+        {status && (
+          <button type="button" className={primitives.button} onClick={() => setDevStatus(editor, [node.id], null)}>
+            Remove status
+          </button>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Dev Mode's Inspect panel: what a layer is, and the measurements a developer builds it from. Beside the status,
+ * nothing here changes the file — Dev Mode reads the design rather than editing it.
  */
 export function InspectPanel() {
   const editor = useEditor();
@@ -94,6 +128,8 @@ export function InspectPanel() {
           {node.name}
         </button>
       </header>
+
+      {canHaveDevStatus(node) && <DevStatusControl node={node} />}
 
       <Group title="Position">
         <Row label="X" value={px(node.transform[4])} />

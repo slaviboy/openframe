@@ -550,6 +550,21 @@ const SceneFields = {
   overrides: z.array(z.string().max(100)).max(200).optional(),
 };
 
+/**
+ * Dev Mode's handoff status, carried by the sections, frames and components a developer works from. `changed` is set
+ * on its own when the design is edited after being marked, and is cleared by marking it again.
+ */
+export const DevStatusSchema = z.object({
+  state: z.enum(['READY_FOR_DEV', 'COMPLETED']),
+  changed: z.literal(true).optional(),
+  note: z.string().max(1000).optional(),
+});
+
+const DevStatusField = {
+  /** Dev Mode's handoff status. Absent until the design is marked. */
+  devStatus: DevStatusSchema.optional(),
+};
+
 export const StrokeJoinSchema = z.enum(['MITER', 'BEVEL', 'ROUND']);
 export const DashCapSchema = z.enum(['NONE', 'ROUND', 'SQUARE']);
 export const IndividualStrokeWeightsSchema = z.object({
@@ -745,6 +760,7 @@ export const FrameNodeSchema = z.object({
   ...SceneFields,
   ...GeometryFields,
   ...CornerFields,
+  ...DevStatusField,
   type: z.literal('FRAME'),
   clipsContent: z.boolean(),
   /** Present when the frame is a main component (Create component, ⌥⌘K). */
@@ -950,7 +966,7 @@ export const BooleanOperationNodeSchema = z.object({
  * Canvas region that organizes layers. Sections live on the page or inside other sections
  * (never in frames or groups), do not clip, and are never rotated or flipped.
  */
-export const SectionNodeSchema = z.object({ ...SceneFields, ...GeometryFields, type: z.literal('SECTION') });
+export const SectionNodeSchema = z.object({ ...SceneFields, ...GeometryFields, ...DevStatusField, type: z.literal('SECTION') });
 
 /** Export region. Slices are not rendered; only content within their bounds is exported. */
 export const SliceNodeSchema = z.object({ ...SceneFields, type: z.literal('SLICE') });
@@ -1248,6 +1264,7 @@ export type AnimatedProperty = z.infer<typeof AnimatedPropertySchema>;
 export type Keyframe = z.infer<typeof KeyframeSchema>;
 export type KeyframeEasing = z.infer<typeof KeyframeEasingSchema>;
 export type AnimationTrack = z.infer<typeof AnimationTrackSchema>;
+export type DevStatus = z.infer<typeof DevStatusSchema>;
 export type MotionCurve = z.infer<typeof MotionCurveSchema>;
 export type PageAnimation = z.infer<typeof PageAnimationSchema>;
 export type StyleNode = z.infer<typeof StyleNodeSchema>;

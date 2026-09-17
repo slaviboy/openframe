@@ -63,3 +63,51 @@ test('the inspect panel waits for a single layer', async ({ page }) => {
   await page.keyboard.press('Shift+D');
   await expect(page.getByTestId('inspect-panel')).toContainText('Select a layer to inspect it.');
 });
+
+test('a design is marked ready for dev, listed in the sidebar, and shows as changed once it is edited', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  // A frame with a rectangle inside it: the design being handed over.
+  await page.keyboard.press('f');
+  await page.mouse.move(box.x + 300, box.y + 220);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 560, box.y + 420, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByRole('treeitem', { name: /Frame 1/ })).toBeVisible();
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 340, box.y + 260);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 440, box.y + 340, { steps: 5 });
+  await page.mouse.up();
+
+  // A design is marked while designing, as the reference allows.
+  await page.getByRole('treeitem', { name: /Frame 1/ }).click();
+  const status = page.getByRole('region', { name: 'Status' });
+  await status.getByRole('button', { name: 'Mark as ready for dev' }).click();
+  await expect(status).toContainText('Ready for dev');
+
+  // Dev Mode lists it, and the page carries the badge that says so.
+  await page.keyboard.press('Shift+D');
+  const ready = page.getByRole('region', { name: 'Ready for development' });
+  await expect(ready.getByRole('button', { name: /Frame 1/ })).toBeVisible();
+  await expect(page.getByRole('img', { name: 'Has designs ready for dev' }).or(page.getByLabel('Has designs ready for dev'))).toBeVisible();
+
+  // Editing the design puts it in the changed state, which marking it again settles.
+  await page.keyboard.press('Shift+D');
+  await page.getByRole('treeitem', { name: /Rectangle 1/ }).click();
+  await page.getByTestId('field-x').fill('120');
+  await page.getByTestId('field-x').press('Enter');
+  await page.getByRole('treeitem', { name: /Frame 1/ }).click();
+  await expect(page.getByRole('region', { name: 'Status' })).toContainText('changed');
+  await page.getByRole('region', { name: 'Status' }).getByRole('button', { name: 'Mark as ready again' }).click();
+  await expect(page.getByRole('region', { name: 'Status' })).not.toContainText('changed');
+
+  // The status is part of the file.
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+  await page.reload();
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await page.getByRole('treeitem', { name: /Frame 1/ }).click();
+  await expect(page.getByRole('region', { name: 'Status' })).toContainText('Ready for dev');
+});

@@ -35,6 +35,7 @@ import type { SpellChecker } from '@/core/text/spelling';
 import { createTextFinalizer, fitTextBox } from '@/core/text/text-resize';
 import type { Color, Transform } from '@/core/schema/document';
 import type { Vec2 } from '@/core/math/vec';
+import { devStatusFinalizer } from './commands/dev-status';
 import { CommandRegistry } from './commands/registry';
 import { ImageRegistry } from './images/image-registry';
 import { FontRegistry } from './fonts/font-registry';
@@ -184,7 +185,7 @@ export class Editor {
       // Text boxes fit their content before groups measure their children.
       // Constraints move children of resized frames before text boxes fit and groups measure them.
       // Constraints and text sizes settle before auto layout measures its children; groups hug the result.
-      finalizers: [styleFinalizer, createComponentFinalizer(() => this.ids.next()), createVariableFinalizer(() => this.ids.next()), vectorFinalizer, constraintsFinalizer, createTextFinalizer(() => this.textLayout), createAutoLayoutFinalizer(() => this.textLayout), groupFinalizer],
+      finalizers: [styleFinalizer, createComponentFinalizer(() => this.ids.next()), createVariableFinalizer(() => this.ids.next()), vectorFinalizer, constraintsFinalizer, createTextFinalizer(() => this.textLayout), createAutoLayoutFinalizer(() => this.textLayout), groupFinalizer, devStatusFinalizer],
       // Constraints and auto layout follow resize drags live.
       previewFinalizers: [styleFinalizer, createComponentFinalizer(() => this.ids.next()), vectorFinalizer, constraintsFinalizer, createAutoLayoutFinalizer(() => this.textLayout, { preview: true })],
       ...(options.validate ? { validate: assertDocumentInvariants } : {}),

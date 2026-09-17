@@ -44,6 +44,7 @@ import styles from './EditorShell.module.css';
 import { RailButton } from './RailButton';
 import { Toolbar } from './Toolbar';
 import { InspectPanel } from '../panels/dev/InspectPanel';
+import { ReadyForDevPanel } from '../panels/dev/ReadyForDevPanel';
 import { MissingFontsNotice } from '../dialogs/MissingFontsDialog';
 
 /**
@@ -175,6 +176,8 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
               ) : (
                 <>
                   <PagesPanel />
+                  {/* Dev Mode lists what is ready for a developer above the layers. */}
+                  {mode === 'dev' && <ReadyForDevPanel />}
                   {findOpen ? <FindPanel /> : <LayersPanel />}
                 </>
               )}

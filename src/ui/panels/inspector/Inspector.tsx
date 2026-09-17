@@ -46,6 +46,8 @@ import { addKeyframe, animationOf, applyMotionPreset, deleteKeyframe, easingVari
 import { ANIMATED_PROPERTIES, ANIMATED_PROPERTY_LABELS, keyframeAt, trackFor } from '@/core/motion/animation';
 import { EASING_LABELS, EASING_TYPES, makeEasing, type EasingType } from '@/core/prototype/reactions';
 import { localCollections } from '@/core/variables/document';
+import { canHaveDevStatus } from '@/editor/commands/dev-status';
+import { DevStatusControl } from '../dev/InspectPanel';
 import { EasingGraph } from '../prototype/EasingGraph';
 import { MOTION_PRESETS } from '@/core/motion/presets';
 import type { AnimatedProperty, KeyframeEasing, PageNode } from '@/core/schema/document';
@@ -1132,6 +1134,8 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         {nodes.length > 1 && <span className={styles.count}>{nodes.length} layers</span>}
       </div>
       {single && <ComponentSection node={single} />}
+      {/* Handoff statuses are set while designing as well as in Dev Mode. */}
+      {single && canHaveDevStatus(single) && <DevStatusControl node={single} />}
       {tool === 'scale' && <ScaleSection nodes={nodes} />}
       <Section title="Position">
         <AlignRow />

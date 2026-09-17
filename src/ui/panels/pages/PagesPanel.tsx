@@ -17,8 +17,10 @@
 
 import { useCallback, useRef, useState } from 'react';
 import type { Id } from '@/core/ids/ids';
+import { pageHasDevStatus } from '@/editor/commands/dev-status';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import { commandItem } from '../../menus/menu-model';
+import { Icon } from '../../icons/Icon';
 import { IconButton } from '../../primitives/IconButton';
 import { Menu, type MenuEntry } from '../../primitives/Menu';
 import styles from './PagesPanel.module.css';
@@ -82,7 +84,11 @@ export function PagesPanel() {
                   }}
                 />
               ) : (
-                <span className={styles.name}>{page.name}</span>
+                <>
+                  <span className={styles.name}>{page.name}</span>
+                  {/* Dev Mode badges the pages holding designs marked for handoff. */}
+                  {pageHasDevStatus(editor, id) && <Icon name="modeDev" size={12} className={styles.devBadge} aria-label="Has designs ready for dev" />}
+                </>
               )}
             </li>
           );
