@@ -19,7 +19,7 @@ import { canHaveDevStatus, devStatusLabel, setDevStatus, type DevStatusNode } fr
 import { ANIMATION_CODE_LABELS, generateAnimationCode, type AnimationCodeFormat } from '@/core/dev/animation-code';
 import { CODE_LANGUAGE_LABELS, CODE_UNITS, DEFAULT_UNIT_SCALE, generateCode, type CodeLanguage, type CodeUnit } from '@/core/dev/code-gen';
 import { shownAnimation } from '@/editor/commands/motion';
-import { addDevResource, boundVariablesOf, deleteDevResource, devResources } from '@/editor/commands/dev-resources';
+import { addDevResource, boundVariablesOf, deleteDevResource, devResources, suggestedVariables } from '@/editor/commands/dev-resources';
 import { deleteMeasurement, measurementsOf, setMeasurementLabel } from '@/editor/commands/measurements';
 import { rotationDegrees } from '@/editor/commands/properties';
 import type { SceneNode } from '@/core/schema/document';
@@ -230,7 +230,8 @@ function VariablesSection({ node }: { node: SceneNode }) {
   const editor = useEditor();
   useDocumentRevision();
   const bound = boundVariablesOf(node);
-  if (bound.length === 0) return null;
+  const suggested = suggestedVariables(editor, node);
+  if (bound.length === 0 && suggested.length === 0) return null;
   return (
     <section className={styles.group} aria-label="Variables">
       <h3 className={styles.groupTitle}>Variables</h3>
@@ -240,6 +241,11 @@ function VariablesSection({ node }: { node: SceneNode }) {
         const code = variable?.type === 'VARIABLE' ? (variable.codeSyntax?.WEB ?? null) : null;
         return <Row key={`${field}:${variableId}`} label={field} value={code ?? name} />;
       })}
+      {/* A value the layer holds outright that a variable already carries: worth naming rather than repeating. */}
+      {suggested.length > 0 && <p className={styles.label}>Suggested</p>}
+      {suggested.map((suggestion) => (
+        <Row key={`suggested:${suggestion.field}:${suggestion.variableId}`} label={suggestion.field} value={suggestion.name} />
+      ))}
     </section>
   );
 }

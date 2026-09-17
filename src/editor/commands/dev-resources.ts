@@ -16,7 +16,9 @@
  */
 
 import type { Id } from '@/core/ids/ids';
-import { isSceneNode, type DevResource, type SceneNode } from '@/core/schema/document';
+import { isSceneNode, type DevResource, type Paint, type SceneNode } from '@/core/schema/document';
+import { collectionVariables, localCollections, resolveForLayer, variableLookup } from '@/core/variables/document';
+import { isVariableColor } from '@/core/variables/resolve';
 import type { Editor } from '../editor';
 
 /** The links written on a layer itself. */
@@ -94,5 +96,57 @@ export function boundVariablesOf(node: SceneNode): { readonly field: string; rea
       if (id !== undefined) out.push({ field: `${field === 'fills' ? 'Fill' : 'Stroke'} ${index + 1}`, variableId: id });
     });
   }
+  return out;
+}
+
+/** A variable that would suit a value the layer holds outright, which a developer would rather name than repeat. */
+export interface SuggestedVariable {
+  readonly field: string;
+  readonly variableId: Id;
+  readonly name: string;
+}
+
+/**
+ * The variables that match what a layer holds outright: a fill or stroke whose colour a colour variable already
+ * carries, or a size or radius a number variable carries. Only properties with no variable bound are suggested for,
+ * since a property that has one is already named.
+ */
+export function suggestedVariables(editor: Editor, node: SceneNode): SuggestedVariable[] {
+  const variables = localCollections(editor.doc).flatMap((collection) => collectionVariables(editor.doc, collection.id));
+  if (variables.length === 0) return [];
+  const lookup = variableLookup(editor.doc);
+  const bound = new Set(boundVariablesOf(node).map((entry) => entry.field));
+  const out: SuggestedVariable[] = [];
+
+  const value = (variable: { readonly id: Id }) => resolveForLayer(editor.doc, lookup, node.id, variable.id);
+  const near = (a: number, b: number) => Math.abs(a - b) < 0.5 / 255;
+
+  const suggestColor = (field: string, paint: Paint | undefined) => {
+    if (!paint || paint.type !== 'SOLID' || bound.has(field)) return;
+    for (const variable of variables) {
+      if (variable.resolvedType !== 'COLOR') continue;
+      const resolved = value(variable);
+      if (isVariableColor(resolved) && near(resolved.r, paint.color.r) && near(resolved.g, paint.color.g) && near(resolved.b, paint.color.b)) {
+        out.push({ field, variableId: variable.id, name: variable.name });
+        return;
+      }
+    }
+  };
+
+  const suggestNumber = (field: string, amount: number | undefined) => {
+    if (amount === undefined || bound.has(field)) return;
+    for (const variable of variables) {
+      if (variable.resolvedType === 'FLOAT' && value(variable) === amount) {
+        out.push({ field, variableId: variable.id, name: variable.name });
+        return;
+      }
+    }
+  };
+
+  if ('fills' in node) suggestColor('Fill 1', node.fills.find((paint) => paint.visible));
+  if ('strokes' in node) suggestColor('Stroke 1', node.strokes.find((paint) => paint.visible));
+  suggestNumber('width', node.size.width);
+  suggestNumber('height', node.size.height);
+  if ('cornerRadius' in node) suggestNumber('cornerRadius', node.cornerRadius);
   return out;
 }

@@ -16,12 +16,14 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { createEmptyDocument, keyOnTop, makeRectangle } from '@/core/document/factory';
+import { createEmptyDocument, keyOnTop, makeRectangle, solid } from '@/core/document/factory';
+import type { SceneNode } from '@/core/schema/document';
 import { IdGenerator } from '@/core/ids/ids';
 import { Editor } from '../editor';
 import { createComponent } from './components';
-import { addDevResource, deleteDevResource, devResourceHref, devResources, ownDevResources } from './dev-resources';
+import { addDevResource, deleteDevResource, devResourceHref, devResources, ownDevResources, suggestedVariables } from './dev-resources';
 import { insertInstance } from './insert-instance';
+import { createCollection, createVariable, setVariableValue } from './variables';
 
 let editor: Editor;
 let rect: string;
@@ -67,5 +69,70 @@ describe('a dev resource', () => {
     addDevResource(editor, instance, 'https://example.com/ticket', 'Ticket');
     expect(devResources(editor, instance).map((resource) => resource.name)).toEqual(['Docs', 'Ticket']);
     expect(devResources(editor, main).map((resource) => resource.name)).toEqual(['Docs']);
+  });
+});
+
+describe('the variables a value is worth naming with', () => {
+  const node = () => editor.doc.getOrThrow(rect) as SceneNode;
+
+  test('a colour a variable already carries is suggested for the fill holding it outright', () => {
+    const collection = createCollection(editor, 'Tokens');
+    const blue = createVariable(editor, collection, 'COLOR', 'Brand/Blue')!;
+    for (const mode of (editor.doc.getOrThrow(collection) as { modes: { modeId: string }[] }).modes) {
+      setVariableValue(editor, blue, mode.modeId, { r: 0, g: 0.4, b: 1, a: 1 });
+    }
+
+    // The rectangle is painted that very colour, without saying so.
+    editor.history.run('fill', (tx) => tx.set(rect, 'fills', [solid({ r: 0, g: 0.4, b: 1, a: 1 })]));
+    expect(suggestedVariables(editor, node()).map((entry) => entry.name)).toContain('Brand/Blue');
+
+    // A colour no variable carries is nothing to suggest for.
+    editor.history.run('fill', (tx) => tx.set(rect, 'fills', [solid({ r: 1, g: 0, b: 0, a: 1 })]));
+    expect(suggestedVariables(editor, node()).map((entry) => entry.name)).not.toContain('Brand/Blue');
+  });
+
+  test('a size a number variable carries is suggested too, and a file with no variables suggests nothing', () => {
+    expect(suggestedVariables(editor, node())).toEqual([]);
+
+    const collection = createCollection(editor, 'Tokens');
+    const size = createVariable(editor, collection, 'FLOAT', 'Size/Card')!;
+    for (const mode of (editor.doc.getOrThrow(collection) as { modes: { modeId: string }[] }).modes) {
+      setVariableValue(editor, size, mode.modeId, 60);
+    }
+    expect(suggestedVariables(editor, node()).find((entry) => entry.field === 'width')?.name).toBe('Size/Card');
+  });
+});
+
+describe('the variables Dev Mode suggests', () => {
+  test('offers a variable already carrying a colour the layer holds outright', () => {
+    const collection = createCollection(editor, 'Theme');
+    const variableId = createVariable(editor, collection, 'COLOR', 'Brand/Blue')!;
+    const mode = (editor.doc.getOrThrow(collection) as { modes: { modeId: string }[] }).modes[0]!.modeId;
+    setVariableValue(editor, variableId, mode, { r: 0, g: 0.6, b: 1, a: 1 });
+
+    // A rectangle filled with that very colour, but not bound to it.
+    editor.history.run('fill', (tx) => tx.set(rect, 'fills', [solid({ r: 0, g: 0.6, b: 1, a: 1 })]));
+    const suggested = suggestedVariables(editor, editor.doc.getOrThrow(rect) as SceneNode);
+    expect(suggested.map((entry) => `${entry.field}:${entry.name}`)).toEqual(['Fill 1:Brand/Blue']);
+  });
+
+  test('says nothing about a colour no variable carries, and nothing where there are no variables', () => {
+    expect(suggestedVariables(editor, editor.doc.getOrThrow(rect) as SceneNode)).toEqual([]);
+    const collection = createCollection(editor, 'Theme');
+    const variableId = createVariable(editor, collection, 'COLOR', 'Brand/Red')!;
+    const mode = (editor.doc.getOrThrow(collection) as { modes: { modeId: string }[] }).modes[0]!.modeId;
+    setVariableValue(editor, variableId, mode, { r: 1, g: 0, b: 0, a: 1 });
+
+    editor.history.run('fill', (tx) => tx.set(rect, 'fills', [solid({ r: 0, g: 1, b: 0, a: 1 })]));
+    expect(suggestedVariables(editor, editor.doc.getOrThrow(rect) as SceneNode)).toEqual([]);
+  });
+
+  test('offers a number variable a size matches', () => {
+    const collection = createCollection(editor, 'Sizes');
+    const variableId = createVariable(editor, collection, 'FLOAT', 'Space/Card')!;
+    const mode = (editor.doc.getOrThrow(collection) as { modes: { modeId: string }[] }).modes[0]!.modeId;
+    setVariableValue(editor, variableId, mode, 60);
+    const suggested = suggestedVariables(editor, editor.doc.getOrThrow(rect) as SceneNode);
+    expect(suggested.map((entry) => entry.field)).toContain('width');
   });
 });
