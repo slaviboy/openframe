@@ -22,6 +22,7 @@ import { IdGenerator } from '@/core/ids/ids';
 import type { RectangleNode, VectorNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { BUILTIN_COMMANDS } from './builtin';
+import { outlineStrokeSelection } from './outline-stroke';
 
 let editor: Editor;
 let id: string;
@@ -53,10 +54,10 @@ beforeEach(() => {
 });
 
 describe('outline stroke', () => {
-  test('a layer with a fill keeps it; the outlined stroke goes directly above it, filled with the stroke paint', () => {
+  test('a layer with a fill keeps it; the outlined stroke goes directly above it, filled with the stroke paint', async () => {
     const paint = rect()!.strokes;
     expect(enabled()).toBe(true);
-    editor.commands.run('object.outlineStroke');
+    await outlineStrokeSelection(editor, async () => null);
     const vector = editor.doc.getOrThrow(editor.selection[0]!) as VectorNode;
     expect(vector).toMatchObject({ type: 'VECTOR', name: 'Box', fills: paint, strokes: [] });
     expect(vector.transform).toEqual([1, 0, 0, 1, 45, 15]);
@@ -68,9 +69,9 @@ describe('outline stroke', () => {
     expect(editor.doc.children(editor.pageId)).toEqual([id]);
   });
 
-  test('a layer without a visible fill is replaced by its outline', () => {
+  test('a layer without a visible fill is replaced by its outline', async () => {
     editor.history.run('no fill', (tx) => tx.set(id, 'fills', []));
-    editor.commands.run('object.outlineStroke');
+    await outlineStrokeSelection(editor, async () => null);
     expect(rect()).toBeUndefined();
     expect(editor.doc.getOrThrow(editor.selection[0]!).type).toBe('VECTOR');
   });

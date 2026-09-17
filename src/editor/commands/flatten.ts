@@ -18,21 +18,37 @@
 import type { Id } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
 import { canFlattenLayer, flattenLayers } from '@/core/vector/flatten';
+import type { FontLoader } from '@/core/text/glyph-paths';
 import type { Editor } from '../editor';
+import { replaceTextWithOutlines, textLayersUnder, textOutlinesFor } from './outline-text';
 import { selectedSceneNodes } from './selection-helpers';
 
 const unlockedSelection = (editor: Editor): Id[] => selectedSceneNodes(editor).filter((id) => !(editor.doc.get(id) as SceneNode).locked);
 
-/** Flatten is available when a selected, unlocked layer has an outline to flatten. */
-export const canFlatten = (editor: Editor): boolean => unlockedSelection(editor).some((id) => canFlattenLayer(editor.doc, id));
+/** Flatten is available when a selected, unlocked layer has an outline to flatten, text counting as one. */
+export const canFlatten = (editor: Editor): boolean => {
+  const ids = unlockedSelection(editor);
+  return ids.some((id) => canFlattenLayer(editor.doc, id)) || (editor.textLayout?.glyphPlacements !== undefined && textLayersUnder(editor, ids).length > 0);
+};
 
-/** Flatten (⌥⇧F): merges the selected layers into one vector layer, selected afterwards, in one undo step. */
-export function flattenSelection(editor: Editor): void {
+/**
+ * Flatten (⌥⇧F): merges the selected layers into one vector layer, selected afterwards, in one undo step. Text
+ * is read out as its glyphs' outlines first, in the same step, so a layer with words in it flattens like any
+ * other; text whose outlines can't be read is left as it is and contributes nothing, as before.
+ */
+export async function flattenSelection(editor: Editor, load: FontLoader): Promise<void> {
   const ids = unlockedSelection(editor);
   if (ids.length === 0) return;
+  // The outlines are read before the document is touched, since reading a font file has to be waited for.
+  const outlines = await textOutlinesFor(editor, textLayersUnder(editor, ids), load);
   let created: Id | null = null;
   editor.history.run('Flatten', (tx) => {
-    created = flattenLayers(tx, ids, () => editor.ids.next());
+    const replaced = replaceTextWithOutlines(tx, editor, outlines);
+    created = flattenLayers(
+      tx,
+      ids.map((id) => replaced.get(id) ?? id),
+      () => editor.ids.next(),
+    );
   });
   if (created) editor.state.select([created]);
 }

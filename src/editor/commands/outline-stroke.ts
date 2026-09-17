@@ -25,6 +25,8 @@ import { hasGeometry, type Paint, type SceneNode, type VectorNode } from '@/core
 import { commandsToNetwork } from '@/core/vector/shape-networks';
 import { networkBounds, transformNetwork } from '@/core/vector/vector-network';
 import type { Editor } from '../editor';
+import type { FontLoader } from '@/core/text/glyph-paths';
+import { replaceTextWithOutlines, textOutlinesFor } from './outline-text';
 import { nextKeyAbove, selectedSceneNodes } from './selection-helpers';
 
 /** Layers whose strokes can be outlined. */
@@ -32,25 +34,39 @@ const OUTLINED: ReadonlySet<string> = new Set(['RECTANGLE', 'ELLIPSE', 'POLYGON'
 
 const anyVisible = (paints: readonly Paint[]): boolean => paints.some((p) => p.visible && p.opacity > 0);
 
-const hasOutlinableStroke = (node: SceneNode): boolean =>
-  OUTLINED.has(node.type) && hasGeometry(node) && !node.locked && node.strokeWeight > 0 && anyVisible(node.strokes);
+const hasOutlinableStroke = (node: SceneNode): boolean => OUTLINED.has(node.type) && hasGeometry(node) && !node.locked && node.strokeWeight > 0 && anyVisible(node.strokes);
+
+/** A text layer's stroke is outlined through its glyphs, which are read out first. */
+const hasTextStroke = (node: SceneNode): boolean => node.type === 'TEXT' && !node.locked && node.characters !== '' && node.strokeWeight > 0 && anyVisible(node.strokes);
 
 /** Outline stroke is available once the engine is loaded and a selected, unlocked layer draws a stroke. */
 export const canOutlineStroke = (editor: Editor): boolean =>
-  editor.geometry !== null && selectedSceneNodes(editor).some((id) => hasOutlinableStroke(editor.doc.getOrThrow(id) as SceneNode));
+  editor.geometry !== null &&
+  selectedSceneNodes(editor).some((id) => {
+    const node = editor.doc.getOrThrow(id) as SceneNode;
+    return hasOutlinableStroke(node) || (editor.textLayout?.glyphPlacements !== undefined && hasTextStroke(node));
+  });
 
 /**
  * Outline stroke (⌘⌥O): each selected layer's stroke becomes a vector layer of the area it covers,
  * filled with the stroke's paints. A layer with a visible fill keeps it and loses its stroke, with the
  * outline directly above it; other layers are replaced. The outlines are selected; one undo step.
  */
-export function outlineStrokeSelection(editor: Editor): Id[] {
+export async function outlineStrokeSelection(editor: Editor, load: FontLoader): Promise<Id[]> {
   const geometry = editor.geometry;
   if (!geometry) return [];
   const ids = sortByPaintOrder(editor.doc, selectedSceneNodes(editor));
+  // A text layer's stroke follows its glyphs, so the glyphs are read out first and that outline is stroked.
+  const outlines = await textOutlinesFor(
+    editor,
+    ids.filter((id) => hasTextStroke(editor.doc.getOrThrow(id) as SceneNode)),
+    load,
+  );
   const selection: Id[] = [];
   editor.history.run('Outline stroke', (tx) => {
-    for (const id of ids) {
+    const replaced = replaceTextWithOutlines(tx, editor, outlines);
+    for (const original of ids) {
+      const id = replaced.get(original) ?? original;
       const node = tx.store.getOrThrow(id) as SceneNode;
       const commands = hasOutlinableStroke(node) ? geometry.strokeOutline(node) : null;
       const network = commands ? commandsToNetwork(commands) : null;

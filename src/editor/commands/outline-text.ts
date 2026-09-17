@@ -16,6 +16,7 @@
  */
 
 import { makeVector } from '@/core/document/factory';
+import type { Transaction } from '@/core/history/history';
 import { sortByPaintOrder } from '@/core/document/order';
 import type { PathCommand } from '@/core/geometry/corners';
 import { keyBetween } from '@/core/ids/fractional-index';
@@ -50,52 +51,87 @@ export async function textOutline(editor: Editor, node: TextNode, load: FontLoad
   return commands.length > 0 ? commands : null;
 }
 
+/** One text layer read out as outlines, ready to be written into the document. */
+export interface TextOutline {
+  readonly node: TextNode;
+  readonly commands: PathCommand[];
+}
+
+/**
+ * Reads the given text layers out as outlines. Nothing is written: a font file has to be waited for, and the
+ * document is only touched once every outline is in hand.
+ */
+export async function textOutlinesFor(editor: Editor, ids: readonly Id[], load: FontLoader): Promise<TextOutline[]> {
+  const outlines: TextOutline[] = [];
+  for (const id of sortByPaintOrder(editor.doc, ids)) {
+    const node = editor.doc.get(id) as TextNode | undefined;
+    if (node?.type !== 'TEXT') continue;
+    const commands = await textOutline(editor, node, load);
+    if (commands) outlines.push({ node, commands });
+  }
+  return outlines;
+}
+
+/** Every text layer at or under the given layers, which is what flattening them has to outline first. */
+export function textLayersUnder(editor: Editor, ids: readonly Id[]): Id[] {
+  const out: Id[] = [];
+  const walk = (id: Id) => {
+    const node = editor.doc.get(id);
+    if (node?.type === 'TEXT' && node.characters !== '') out.push(id);
+    for (const child of editor.doc.children(id)) walk(child);
+  };
+  for (const id of ids) walk(id);
+  return out;
+}
+
+/**
+ * Puts outlines in place of the text layers they were read from, inside an open transaction. Returns which layer
+ * took each text layer's place, so a caller that was working on the text can go on working on the outline.
+ */
+export function replaceTextWithOutlines(tx: Transaction, editor: Editor, outlines: readonly TextOutline[]): Map<Id, Id> {
+  const made = new Map<Id, Id>();
+  for (const { node, commands } of outlines) {
+    if (!tx.store.has(node.id)) continue;
+    const network = commandsToNetwork(commands);
+    const bounds = networkBounds(network);
+    if (!bounds || bounds.width <= 0 || bounds.height <= 0) continue;
+    // The outline is in the text layer's own space, so its box moves along that layer's rotation.
+    const shift = applyLinear(matrixOf(node.transform), { x: bounds.x, y: bounds.y });
+    const vectorId = editor.ids.next();
+    const key = keyBetween(node.parent.key, nextKeyAbove(tx.store, node.id));
+    const vector = makeVector(
+      { id: vectorId, parent: { id: node.parent.id, key }, name: node.name, x: 0, y: 0, width: bounds.width, height: bounds.height },
+      transformNetwork(network, { x: bounds.x, y: bounds.y }, 1, 1),
+    );
+    tx.create({
+      ...vector,
+      transform: [node.transform[0], node.transform[1], node.transform[2], node.transform[3], node.transform[4] + shift.x, node.transform[5] + shift.y],
+      fills: node.fills,
+      strokes: node.strokes,
+      strokeWeight: node.strokeWeight,
+      strokeAlign: node.strokeAlign,
+      opacity: node.opacity,
+      blendMode: node.blendMode,
+      visible: node.visible,
+      ...(node.effects && node.effects.length > 0 ? { effects: node.effects } : {}),
+    } satisfies VectorNode as SceneNode);
+    tx.delete(node.id);
+    made.set(node.id, vectorId);
+  }
+  return made;
+}
+
 /**
  * Convert text to vector paths: each selected text layer becomes a vector layer of its glyphs' outlines, keeping
  * the text's fills, in the text layer's place. The layers are selected afterwards; one undo step. Returns the ids
  * of the layers made, which is empty when nothing could be outlined.
  */
 export async function outlineTextSelection(editor: Editor, load: FontLoader): Promise<Id[]> {
-  const ids = sortByPaintOrder(editor.doc, textLayers(editor));
-  if (ids.length === 0) return [];
-
-  // The outlines are read before the document is touched, since reading a font file has to be waited for.
-  const outlines: { readonly node: TextNode; readonly commands: PathCommand[] }[] = [];
-  for (const id of ids) {
-    const node = editor.doc.get(id) as TextNode | undefined;
-    if (!node) continue;
-    const commands = await textOutline(editor, node, load);
-    if (commands) outlines.push({ node, commands });
-  }
+  const outlines = await textOutlinesFor(editor, textLayers(editor), load);
   if (outlines.length === 0) return [];
-
-  const made: Id[] = [];
+  let made: Id[] = [];
   editor.history.run('Convert text to vector paths', (tx) => {
-    for (const { node, commands } of outlines) {
-      if (!tx.store.has(node.id)) continue;
-      const network = commandsToNetwork(commands);
-      const bounds = networkBounds(network);
-      if (!bounds || bounds.width <= 0 || bounds.height <= 0) continue;
-      // The outline is in the text layer's own space, so its box moves along that layer's rotation.
-      const shift = applyLinear(matrixOf(node.transform), { x: bounds.x, y: bounds.y });
-      const vectorId = editor.ids.next();
-      const key = keyBetween(node.parent.key, nextKeyAbove(tx.store, node.id));
-      const vector = makeVector(
-        { id: vectorId, parent: { id: node.parent.id, key }, name: node.name, x: 0, y: 0, width: bounds.width, height: bounds.height },
-        transformNetwork(network, { x: bounds.x, y: bounds.y }, 1, 1),
-      );
-      tx.create({
-        ...vector,
-        transform: [node.transform[0], node.transform[1], node.transform[2], node.transform[3], node.transform[4] + shift.x, node.transform[5] + shift.y],
-        fills: node.fills,
-        opacity: node.opacity,
-        blendMode: node.blendMode,
-        visible: node.visible,
-        ...(node.effects && node.effects.length > 0 ? { effects: node.effects } : {}),
-      } satisfies VectorNode as SceneNode);
-      tx.delete(node.id);
-      made.push(vectorId);
-    }
+    made = [...replaceTextWithOutlines(tx, editor, outlines).values()];
   });
   if (made.length > 0) editor.state.select(made);
   return made;

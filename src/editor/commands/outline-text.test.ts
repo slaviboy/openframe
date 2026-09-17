@@ -16,7 +16,7 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { createEmptyDocument, keyOnTop, makeText } from '@/core/document/factory';
+import { createEmptyDocument, keyOnTop, makeGroup, makeRectangle, makeText } from '@/core/document/factory';
 import type { PathCommand } from '@/core/geometry/corners';
 import { IdGenerator } from '@/core/ids/ids';
 import type { TextNode, VectorNode } from '@/core/schema/document';
@@ -24,6 +24,8 @@ import type { OutlineFont } from '@/core/text/glyph-paths';
 import type { GlyphPlacement, TextLayoutService } from '@/core/text/text-layout';
 import { Editor } from '../editor';
 import { BUILTIN_COMMANDS } from './builtin';
+import { flattenSelection } from './flatten';
+import { outlineStrokeSelection } from './outline-stroke';
 import { outlineTextSelection } from './outline-text';
 
 let editor: Editor;
@@ -113,5 +115,75 @@ describe('convert text to vector paths', () => {
     expect(enabled()).toBe(true);
     editor.state.clearSelection();
     expect(enabled()).toBe(false);
+  });
+});
+
+describe('outlining a text layer’s stroke', () => {
+  test('the stroke follows the glyphs, and the text is replaced by the two vector layers', async () => {
+    editor.history.run('stroke', (tx) => {
+      tx.set(id, 'strokes', (editor.doc.getOrThrow(id) as TextNode).fills);
+      tx.set(id, 'strokeWeight', 2);
+    });
+    editor.setTextLayout(layoutService(placementsFor('ab')) as TextLayoutService);
+    // A stand-in engine: every stroke covers its layer's box grown by one on each side.
+    editor.setGeometry({
+      strokeOutline: (node) => [
+        { op: 'M', x: -1, y: -1 },
+        { op: 'L', x: node.size.width + 1, y: -1 },
+        { op: 'L', x: node.size.width + 1, y: node.size.height + 1 },
+        { op: 'L', x: -1, y: node.size.height + 1 },
+        { op: 'Z' },
+      ],
+      regionMinusStroke: () => null,
+      regionHalves: () => null,
+      offsetNetwork: () => null,
+    });
+    await outlineStrokeSelection(editor, async () => boxFont('ab'));
+    expect(editor.doc.has(id)).toBe(false);
+    // The glyphs are 20 by 10, so their stroke's outline is 22 by 12.
+    const outlined = editor.doc.getOrThrow(editor.selection[0]!) as VectorNode;
+    expect(outlined.type).toBe('VECTOR');
+    expect(outlined.size).toEqual({ width: 22, height: 12 });
+  });
+});
+
+describe('flattening text', () => {
+  test('a text layer flattens through its outlines, in one undo step', async () => {
+    editor.setTextLayout(layoutService(placementsFor('ab')) as TextLayoutService);
+    const before = editor.history.canUndo;
+    await flattenSelection(editor, async () => boxFont('ab'));
+    const node = vector();
+    expect(node.type).toBe('VECTOR');
+    expect(node.size).toEqual({ width: 20, height: 10 });
+    expect(editor.doc.has(id)).toBe(false);
+    // One step: undo puts the text back rather than leaving an outlined layer behind.
+    editor.history.undo();
+    expect(editor.doc.getOrThrow(id).type).toBe('TEXT');
+    expect(editor.history.canUndo).toBe(before);
+  });
+
+  test('a group of text and a shape flattens into one layer', async () => {
+    const group = editor.history.run('group', (tx) => {
+      const groupId = editor.ids.next();
+      tx.create(makeGroup({ id: groupId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'G', x: 0, y: 0, width: 80, height: 40 }));
+      tx.set(id, 'parent', { id: groupId, key: keyOnTop(tx.store, groupId) });
+      const rectId = editor.ids.next();
+      tx.create(makeRectangle({ id: rectId, parent: { id: groupId, key: keyOnTop(tx.store, groupId) }, name: 'R', x: 60, y: 0, width: 20, height: 20 }));
+      return groupId;
+    });
+    editor.state.select([group]);
+    editor.setTextLayout(layoutService(placementsFor('ab')) as TextLayoutService);
+    await flattenSelection(editor, async () => boxFont('ab'));
+    expect(vector().type).toBe('VECTOR');
+    expect(editor.doc.has(group)).toBe(false);
+    // The glyphs span x 40 to 60 in the group's space (the text layer sits at 40) and the rectangle 60 to 80,
+    // so both went into the one layer.
+    expect(vector().size.width).toBe(40);
+  });
+
+  test('text whose outlines can’t be read is left alone and contributes nothing', async () => {
+    editor.setTextLayout(layoutService(placementsFor('ab')) as TextLayoutService);
+    await flattenSelection(editor, async () => null);
+    expect(editor.doc.getOrThrow(id).type).toBe('TEXT');
   });
 });

@@ -49,11 +49,18 @@ import { canResetOverrides, resetSelectedOverrides } from './reset-overrides';
 import { canGoToMainComponent, canPushChangesToMain, canRestoreMainComponent, goToMainComponent, pushChangesToMain, restoreMainComponent } from './main-component';
 import { canOutlineStroke, outlineStrokeSelection } from './outline-stroke';
 import { canOffsetPath } from './offset-path';
+import type { FontLoader } from '@/core/text/glyph-paths';
 import { canOutlineText, outlineTextSelection } from './outline-text';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
 import { deleteMarked, duplicateMarked } from './smart-selection';
 
 const hasSelection = (e: Editor) => e.selection.length > 0;
+
+/** Runs something that needs glyph outlines, loading the fonts they are read from the first time one is wanted. */
+async function withOutlineFonts<T>(editor: Editor, run: (load: FontLoader) => Promise<T>): Promise<T> {
+  const { bundledFontLoader } = await import('@/engine/text/outline-font');
+  return run(bundledFontLoader((family) => editor.textLayout?.fontBytesOf?.(family) ?? null));
+}
 
 /** Siblings scope for "Select all": the parent of the current selection, or the page. */
 function selectAllScope(e: Editor): Id {
@@ -397,7 +404,9 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     category: 'Object',
     shortcuts: ['Shift+Alt+F'],
     enabled: canFlatten,
-    run: (e) => flattenSelection(e),
+    run: (e) => {
+      void withOutlineFonts(e, (load) => flattenSelection(e, load));
+    },
   },
   {
     id: 'object.outlineStroke',
@@ -406,21 +415,18 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     // ⌘⌥O on macOS; Ctrl+Alt+O elsewhere.
     shortcuts: ['Mod+Alt+O'],
     enabled: canOutlineStroke,
-    run: (e) => outlineStrokeSelection(e),
+    run: (e) => {
+      void withOutlineFonts(e, (load) => outlineStrokeSelection(e, load));
+    },
   },
   {
     id: 'object.outlineText',
     label: 'Convert text to vector paths',
     category: 'Object',
     enabled: canOutlineText,
-    // Reading a font file is loaded and waited for, so the outlines arrive a moment after the command runs.
+    // The font file is loaded and waited for, so the outlines arrive a moment after the command runs.
     run: (e) => {
-      void import('@/engine/text/outline-font').then(({ bundledFontLoader }) =>
-        outlineTextSelection(
-          e,
-          bundledFontLoader((family) => e.textLayout?.fontBytesOf?.(family) ?? null),
-        ),
-      );
+      void withOutlineFonts(e, (load) => outlineTextSelection(e, load));
     },
   },
   {
