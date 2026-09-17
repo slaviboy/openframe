@@ -29,7 +29,7 @@ import { balancedWidth, prettyWidth } from '@/core/text/wrap-style';
 import { fallbackUnderlineMetrics, underlineLine, wavySegments, type UnderlineMetrics } from '@/core/text/underline';
 import { parseFontStyle, VARIABLE_FONT_STYLES } from '@/core/text/font-style';
 import { nextGrapheme, previousGrapheme } from '@/core/text/text-editing';
-import type { FontFamilyInfo, TextCaretBox, TextLayoutService } from '@/core/text/text-layout';
+import type { FontFamilyInfo, GlyphPlacement, TextCaretBox, TextLayoutService } from '@/core/text/text-layout';
 import { isFallbackFamily } from './font-files';
 import { textSegments, textStyleAt, type TextSegment, type TextStyle as RunsStyle } from '@/core/text/style-runs';
 import { applyTextCase } from '@/core/text/letter-case';
@@ -144,6 +144,8 @@ export class TextShaper implements TextLayoutService {
   private readonly familyAxes = new Map<string, readonly FontAxis[]>();
   /** One typeface per family, for its underline metrics. */
   private readonly typefaces = new Map<string, Typeface>();
+  /** The font file each family was registered from, which is what glyph outlines are read out of. */
+  private readonly fontFiles = new Map<string, Uint8Array>();
   /** Registered Noto Sans CJK subsets: fallbacks added only to text of their script. */
   private readonly cjkSubsets = new Set<string>();
   private readonly underlineCache = new Map<string, UnderlineMetrics>();
@@ -263,6 +265,7 @@ export class TextShaper implements TextLayoutService {
   registerCjkSubsets(fonts: readonly FontSource[]): void {
     for (const font of fonts) {
       if (this.cjkSubsets.has(font.family)) continue;
+      if (!this.fontFiles.has(font.family)) this.fontFiles.set(font.family, font.bytes instanceof Uint8Array ? font.bytes : new Uint8Array(font.bytes));
       this.provider.registerFont(font.bytes, font.family);
       this.cjkSubsets.add(font.family);
     }
@@ -279,7 +282,54 @@ export class TextShaper implements TextLayoutService {
     return [...this.cjkSubsets].filter((family) => family.startsWith(prefix));
   }
 
+  /**
+   * Where each character of a text layer sits, in the layer's space: the left of its box and the baseline of the
+   * line it is on, with the size and family its style asks for. Line breaks carry no glyph and are left out.
+   */
+  glyphPlacements(node: TextNode): GlyphPlacement[] {
+    if (node.characters === '') return [];
+    const block = this.layout(node);
+    const segments = textSegments(node);
+    const out: GlyphPlacement[] = [];
+    for (const layout of block.paragraphs) {
+      if (layout.hidden) continue;
+      const lines = layout.paragraph.getLineMetrics();
+      for (const segment of segments) {
+        const from = Math.max(segment.start, layout.range.start);
+        const to = Math.min(segment.end, layout.range.end);
+        for (let i = from; i < to; i++) {
+          const code = node.characters.codePointAt(i);
+          if (code === undefined) continue;
+          const char = String.fromCodePoint(code);
+          // A character outside the basic plane takes two code units, the second of which is not its own character.
+          const units = char.length;
+          const skip = units - 1;
+          if (char === '\n' || char.trim() === '') {
+            i += skip;
+            continue;
+          }
+          const at = toParagraphOffset(layout.range, i, layout.prefix);
+          const rect = layout.paragraph.getRectsForRange(at, at + units, this.ck.RectHeightStyle.Tight, this.ck.RectWidthStyle.Tight)[0];
+          i += skip;
+          if (!rect) continue;
+          const [x0 = 0, top = 0, , bottom = 0] = rect.rect;
+          const middle = (top + bottom) / 2;
+          const line = lines.find((l) => middle >= l.baseline - l.ascent - 0.5 && middle <= l.baseline + l.descent + 0.5) ?? lines[0];
+          if (!line) continue;
+          out.push({ char, x: lineLeft(layout, lines.indexOf(line)) + x0, baseline: block.dy + layout.top + line.baseline, fontSize: segment.fontSize, family: segment.fontName.family });
+        }
+      }
+    }
+    return out;
+  }
+
+  /** The font file a family was registered from, for reading its glyph outlines; null for an unknown family. */
+  fontBytesOf(family: string): Uint8Array | null {
+    return this.fontFiles.get(family) ?? null;
+  }
+
   private rememberTypeface(family: string, bytes: ArrayBuffer | Uint8Array): void {
+    if (!this.fontFiles.has(family)) this.fontFiles.set(family, bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes));
     if (this.typefaces.has(family)) return;
     const data = bytes instanceof Uint8Array ? bytes.slice().buffer : bytes;
     const typeface = this.ck.Typeface.MakeTypefaceFromData(data);
@@ -332,7 +382,12 @@ export class TextShaper implements TextLayoutService {
         const to = Math.min(segment.end, layout.range.end);
         if (to <= from) continue;
         const metrics = this.underlineMetrics(segment.fontName.family, segment.fontSize);
-        const rects = layout.paragraph.getRectsForRange(toParagraphOffset(layout.range, from, layout.prefix), toParagraphOffset(layout.range, to, layout.prefix), this.ck.RectHeightStyle.Tight, this.ck.RectWidthStyle.Tight);
+        const rects = layout.paragraph.getRectsForRange(
+          toParagraphOffset(layout.range, from, layout.prefix),
+          toParagraphOffset(layout.range, to, layout.prefix),
+          this.ck.RectHeightStyle.Tight,
+          this.ck.RectWidthStyle.Tight,
+        );
         for (const { rect } of rects) {
           const middle = (rect[1]! + rect[3]!) / 2;
           const line = lines.find((l) => middle >= l.baseline - l.ascent - 0.5 && middle <= l.baseline + l.descent + 0.5) ?? lines[0];
@@ -642,7 +697,15 @@ export class TextShaper implements TextLayoutService {
       // Hanging quotes: an opening quote starting a left-aligned, left-to-right paragraph sits outside the box on the first line.
       let firstLineShift = 0;
       const first = node.characters[ranges[i]!.start];
-      if (!hidden && node.hangingPunctuation && !rtl[i] && items[i]!.type === 'NONE' && (node.textAlignHorizontal === 'LEFT' || node.textAlignHorizontal === 'JUSTIFIED') && first !== undefined && OPENING_QUOTES.has(first)) {
+      if (
+        !hidden &&
+        node.hangingPunctuation &&
+        !rtl[i] &&
+        items[i]!.type === 'NONE' &&
+        (node.textAlignHorizontal === 'LEFT' || node.textAlignHorizontal === 'JUSTIFIED') &&
+        first !== undefined &&
+        OPENING_QUOTES.has(first)
+      ) {
         const prefix = indents[i]! > 0 ? 1 : 0;
         const quote = paragraph.getRectsForRange(prefix, prefix + 1, this.ck.RectHeightStyle.Tight, this.ck.RectWidthStyle.Tight)[0];
         if (quote) firstLineShift = -(quote.rect[2]! - quote.rect[0]!);
@@ -800,7 +863,10 @@ export class TextShaper implements TextLayoutService {
     const localY = y - target.top;
     const targetLines = target.paragraph.getLineMetrics();
     // The line under the point: the first whose next line starts below it.
-    const lineUnder = Math.max(0, targetLines.findIndex((_, i) => i === targetLines.length - 1 || localY < targetLines[i + 1]!.baseline - targetLines[i + 1]!.ascent));
+    const lineUnder = Math.max(
+      0,
+      targetLines.findIndex((_, i) => i === targetLines.length - 1 || localY < targetLines[i + 1]!.baseline - targetLines[i + 1]!.ascent),
+    );
     const local = target.paragraph.getGlyphPositionAtCoordinate(point.x - lineLeft(target, lineUnder), localY).pos;
     return this.clamp(node, fromParagraphOffset(target.range, local, target.prefix));
   }
@@ -846,9 +912,17 @@ export class TextShaper implements TextLayoutService {
       const to = Math.min(end, layout.range.end);
       if (layout.hidden || to <= from) continue;
       const y = block.dy + layout.top;
-      for (const { rect: r } of layout.paragraph.getRectsForRange(toParagraphOffset(layout.range, from, layout.prefix), toParagraphOffset(layout.range, to, layout.prefix), this.ck.RectHeightStyle.Max, this.ck.RectWidthStyle.Tight)) {
+      for (const { rect: r } of layout.paragraph.getRectsForRange(
+        toParagraphOffset(layout.range, from, layout.prefix),
+        toParagraphOffset(layout.range, to, layout.prefix),
+        this.ck.RectHeightStyle.Max,
+        this.ck.RectWidthStyle.Tight,
+      )) {
         const middle = (r[1]! + r[3]!) / 2;
-        const line = Math.max(0, layout.paragraph.getLineMetrics().findIndex((l) => middle <= l.baseline + l.descent + 0.5));
+        const line = Math.max(
+          0,
+          layout.paragraph.getLineMetrics().findIndex((l) => middle <= l.baseline + l.descent + 0.5),
+        );
         rects.push({ x: lineLeft(layout, line) + r[0]!, y: r[1]! + y, width: r[2]! - r[0]!, height: r[3]! - r[1]! });
       }
     }
@@ -870,7 +944,10 @@ export class TextShaper implements TextLayoutService {
     const nextLines = next.paragraph.getLineMetrics();
     const nextLine = direction > 0 ? nextLines[0] : nextLines[nextLines.length - 1];
     if (!nextLine) return direction > 0 ? next.range.start : next.range.end;
-    return this.clamp(node, fromParagraphOffset(next.range, next.paragraph.getGlyphPositionAtCoordinate(x - lineLeft(next, direction > 0 ? 0 : nextLines.length - 1), nextLine.baseline).pos, next.prefix));
+    return this.clamp(
+      node,
+      fromParagraphOffset(next.range, next.paragraph.getGlyphPositionAtCoordinate(x - lineLeft(next, direction > 0 ? 0 : nextLines.length - 1), nextLine.baseline).pos, next.prefix),
+    );
   }
 
   lineRange(node: TextNode, offset: number): [number, number] {

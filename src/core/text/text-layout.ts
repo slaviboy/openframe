@@ -66,4 +66,20 @@ export interface TextLayoutService {
   supportedFeatures?(font: FontName): readonly string[];
   /** The variation axes of a family (empty for static fonts and fonts whose axes can't be read). */
   fontAxes?(family: string): readonly FontAxis[];
+  /** Where each character of a text layer sits, for reading its glyphs out as outlines. */
+  glyphPlacements?(node: TextNode): readonly GlyphPlacement[];
+  /** The font file registered for a family, whose glyph outlines can be read; null when there is none. */
+  fontBytesOf?(family: string): Uint8Array | null;
+}
+
+/** Where one character of a laid-out text layer sits, in the layer's own space. */
+export interface GlyphPlacement {
+  readonly char: string;
+  /** The left of the character's box, which is where its glyph is drawn from. */
+  readonly x: number;
+  /** The baseline the character sits on. */
+  readonly baseline: number;
+  readonly fontSize: number;
+  /** The family the character's style asks for; the glyph may come from a fallback when it has no such glyph. */
+  readonly family: string;
 }

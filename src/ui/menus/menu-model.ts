@@ -79,7 +79,18 @@ const MAIN_MENU: readonly (readonly [string, readonly (readonly string[])[]])[] 
   [
     'Object',
     [
-      ['object.group', 'object.frameSelection', 'object.wrapInSection', 'object.ungroup', 'object.removeSection', 'object.useAsMask', 'object.flatten', 'object.outlineStroke', 'object.offsetPath'],
+      [
+        'object.group',
+        'object.frameSelection',
+        'object.wrapInSection',
+        'object.ungroup',
+        'object.removeSection',
+        'object.useAsMask',
+        'object.flatten',
+        'object.outlineStroke',
+        'object.offsetPath',
+        'object.outlineText',
+      ],
       [
         'object.createComponent',
         'object.createMultipleComponents',
@@ -180,7 +191,18 @@ function objectCommandEntries(editor: Editor): MenuEntry[] {
     ['edit.copy', 'edit.cut', 'edit.paste', 'edit.pasteReplace'],
     ['edit.duplicate', 'edit.delete'],
     ['arrange.bringToFront', 'arrange.bringForward', 'arrange.sendBackward', 'arrange.sendToBack'],
-    ['object.group', 'object.frameSelection', 'object.wrapInSection', 'object.ungroup', 'object.removeSection', 'object.useAsMask', 'object.flatten', 'object.outlineStroke', 'object.offsetPath'],
+    [
+      'object.group',
+      'object.frameSelection',
+      'object.wrapInSection',
+      'object.ungroup',
+      'object.removeSection',
+      'object.useAsMask',
+      'object.flatten',
+      'object.outlineStroke',
+      'object.offsetPath',
+      'object.outlineText',
+    ],
     [
       'object.createComponent',
       'object.createMultipleComponents',

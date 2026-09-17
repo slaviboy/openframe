@@ -44,13 +44,29 @@ export function serviceWorkerPlugin(): Plugin {
       const isDeferred = (name: string) => /(^|\/)emoji-font-data-[^/]*\.js$/.test(name);
       // The 454 Noto Sans CJK subsets (23 MB) aren't precached at all: each is cached by the fetch handler
       // when text first needs it, instead of every visitor downloading all of them.
-      const isOnDemand = (name: string) => /(^|\/)noto-sans-(sc|tc|jp|kr)-\d+-wght-normal-[^/]*\.js$/.test(name);
+      // The plain font files that glyph outlines are read from are fetched only when text is turned into paths.
+      const isOnDemand = (name: string) => /(^|\/)noto-sans-(sc|tc|jp|kr)-\d+-wght-normal-[^/]*\.js$/.test(name) || /(^|\/)font-outlines_[^/]*\.js$/.test(name);
       // Paths are relative to the service worker's scope (the app's base path).
-      const precache = [...new Set(['./', 'index.html', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-maskable-512.png', ...files.filter((f) => !isDeferred(f) && !isOnDemand(f))])].sort();
+      const precache = [
+        ...new Set([
+          './',
+          'index.html',
+          'manifest.webmanifest',
+          'icons/icon.svg',
+          'icons/icon-192.png',
+          'icons/icon-512.png',
+          'icons/icon-maskable-512.png',
+          ...files.filter((f) => !isDeferred(f) && !isOnDemand(f)),
+        ]),
+      ].sort();
       const deferred = files.filter(isDeferred).sort();
       const version = createHash('sha256')
         .update([...precache, ...deferred].join('\n'))
-        .update(Object.values(bundle).map((b) => (b.type === 'chunk' ? b.code : '')).join(''))
+        .update(
+          Object.values(bundle)
+            .map((b) => (b.type === 'chunk' ? b.code : ''))
+            .join(''),
+        )
         .digest('hex')
         .slice(0, 12);
       if (!sw.code.includes('__OPENFRAME_PRECACHE__') || !sw.code.includes('__OPENFRAME_DEFERRED__') || !sw.code.includes('__OPENFRAME_VERSION__')) {

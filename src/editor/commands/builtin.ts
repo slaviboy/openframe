@@ -49,6 +49,7 @@ import { canResetOverrides, resetSelectedOverrides } from './reset-overrides';
 import { canGoToMainComponent, canPushChangesToMain, canRestoreMainComponent, goToMainComponent, pushChangesToMain, restoreMainComponent } from './main-component';
 import { canOutlineStroke, outlineStrokeSelection } from './outline-stroke';
 import { canOffsetPath } from './offset-path';
+import { canOutlineText, outlineTextSelection } from './outline-text';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
 import { deleteMarked, duplicateMarked } from './smart-selection';
 
@@ -406,6 +407,21 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     shortcuts: ['Mod+Alt+O'],
     enabled: canOutlineStroke,
     run: (e) => outlineStrokeSelection(e),
+  },
+  {
+    id: 'object.outlineText',
+    label: 'Convert text to vector paths',
+    category: 'Object',
+    enabled: canOutlineText,
+    // Reading a font file is loaded and waited for, so the outlines arrive a moment after the command runs.
+    run: (e) => {
+      void import('@/engine/text/outline-font').then(({ bundledFontLoader }) =>
+        outlineTextSelection(
+          e,
+          bundledFontLoader((family) => e.textLayout?.fontBytesOf?.(family) ?? null),
+        ),
+      );
+    },
   },
   {
     id: 'object.offsetPath',
