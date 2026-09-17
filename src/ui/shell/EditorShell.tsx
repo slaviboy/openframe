@@ -45,6 +45,7 @@ import { RailButton } from './RailButton';
 import { Toolbar } from './Toolbar';
 import { InspectPanel } from '../panels/dev/InspectPanel';
 import { ReadyForDevPanel } from '../panels/dev/ReadyForDevPanel';
+import { FocusView } from '../panels/dev/FocusView';
 import { MissingFontsNotice } from '../dialogs/MissingFontsDialog';
 
 /**
@@ -79,6 +80,7 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
   const viewingVersion = useSyncExternalStore(session.session.subscribe, () => session.session.getSnapshot().viewing !== null);
   const mode = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().mode);
   const devTimeline = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().devTimeline);
+  const focusId = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().focusId);
   // Draw mode has its own accent, from the mode on the root element (as the theme is), and is where the editor opens again.
   const modeRestored = useRef(false);
   useLayoutEffect(() => {
@@ -177,8 +179,8 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
               ) : (
                 <>
                   <PagesPanel />
-                  {/* Dev Mode lists what is ready for a developer above the layers. */}
-                  {mode === 'dev' && <ReadyForDevPanel />}
+                  {/* Dev Mode lists what is ready for a developer above the layers, or focuses on one of them. */}
+                  {mode === 'dev' && (focusId === null ? <ReadyForDevPanel /> : <FocusView />)}
                   {findOpen ? <FindPanel /> : <LayersPanel />}
                 </>
               )}

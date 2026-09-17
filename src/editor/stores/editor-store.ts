@@ -103,6 +103,8 @@ export interface EditorState {
   readonly annotationFilter: string | null;
   /** Dev Mode: the timeline is shown, read-only, to watch an animation in. */
   readonly devTimeline: boolean;
+  /** Dev Mode's focus view: the one design being looked at on its own, or null for the whole page. */
+  readonly focusId: Id | null;
   readonly rightTab: RightPanelTab;
   readonly viewports: Readonly<Record<Id, Viewport>>;
   /** Layer rows expanded in the layers panel. */
@@ -219,6 +221,7 @@ export class EditorStore extends Observable<EditorState> {
       motion: DEFAULT_MOTION,
       annotationFilter: null,
       devTimeline: false,
+      focusId: null,
       rightTab: 'design',
       viewports: {},
       expanded: new Set(),
@@ -389,6 +392,10 @@ export class EditorStore extends Observable<EditorState> {
 
   releaseSpring(): void {
     if (this.state.spring) this.setState({ tool: this.state.spring, spring: null });
+  }
+
+  setFocus(focusId: Id | null): void {
+    this.setState({ focusId });
   }
 
   setDevTimeline(devTimeline: boolean): void {

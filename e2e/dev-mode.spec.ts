@@ -439,3 +439,36 @@ test('Dev Mode compares the file with a saved version, by property and by code',
   await expect(page.getByTestId('compare-code-before')).toContainText(`width: ${startWidth}px;`);
   await expect(page.getByTestId('compare-code-after')).toContainText('width: 260px;');
 });
+
+test('the focus view looks at one design on its own, and marks the work on it done', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('f');
+  await page.mouse.move(box.x + 300, box.y + 240);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 520, box.y + 400, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.getByRole('treeitem', { name: /Frame 1/ })).toBeVisible();
+
+  // Marked for handoff, so it shows in the list Dev Mode focuses from.
+  await page.getByRole('region', { name: 'Status' }).getByRole('button', { name: 'Mark as ready for dev' }).click();
+  await page.keyboard.press('Shift+D');
+  const ready = page.getByRole('region', { name: 'Ready for development' });
+  await ready.getByRole('button', { name: /Frame 1/ }).click();
+
+  // The sidebar gives up the list for the design itself.
+  const focus = page.getByRole('region', { name: 'Focus view' });
+  await expect(focus).toBeVisible();
+  await expect(focus).toContainText('Frame 1');
+  await expect(focus).toContainText('Ready for dev');
+  await expect(page.getByRole('region', { name: 'Ready for development' })).toHaveCount(0);
+
+  // The work on it is marked done from here.
+  await focus.getByRole('button', { name: 'Mark as completed' }).click();
+  await expect(focus).toContainText('Completed');
+
+  await focus.getByRole('button', { name: 'Back' }).click();
+  await expect(page.getByRole('region', { name: 'Ready for development' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Focus view' })).toHaveCount(0);
+});

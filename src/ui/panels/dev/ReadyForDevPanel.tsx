@@ -49,6 +49,7 @@ export function ReadyForDevPanel() {
                 data-selected={selection.includes(node.id) || undefined}
                 onClick={() => {
                   editor.state.select([node.id]);
+                  editor.state.setFocus(node.id);
                   editor.commands.run('view.zoomToSelection');
                 }}
               >
