@@ -17,6 +17,7 @@
 
 import { canHaveDevStatus, devStatusLabel, setDevStatus, type DevStatusNode } from '@/editor/commands/dev-status';
 import { CODE_LANGUAGE_LABELS, CODE_UNITS, DEFAULT_UNIT_SCALE, generateCode, type CodeLanguage, type CodeUnit } from '@/core/dev/code-gen';
+import { addDevResource, boundVariablesOf, deleteDevResource, devResources } from '@/editor/commands/dev-resources';
 import { deleteMeasurement, measurementsOf, setMeasurementLabel } from '@/editor/commands/measurements';
 import { rotationDegrees } from '@/editor/commands/properties';
 import type { SceneNode } from '@/core/schema/document';
@@ -173,11 +174,73 @@ export function InspectPanel() {
         <Row label="Opacity" value={`${formatNumber(node.opacity * 100, 0)}%`} />
         <Row label="Blend mode" value={node.blendMode.toLowerCase().replace(/_/g, ' ')} />
       </Group>
+      <VariablesSection node={node} />
+      <DevResourcesSection node={node} />
       <AnnotationsSection node={node} />
       <MeasurementsSection />
         </>
       )}
     </div>
+  );
+}
+
+/** The variables the layer's properties are bound to, which is what a developer writes in code. */
+function VariablesSection({ node }: { node: SceneNode }) {
+  const editor = useEditor();
+  useDocumentRevision();
+  const bound = boundVariablesOf(node);
+  if (bound.length === 0) return null;
+  return (
+    <section className={styles.group} aria-label="Variables">
+      <h3 className={styles.groupTitle}>Variables</h3>
+      {bound.map(({ field, variableId }) => {
+        const variable = editor.doc.get(variableId);
+        const name = variable?.name ?? 'Missing variable';
+        const code = variable?.type === 'VARIABLE' ? (variable.codeSyntax?.WEB ?? null) : null;
+        return <Row key={`${field}:${variableId}`} label={field} value={code ?? name} />;
+      })}
+    </section>
+  );
+}
+
+/** The links left on the layer pointing at what a developer needs, and the box that adds one. */
+function DevResourcesSection({ node }: { node: SceneNode }) {
+  const editor = useEditor();
+  useDocumentRevision();
+  const [draft, setDraft] = useState('');
+  const links = devResources(editor, node.id);
+  return (
+    <section className={styles.group} aria-label="Dev resources">
+      <h3 className={styles.groupTitle}>Dev resources</h3>
+      {links.map((resource) => (
+        <div key={resource.id} className={styles.row}>
+          <a className={styles.link} href={resource.url} target="_blank" rel="noreferrer noopener">
+            {resource.name ?? resource.url}
+          </a>
+          {resource.inherited ? (
+            <span className={styles.label}>From component</span>
+          ) : (
+            <button type="button" className={primitives.button} aria-label={`Delete link ${resource.name ?? resource.url}`} onClick={() => deleteDevResource(editor, node.id, resource.id)}>
+              Delete link
+            </button>
+          )}
+        </div>
+      ))}
+      <div className={styles.codeControls}>
+        <input
+          className={primitives.textInput}
+          aria-label="Add a dev resource link"
+          placeholder="Paste a link"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key !== 'Enter') return;
+            if (addDevResource(editor, node.id, draft) !== null) setDraft('');
+          }}
+        />
+      </div>
+    </section>
   );
 }
 

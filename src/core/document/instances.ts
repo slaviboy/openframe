@@ -29,6 +29,8 @@ const ROOT_PLACEMENT: ReadonlySet<string> = new Set([
   'transform',
   // Where the instance sits on the Motion timeline is its own, not the component's.
   'animationOffset',
+  // Dev Mode links: an instance's own are its own, and the component's reach it by being read, not copied.
+  'devResources',
   'constraints',
   'constrainProportions',
   'layoutSizingHorizontal',

@@ -237,3 +237,45 @@ test('⇧T annotates a layer with a note, a category and the properties it calls
   await page.getByRole('button', { name: 'Delete annotation 1' }).click();
   await expect(page.getByRole('textbox', { name: 'Annotation 1 note' })).toHaveCount(0);
 });
+
+test('Dev Mode shows a layer’s variables and the links left on it', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+
+  // A colour variable to bind the rectangle's fill to.
+  await page.getByRole('button', { name: 'Variables', exact: true }).click();
+  const variables = page.getByRole('region', { name: 'Variables' });
+  await variables.getByRole('button', { name: 'Create collection' }).last().click();
+  await variables.getByRole('button', { name: 'Create variable' }).click();
+  await page.getByRole('menuitem', { name: 'Color' }).click();
+  await page.keyboard.press('Escape');
+
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 520, box.y + 380, { steps: 5 });
+  await page.mouse.up();
+
+  await page.keyboard.press('Shift+D');
+  const inspect = page.getByTestId('inspect-panel');
+
+  // A link is pasted in and followed from the panel.
+  const resources = inspect.getByRole('region', { name: 'Dev resources' });
+  const field = resources.getByRole('textbox', { name: 'Add a dev resource link' });
+  await field.fill('example.com/card.tsx');
+  await field.press('Enter');
+  const link = resources.getByRole('link', { name: 'https://example.com/card.tsx' });
+  await expect(link).toBeVisible();
+  await expect(link).toHaveAttribute('href', 'https://example.com/card.tsx');
+
+  // It belongs to the file.
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+  await page.reload();
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await page.getByRole('treeitem', { name: /Rectangle 1/ }).click();
+  await expect(page.getByRole('region', { name: 'Dev resources' }).getByRole('link')).toHaveCount(1);
+
+  await page.getByRole('button', { name: /^Delete link/ }).click();
+  await expect(page.getByRole('region', { name: 'Dev resources' }).getByRole('link')).toHaveCount(0);
+});

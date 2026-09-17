@@ -185,3 +185,14 @@
   width: 100%;
   resize: vertical;
 }
+
+/* A link to what a developer needs: the source, a ticket, a page of documentation. */
+.link {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--accent);
+  font-size: var(--text-sm);
+}

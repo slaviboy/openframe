@@ -478,10 +478,19 @@ const BaseNodeFields = {
   locked: z.boolean(),
 };
 
+/** A link left on a layer pointing at what a developer needs: the source, a ticket, a page of documentation. */
+export const DevResourceSchema = z.object({
+  id: z.string().min(1).max(64),
+  url: z.string().min(1).max(2000),
+  name: z.string().max(200).optional(),
+});
+
 const SceneFields = {
   ...BaseNodeFields,
   transform: TransformSchema,
   size: SizeSchema,
+  /** Dev Mode: the links left on this layer. Absent until one is added. */
+  devResources: z.array(DevResourceSchema).max(50).optional(),
   /**
    * Motion: the point a layer turns and scales around, as a share of its own box (0–1 in each direction). Absent means
    * the middle.
@@ -1307,6 +1316,7 @@ export type AnimationTrack = z.infer<typeof AnimationTrackSchema>;
 export type DevStatus = z.infer<typeof DevStatusSchema>;
 export type Measurement = z.infer<typeof MeasurementSchema>;
 export type Annotation = z.infer<typeof AnnotationSchema>;
+export type DevResource = z.infer<typeof DevResourceSchema>;
 export type AnnotationCategory = z.infer<typeof AnnotationCategorySchema>;
 export type MotionCurve = z.infer<typeof MotionCurveSchema>;
 export type PageAnimation = z.infer<typeof PageAnimationSchema>;
