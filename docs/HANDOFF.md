@@ -279,11 +279,19 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 Nothing. The working tree is clean apart from anything noted above.
 
-## Next (M14, then the backfill)
+## Next (the backfill)
 
-M10 through M13 are finished: every row of theirs in `docs/FEATURE_MATRIX.md` is Implemented, bar the parts recorded as a browser limitation (animated export needs WebCodecs for MP4 and WebM; GIF and SVG work). Dev Mode is whole: the mode itself, the inspect panel with its List and Code views, code generation in five languages, saved measurements, annotations, handoff statuses, the ready for dev and focus views, compare changes by property, code and eye, variables and their suggestions, assets, dev resources, the component playground and animation handoff code.
+Every named milestone, M0 through M14, is finished: their rows in `docs/FEATURE_MATRIX.md` are Implemented, bar the ones recorded as a browser limitation (animated export needs WebCodecs for MP4 and WebM) or as a local equivalent for something that is a cloud service (publishing a library; branches are kept as local files).
 
-M14 is next: libraries and comments. After it, go back and close the rows still In progress or Planned in the earlier milestones — M2 has the most (18), then M6 (14), M1 (11) and M5 (7). The user asked on 2026-09-17 for everything to be finished, so none of those rows are to be left.
+What is left is the backfill the user asked for on 2026-09-17: the rows still In progress or Planned in the earlier milestones, 60 of them. Work them largest block first, since that is where the most is missing:
+
+- **M2 — 18 rows.** The biggest gap.
+- **M6 — 14 rows.**
+- **M1 — 11 rows.**
+- **M5 — 7 rows.**
+- M9 (3), M4 (2), M8 (1), and four rows spanning two milestones each.
+
+Read each row's current status before starting: most are partly built, and the status says what is missing rather than describing the whole feature.
 
 ## What's left, by milestone
 
