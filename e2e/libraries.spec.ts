@@ -59,6 +59,12 @@ test('another Openframe file is brought in as a library, and taken out again', a
   const reloaded = page.getByRole('region', { name: 'Assets' });
   await expect(reloaded.getByRole('list', { name: 'Imported libraries' })).toContainText('1 component');
 
+  // Reading the same file again finds nothing new to take.
+  const again = page.waitForEvent('filechooser');
+  await reloaded.getByRole('button', { name: /^Check .* for updates/ }).click();
+  await (await again).setFiles(path!);
+  await expect(reloaded).toContainText('already up to date');
+
   // Taking it out takes its components with it.
   await reloaded.getByRole('button', { name: /^Remove library/ }).click();
   await expect(reloaded.getByRole('list', { name: 'Imported libraries' })).toHaveCount(0);

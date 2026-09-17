@@ -17,7 +17,7 @@
 
 import { useState } from 'react';
 import { assetTree, COMPONENT_DRAG_TYPE, componentLeafName, localComponents, type AssetFolder, type LocalComponent } from '@/editor/commands/insert-instance';
-import { importLibrary, importedLibraries, removeLibrary } from '@/editor/commands/libraries';
+import { applyLibraryUpdates, importLibrary, importedLibraries, removeLibrary, swapLibrary } from '@/editor/commands/libraries';
 import { readPackage } from '@/platform/package';
 import { pickPackageFile } from '../../images/pick-package';
 import { Icon } from '../../icons/Icon';
@@ -44,6 +44,30 @@ export function AssetsPanel() {
   const [message, setMessage] = useState<string | null>(null);
   const libraries = importedLibraries(editor);
   const needle = query.trim().toLowerCase();
+
+  /** Reads a newer copy of a library and says what it would change, then takes it. */
+  const review = async (pageId: string, name: string) => {
+    setMessage(null);
+    const file = await pickPackageFile();
+    if (!file) return;
+    try {
+      const { store, images } = await readPackage(new Uint8Array(await file.arrayBuffer()));
+      for (const image of images) await editor.images.add(image);
+      const updates = applyLibraryUpdates(editor, pageId, store);
+      if (updates === null) {
+        setMessage('That is not a library page.');
+        return;
+      }
+      const parts = [
+        updates.changed.length > 0 ? `${updates.changed.length} redrawn` : '',
+        updates.added.length > 0 ? `${updates.added.length} added` : '',
+        updates.removed.length > 0 ? `${updates.removed.length} no longer in the file` : '',
+      ].filter((part) => part !== '');
+      setMessage(parts.length === 0 ? `${name} is already up to date.` : `${name}: ${parts.join(', ')}.`);
+    } catch {
+      setMessage('That file could not be read as an Openframe file.');
+    }
+  };
 
   /** Picks another Openframe file and brings its components in as a library. */
   const bringIn = async () => {
@@ -152,6 +176,31 @@ export function AssetsPanel() {
                   {library.name}
                 </button>
                 <span className={styles.count}>{library.components === 1 ? '1 component' : `${library.components} components`}</span>
+                <button type="button" className={styles.chip} aria-label={`Check ${library.name} for updates`} onClick={() => void review(library.pageId, library.name)}>
+                  Check for updates
+                </button>
+                {libraries.length > 1 && (
+                  <select
+                    className={styles.chip}
+                    aria-label={`Swap ${library.name} for another library`}
+                    value=""
+                    onChange={(e) => {
+                      if (e.target.value === '') return;
+                      const moved = swapLibrary(editor, library.pageId, e.target.value);
+                      setMessage(moved === 0 ? 'Nothing was using that library.' : `${moved === 1 ? '1 instance' : `${moved} instances`} now use the other library.`);
+                      e.target.value = '';
+                    }}
+                  >
+                    <option value="">Swap for…</option>
+                    {libraries
+                      .filter((other) => other.pageId !== library.pageId)
+                      .map((other) => (
+                        <option key={other.pageId} value={other.pageId}>
+                          {other.name}
+                        </option>
+                      ))}
+                  </select>
+                )}
                 <button type="button" className={styles.chip} aria-label={`Remove library ${library.name}`} onClick={() => removeLibrary(editor, library.pageId)}>
                   Remove
                 </button>

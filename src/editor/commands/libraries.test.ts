@@ -22,7 +22,8 @@ import { IdGenerator } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { createComponent } from './components';
-import { importLibrary, importedLibraries, libraryComponentsOf, removeLibrary } from './libraries';
+import { applyLibraryUpdates, componentSignature, importLibrary, importedLibraries, libraryComponentsOf, libraryUpdates, removeLibrary, swapLibrary } from './libraries';
+import { insertInstance } from './insert-instance';
 
 let editor: Editor;
 let library: DocumentStore;
@@ -96,5 +97,82 @@ describe('a library brought in from another file', () => {
     expect(editor.doc.get(result.pageId)).toBeUndefined();
     // A page that is not a library is not something this takes away.
     expect(removeLibrary(editor, editor.pageId)).toBe(false);
+  });
+});
+
+describe('a newer copy of a library', () => {
+  test('says what it would add, take away and redraw', () => {
+    const result = importLibrary(editor, library, 'Kit')!;
+    // The same file again changes nothing.
+    expect(libraryUpdates(editor, result.pageId, library)).toEqual({ added: [], removed: [], changed: [] });
+
+    // A wider button, and a second component beside it.
+    const newer = makeLibraryFile();
+    const [wider] = libraryComponentsOf(newer);
+    newer.applyOp({ kind: 'set', id: wider!.id, field: 'size', value: { width: 200, height: 40 }, prev: wider!.size });
+
+    const updates = libraryUpdates(editor, result.pageId, newer);
+    expect(updates).toEqual({ added: [], removed: [], changed: ['Button'] });
+  });
+
+  test('a redrawn component is rebuilt in place, so its instances take the new design', () => {
+    const result = importLibrary(editor, library, 'Kit')!;
+    const [main] = editor.doc.children(result.pageId);
+    const instance = insertInstance(editor, main!, { x: 500, y: 500 })!;
+    expect((editor.doc.getOrThrow(instance) as SceneNode).size.width).toBe(120);
+
+    const newer = makeLibraryFile();
+    const [wider] = libraryComponentsOf(newer);
+    newer.applyOp({ kind: 'set', id: wider!.id, field: 'size', value: { width: 200, height: 40 }, prev: wider!.size });
+
+    expect(applyLibraryUpdates(editor, result.pageId, newer)).toEqual({ added: [], removed: [], changed: ['Button'] });
+    // The component kept its id, so the instance is still of it, and has taken the new width.
+    expect(editor.doc.children(result.pageId)[0]).toBe(main);
+    expect((editor.doc.getOrThrow(main!) as SceneNode).size.width).toBe(200);
+    expect(editor.doc.get(instance)).toBeDefined();
+  });
+
+  test('a component that is only in the newer copy is brought in', () => {
+    const result = importLibrary(editor, library, 'Kit')!;
+    const newer = makeLibraryFile();
+    const [button] = libraryComponentsOf(newer);
+    newer.applyOp({ kind: 'set', id: button!.id, field: 'name', value: 'Chip', prev: 'Button' });
+
+    const updates = applyLibraryUpdates(editor, result.pageId, newer)!;
+    expect(updates.added).toEqual(['Chip']);
+    // What is gone from the newer copy is left where it is, since instances may still be using it.
+    expect(updates.removed).toEqual(['Button']);
+    expect(editor.doc.children(result.pageId)).toHaveLength(2);
+  });
+
+  test('a fingerprint tells one design from another', () => {
+    const result = importLibrary(editor, library, 'Kit')!;
+    const [main] = editor.doc.children(result.pageId);
+    const before = componentSignature(editor.doc, main!);
+    editor.history.run('rename', (tx) => tx.set(main!, 'name', 'Renamed'));
+    expect(componentSignature(editor.doc, main!)).not.toBe(before);
+  });
+});
+
+describe('swapping one library for another', () => {
+  test('points the instances at the other library’s component of the same name', () => {
+    const first = importLibrary(editor, library, 'Kit')!;
+    const second = importLibrary(editor, makeLibraryFile(), 'Kit Two')!;
+    const [mainA] = editor.doc.children(first.pageId);
+    const [mainB] = editor.doc.children(second.pageId);
+
+    const instance = insertInstance(editor, mainA!, { x: 500, y: 500 })!;
+    expect(swapLibrary(editor, first.pageId, second.pageId)).toBe(1);
+    expect((editor.doc.getOrThrow(instance) as { instance?: { mainId: string } }).instance?.mainId).toBe(mainB);
+
+    // Swapping again the other way puts them back.
+    expect(swapLibrary(editor, second.pageId, first.pageId)).toBe(1);
+    expect((editor.doc.getOrThrow(instance) as { instance?: { mainId: string } }).instance?.mainId).toBe(mainA);
+  });
+
+  test('a library with nothing pointing at it swaps nothing', () => {
+    const first = importLibrary(editor, library, 'Kit')!;
+    const second = importLibrary(editor, makeLibraryFile(), 'Kit Two')!;
+    expect(swapLibrary(editor, first.pageId, second.pageId)).toBe(0);
   });
 });

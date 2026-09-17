@@ -138,3 +138,123 @@ export function removeLibrary(editor: Editor, pageId: Id): boolean {
   });
   return true;
 }
+
+/**
+ * A fingerprint of a component as it stands: what it is made of, named and sized. Two components with the same
+ * fingerprint are the same design, which is how a library's copy is told from a newer one.
+ */
+export function componentSignature(store: DocumentStore, id: Id): string {
+  const node = store.get(id);
+  if (!node || !isSceneNode(node)) return '';
+  const own = `${node.type}:${node.name}:${Math.round(node.size.width)}x${Math.round(node.size.height)}:${Math.round(node.opacity * 100)}`;
+  const children = store.children(id).map((child) => componentSignature(store, child));
+  return children.length === 0 ? own : `${own}[${children.join(',')}]`;
+}
+
+/** What a newer copy of a library would change: the components added, taken away and redrawn since it was brought in. */
+export interface LibraryUpdates {
+  readonly added: readonly string[];
+  readonly removed: readonly string[];
+  readonly changed: readonly string[];
+}
+
+/** The components a library page holds, by name. */
+function byName(store: DocumentStore, pageId: Id): Map<string, Id> {
+  const out = new Map<string, Id>();
+  for (const id of store.children(pageId)) {
+    const node = store.get(id);
+    if (node?.type === 'FRAME' && (node.component || node.componentSet)) out.set(node.name, id);
+  }
+  return out;
+}
+
+/**
+ * Reads a newer copy of a library against the one in the file. Components are matched by name, since the copy here
+ * was given ids of its own when it came across.
+ */
+export function libraryUpdates(editor: Editor, pageId: Id, from: DocumentStore): LibraryUpdates {
+  const here = byName(editor.doc, pageId);
+  const there = new Map(libraryComponentsOf(from).map((node) => [node.name, node.id] as const));
+  const added: string[] = [];
+  const removed: string[] = [];
+  const changed: string[] = [];
+  for (const [name, id] of there) {
+    const mine = here.get(name);
+    if (mine === undefined) added.push(name);
+    else if (componentSignature(editor.doc, mine) !== componentSignature(from, id)) changed.push(name);
+  }
+  for (const name of here.keys()) if (!there.has(name)) removed.push(name);
+  return { added, removed, changed };
+}
+
+/**
+ * Takes a newer copy of a library: a component that has been redrawn is rebuilt in place, so the instances of it
+ * keep pointing at the same component and take the new design; a new one is brought in, and one that is gone is
+ * left alone rather than pulled out from under the instances still using it.
+ */
+export function applyLibraryUpdates(editor: Editor, pageId: Id, from: DocumentStore): LibraryUpdates | null {
+  const page = editor.doc.get(pageId) as PageNode | undefined;
+  if (page?.type !== 'PAGE' || !page.library) return null;
+  const updates = libraryUpdates(editor, pageId, from);
+  if (updates.added.length === 0 && updates.changed.length === 0) return updates;
+
+  const there = new Map(libraryComponentsOf(from).map((node) => [node.name, node] as const));
+  editor.history.run('Update library', (tx) => {
+    const here = byName(tx.store, pageId);
+    const ids = new Map<Id, Id>();
+    for (const name of updates.changed) {
+      const source = there.get(name);
+      const mine = here.get(name);
+      if (!source || mine === undefined) continue;
+      // The component keeps its id, so every instance of it follows; only what it is made of is renewed.
+      for (const child of [...tx.store.children(mine)]) tx.delete(child);
+      const { id: _id, parent: _parent, ...fields } = source;
+      for (const [field, value] of Object.entries(fields)) tx.set(mine, field, value);
+      ids.set(source.id, mine);
+      for (const childId of from.children(source.id)) {
+        const child = from.get(childId);
+        if (child && isSceneNode(child)) copyInto(tx, editor, from, childId, mine, child.parent.key, ids);
+      }
+    }
+    for (const name of updates.added) {
+      const source = there.get(name);
+      if (source) copyInto(tx, editor, from, source.id, pageId, keyOnTop(tx.store, pageId), ids);
+    }
+    remap(tx, ids);
+    tx.set(pageId, 'library', { name: page.library!.name, importedAt: new Date().toISOString() });
+  });
+  return updates;
+}
+
+/**
+ * Points the instances of one library's components at another library's, matching by name. What the other library
+ * has no component for is left where it is.
+ */
+export function swapLibrary(editor: Editor, fromPageId: Id, toPageId: Id): number {
+  const from = byName(editor.doc, fromPageId);
+  const to = byName(editor.doc, toPageId);
+  const moves = new Map<Id, Id>();
+  for (const [name, id] of from) {
+    const other = to.get(name);
+    if (other !== undefined && other !== id) moves.set(id, other);
+  }
+  if (moves.size === 0) return 0;
+
+  let swapped = 0;
+  const instances: { readonly id: Id; readonly mainId: Id }[] = [];
+  for (const pageId of editor.doc.pages()) {
+    for (const id of editor.doc.descendants(pageId, false)) {
+      const node = editor.doc.get(id);
+      const mainId = node?.type === 'FRAME' ? node.instance?.mainId : undefined;
+      if (mainId !== undefined && moves.has(mainId)) instances.push({ id, mainId });
+    }
+  }
+  if (instances.length === 0) return 0;
+  editor.history.run('Swap library', (tx) => {
+    for (const { id, mainId } of instances) {
+      tx.set(id, 'instance', { mainId: moves.get(mainId)! });
+      swapped += 1;
+    }
+  });
+  return swapped;
+}
