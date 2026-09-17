@@ -59,7 +59,9 @@ export type CursorKind =
   | 'rotate-ne'
   | 'rotate-se'
   | 'rotate-sw'
-  | 'text';
+  | 'text'
+  | 'droplet'
+  | 'droplet-empty';
 
 export interface Tool {
   readonly id: ToolId;

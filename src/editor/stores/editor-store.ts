@@ -204,6 +204,8 @@ export interface VectorEditRef {
   readonly paint?: Paint;
   /** The Eraser's weight, in canvas units; absent means 10. */
   readonly eraserWeight?: number;
+  /** The shape the Eraser rubs out with; absent means round, which is how it has always rubbed out. */
+  readonly eraserShape?: 'ROUND' | 'SQUARE';
   /** Indices of the selected width points (Variable width tool) in the layer's `strokeWidths`. */
   readonly widthPoints?: readonly number[];
   /** Bézier handles Shift-selected to move together, as the segment ends they belong to. */

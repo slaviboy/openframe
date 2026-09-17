@@ -134,7 +134,7 @@ import { Menu, type MenuEntry } from '../../primitives/Menu';
 import { localComponents, type LocalComponent } from '@/editor/commands/insert-instance';
 import { swapInstanceFor } from '@/editor/commands/swap-instance';
 import { canResetOverrides, overrideLabel, resetSelectedOverride, resetSelectedOverrides, selectionOverriddenFields } from '@/editor/commands/reset-overrides';
-import { eraserWeight, vectorEditPaint } from '@/editor/interactions/vector-edit';
+import { eraserShape, eraserWeight, vectorEditPaint } from '@/editor/interactions/vector-edit';
 import { mirroringOf, setMirroring } from '@/core/vector/vector-bend';
 import { profileOf, profileWidthPoints, WIDTH_PROFILES } from '@/core/vector/vector-width';
 import { invert, applyLinear } from '@/core/math/matrix';
@@ -2639,6 +2639,17 @@ function VectorEraserSection() {
         value={eraserWeight(editor)}
         onChange={(v) => editor.state.setVectorEdit({ ...state, eraserWeight: v })}
       />
+      <select
+        className={primitives.select}
+        aria-label="Eraser shape"
+        data-testid="field-eraser-shape"
+        value={eraserShape(editor)}
+        onKeyDown={(e) => e.stopPropagation()}
+        onChange={(e) => editor.state.setVectorEdit({ ...state, eraserShape: e.target.value as 'ROUND' | 'SQUARE' })}
+      >
+        <option value="ROUND">Round</option>
+        <option value="SQUARE">Square</option>
+      </select>
     </Section>
   );
 }
@@ -2649,19 +2660,37 @@ function VectorPaintSection() {
   const state = useEditorState((s) => s.vectorEdit);
   if (state?.tool !== 'paint') return null;
   const paint = vectorEditPaint(editor);
-  if (paint.type !== 'SOLID') return null;
   const setPaint = (next: Paint) => editor.state.setVectorEdit({ ...state, paint: next });
   return (
     <Section title="Paint">
-      <ColorControl
-        label="Paint"
-        color={paint.color}
-        opacity={paint.opacity}
-        onGestureStart={() => undefined}
-        onGestureEnd={() => undefined}
-        onColor={(c) => setPaint({ ...paint, color: { ...c, a: 1 } })}
-        onOpacity={(o) => setPaint({ ...paint, opacity: o })}
-      />
+      <select
+        className={primitives.select}
+        aria-label="Paint type"
+        data-testid="field-paint-type"
+        value={paint.type}
+        onKeyDown={(e) => e.stopPropagation()}
+        onChange={(e) => setPaint(convertPaint(paint, e.target.value as PaintType))}
+      >
+        {PAINT_TYPES.filter((type) => type === 'SOLID' || type.startsWith('GRADIENT_')).map((type) => (
+          <option key={type} value={type}>
+            {PAINT_TYPE_LABELS[type]}
+          </option>
+        ))}
+      </select>
+      {paint.type === 'SOLID' ? (
+        <ColorControl
+          label="Paint"
+          color={paint.color}
+          opacity={paint.opacity}
+          onGestureStart={() => undefined}
+          onGestureEnd={() => undefined}
+          onColor={(c) => setPaint({ ...paint, color: { ...c, a: 1 } })}
+          onOpacity={(o) => setPaint({ ...paint, opacity: o })}
+        />
+      ) : (
+        // A gradient's stops are the ones it was made from; the Fill section is where they are shaped.
+        <span>Painting with the gradient. Its stops follow the fill it came from.</span>
+      )}
     </Section>
   );
 }

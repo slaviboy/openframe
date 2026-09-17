@@ -1432,7 +1432,7 @@ export class SceneRenderer {
   }
 
   /** What is left of a vector region after a round eraser stroke (GeometryService); null when the stroke misses it. */
-  regionMinusStroke(network: VectorNetwork, index: number, path: readonly { readonly x: number; readonly y: number }[], weight: number): PathCommand[] | null {
+  regionMinusStroke(network: VectorNetwork, index: number, path: readonly { readonly x: number; readonly y: number }[], weight: number, shape: 'ROUND' | 'SQUARE' = 'ROUND'): PathCommand[] | null {
     const ck = this.ck;
     const region = network.regions[index];
     const first = path[0];
@@ -1442,7 +1442,8 @@ export class SceneRenderer {
     if (path.length === 1) builder.lineTo(first.x + 0.001, first.y);
     for (const p of path.slice(1)) builder.lineTo(p.x, p.y);
     const line = builder.detachAndDelete();
-    const stroke = line.makeStroked({ width: weight, cap: ck.StrokeCap.Round, join: ck.StrokeJoin.Round });
+    const square = shape === 'SQUARE';
+    const stroke = line.makeStroked({ width: weight, cap: square ? ck.StrokeCap.Square : ck.StrokeCap.Round, join: square ? ck.StrokeJoin.Miter : ck.StrokeJoin.Round });
     line.delete();
     if (!stroke) return null;
     const area = this.pathFrom(regionFillPath(network, region), region.windingRule === 'EVENODD');

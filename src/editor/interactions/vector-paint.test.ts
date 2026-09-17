@@ -18,7 +18,8 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import { createEmptyDocument, DEFAULT_SHAPE_FILL, keyOnTop, makeVector, solid } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
-import type { VectorNode } from '@/core/schema/document';
+import type { Paint, VectorNode } from '@/core/schema/document';
+import { convertPaint } from '@/core/color/paints';
 import { straightSegment } from '@/core/vector/vector-network';
 import { BUILTIN_COMMANDS } from '../commands/builtin';
 import { Editor } from '../editor';
@@ -58,16 +59,19 @@ beforeEach(() => {
   id = editor.history.run('create', (tx) => {
     const vectorId = editor.ids.next();
     tx.create(
-      makeVector({ id: vectorId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'Vector', x: 100, y: 100, width: 100, height: 100 }, {
-        vertices: [
-          { x: 0, y: 0 },
-          { x: 100, y: 0 },
-          { x: 100, y: 100 },
-          { x: 0, y: 100 },
-        ],
-        segments: [straightSegment(0, 1), straightSegment(1, 2), straightSegment(2, 3), straightSegment(3, 0)],
-        regions: [{ loops: [[0, 1, 2, 3]], windingRule: 'NONZERO' }],
-      }),
+      makeVector(
+        { id: vectorId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'Vector', x: 100, y: 100, width: 100, height: 100 },
+        {
+          vertices: [
+            { x: 0, y: 0 },
+            { x: 100, y: 0 },
+            { x: 100, y: 100 },
+            { x: 0, y: 100 },
+          ],
+          segments: [straightSegment(0, 1), straightSegment(1, 2), straightSegment(2, 3), straightSegment(3, 0)],
+          regions: [{ loops: [[0, 1, 2, 3]], windingRule: 'NONZERO' }],
+        },
+      ),
     );
     return vectorId;
   });
@@ -101,5 +105,42 @@ describe('paint tool in vector edit mode', () => {
 
   test("the paint defaults to the layer's first solid fill, or the default shape fill", () => {
     expect(vectorEditPaint(editor)).toEqual(solid(DEFAULT_SHAPE_FILL));
+  });
+});
+
+describe('what the Paint tool paints with, and the cursor it carries', () => {
+  test('the paint falls back to the layer’s first visible fill, gradient or not', () => {
+    const gradient: Paint = {
+      type: 'GRADIENT_LINEAR',
+      gradientStops: [
+        { position: 0, color: { r: 1, g: 0, b: 0, a: 1 } },
+        { position: 1, color: { r: 0, g: 0, b: 1, a: 1 } },
+      ],
+      gradientTransform: [1, 0, 0, 1, 0, 0],
+      opacity: 1,
+      visible: true,
+      blendMode: 'NORMAL',
+    };
+    editor.history.run('gradient fill', (tx) => tx.set(id, 'fills', [gradient]));
+    expect(vectorEditPaint(editor).type).toBe('GRADIENT_LINEAR');
+  });
+
+  test('a gradient picked for the tool is what a click paints the region with', () => {
+    const gradient = convertPaint(vectorEditPaint(editor), 'GRADIENT_RADIAL');
+    editor.state.setVectorEdit({ ...editState()!, paint: gradient });
+    tools.pointerDown(sample(150, 150));
+    tools.pointerUp(sample(150, 150));
+    const painted = (editor.doc.getOrThrow(id) as VectorNode).vectorNetwork.regions[0]!.fills;
+    expect(painted?.[0]?.type).toBe('GRADIENT_RADIAL');
+  });
+
+  test('the cursor is a droplet, hollow over a region the click would clear', () => {
+    tools.pointerMove(sample(750, 750));
+    expect(tools.vectorEdit.cursor()).toBe('droplet');
+    // Over a region already showing the paint, the click would take the fill away instead.
+    tools.pointerDown(sample(150, 150));
+    tools.pointerUp(sample(150, 150));
+    tools.pointerMove(sample(160, 160));
+    expect(tools.vectorEdit.cursor()).toBe('droplet-empty');
   });
 });

@@ -26,7 +26,7 @@ import { BUILTIN_COMMANDS } from '../commands/builtin';
 import { Editor } from '../editor';
 import { ToolManager } from '../tools/tool-manager';
 import type { PointerInfo } from '../tools/types';
-import { beginVectorEdit } from './vector-edit';
+import { beginVectorEdit, eraserShape } from './vector-edit';
 
 let editor: Editor;
 let tools: ToolManager;
@@ -140,5 +140,35 @@ describe('eraser in vector edit mode', () => {
     tools.pointerUp(sample(200, 220));
     expect(node().vectorNetwork).toBe(before);
     expect(lastCall).toBeNull();
+  });
+});
+
+describe('the shape the Eraser rubs out with', () => {
+  test('round by default, and the square shape is what reaches the geometry', () => {
+    const shapes: (string | undefined)[] = [];
+    editor.setGeometry({
+      strokeOutline: () => null,
+      offsetNetwork: () => null,
+      regionHalves: () => null,
+      shapeFaces: () => [],
+      booleanOutline: () => null,
+      // Nothing is actually rubbed out, so the layer is the same for the second pass as for the first.
+      regionMinusStroke: (_network, _region, _path, _weight, shape) => {
+        shapes.push(shape);
+        return null;
+      },
+    });
+    const rub = () => {
+      tools.pointerDown(sample(200, 80));
+      tools.pointerMove(sample(200, 150));
+      tools.pointerUp(sample(200, 150));
+    };
+    expect(eraserShape(editor)).toBe('ROUND');
+    rub();
+    editor.state.setVectorEdit({ ...editor.state.getSnapshot().vectorEdit!, eraserShape: 'SQUARE' });
+    expect(eraserShape(editor)).toBe('SQUARE');
+    rub();
+    expect(shapes[0]).toBe('ROUND');
+    expect(shapes.at(-1)).toBe('SQUARE');
   });
 });

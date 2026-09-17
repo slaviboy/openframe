@@ -43,7 +43,7 @@ export interface GeometryService {
    * Eraser on a closed region: the region's area (in the network's space) minus a round stroke of
    * `weight` along `path`, as path commands; [] when nothing is left, null when the stroke doesn't reach it.
    */
-  regionMinusStroke(network: VectorNetwork, region: number, path: readonly Vec2[], weight: number): PathCommand[] | null;
+  regionMinusStroke(network: VectorNetwork, region: number, path: readonly Vec2[], weight: number, shape?: 'ROUND' | 'SQUARE'): PathCommand[] | null;
 
   /**
    * Shape builder: the separate pieces a set of overlapping shapes cuts the plane into, each piece being the area

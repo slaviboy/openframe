@@ -41,6 +41,26 @@ const ROTATE: Record<'rotate-nw' | 'rotate-ne' | 'rotate-se' | 'rotate-sw', stri
   'rotate-sw': rotateSvg(270),
 };
 
+/**
+ * The Paint tool's droplet, its tip at the point it would paint: filled in where a click adds the paint, hollow
+ * where it would take a region's fill away again. Drawn with a white outline, as the rotate cursor is.
+ */
+function dropletSvg(filled: boolean): string {
+  const drop = 'M6 2c0 0 5 5.2 5 8.4A5 5 0 0 1 1 10.4C1 7.2 6 2 6 2Z';
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24' viewBox='0 0 24 24'>` +
+    `<g transform='translate(0 1)' stroke-linecap='round' stroke-linejoin='round'>` +
+    `<path d='${drop}' fill='none' stroke='white' stroke-width='4'/>` +
+    `<path d='${drop}' fill='${filled ? 'black' : 'white'}' stroke='black' stroke-width='1.5'/>` +
+    `</g></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 6 3, crosshair`;
+}
+
+const DROPLET: Record<'droplet' | 'droplet-empty', string> = {
+  droplet: dropletSvg(true),
+  'droplet-empty': dropletSvg(false),
+};
+
 /** CSS `cursor` value for a tool cursor kind. */
 export function cursorCss(kind: CursorKind): string {
   switch (kind) {
@@ -49,6 +69,9 @@ export function cursorCss(kind: CursorKind): string {
     case 'rotate-se':
     case 'rotate-sw':
       return ROTATE[kind];
+    case 'droplet':
+    case 'droplet-empty':
+      return DROPLET[kind];
     default:
       return kind;
   }

@@ -104,10 +104,16 @@ export const WIDTH_KNOB_MIN_PX = 12;
 /** The Eraser's weight in canvas units: the one set for it, else 10. */
 export const eraserWeight = (editor: Editor): number => editor.state.getSnapshot().vectorEdit?.eraserWeight ?? 10;
 
-/** The Paint tool's paint: the one picked for it, else the layer's first solid fill, else the default shape fill. */
+/** The shape the Eraser rubs out with: round, unless it has been set to square. */
+export const eraserShape = (editor: Editor): 'ROUND' | 'SQUARE' => editor.state.getSnapshot().vectorEdit?.eraserShape ?? 'ROUND';
+
+/**
+ * The Paint tool's paint: the one picked for it, else the layer's first visible fill — a gradient as readily as a
+ * solid colour, so a region can be painted with whatever the layer is filled with — else the default shape fill.
+ */
 export function vectorEditPaint(editor: Editor): Paint {
   const state = editor.state.getSnapshot().vectorEdit;
-  return state?.paint ?? editedVector(editor)?.fills.find((p) => p.type === 'SOLID') ?? solid(DEFAULT_SHAPE_FILL);
+  return state?.paint ?? editedVector(editor)?.fills.find((p) => p.visible && p.opacity > 0) ?? solid(DEFAULT_SHAPE_FILL);
 }
 
 /** Deletes the selected points of the vector being edited (with their segments), as one undo step. */
@@ -317,7 +323,9 @@ export class VectorEditController implements Tool {
   }
 
   cursor(): CursorKind {
-    return 'default';
+    // The Paint tool carries a droplet: filled where a click would paint a region, hollow where it would clear one.
+    if (this.editor.state.getSnapshot().vectorEdit?.tool !== 'paint') return 'default';
+    return this.hover?.remove ? 'droplet-empty' : 'droplet';
   }
 
   pointerDown(p: PointerInfo): void {
@@ -843,7 +851,8 @@ export class VectorEditController implements Tool {
     if (!g || !state || !geometry) return;
     g.path.push(apply(g.startInverse, p.world));
     g.screen.push({ ...p.screen });
-    const network = eraseNetwork(g.start, g.path, g.weight, (n, region, path, weight) => geometry.regionMinusStroke(n, region, path, weight));
+    const shape = eraserShape(this.editor);
+    const network = eraseNetwork(g.start, g.path, g.weight, (n, region, path, weight) => geometry.regionMinusStroke(n, region, path, weight, shape));
     g.erased = network !== g.start;
     refitVector(g.tx, state.nodeId, network, g.startTransform);
     g.tx.flushPreview();
