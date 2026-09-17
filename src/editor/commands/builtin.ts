@@ -48,6 +48,7 @@ import { canDetachInstance, detachInstances } from './detach';
 import { canResetOverrides, resetSelectedOverrides } from './reset-overrides';
 import { canGoToMainComponent, canPushChangesToMain, canRestoreMainComponent, goToMainComponent, pushChangesToMain, restoreMainComponent } from './main-component';
 import { canOutlineStroke, outlineStrokeSelection } from './outline-stroke';
+import { canOffsetPath } from './offset-path';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
 import { deleteMarked, duplicateMarked } from './smart-selection';
 
@@ -405,6 +406,13 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     shortcuts: ['Mod+Alt+O'],
     enabled: canOutlineStroke,
     run: (e) => outlineStrokeSelection(e),
+  },
+  {
+    id: 'object.offsetPath',
+    label: 'Offset vector',
+    category: 'Object',
+    enabled: canOffsetPath,
+    run: (e) => e.state.openDialog('offsetPath'),
   },
   {
     id: 'object.wrapInSection',

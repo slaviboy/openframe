@@ -237,7 +237,7 @@ export interface GradientEditRef {
   readonly index: number;
 }
 
-export type EditorDialog = 'batchRename' | 'nudgeAmount' | 'missingFonts' | 'export';
+export type EditorDialog = 'batchRename' | 'nudgeAmount' | 'missingFonts' | 'export' | 'offsetPath';
 
 /** Transient, non-document editor state. Never persisted inside the document. */
 export class EditorStore extends Observable<EditorState> {

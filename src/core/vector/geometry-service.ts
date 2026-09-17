@@ -20,6 +20,9 @@ import type { Vec2 } from '../math/vec';
 import type { SceneNode } from '../schema/document';
 import type { VectorNetwork } from './vector-network';
 
+/** How an offset path turns the corners it grows around: squared off, or rounded. */
+export type OffsetJoin = 'SQUARE' | 'ROUND';
+
 /** Path geometry that needs the rendering engine's path operations (stroking, dashing, combining). */
 export interface GeometryService {
   /**
@@ -34,6 +37,13 @@ export interface GeometryService {
    * `weight` along `path`, as path commands; [] when nothing is left, null when the stroke doesn't reach it.
    */
   regionMinusStroke(network: VectorNetwork, region: number, path: readonly Vec2[], weight: number): PathCommand[] | null;
+
+  /**
+   * Offset path: the area a network's closed loops cover, grown by `amount` (or shrunk, when it is negative),
+   * as path commands in the network's space. `join` shapes the corners the growth rounds or squares off.
+   * [] when shrinking leaves nothing; null when the network encloses no area to offset.
+   */
+  offsetNetwork(network: VectorNetwork, amount: number, join: OffsetJoin): PathCommand[] | null;
 
   /**
    * Cut divide on a closed region: its area (in the network's space) split by the infinite line through

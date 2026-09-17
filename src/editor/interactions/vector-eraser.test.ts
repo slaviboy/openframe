@@ -61,6 +61,7 @@ beforeEach(() => {
   rest = [{ op: 'M', x: 0, y: 0 }, { op: 'L', x: 90, y: 0 }, { op: 'L', x: 90, y: 100 }, { op: 'L', x: 0, y: 100 }, { op: 'Z' }];
   editor.setGeometry({
     strokeOutline: () => null,
+    offsetNetwork: () => null,
     regionHalves: () => null,
     regionMinusStroke: (_network, _region, path, weight) => {
       lastCall = { path: [...path], weight };
@@ -71,16 +72,19 @@ beforeEach(() => {
   id = editor.history.run('create', (tx) => {
     const vectorId = editor.ids.next();
     tx.create(
-      makeVector({ id: vectorId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'Vector', x: 100, y: 100, width: 100, height: 100 }, {
-        vertices: [
-          { x: 0, y: 0 },
-          { x: 100, y: 0 },
-          { x: 100, y: 100 },
-          { x: 0, y: 100 },
-        ],
-        segments: [straightSegment(0, 1), straightSegment(1, 2), straightSegment(2, 3), straightSegment(3, 0)],
-        regions: [{ loops: [[0, 1, 2, 3]], windingRule: 'NONZERO' }],
-      }),
+      makeVector(
+        { id: vectorId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'Vector', x: 100, y: 100, width: 100, height: 100 },
+        {
+          vertices: [
+            { x: 0, y: 0 },
+            { x: 100, y: 0 },
+            { x: 100, y: 100 },
+            { x: 0, y: 100 },
+          ],
+          segments: [straightSegment(0, 1), straightSegment(1, 2), straightSegment(2, 3), straightSegment(3, 0)],
+          regions: [{ loops: [[0, 1, 2, 3]], windingRule: 'NONZERO' }],
+        },
+      ),
     );
     return vectorId;
   });

@@ -25,6 +25,7 @@ import { maskRuns } from '@/core/scene/masks';
 import { arcCommands } from '@/core/geometry/arc';
 import { strokeChain, variableWidthOutline } from '@/core/vector/vector-width';
 import { networkStrokePath, regionFillPath, type VectorNetwork } from '@/core/vector/vector-network';
+import type { OffsetJoin } from '@/core/vector/geometry-service';
 import { dynamicStrokePath, hasDynamicStroke } from '@/core/vector/dynamic-stroke';
 import { brushStrokeOutlines, isBrush } from '@/core/vector/brush';
 import { pathRunFor } from '@/core/vector/text-path';
@@ -350,7 +351,12 @@ export class SceneRenderer {
         const b = index.paintBounds(child) ?? index.worldBounds(child);
         if (!b) continue;
         bounds = bounds
-          ? { x: Math.min(bounds.x, b.x), y: Math.min(bounds.y, b.y), width: Math.max(bounds.x + bounds.width, b.x + b.width) - Math.min(bounds.x, b.x), height: Math.max(bounds.y + bounds.height, b.y + b.height) - Math.min(bounds.y, b.y) }
+          ? {
+              x: Math.min(bounds.x, b.x),
+              y: Math.min(bounds.y, b.y),
+              width: Math.max(bounds.x + bounds.width, b.x + b.width) - Math.min(bounds.x, b.x),
+              height: Math.max(bounds.y + bounds.height, b.y + b.height) - Math.min(bounds.y, b.y),
+            }
           : b;
       }
     }
@@ -550,7 +556,12 @@ export class SceneRenderer {
     const placement = paint && image ? imagePlacement(paint, image, node.size) : null;
     if (!paint || !image || !placement) return;
     const quad = imageQuad(placement.matrix, image);
-    const path = new this.ck.PathBuilder().addPolygon(quad.flatMap((p) => [p.x, p.y]), true).detachAndDelete();
+    const path = new this.ck.PathBuilder()
+      .addPolygon(
+        quad.flatMap((p) => [p.x, p.y]),
+        true,
+      )
+      .detachAndDelete();
     this.configurePaint(this.fillPaint, { ...paint, opacity: paint.opacity * 0.35, blendMode: 'NORMAL' }, node.size);
     canvas.drawPath(path, this.fillPaint);
     path.delete();
@@ -732,13 +743,7 @@ export class SceneRenderer {
    * linear gradient along the blur direction (DstIn) and the masked levels are summed (Plus). The
    * weights sum to 1, so the result is a smooth ramp from the start radius to the end radius.
    */
-  private progressiveBlurFilter(
-    effect: BlurEffect,
-    size: Size,
-    keep: <T extends ImageFilter>(filter: T) => T,
-    input: ImageFilter | null,
-    tile: EmbindEnumEntity,
-  ): ImageFilter {
+  private progressiveBlurFilter(effect: BlurEffect, size: Size, keep: <T extends ImageFilter>(filter: T) => T, input: ImageFilter | null, tile: EmbindEnumEntity): ImageFilter {
     const ck = this.ck;
     const w = Math.max(size.width, 1e-6);
     const h = Math.max(size.height, 1e-6);
@@ -752,7 +757,13 @@ export class SceneRenderer {
       const sigma = blurSigma(level.radius);
       const blurred = sigma > 0 ? keep(ck.ImageFilter.MakeBlur(sigma, sigma, tile, input)) : input;
       const colors = level.stops.map((s) => ck.Color4f(0, 0, 0, s.alpha));
-      const shader = ck.Shader.MakeLinearGradient(from, to, colors, level.stops.map((s) => s.position), ck.TileMode.Clamp);
+      const shader = ck.Shader.MakeLinearGradient(
+        from,
+        to,
+        colors,
+        level.stops.map((s) => s.position),
+        ck.TileMode.Clamp,
+      );
       const mask = keep(ck.ImageFilter.MakeShader(shader));
       shader.delete();
       const masked = keep(ck.ImageFilter.MakeBlend(ck.BlendMode.DstIn, blurred, mask));
@@ -881,7 +892,12 @@ export class SceneRenderer {
     const scale = effect.refraction * effect.depth;
     this.glassEffect ??= ck.RuntimeEffect.Make(GLASS_FIELD_SKSL);
     if (this.glassEffect && scale > 0) {
-      const corner = node.type === 'FRAME' || node.type === 'RECTANGLE' ? (node.cornerRadii ? Math.max(node.cornerRadii.topLeft, node.cornerRadii.topRight, node.cornerRadii.bottomRight, node.cornerRadii.bottomLeft) : node.cornerRadius) : 0;
+      const corner =
+        node.type === 'FRAME' || node.type === 'RECTANGLE'
+          ? node.cornerRadii
+            ? Math.max(node.cornerRadii.topLeft, node.cornerRadii.topRight, node.cornerRadii.bottomRight, node.cornerRadii.bottomLeft)
+            : node.cornerRadius
+          : 0;
       const shader = this.glassEffect.makeShader([width, height, corner, node.type === 'ELLIPSE' ? 1 : 0, effect.depth]);
       const field = keep(ck.ImageFilter.MakeShader(shader));
       shader.delete();
@@ -962,9 +978,7 @@ export class SceneRenderer {
       return filter;
     };
     const sigma = blurSigma(effect.radius);
-    const filter = isProgressiveBlur(effect)
-      ? this.progressiveBlurFilter(effect, node.size, keep, null, ck.TileMode.Clamp)
-      : keep(ck.ImageFilter.MakeBlur(sigma, sigma, ck.TileMode.Clamp, null));
+    const filter = isProgressiveBlur(effect) ? this.progressiveBlurFilter(effect, node.size, keep, null, ck.TileMode.Clamp) : keep(ck.ImageFilter.MakeBlur(sigma, sigma, ck.TileMode.Clamp, null));
     canvas.saveLayer(undefined, null, filter);
     canvas.restore();
     canvas.restore();
@@ -1169,8 +1183,21 @@ export class SceneRenderer {
       case 'STAR': {
         const points = node.type === 'POLYGON' ? polygonPoints(w, h, node.pointCount) : starPoints(w, h, node.pointCount, node.innerRadius);
         const radius = node.cornerRadius ?? 0;
-        if (radius <= 0) return new this.ck.PathBuilder().addPolygon(points.flatMap((p) => [p.x, p.y]), true).detachAndDelete();
-        if (node.cornerSmoothing) return this.pathFrom(roundedPolygon(points, points.map(() => radius), node.cornerSmoothing));
+        if (radius <= 0)
+          return new this.ck.PathBuilder()
+            .addPolygon(
+              points.flatMap((p) => [p.x, p.y]),
+              true,
+            )
+            .detachAndDelete();
+        if (node.cornerSmoothing)
+          return this.pathFrom(
+            roundedPolygon(
+              points,
+              points.map(() => radius),
+              node.cornerSmoothing,
+            ),
+          );
         // Start mid-edge so every vertex, including the first, gets a tangent arc.
         const builder = new this.ck.PathBuilder();
         const n = points.length;
@@ -1210,7 +1237,13 @@ export class SceneRenderer {
     for (let contour = iterator.next(); contour; contour = iterator.next()) {
       const length = contour.length();
       // A trim that starts past where it ends wraps back around the contour, which is how a spinner is made.
-      const spans: readonly (readonly [number, number])[] = from <= to ? [[from * length, to * length]] : [[from * length, length], [0, to * length]];
+      const spans: readonly (readonly [number, number])[] =
+        from <= to
+          ? [[from * length, to * length]]
+          : [
+              [from * length, length],
+              [0, to * length],
+            ];
       for (const [a, b] of spans) {
         if (length <= 0 || b - a <= 0) continue;
         const segment = contour.getSegment(a, b, true);
@@ -1324,6 +1357,33 @@ export class SceneRenderer {
     return commands;
   }
 
+  /**
+   * Offset path (GeometryService): the area the network's closed loops cover, grown or shrunk by `amount`. The
+   * growth is a stroke of twice the amount laid along the outline, taken in where the amount is positive and cut
+   * away where it is negative, which is what rounds or squares the corners off by the join.
+   */
+  offsetNetwork(network: VectorNetwork, amount: number, join: OffsetJoin): PathCommand[] | null {
+    const ck = this.ck;
+    const loops = network.regions.flatMap((region) => regionFillPath(network, region));
+    if (loops.length === 0 || amount === 0) return null;
+    const area = this.pathFrom(
+      loops,
+      network.regions.some((region) => region.windingRule === 'EVENODD'),
+    );
+    const band = area.makeStroked({ width: Math.abs(amount) * 2, cap: ck.StrokeCap.Butt, join: join === 'ROUND' ? ck.StrokeJoin.Round : ck.StrokeJoin.Miter });
+    if (!band) {
+      area.delete();
+      return null;
+    }
+    const grown: Path | null = ck.Path.MakeFromOp(area, band, amount > 0 ? ck.PathOp.Union : ck.PathOp.Difference);
+    area.delete();
+    band.delete();
+    if (!grown) return [];
+    const commands = grown.isEmpty() ? [] : this.commandsOf(grown);
+    grown.delete();
+    return commands;
+  }
+
   /** A vector region's area split by the line through `a` and `b` (GeometryService); null without the region. */
   regionHalves(
     network: VectorNetwork,
@@ -1363,7 +1423,7 @@ export class SceneRenderer {
     const out: PathCommand[] = [];
     let x = 0;
     let y = 0;
-    for (let i = 0; i < cmds.length; ) {
+    for (let i = 0; i < cmds.length;) {
       const verb = cmds[i++]!;
       if (verb === ck.MOVE_VERB || verb === ck.LINE_VERB) {
         x = cmds[i++]!;
@@ -1477,7 +1537,11 @@ export class SceneRenderer {
     const brushChain = isBrush(brush) && node.strokeWeight > 0 ? strokeChain(node.vectorNetwork) : null;
     if (isBrush(brush) && brushChain) {
       const builder = new this.ck.PathBuilder();
-      for (const polygon of brushStrokeOutlines(brushChain, brush.vectorNetwork, brush.size, brush.brushKind, node.strokeWeight)) builder.addPolygon(polygon.flatMap((q) => [q.x, q.y]), true);
+      for (const polygon of brushStrokeOutlines(brushChain, brush.vectorNetwork, brush.size, brush.brushKind, node.strokeWeight))
+        builder.addPolygon(
+          polygon.flatMap((q) => [q.x, q.y]),
+          true,
+        );
       const outline = builder.detachAndDelete();
       for (const paint of node.strokes) {
         if (!paint.visible || paint.opacity <= 0) continue;
@@ -1488,7 +1552,11 @@ export class SceneRenderer {
     } else if (widths && chain) {
       // A variable-width stroke is its outline, filled with the stroke paints.
       const builder = new this.ck.PathBuilder();
-      for (const polygon of variableWidthOutline(chain, widths, node.strokeWeight)) builder.addPolygon(polygon.flatMap((q) => [q.x, q.y]), true);
+      for (const polygon of variableWidthOutline(chain, widths, node.strokeWeight))
+        builder.addPolygon(
+          polygon.flatMap((q) => [q.x, q.y]),
+          true,
+        );
       const outline = builder.detachAndDelete();
       for (const paint of node.strokes) {
         if (!paint.visible || paint.opacity <= 0) continue;
@@ -1589,10 +1657,7 @@ export class SceneRenderer {
       case 'LINE_ARROW':
       case 'TRIANGLE_ARROW':
       case 'DIAMOND_FILLED': {
-        const points =
-          cap === 'DIAMOND_FILLED'
-            ? [x - size / 2, 0, x, -size / 2, x + size / 2, 0, x, size / 2]
-            : [back, -spread, x, 0, back, spread];
+        const points = cap === 'DIAMOND_FILLED' ? [x - size / 2, 0, x, -size / 2, x + size / 2, 0, x, size / 2] : [back, -spread, x, 0, back, spread];
         const path = new this.ck.PathBuilder().addPolygon(points, cap !== 'LINE_ARROW').detachAndDelete();
         canvas.drawPath(path, cap === 'LINE_ARROW' ? this.strokePaint : this.fillPaint);
         path.delete();
@@ -1702,7 +1767,7 @@ export class SceneRenderer {
     const pixels = new Uint8Array(16 * 16 * 4);
     for (let y = 0; y < 16; y++) {
       for (let x = 0; x < 16; x++) {
-        const v = (x < 8) === (y < 8) ? 255 : 204;
+        const v = x < 8 === y < 8 ? 255 : 204;
         pixels.set([v, v, v, 255], (y * 16 + x) * 4);
       }
     }

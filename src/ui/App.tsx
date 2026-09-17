@@ -49,6 +49,7 @@ import { KeyboardController } from './keyboard/keyboard-controller';
 import { canvasMenuEntries, connectionMenuEntries, guideMenuEntries, objectMenuEntries, pasteHereEntries, selectLayerEntries } from './menus/menu-model';
 import { BatchRenameDialog } from './dialogs/BatchRenameDialog';
 import { NudgeDialog } from './dialogs/NudgeDialog';
+import { OffsetPathDialog } from './dialogs/OffsetPathDialog';
 import { CommandPalette } from './palette/CommandPalette';
 import { Menu, type MenuEntry } from './primitives/Menu';
 import { EditorShell, type UiMode } from './shell/EditorShell';
@@ -83,8 +84,7 @@ export function App() {
       })
       .catch((error: unknown) => {
         console.error(error);
-        const message =
-          error instanceof StorageError ? error.message : 'Openframe could not start. Local storage may be disabled in this browser.';
+        const message = error instanceof StorageError ? error.message : 'Openframe could not start. Local storage may be disabled in this browser.';
         setLoad({ kind: 'error', message });
       });
     return () => {
@@ -449,7 +449,18 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
   return (
     <>
       <EditorShell session={session} uiMode={uiMode} onRestoreUi={restoreUi}>
-        <CanvasHost editor={editor} tools={tools} theme={theme} rulers={prefs.rulers} pixelGrid={prefs.pixelGrid} layoutGuides={prefs.layoutGuides} maskOutlines={prefs.maskOutlines} outlines={outlines} onContextMenu={openContextMenu} onDropFiles={dropFiles} />
+        <CanvasHost
+          editor={editor}
+          tools={tools}
+          theme={theme}
+          rulers={prefs.rulers}
+          pixelGrid={prefs.pixelGrid}
+          layoutGuides={prefs.layoutGuides}
+          maskOutlines={prefs.maskOutlines}
+          outlines={outlines}
+          onContextMenu={openContextMenu}
+          onDropFiles={dropFiles}
+        />
         {editorState.textEdit && <LinkPopover />}
         {editorState.layoutValueEdit && <LayoutValuePopover />}
         {editorState.flowRename && <FlowRenamePopover />}
@@ -465,11 +476,11 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
               : editorState.selectedConnections.length > 0 && editorState.rightTab === 'prototype'
                 ? connectionMenuEntries(editor)
                 : [
-                  ...spellingEntries(editor, contextMenu.spelling),
-                  ...selectLayerEntries(editor, contextMenu.layers),
-                  ...contextMenu.pasteEntries,
-                  ...(editor.selection.length > 0 ? objectMenuEntries(editor) : canvasMenuEntries(editor)),
-                ]
+                    ...spellingEntries(editor, contextMenu.spelling),
+                    ...selectLayerEntries(editor, contextMenu.layers),
+                    ...contextMenu.pasteEntries,
+                    ...(editor.selection.length > 0 ? objectMenuEntries(editor) : canvasMenuEntries(editor)),
+                  ]
           }
           anchor={{ x: contextMenu.x, y: contextMenu.y, width: 0, height: 0 }}
           placement="point"
@@ -484,6 +495,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
       {editorState.dialog === 'batchRename' && <BatchRenameDialog editor={editor} onClose={closeDialog} />}
       {editorState.dialog === 'nudgeAmount' && <NudgeDialog onClose={closeDialog} />}
       {editorState.dialog === 'export' && <ExportDialog editor={editor} onClose={closeDialog} />}
+      {editorState.dialog === 'offsetPath' && <OffsetPathDialog editor={editor} onClose={closeDialog} />}
       <input
         ref={openInput}
         type="file"
