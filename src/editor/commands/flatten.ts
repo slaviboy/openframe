@@ -17,7 +17,8 @@
 
 import type { Id } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
-import { canFlattenLayer, flattenLayers } from '@/core/vector/flatten';
+import { canFlattenLayer, flattenLayers, type OutlineResolver } from '@/core/vector/flatten';
+import { commandsToNetwork } from '@/core/vector/shape-networks';
 import type { FontLoader } from '@/core/text/glyph-paths';
 import type { Editor } from '../editor';
 import { replaceTextWithOutlines, textLayersUnder, textOutlinesFor } from './outline-text';
@@ -44,10 +45,19 @@ export async function flattenSelection(editor: Editor, load: FontLoader): Promis
   let created: Id | null = null;
   editor.history.run('Flatten', (tx) => {
     const replaced = replaceTextWithOutlines(tx, editor, outlines);
+    // A boolean group flattens into the shape it combines to, which only the engine can work out.
+    const geometry = editor.geometry;
+    const resolve: OutlineResolver | undefined = geometry
+      ? (node) => {
+          const commands = geometry.booleanOutline(node, tx.store);
+          return commands ? commandsToNetwork(commands) : null;
+        }
+      : undefined;
     created = flattenLayers(
       tx,
       ids.map((id) => replaced.get(id) ?? id),
       () => editor.ids.next(),
+      resolve,
     );
   });
   if (created) editor.state.select([created]);

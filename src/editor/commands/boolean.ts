@@ -16,7 +16,7 @@
  */
 
 import type { Id } from '@/core/ids/ids';
-import type { BooleanOperation, SceneNode } from '@/core/schema/document';
+import type { BooleanOperation, BooleanOperationNode, SceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 import { selectedSceneNodes } from './selection-helpers';
 import { wrapSelection } from './structure';
@@ -34,9 +34,17 @@ const UNSUPPORTED: ReadonlySet<string> = new Set(['FRAME', 'SECTION', 'SLICE']);
 /** The appearance a new boolean group takes over from one of its layers. */
 const APPEARANCE = ['fills', 'strokes', 'strokeWeight', 'strokeAlign', 'strokeDashes', 'strokeCap', 'strokeJoin', 'strokeMiterAngle', 'effects'] as const;
 
-/** A boolean operation needs at least two unlocked, supported layers. */
+/** The one boolean group the selection is, whose operation the same commands change. */
+function selectedBooleanGroup(editor: Editor): BooleanOperationNode | null {
+  const ids = selectedSceneNodes(editor);
+  const only = ids.length === 1 ? (editor.doc.get(ids[0]!) as SceneNode | undefined) : undefined;
+  return only?.type === 'BOOLEAN_OPERATION' && !only.locked ? only : null;
+}
+
+/** A boolean operation needs at least two unlocked, supported layers, or one boolean group to change. */
 export function canBooleanSelection(editor: Editor): boolean {
   const ids = selectedSceneNodes(editor);
+  if (selectedBooleanGroup(editor)) return true;
   return (
     ids.length >= 2 &&
     ids.every((id) => {
@@ -53,6 +61,21 @@ export function canBooleanSelection(editor: Editor): boolean {
 export function booleanSelection(editor: Editor, operation: BooleanOperation): Id | null {
   if (!canBooleanSelection(editor)) return null;
   const name = BOOLEAN_NAMES[operation];
+
+  // A boolean group already selected takes the new operation instead of being wrapped in another group.
+  const group = selectedBooleanGroup(editor);
+  if (group) {
+    if (group.booleanOperation === operation) return group.id;
+    editor.history.run(`${name} selection`, (tx) => {
+      tx.set(group.id, 'booleanOperation', operation);
+      // A group still called after its old operation is renamed, keeping the number a repeated name is given;
+      // one the designer named keeps that name.
+      const named = new RegExp(`^(?:${Object.values(BOOLEAN_NAMES).join('|')})( \\d+)?$`).exec(group.name);
+      if (named) tx.set(group.id, 'name', `${name}${named[1] ?? ''}`);
+    });
+    return group.id;
+  }
+
   return wrapSelection(editor, 'GROUP', {
     label: `${name} selection`,
     name,

@@ -18,6 +18,8 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 
+const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
+
 async function drag(page: Page, from: [number, number], to: [number, number]) {
   const box = (await page.getByTestId('canvas').boundingBox())!;
   await page.mouse.move(box.x + from[0], box.y + from[1]);
@@ -58,4 +60,30 @@ test('⌥⇧S subtracts the upper rectangle; only the remaining shape is clickab
   await page.keyboard.press('ControlOrMeta+Shift+G');
   await expect(page.getByRole('treeitem', { name: /Subtract 1/ })).toHaveCount(0);
   await expect(page.getByRole('treeitem', { name: /Rectangle 2/ })).toHaveAttribute('aria-selected', 'true');
+});
+
+test('the toolbar boolean menu combines the selection, and changes an existing group', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await page.keyboard.press('r');
+  await drag(page, [400, 300], [500, 400]);
+  await page.keyboard.press('r');
+  await drag(page, [450, 300], [550, 400]);
+  await page.keyboard.press(`${mod}+a`);
+
+  await page.getByRole('button', { name: 'Boolean operations' }).click();
+  await page.getByRole('menu', { name: 'Boolean operations' }).getByRole('menuitem', { name: 'Union selection' }).click();
+  await expect(page.getByRole('treeitem', { name: /Union/ })).toHaveCount(1);
+
+  // With the group selected, the menu changes its operation rather than wrapping it in another group.
+  await page.getByRole('button', { name: 'Boolean operations' }).click();
+  await page.getByRole('menu', { name: 'Boolean operations' }).getByRole('menuitem', { name: 'Intersect selection' }).click();
+  await expect(page.getByRole('treeitem', { name: /Intersect/ })).toHaveCount(1);
+  await expect(page.getByRole('treeitem', { name: /Union/ })).toHaveCount(0);
+
+  // Flatten from the same menu turns the group into the shape it combines to.
+  await page.getByRole('button', { name: 'Boolean operations' }).click();
+  await page.getByRole('menu', { name: 'Boolean operations' }).getByRole('menuitem', { name: 'Flatten selection' }).click();
+  await expect(page.getByTestId('inspector')).toContainText('Vector');
+  await expect(page.getByTestId('field-w')).toHaveValue('50');
 });

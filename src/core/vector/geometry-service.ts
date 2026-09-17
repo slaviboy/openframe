@@ -17,6 +17,7 @@
 
 import type { PathCommand } from '../geometry/corners';
 import type { Vec2 } from '../math/vec';
+import type { DocumentStore } from '../document/store';
 import type { SceneNode } from '../schema/document';
 import type { VectorNetwork } from './vector-network';
 
@@ -37,6 +38,12 @@ export interface GeometryService {
    * `weight` along `path`, as path commands; [] when nothing is left, null when the stroke doesn't reach it.
    */
   regionMinusStroke(network: VectorNetwork, region: number, path: readonly Vec2[], weight: number): PathCommand[] | null;
+
+  /**
+   * The shape a boolean group comes to: its children's outlines combined by its operation, as path commands in
+   * the group's own space. Null when the group combines nothing.
+   */
+  booleanOutline(node: SceneNode, store: DocumentStore): PathCommand[] | null;
 
   /**
    * Offset path: the area a network's closed loops cover, grown by `amount` (or shrunk, when it is negative),

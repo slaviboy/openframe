@@ -43,15 +43,29 @@ function worldOf(store: DocumentStore, id: Id): Matrix {
 const hasText = (store: DocumentStore, id: Id): boolean => store.children(id).some((child) => store.get(child)?.type === 'TEXT' || hasText(store, child));
 
 /**
+ * The outline of a layer the core can't work out on its own: a boolean group's combined shape, which needs the
+ * rendering engine's path operations. Without one such a group contributes its children separately, as before.
+ */
+export type OutlineResolver = (node: SceneNode) => VectorNetwork | null;
+
+/** A layer's own outline: its shape, or, for a boolean group, whatever the resolver makes of it. */
+const outlineOf = (node: SceneNode, resolve?: OutlineResolver): VectorNetwork | null => (node.type === 'BOOLEAN_OPERATION' ? (resolve?.(node) ?? null) : shapeNetwork(node));
+
+/**
  * The visible layers with an outline that a layer flattens into: the layer itself, or a container's
  * contents. Containers with text inside are not flattened (text needs its glyph outlines).
  */
-function collectLeaves(store: DocumentStore, id: Id, out: SceneNode[]): void {
+function collectLeaves(store: DocumentStore, id: Id, out: SceneNode[], resolve?: OutlineResolver): void {
   const node = store.get(id);
   if (!node || !isSceneNode(node) || !node.visible) return;
+  // A boolean group is one shape, not the layers it combines, once there is something to work that shape out.
+  if (node.type === 'BOOLEAN_OPERATION' && resolve) {
+    if (outlineOf(node, resolve)) out.push(node);
+    return;
+  }
   if (CONTAINERS.has(node.type) && store.children(id).length > 0) {
     if (hasText(store, id)) return;
-    for (const child of store.children(id)) collectLeaves(store, child, out);
+    for (const child of store.children(id)) collectLeaves(store, child, out, resolve);
     return;
   }
   if (shapeNetwork(node)) out.push(node);
@@ -61,7 +75,7 @@ function collectLeaves(store: DocumentStore, id: Id, out: SceneNode[]): void {
 export function canFlattenLayer(store: DocumentStore, id: Id): boolean {
   const leaves: SceneNode[] = [];
   collectLeaves(store, id, leaves);
-  return leaves.length > 0;
+  return leaves.length > 0 || store.get(id)?.type === 'BOOLEAN_OPERATION';
 }
 
 /** Joins networks into one, keeping each one's segments and regions. */
@@ -100,21 +114,21 @@ function appearanceOf(node: SceneNode): Partial<VectorNode> {
  * are. The vector takes the topmost flattened layer's appearance and the topmost selected layer's
  * name. Returns the new layer's id, or null when nothing could be flattened.
  */
-export function flattenLayers(tx: Transaction, ids: readonly Id[], nextId: () => Id): Id | null {
+export function flattenLayers(tx: Transaction, ids: readonly Id[], nextId: () => Id, resolve?: OutlineResolver): Id | null {
   const store = tx.store;
   const ordered = sortByPaintOrder(store, ids);
   const leaves: SceneNode[] = [];
   const contributing: Id[] = [];
   for (const id of ordered) {
     const before = leaves.length;
-    collectLeaves(store, id, leaves);
+    collectLeaves(store, id, leaves, resolve);
     if (leaves.length > before) contributing.push(id);
   }
   const top = contributing.at(-1);
   if (!top) return null;
   const parent = store.parentOf(top)!;
   const parentInverse = invert(worldOf(store, parent)) ?? IDENTITY;
-  const merged = mergeNetworks(leaves.map((leaf) => transformNetworkBy(shapeNetwork(leaf)!, multiply(parentInverse, worldOf(store, leaf.id)))));
+  const merged = mergeNetworks(leaves.map((leaf) => transformNetworkBy(outlineOf(leaf, resolve)!, multiply(parentInverse, worldOf(store, leaf.id)))));
   const bounds = networkBounds(merged) ?? { x: 0, y: 0, width: 0, height: 0 };
   const topNode = store.getOrThrow(top) as SceneNode;
   const siblings = store.children(parent);

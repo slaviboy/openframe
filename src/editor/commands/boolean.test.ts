@@ -21,6 +21,7 @@ import { IdGenerator } from '@/core/ids/ids';
 import type { BooleanOperationNode, SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { BUILTIN_COMMANDS } from './builtin';
+import { flattenSelection } from './flatten';
 
 let editor: Editor;
 let base: string;
@@ -81,5 +82,62 @@ describe('boolean operation commands', () => {
     });
     editor.state.select([base, frame]);
     expect(editor.commands.get('object.booleanExclude')!.enabled!(editor)).toBe(false);
+  });
+});
+
+describe('changing and flattening a boolean group', () => {
+  test('a boolean group already selected takes the new operation instead of being wrapped again', () => {
+    editor.state.select([base, top]);
+    editor.commands.run('object.booleanUnion');
+    const group = selected();
+    expect(group.booleanOperation).toBe('UNION');
+    expect(group.name).toBe('Union 1');
+
+    editor.commands.run('object.booleanSubtract');
+    expect(editor.selection).toEqual([group.id]);
+    expect(selected().booleanOperation).toBe('SUBTRACT');
+    // The group was still called after its old operation, so it takes the new one's name, number and all.
+    expect(selected().name).toBe('Subtract 1');
+    expect(editor.doc.children(group.id)).toHaveLength(2);
+
+    editor.history.undo();
+    expect(selected().booleanOperation).toBe('UNION');
+  });
+
+  test('a group the designer named keeps that name when its operation changes', () => {
+    editor.state.select([base, top]);
+    editor.commands.run('object.booleanUnion');
+    const id = editor.selection[0]!;
+    editor.history.run('rename', (tx) => tx.set(id, 'name', 'Badge'));
+    editor.commands.run('object.booleanIntersect');
+    expect(selected().name).toBe('Badge');
+    expect(selected().booleanOperation).toBe('INTERSECT');
+  });
+
+  test('running the same operation again on a group leaves it as it is, with no undo step', () => {
+    editor.state.select([base, top]);
+    editor.commands.run('object.booleanUnion');
+    const before = editor.doc.rev;
+    editor.commands.run('object.booleanUnion');
+    expect(editor.doc.rev).toBe(before);
+  });
+
+  test('a boolean group flattens into the shape it combines to', async () => {
+    editor.state.select([base, top]);
+    editor.commands.run('object.booleanUnion');
+    const group = editor.selection[0]!;
+    // A stand-in for the engine: the combination is a 30-wide square, whatever the children are.
+    editor.setGeometry({
+      strokeOutline: () => null,
+      regionMinusStroke: () => null,
+      regionHalves: () => null,
+      offsetNetwork: () => null,
+      booleanOutline: () => [{ op: 'M', x: 0, y: 0 }, { op: 'L', x: 30, y: 0 }, { op: 'L', x: 30, y: 30 }, { op: 'L', x: 0, y: 30 }, { op: 'Z' }],
+    });
+    await flattenSelection(editor, async () => null);
+    const flattened = editor.doc.getOrThrow(editor.selection[0]!) as SceneNode;
+    expect(flattened.type).toBe('VECTOR');
+    expect(flattened.size).toEqual({ width: 30, height: 30 });
+    expect(editor.doc.has(group)).toBe(false);
   });
 });

@@ -1451,6 +1451,31 @@ export class SceneRenderer {
   }
 
   /** A boolean group's shape: its visible children's outlines, placed by their transforms and combined by its operation. */
+  /**
+   * A layer's shape with the area its stroke covers taken in, which is what a boolean group combines: a stroked
+   * layer contributes the ink it draws, not just the shape the ink runs around. Deletes the shape it is given.
+   */
+  private withStrokeArea(shape: Path | null, node: SceneNode): Path | null {
+    const commands = this.strokeOutline(node);
+    if (!commands || commands.length === 0) return shape;
+    const stroke = this.pathFrom(commands);
+    if (!shape) return stroke;
+    const merged: Path | null = this.ck.Path.MakeFromOp(shape, stroke, this.ck.PathOp.Union);
+    shape.delete();
+    stroke.delete();
+    return merged;
+  }
+
+  /** A boolean group's combined shape as path commands (GeometryService); null when it combines nothing. */
+  booleanOutline(node: SceneNode, store: DocumentStore): PathCommand[] | null {
+    if (node.type !== 'BOOLEAN_OPERATION') return null;
+    const path = this.booleanPath(node, store);
+    if (!path) return null;
+    const commands = path.isEmpty() ? null : this.commandsOf(path);
+    path.delete();
+    return commands;
+  }
+
   private booleanPath(node: BooleanOperationNode, store: DocumentStore, depth = 0): Path | null {
     const ck = this.ck;
     const op = { UNION: ck.PathOp.Union, SUBTRACT: ck.PathOp.Difference, INTERSECT: ck.PathOp.Intersect, EXCLUDE: ck.PathOp.XOR }[node.booleanOperation];
@@ -1458,7 +1483,7 @@ export class SceneRenderer {
     for (const childId of store.children(node.id)) {
       const child = store.get(childId);
       if (!child || !isSceneNode(child) || !child.visible) continue;
-      const outline = this.backdropOutline(child, store, depth + 1);
+      const outline = this.withStrokeArea(this.backdropOutline(child, store, depth + 1), child);
       if (!outline) continue;
       const m = matrixOf(child.transform);
       const placed = new ck.PathBuilder().addPath(outline, [m.a, m.c, m.e, m.b, m.d, m.f, 0, 0, 1])?.detachAndDelete() ?? null;

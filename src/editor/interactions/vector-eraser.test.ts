@@ -63,6 +63,7 @@ beforeEach(() => {
     strokeOutline: () => null,
     offsetNetwork: () => null,
     regionHalves: () => null,
+    booleanOutline: () => null,
     regionMinusStroke: (_network, _region, path, weight) => {
       lastCall = { path: [...path], weight };
       return rest;

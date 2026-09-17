@@ -56,7 +56,7 @@ beforeEach(() => {
   const ids = new IdGenerator('o');
   editor = new Editor({ doc: createEmptyDocument({ name: 'D', now: 'n', appVersion: 't', ids }), ids, validate: true });
   editor.commands.register(...BUILTIN_COMMANDS);
-  editor.setGeometry({ strokeOutline: () => null, regionMinusStroke: () => null, regionHalves: () => null, offsetNetwork: grown });
+  editor.setGeometry({ strokeOutline: () => null, regionMinusStroke: () => null, regionHalves: () => null, booleanOutline: () => null, offsetNetwork: grown });
   id = editor.history.run('create', (tx) => {
     const vectorId = editor.ids.next();
     tx.create(makeVector({ id: vectorId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'V', x: 100, y: 50, width: 40, height: 40 }, square));
