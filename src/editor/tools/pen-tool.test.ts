@@ -16,7 +16,7 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { createEmptyDocument, keyOnTop, makeFrame, solid } from '@/core/document/factory';
+import { createEmptyDocument, keyOnTop, makeFrame, makeRectangle, solid } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
 import type { VectorNode } from '@/core/schema/document';
 import { BUILTIN_COMMANDS } from '../commands/builtin';
@@ -96,6 +96,63 @@ describe('pen tool', () => {
     expect(tools.cancel()).toBe(true);
     expect(vectors()).toHaveLength(1);
     expect(editor.state.getSnapshot().tool).toBe('pen');
+  });
+});
+
+describe('pen tool: snapping, the trailing line and carrying a path on', () => {
+  test('a point snaps to a layer edge, and Control puts it exactly where the pointer is', () => {
+    editor.history.run('seed', (tx) => {
+      const id = editor.ids.next();
+      tx.create(makeRectangle({ id, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'R', x: 200, y: 200, width: 100, height: 100 }));
+    });
+    editor.state.setTool('pen');
+    // Three short of the rectangle's left edge, so the point takes the edge.
+    click(197, 400);
+    click(400, 400);
+    tools.cancel();
+    expect(vectors()[0]!.vectorNetwork.vertices[0]).toMatchObject({ x: 0, y: 0 });
+    expect(vectors()[0]!.transform[4]).toBe(200);
+
+    editor.state.setTool('pen');
+    tools.pointerDown(sample(197, 600, { ctrl: true }));
+    tools.pointerUp(sample(197, 600, { ctrl: true }));
+    tools.pointerDown(sample(400, 600, { ctrl: true }));
+    tools.pointerUp(sample(400, 600, { ctrl: true }));
+    tools.cancel();
+    expect(vectors()[1]!.transform[4]).toBe(197);
+  });
+
+  test('a line trails the pointer from the point last placed, and goes once the path is done', () => {
+    editor.state.setTool('pen');
+    expect(tools.penRubberBand).toBeNull();
+    click(100, 100);
+    tools.pointerMove(sample(160, 140));
+    expect(tools.penRubberBand).toEqual([
+      { x: 100, y: 100 },
+      { x: 160, y: 140 },
+    ]);
+    click(200, 200);
+    tools.cancel();
+    expect(tools.penRubberBand).toBeNull();
+  });
+
+  test('starting on the end of a path carries that path on instead of beginning another layer', () => {
+    editor.state.setTool('pen');
+    click(100, 100);
+    click(200, 100);
+    tools.cancel();
+    const first = vectors()[0]!;
+    expect(first.vectorNetwork.vertices).toHaveLength(2);
+
+    // Pressing on the end of that path and clicking on adds to it, leaving one layer.
+    editor.state.setTool('pen');
+    click(200, 100);
+    click(200, 200);
+    tools.cancel();
+    expect(vectors()).toHaveLength(1);
+    const carried = editor.doc.getOrThrow(first.id) as VectorNode;
+    expect(carried.vectorNetwork.vertices).toHaveLength(3);
+    expect(carried.vectorNetwork.segments).toHaveLength(2);
   });
 });
 

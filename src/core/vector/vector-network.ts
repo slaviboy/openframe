@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { Paint } from '../schema/document';
+import type { HandleMirroring, Paint } from '../schema/document';
 import { flattenPath, type PathCommand } from '../geometry/corners';
 import { apply, applyLinear, type Matrix } from '../math/matrix';
 import type { Rect } from '../math/rect';
@@ -30,6 +30,8 @@ import type { Vec2 } from '../math/vec';
 export interface VectorVertex {
   readonly x: number;
   readonly y: number;
+  /** How the point's two handles follow each other while one is dragged; absent means exact opposites. */
+  readonly mirror?: HandleMirroring | undefined;
 }
 
 export interface VectorSegment {

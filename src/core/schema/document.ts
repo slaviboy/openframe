@@ -464,9 +464,7 @@ export const ConstraintSchema = z.enum(['MIN', 'MAX', 'CENTER', 'STRETCH', 'SCAL
 export const LayoutSizingSchema = z.enum(['HUG', 'FILL']);
 
 /** Variables bound to a layer's properties, by property; the properties hold the resolved values. */
-export const BoundVariablesSchema = z
-  .record(z.string().min(1).max(64), VariableAliasSchema)
-  .refine((bindings) => Object.keys(bindings).length <= 64, 'Too many bound variables');
+export const BoundVariablesSchema = z.record(z.string().min(1).max(64), VariableAliasSchema).refine((bindings) => Object.keys(bindings).length <= 64, 'Too many bound variables');
 /** Variable modes set on a layer or page, by collection id; collections not listed are Auto. */
 export const ExplicitVariableModesSchema = z.record(IdSchema, z.string().min(1).max(64)).refine((modes) => Object.keys(modes).length <= 256, 'Too many variable modes');
 
@@ -993,16 +991,25 @@ export const LineNodeSchema = z.object({
 const VectorPointSchema = z.object({ x: finite, y: finite });
 
 /**
+ * How a point's two handles follow each other while one of them is dragged: not at all, keeping opposite
+ * directions while each keeps its own length, or staying exact opposites. Absent means the two are exact
+ * opposites, which is how a point the Bend tool made is drawn.
+ */
+export const HandleMirroringSchema = z.enum(['NONE', 'ANGLE', 'ANGLE_AND_LENGTH']);
+export type HandleMirroring = z.infer<typeof HandleMirroringSchema>;
+
+/** A vertex: where it sits, and how its handles follow each other. */
+const VectorVertexSchema = z.object({ x: finite, y: finite, mirror: HandleMirroringSchema.optional() });
+
+/**
  * Vector network: vertices joined by straight or curved segments in any direction (branches
  * allowed), plus closed regions that can be filled. A segment's tangents are the offsets of its
  * Bézier control points from its start and end vertices (zero for straight segments); a region
  * lists loops of segment indices. Coordinates are in the layer's local space.
  */
 export const VectorNetworkSchema = z.object({
-  vertices: z.array(VectorPointSchema).max(100_000),
-  segments: z
-    .array(z.object({ start: z.number().int().min(0), end: z.number().int().min(0), tangentStart: VectorPointSchema, tangentEnd: VectorPointSchema }))
-    .max(100_000),
+  vertices: z.array(VectorVertexSchema).max(100_000),
+  segments: z.array(z.object({ start: z.number().int().min(0), end: z.number().int().min(0), tangentStart: VectorPointSchema, tangentEnd: VectorPointSchema })).max(100_000),
   /** Closed regions that can be filled; a region's own `fills` (Paint tool) replace the layer's fills inside it. */
   regions: z
     .array(
@@ -1399,8 +1406,7 @@ export type NodeType = Node['type'];
 export type DocumentMeta = z.infer<typeof DocumentMetaSchema>;
 export type SerializedDocument = z.infer<typeof DocumentSchema>;
 
-export const isSceneNode = (n: Node): n is SceneNode =>
-  n.type !== 'DOCUMENT' && n.type !== 'PAGE' && n.type !== 'STYLE' && n.type !== 'VARIABLE_COLLECTION' && n.type !== 'VARIABLE';
+export const isSceneNode = (n: Node): n is SceneNode => n.type !== 'DOCUMENT' && n.type !== 'PAGE' && n.type !== 'STYLE' && n.type !== 'VARIABLE_COLLECTION' && n.type !== 'VARIABLE';
 export const hasGeometry = (n: Node): n is FrameNode | RectangleNode | EllipseNode | PolygonNode | StarNode | LineNode | VectorNode | BooleanOperationNode | SectionNode | TextNode =>
   n.type === 'FRAME' ||
   n.type === 'RECTANGLE' ||
@@ -1412,5 +1418,4 @@ export const hasGeometry = (n: Node): n is FrameNode | RectangleNode | EllipseNo
   n.type === 'LINE' ||
   n.type === 'SECTION' ||
   n.type === 'TEXT';
-export const isContainer = (n: Node): boolean =>
-  n.type === 'DOCUMENT' || n.type === 'PAGE' || n.type === 'FRAME' || n.type === 'GROUP' || n.type === 'BOOLEAN_OPERATION' || n.type === 'SECTION';
+export const isContainer = (n: Node): boolean => n.type === 'DOCUMENT' || n.type === 'PAGE' || n.type === 'FRAME' || n.type === 'GROUP' || n.type === 'BOOLEAN_OPERATION' || n.type === 'SECTION';

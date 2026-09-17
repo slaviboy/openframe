@@ -16,6 +16,7 @@
  */
 
 import type { Vec2 } from '../math/vec';
+import type { HandleMirroring } from '../schema/document';
 import type { VectorNetwork } from './vector-network';
 
 /** One end of a segment: the vertex it starts at, or the one it ends at. */
@@ -67,6 +68,46 @@ export function oppositeEnd(network: VectorNetwork, end: SegmentEnd): SegmentEnd
   const ends = vertexEnds(network, endVertex(network, end));
   if (ends.length !== 2) return null;
   return ends.find((e) => e.segment !== end.segment || e.side !== end.side) ?? null;
+}
+
+/** What a point's mirroring comes to when it carries none of its own: handles the Bend tool made are exact opposites. */
+export function mirroringOf(network: VectorNetwork, vertex: number): HandleMirroring {
+  const stored = network.vertices[vertex]?.mirror;
+  if (stored) return stored;
+  const ends = vertexEnds(network, vertex);
+  const [a, b] = ends;
+  if (!a || !b) return 'NONE';
+  const [t, o] = [tangentAt(network, a), tangentAt(network, b)];
+  const opposite = Math.abs(t.x + o.x) < 1e-6 && Math.abs(t.y + o.y) < 1e-6;
+  const drawn = t.x !== 0 || t.y !== 0 || o.x !== 0 || o.y !== 0;
+  return opposite && drawn ? 'ANGLE_AND_LENGTH' : 'NONE';
+}
+
+/**
+ * The tangent the handle opposite a dragged one takes: nothing under no mirroring, the opposite direction at its
+ * own length under mirrored angle, and the exact opposite under mirrored angle and length.
+ */
+export function mirroredTangent(mode: HandleMirroring, dragged: Vec2, other: Vec2): Vec2 | null {
+  if (mode === 'NONE') return null;
+  if (mode === 'ANGLE_AND_LENGTH') return { x: 0 - dragged.x, y: 0 - dragged.y };
+  const length = Math.hypot(other.x, other.y);
+  const reach = Math.hypot(dragged.x, dragged.y);
+  // A handle dragged onto its point has no direction to mirror, so the other one stays where it is.
+  if (reach === 0 || length === 0) return other;
+  return { x: (0 - dragged.x / reach) * length, y: (0 - dragged.y / reach) * length };
+}
+
+/** The network with a mirroring set on the given points; `undefined` puts them back to being read from the handles. */
+export function setMirroring(network: VectorNetwork, vertices: readonly number[], mode: HandleMirroring | undefined): VectorNetwork {
+  const wanted = new Set(vertices);
+  return {
+    ...network,
+    vertices: network.vertices.map((vertex, i) => {
+      if (!wanted.has(i)) return vertex;
+      const { mirror: _mirror, ...rest } = vertex;
+      return mode === undefined ? rest : { ...rest, mirror: mode };
+    }),
+  };
 }
 
 /**

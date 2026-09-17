@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import { bendVertex, moveHandles, oppositeEnd, setTangent, tangentAt, vertexEnds, vertexHandles } from './vector-bend';
+import { bendVertex, mirroredTangent, mirroringOf, moveHandles, oppositeEnd, setMirroring, setTangent, tangentAt, vertexEnds, vertexHandles } from './vector-bend';
 import { straightSegment, type VectorNetwork } from './vector-network';
 
 const square: VectorNetwork = {
@@ -84,5 +84,59 @@ describe('bend', () => {
     expect(tangentAt(moved, ends[0])).toEqual({ x: -20, y: 10 });
     expect(tangentAt(moved, ends[1])).toEqual({ x: 20, y: 10 });
     expect(moved.segments[2]).toBe(bent.segments[2]);
+  });
+});
+
+describe('handle mirroring', () => {
+  /** A path through three points, bent at the middle one so its handles are exact opposites. */
+  const bent = () =>
+    bendVertex(
+      {
+        vertices: [
+          { x: 0, y: 0 },
+          { x: 10, y: 0 },
+          { x: 20, y: 0 },
+        ],
+        segments: [straightSegment(0, 1), straightSegment(1, 2)],
+        regions: [],
+      },
+      1,
+      { x: 4, y: 2 },
+    );
+
+  test('a point bent into a curve mirrors angle and length; a corner mirrors nothing', () => {
+    expect(mirroringOf(bent(), 1)).toBe('ANGLE_AND_LENGTH');
+    const straight: VectorNetwork = {
+      vertices: [
+        { x: 0, y: 0 },
+        { x: 10, y: 0 },
+        { x: 20, y: 0 },
+      ],
+      segments: [straightSegment(0, 1), straightSegment(1, 2)],
+      regions: [],
+    };
+    expect(mirroringOf(straight, 1)).toBe('NONE');
+  });
+
+  test('mirror angle turns the other handle around but leaves its length', () => {
+    const other = { x: -2, y: 0 };
+    const followed = mirroredTangent('ANGLE', { x: 0, y: 6 }, other)!;
+    expect(Math.hypot(followed.x, followed.y)).toBeCloseTo(2, 6);
+    expect(followed).toMatchObject({ x: 0 });
+    expect(followed.y).toBeCloseTo(-2, 6);
+  });
+
+  test('mirror angle and length makes the other handle the exact opposite; no mirroring leaves it', () => {
+    expect(mirroredTangent('ANGLE_AND_LENGTH', { x: 3, y: -4 }, { x: 1, y: 1 })).toEqual({ x: -3, y: 4 });
+    expect(mirroredTangent('NONE', { x: 3, y: -4 }, { x: 1, y: 1 })).toBeNull();
+  });
+
+  test('a mirroring set on a point is what is read back, and clearing it reads the handles again', () => {
+    const set = setMirroring(bent(), [1], 'NONE');
+    expect(mirroringOf(set, 1)).toBe('NONE');
+    expect(set.vertices[1]).toMatchObject({ mirror: 'NONE' });
+    const cleared = setMirroring(set, [1], undefined);
+    expect(cleared.vertices[1]).not.toHaveProperty('mirror');
+    expect(mirroringOf(cleared, 1)).toBe('ANGLE_AND_LENGTH');
   });
 });

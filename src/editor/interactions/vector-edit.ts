@@ -22,9 +22,9 @@ import type { Rect } from '@/core/math/rect';
 import type { Vec2 } from '@/core/math/vec';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
 import { DEFAULT_SHAPE_FILL, solid } from '@/core/document/factory';
-import type { Paint, Transform, VectorNode } from '@/core/schema/document';
+import type { HandleMirroring, Paint, Transform, VectorNode } from '@/core/schema/document';
 import { cutVertex, deleteVertices, healVertices, moveVertices, nearestOnSegments, splitSegment } from '@/core/vector/vector-edit';
-import { bendVertex, moveHandles, oppositeEnd, setTangent, tangentAt, type SegmentEnd } from '@/core/vector/vector-bend';
+import { bendVertex, mirroredTangent, mirroringOf, moveHandles, oppositeEnd, setTangent, tangentAt, type SegmentEnd } from '@/core/vector/vector-bend';
 import { keyBetween } from '@/core/ids/fractional-index';
 import { matrixOf } from '@/core/scene/scene-index';
 import { divideNetwork } from '@/core/vector/vector-divide';
@@ -154,7 +154,14 @@ type HandleGesture = {
   moved: boolean;
 } & (
   | { readonly kind: 'bend'; readonly vertex: number; /** A point was added on the path first. */ readonly added: boolean }
-  | { readonly kind: 'handle'; readonly end: SegmentEnd; readonly origin: { readonly x: number; readonly y: number }; readonly mirror: SegmentEnd | null }
+  | {
+      readonly kind: 'handle';
+      readonly end: SegmentEnd;
+      readonly origin: { readonly x: number; readonly y: number };
+      /** The handle across the point that follows this one, and how it follows. */
+      readonly mirror: SegmentEnd | null;
+      readonly mirroring: HandleMirroring;
+    }
   | { readonly kind: 'handles'; readonly ends: readonly SegmentEnd[] }
 );
 
@@ -258,7 +265,9 @@ export class VectorEditController implements Tool {
   ) {}
 
   get active(): boolean {
-    return this.drag !== null || this.lasso !== null || this.handle !== null || this.painting !== null || this.erasing !== null || this.widthDrag !== null || this.cutDrag !== null || this.boxDrag !== null;
+    return (
+      this.drag !== null || this.lasso !== null || this.handle !== null || this.painting !== null || this.erasing !== null || this.widthDrag !== null || this.cutDrag !== null || this.boxDrag !== null
+    );
   }
 
   /** Screen outline of the lasso being drawn, for the overlay. */
@@ -317,7 +326,13 @@ export class VectorEditController implements Tool {
       const hitPoint = this.hitWidthPoint(chain, points, local, tolerance, WIDTH_KNOB_MIN_PX / pxPerUnit);
       if (hitPoint) {
         const current = state.widthPoints ?? [];
-        const widthPoints = p.shift ? (current.includes(hitPoint.index) ? current.filter((i) => i !== hitPoint.index) : [...current, hitPoint.index]) : current.includes(hitPoint.index) ? current : [hitPoint.index];
+        const widthPoints = p.shift
+          ? current.includes(hitPoint.index)
+            ? current.filter((i) => i !== hitPoint.index)
+            : [...current, hitPoint.index]
+          : current.includes(hitPoint.index)
+            ? current
+            : [hitPoint.index];
         editor.state.setVectorEdit({ ...state, widthPoints });
         const label = hitPoint.kind === 'width' ? 'Change stroke width' : 'Move width point';
         this.widthDrag = { tx: editor.history.begin(label), kind: hitPoint.kind, index: hitPoint.index, start: points, inverse: widthInverse, pxPerUnit, down: p, moved: false };
@@ -379,12 +394,23 @@ export class VectorEditController implements Tool {
         return;
       }
       const network = node.vectorNetwork;
-      const opposite = oppositeEnd(network, handle.end);
-      const t = tangentAt(network, handle.end);
-      const o = opposite ? tangentAt(network, opposite) : null;
-      const mirrored = o !== null && Math.abs(t.x + o.x) < 1e-6 && Math.abs(t.y + o.y) < 1e-6;
+      // The point's own mirroring says whether the handle opposite this one follows it, and how.
+      const mode = mirroringOf(network, handle.vertex);
+      const opposite = mode === 'NONE' ? null : oppositeEnd(network, handle.end);
       const tx = editor.history.begin('Move handle');
-      this.handle = { kind: 'handle', tx, start: network, startTransform: node.transform, startInverse, down: p, moved: false, end: handle.end, origin: network.vertices[handle.vertex]!, mirror: mirrored ? opposite : null };
+      this.handle = {
+        kind: 'handle',
+        tx,
+        start: network,
+        startTransform: node.transform,
+        startInverse,
+        down: p,
+        moved: false,
+        end: handle.end,
+        origin: network.vertices[handle.vertex]!,
+        mirror: opposite,
+        mirroring: mode,
+      };
       return;
     }
     const hit = node.vectorNetwork.vertices.findIndex((vertex) => {
@@ -699,7 +725,11 @@ export class VectorEditController implements Tool {
       const total = chain.lengths[chain.lengths.length - 1]!;
       next = { ...current, position: p.ctrl ? nearest.position : snapPosition(chain, others, nearest.position, this.tolerancePx / g.pxPerUnit / total) };
     }
-    g.tx.set(node.id, 'strokeWidths', g.start.map((w, i) => (i === g.index ? next : w)));
+    g.tx.set(
+      node.id,
+      'strokeWidths',
+      g.start.map((w, i) => (i === g.index ? next : w)),
+    );
     g.tx.flushPreview();
     this.editor.requestRender();
   }
@@ -774,7 +804,10 @@ export class VectorEditController implements Tool {
     } else {
       const tangent = { x: local.x - g.origin.x, y: local.y - g.origin.y };
       network = setTangent(g.start, g.end, tangent);
-      if (g.mirror) network = setTangent(network, g.mirror, { x: 0 - tangent.x, y: 0 - tangent.y });
+      if (g.mirror) {
+        const followed = mirroredTangent(g.mirroring, tangent, tangentAt(g.start, g.mirror));
+        if (followed) network = setTangent(network, g.mirror, followed);
+      }
     }
     refitVector(g.tx, state.nodeId, network, g.startTransform);
     g.tx.flushPreview();

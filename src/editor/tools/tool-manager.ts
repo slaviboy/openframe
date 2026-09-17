@@ -204,6 +204,12 @@ export class ToolManager {
     return current instanceof MoveTool ? current : (this.tools.move as MoveTool);
   }
 
+  /** The Pen's line trailing the path it is drawing, in world coordinates; null when the Pen isn't drawing. */
+  get penRubberBand(): readonly [Vec2, Vec2] | null {
+    const pen = this.tools.pen;
+    return pen instanceof PenTool ? pen.rubberBand : null;
+  }
+
   /** Snapping guides of whichever tool owns the current gesture. */
   get snapGuides(): readonly SnapGuide[] {
     return (this.pointerTool ?? this.tool).snapGuides ?? [];

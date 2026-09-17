@@ -20,6 +20,7 @@ import { createEmptyDocument, keyOnTop, makeVector } from '@/core/document/facto
 import { IdGenerator } from '@/core/ids/ids';
 import type { VectorNode } from '@/core/schema/document';
 import { straightSegment } from '@/core/vector/vector-network';
+import { setMirroring } from '@/core/vector/vector-bend';
 import { BUILTIN_COMMANDS } from '../commands/builtin';
 import { Editor } from '../editor';
 import { ToolManager } from '../tools/tool-manager';
@@ -60,16 +61,19 @@ beforeEach(() => {
   id = editor.history.run('create', (tx) => {
     const vectorId = editor.ids.next();
     tx.create(
-      makeVector({ id: vectorId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'Vector', x: 100, y: 100, width: 100, height: 100 }, {
-        vertices: [
-          { x: 0, y: 0 },
-          { x: 100, y: 0 },
-          { x: 100, y: 100 },
-          { x: 0, y: 100 },
-        ],
-        segments: [straightSegment(0, 1), straightSegment(1, 2), straightSegment(2, 3), straightSegment(3, 0)],
-        regions: [{ loops: [[0, 1, 2, 3]], windingRule: 'NONZERO' }],
-      }),
+      makeVector(
+        { id: vectorId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'Vector', x: 100, y: 100, width: 100, height: 100 },
+        {
+          vertices: [
+            { x: 0, y: 0 },
+            { x: 100, y: 0 },
+            { x: 100, y: 100 },
+            { x: 0, y: 100 },
+          ],
+          segments: [straightSegment(0, 1), straightSegment(1, 2), straightSegment(2, 3), straightSegment(3, 0)],
+          regions: [{ loops: [[0, 1, 2, 3]], windingRule: 'NONZERO' }],
+        },
+      ),
     );
     return vectorId;
   });
@@ -128,5 +132,49 @@ describe('bend tool and handles in vector edit mode', () => {
     drag([220, 100], [220, 120]);
     expect(network().segments[0]!.tangentEnd).toEqual({ x: -20, y: 20 });
     expect(network().segments[1]!.tangentStart).toEqual({ x: 20, y: 20 });
+  });
+});
+
+describe('the mirroring a point carries', () => {
+  /** Bends the corner at (200, 100) into a curve, then selects it so its handles can be dragged. */
+  const bendCorner = () => {
+    beginVectorEdit(editor, id);
+    editor.state.setVectorEdit({ ...editState()!, tool: 'bend' });
+    drag([200, 100], [220, 130]);
+    editor.state.setVectorEdit({ ...editState()!, tool: 'move', vertices: [1] });
+  };
+
+  test('mirror angle and length keeps the far handle the exact opposite', () => {
+    bendCorner();
+    const before = network().segments[1]!.tangentStart;
+    expect(before.x).not.toBe(0);
+    // The handle leaving the point is at (120, 130) on screen; drag it somewhere else entirely.
+    drag([220, 130], [210, 160]);
+    const after = network();
+    const leaving = after.segments[1]!.tangentStart;
+    const arriving = after.segments[0]!.tangentEnd;
+    expect(arriving.x).toBeCloseTo(-leaving.x, 6);
+    expect(arriving.y).toBeCloseTo(-leaving.y, 6);
+  });
+
+  test('no mirroring leaves the far handle alone', () => {
+    bendCorner();
+    editor.history.run('mirroring', (tx) => tx.set(id, 'vectorNetwork', setMirroring(network(), [1], 'NONE')));
+    const before = network().segments[0]!.tangentEnd;
+    drag([220, 130], [205, 170]);
+    expect(network().segments[0]!.tangentEnd).toEqual(before);
+  });
+
+  test('mirror angle turns the far handle but keeps the length it had', () => {
+    bendCorner();
+    editor.history.run('mirroring', (tx) => tx.set(id, 'vectorNetwork', setMirroring(network(), [1], 'ANGLE')));
+    const before = network().segments[0]!.tangentEnd;
+    const length = Math.hypot(before.x, before.y);
+    drag([220, 130], [200, 180]);
+    const after = network().segments[0]!.tangentEnd;
+    expect(Math.hypot(after.x, after.y)).toBeCloseTo(length, 6);
+    // It faces the other way from the handle that was dragged.
+    const leaving = network().segments[1]!.tangentStart;
+    expect(after.x * leaving.x + after.y * leaving.y).toBeLessThan(0);
   });
 });

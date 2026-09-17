@@ -288,6 +288,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
         measurements: tools.moveTool.measurements,
         gaps: tools.moveTool.gapIndicators,
         insertion: tools.moveTool.flowInsertion ?? tools.moveTool.reorderInsertion,
+        penRubberBand: tools.penRubberBand,
         rulers: rulersRef.current,
         pixelGrid: pixelGridRef.current,
         layoutGuides: layoutGuidesRef.current,

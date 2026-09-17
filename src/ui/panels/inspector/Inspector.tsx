@@ -42,7 +42,19 @@ import { moveItem } from '@/core/collections/move-item';
 import { DEFAULT_DYNAMIC_STROKE } from '@/core/vector/dynamic-stroke';
 import { applyBrush, localBrushes } from '@/editor/commands/brushes';
 import { addRepeatTransform, applyTransforms, removeRepeatTransform, setRepeatTransform } from '@/editor/commands/transforms';
-import { addKeyframe, animationOf, applyMotionPreset, deleteKeyframe, easingVariables, hasKeyframe, isAnimated, removeAnimatedProperty, resolvedAnimation, saveEasingAsVariable, setSegmentEasing } from '@/editor/commands/motion';
+import {
+  addKeyframe,
+  animationOf,
+  applyMotionPreset,
+  deleteKeyframe,
+  easingVariables,
+  hasKeyframe,
+  isAnimated,
+  removeAnimatedProperty,
+  resolvedAnimation,
+  saveEasingAsVariable,
+  setSegmentEasing,
+} from '@/editor/commands/motion';
 import { ANIMATED_PROPERTIES, ANIMATED_PROPERTY_LABELS, keyframeAt, trackFor } from '@/core/motion/animation';
 import { EASING_LABELS, EASING_TYPES, makeEasing, type EasingType } from '@/core/prototype/reactions';
 import { localCollections } from '@/core/variables/document';
@@ -51,7 +63,7 @@ import { DevStatusControl } from '../dev/InspectPanel';
 import { AnnotationsSection } from '../dev/AnnotationsSection';
 import { EasingGraph } from '../prototype/EasingGraph';
 import { MOTION_PRESETS } from '@/core/motion/presets';
-import type { AnimatedProperty, KeyframeEasing, PageNode } from '@/core/schema/document';
+import type { AnimatedProperty, HandleMirroring, KeyframeEasing, PageNode } from '@/core/schema/document';
 import { IOS_CORNER_SMOOTHING } from '@/core/geometry/corners';
 import { backgroundColorBehind } from '@/core/color/contrast';
 import { useColorProfile } from '../../hooks/useColorProfile';
@@ -74,9 +86,31 @@ import gradientStyles from './Gradient.module.css';
 import { gradientCss } from './gradient-css';
 import { DEFAULT_SHAPE_FILL, BLACK, solid } from '@/core/document/factory';
 import { canCreateComponent, canCreateMultipleComponents, createComponent, isSafeLink, setComponentConfiguration } from '@/editor/commands/components';
-import { addVariant, canAddVariant, canCombineAsVariants, combineAsVariants, deleteVariantProperty, instanceVariant, moveVariantProperty, renameVariantProperty, renameVariantValue, setInstanceVariant } from '@/editor/commands/variants';
+import {
+  addVariant,
+  canAddVariant,
+  canCombineAsVariants,
+  combineAsVariants,
+  deleteVariantProperty,
+  instanceVariant,
+  moveVariantProperty,
+  renameVariantProperty,
+  renameVariantValue,
+  setInstanceVariant,
+} from '@/editor/commands/variants';
 import { componentSetProperties, defaultVariant, parseVariantName, variantErrors } from '@/core/document/variants';
-import { bindingOwner, boundLayers, exposableInstances, exposedInstances, isInInstance, PROPERTY_FIELD, propertyDefinitions, propertyOwner, type ComponentPropertyType, slotLimits } from '@/core/document/component-properties';
+import {
+  bindingOwner,
+  boundLayers,
+  exposableInstances,
+  exposedInstances,
+  isInInstance,
+  PROPERTY_FIELD,
+  propertyDefinitions,
+  propertyOwner,
+  type ComponentPropertyType,
+  slotLimits,
+} from '@/core/document/component-properties';
 import {
   applyComponentProperty,
   canHaveProperties,
@@ -101,6 +135,7 @@ import { localComponents, type LocalComponent } from '@/editor/commands/insert-i
 import { swapInstanceFor } from '@/editor/commands/swap-instance';
 import { canResetOverrides, overrideLabel, resetSelectedOverride, resetSelectedOverrides, selectionOverriddenFields } from '@/editor/commands/reset-overrides';
 import { eraserWeight, vectorEditPaint } from '@/editor/interactions/vector-edit';
+import { mirroringOf, setMirroring } from '@/core/vector/vector-bend';
 import { invert, applyLinear } from '@/core/math/matrix';
 import {
   DEFAULT_MITER_ANGLE,
@@ -145,7 +180,16 @@ import { ExportSection } from './ExportSection';
 import { FRAME_PRESET_CATEGORIES, presetById, presetForSize, presetsIn } from '@/core/document/frame-presets';
 import { placeFramePreset, resizeFramesToPreset } from '@/editor/commands/frame-presets';
 import { screenToWorld } from '@/editor/viewport/viewport';
-import { BoundPaint, PropertyDefaultVariableButton, sharedBoundVariable, VariableBindingControl, VariableModeButton, VariableNumberField, VariantVariableButton, VisibilityControl } from './VariableFields';
+import {
+  BoundPaint,
+  PropertyDefaultVariableButton,
+  sharedBoundVariable,
+  VariableBindingControl,
+  VariableModeButton,
+  VariableNumberField,
+  VariantVariableButton,
+  VisibilityControl,
+} from './VariableFields';
 import { PatternSettings } from './PatternSettings';
 import { PAINT_BLEND_OPTIONS } from './blend-modes';
 import { ColorControl } from './ColorControl';
@@ -274,7 +318,12 @@ function FramePresetSelect({ frames }: { frames: readonly SceneNode[] }) {
       onKeyDown={(e) => e.stopPropagation()}
       onChange={(e) => {
         const preset = presetById(e.target.value);
-        if (preset) resizeFramesToPreset(editor, frames.map((frame) => frame.id), preset);
+        if (preset)
+          resizeFramesToPreset(
+            editor,
+            frames.map((frame) => frame.id),
+            preset,
+          );
       }}
     >
       <option value="">{sizes.size === 1 ? (match ? `${match.preset.name} (landscape)` : 'Custom') : 'Mixed'}</option>
@@ -358,9 +407,27 @@ function GrainSettings({ name, index, effect, change, write, gesture }: GrainSet
         />
         {percent('lightIntensity', 'Light')}
         {percent('refraction', 'Refraction')}
-        <NumberField label="Depth" ariaLabel={`${name} depth`} min={0} max={1000} value={effect.depth} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => patchGlass({ depth: Math.min(1000, Math.max(0, v)) })} />
+        <NumberField
+          label="Depth"
+          ariaLabel={`${name} depth`}
+          min={0}
+          max={1000}
+          value={effect.depth}
+          onGestureStart={gesture.start}
+          onGestureEnd={gesture.end}
+          onChange={(v) => patchGlass({ depth: Math.min(1000, Math.max(0, v)) })}
+        />
         {percent('dispersion', 'Dispersion')}
-        <NumberField label="Frost" ariaLabel={`${name} frost`} min={0} max={1000} value={effect.radius} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => patchGlass({ radius: Math.min(1000, Math.max(0, v)) })} />
+        <NumberField
+          label="Frost"
+          ariaLabel={`${name} frost`}
+          min={0}
+          max={1000}
+          value={effect.radius}
+          onGestureStart={gesture.start}
+          onGestureEnd={gesture.end}
+          onChange={(v) => patchGlass({ radius: Math.min(1000, Math.max(0, v)) })}
+        />
         {percent('splay', 'Splay')}
       </div>
     );
@@ -368,8 +435,26 @@ function GrainSettings({ name, index, effect, change, write, gesture }: GrainSet
   if (effect.type === 'TEXTURE') {
     return (
       <div className={styles.grid2}>
-        <NumberField label="Size" ariaLabel={`${name} texture size`} min={0.1} max={100} value={effect.noiseSize} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => patchTexture({ noiseSize: Math.min(100, Math.max(0.1, v)) })} />
-        <NumberField label="Radius" ariaLabel={`${name} texture radius`} min={0} max={100} value={effect.radius} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => patchTexture({ radius: Math.min(100, Math.max(0, v)) })} />
+        <NumberField
+          label="Size"
+          ariaLabel={`${name} texture size`}
+          min={0.1}
+          max={100}
+          value={effect.noiseSize}
+          onGestureStart={gesture.start}
+          onGestureEnd={gesture.end}
+          onChange={(v) => patchTexture({ noiseSize: Math.min(100, Math.max(0.1, v)) })}
+        />
+        <NumberField
+          label="Radius"
+          ariaLabel={`${name} texture radius`}
+          min={0}
+          max={100}
+          value={effect.radius}
+          onGestureStart={gesture.start}
+          onGestureEnd={gesture.end}
+          onChange={(v) => patchTexture({ radius: Math.min(100, Math.max(0, v)) })}
+        />
         <label className={styles.checkbox}>
           <input
             type="checkbox"
@@ -408,7 +493,16 @@ function GrainSettings({ name, index, effect, change, write, gesture }: GrainSet
             </option>
           ))}
         </select>
-        <NumberField label="Size" ariaLabel={`${name} noise size`} min={0.1} max={100} value={effect.noiseSize} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => patchNoise({ noiseSize: Math.min(100, Math.max(0.1, v)) })} />
+        <NumberField
+          label="Size"
+          ariaLabel={`${name} noise size`}
+          min={0.1}
+          max={100}
+          value={effect.noiseSize}
+          onGestureStart={gesture.start}
+          onGestureEnd={gesture.end}
+          onChange={(v) => patchNoise({ noiseSize: Math.min(100, Math.max(0.1, v)) })}
+        />
         <NumberField
           label="Density"
           ariaLabel={`${name} density`}
@@ -491,8 +585,7 @@ function SelectionColorsSection({ nodes }: { nodes: SceneNode[] }) {
     gesture.end();
     active.current = null;
   };
-  const edit = (entry: SelectionColor, change: (paint: ColorPaint) => Paint) =>
-    gesture.change((tx) => updateSelectionColor(tx, active.current ?? entry.usages, change));
+  const edit = (entry: SelectionColor, change: (paint: ColorPaint) => Paint) => gesture.change((tx) => updateSelectionColor(tx, active.current ?? entry.usages, change));
 
   return (
     <Section title="Selection colors">
@@ -583,11 +676,29 @@ function TransformSection({ nodes, motion }: { nodes: SceneNode[]; motion?: bool
       {!motion && group && repeat && (
         <>
           <div className={styles.row}>
-            <NumberField label="#" ariaLabel="Repeat count" testId="field-repeat-count" min={1} max={200} decimals={0} value={repeat.count} onChange={(v) => setRepeatTransform(editor, group.id, { count: Math.round(v) })} />
+            <NumberField
+              label="#"
+              ariaLabel="Repeat count"
+              testId="field-repeat-count"
+              min={1}
+              max={200}
+              decimals={0}
+              value={repeat.count}
+              onChange={(v) => setRepeatTransform(editor, group.id, { count: Math.round(v) })}
+            />
             {repeat.kind === 'LINEAR' ? (
               <NumberField label="↔" ariaLabel="Repeat spacing" testId="field-repeat-spacing" value={repeat.spacing} onChange={(v) => setRepeatTransform(editor, group.id, { spacing: v })} />
             ) : (
-              <NumberField label={<Icon name="rotation" />} ariaLabel="Repeat angle" suffix="°" min={-360} max={360} decimals={0} value={repeat.angle ?? 360} onChange={(v) => setRepeatTransform(editor, group.id, { angle: v })} />
+              <NumberField
+                label={<Icon name="rotation" />}
+                ariaLabel="Repeat angle"
+                suffix="°"
+                min={-360}
+                max={360}
+                decimals={0}
+                value={repeat.angle ?? 360}
+                onChange={(v) => setRepeatTransform(editor, group.id, { angle: v })}
+              />
             )}
             <IconButton icon="minus" label="Remove transform" onClick={() => removeRepeatTransform(editor, group.id)} />
           </div>
@@ -683,7 +794,15 @@ function EasingSection() {
       )}
       {current.type === 'CUSTOM_SPRING' && (
         <div className={styles.grid2}>
-          <NumberField label="Stiffness" ariaLabel="Spring stiffness" testId="field-spring-stiffness" min={1} max={10_000} value={current.stiffness} onChange={(stiffness) => apply({ ...current, stiffness })} />
+          <NumberField
+            label="Stiffness"
+            ariaLabel="Spring stiffness"
+            testId="field-spring-stiffness"
+            min={1}
+            max={10_000}
+            value={current.stiffness}
+            onChange={(stiffness) => apply({ ...current, stiffness })}
+          />
           <NumberField label="Damping" ariaLabel="Spring damping" testId="field-spring-damping" min={0} max={1000} value={current.damping} onChange={(damping) => apply({ ...current, damping })} />
           <NumberField label="Mass" ariaLabel="Spring mass" testId="field-spring-mass" min={0.1} max={100} step={0.1} value={current.mass} onChange={(mass) => apply({ ...current, mass })} />
         </div>
@@ -761,11 +880,7 @@ function AnimationsSection({ nodes }: { nodes: SceneNode[] }) {
           {animated.map((property) => (
             <li key={property} className={styles.smoothingRow}>
               <span>{ANIMATED_PROPERTY_LABELS[property]}</span>
-              <IconButton
-                icon="minus"
-                label={`Remove ${ANIMATED_PROPERTY_LABELS[property].toLowerCase()} animation`}
-                onClick={() => removeAnimatedProperty(editor, ids, property)}
-              />
+              <IconButton icon="minus" label={`Remove ${ANIMATED_PROPERTY_LABELS[property].toLowerCase()} animation`} onClick={() => removeAnimatedProperty(editor, ids, property)} />
             </li>
           ))}
         </ul>
@@ -796,9 +911,7 @@ function MaskSection({ nodes }: { nodes: SceneNode[] }) {
         className={primitives.select}
         aria-label="Mask type"
         value={type === MIXED ? '' : (type ?? '')}
-        onChange={(e) =>
-          editor.history.run('Change mask type', (tx) => nodes.forEach((n) => setMaskType(tx, tx.store.getOrThrow(n.id) as SceneNode, e.target.value as MaskType)))
-        }
+        onChange={(e) => editor.history.run('Change mask type', (tx) => nodes.forEach((n) => setMaskType(tx, tx.store.getOrThrow(n.id) as SceneNode, e.target.value as MaskType)))}
       >
         {type === MIXED && <option value="">Mixed</option>}
         {(Object.keys(MASK_TYPE_LABELS) as MaskType[]).map((t) => (
@@ -816,7 +929,12 @@ function IconSelect({ label, icon, narrow, children }: { label: string; icon: Ic
   const { handlers, tooltip } = useHoverTooltip(label, undefined, 'below');
   return (
     <>
-      <label className={narrow ? `${styles.iconSelect} ${styles.paintType}` : styles.iconSelect} onPointerEnter={handlers.onPointerEnter} onPointerLeave={handlers.onPointerLeave} onPointerDown={handlers.onPointerDown}>
+      <label
+        className={narrow ? `${styles.iconSelect} ${styles.paintType}` : styles.iconSelect}
+        onPointerEnter={handlers.onPointerEnter}
+        onPointerLeave={handlers.onPointerLeave}
+        onPointerDown={handlers.onPointerDown}
+      >
         <Icon name={icon} size={narrow ? 16 : 24} />
         {children}
       </label>
@@ -870,14 +988,35 @@ function AlignRow() {
           ))}
         </div>
       ))}
-      <IconButton icon="alignMore" label="More alignment actions" tooltip="More actions" aria-haspopup="menu" aria-expanded={anchor !== null} onClick={(e) => setAnchor(e.currentTarget.getBoundingClientRect())} />
+      <IconButton
+        icon="alignMore"
+        label="More alignment actions"
+        tooltip="More actions"
+        aria-haspopup="menu"
+        aria-expanded={anchor !== null}
+        onClick={(e) => setAnchor(e.currentTarget.getBoundingClientRect())}
+      />
       {anchor && <Menu label="More alignment actions" entries={entries} anchor={anchor} placement="bottom-start" onClose={() => setAnchor(null)} />}
     </div>
   );
 }
 
 /** A property as a slider with its value, for Draw mode: dragging changes it, and the number says where it landed. */
-function SliderRow({ label, min, max, value, gesture, onChange }: { label: string; min: number; max: number; value: number | undefined; gesture: { start: () => void; end: () => void }; onChange: (value: number) => void }) {
+function SliderRow({
+  label,
+  min,
+  max,
+  value,
+  gesture,
+  onChange,
+}: {
+  label: string;
+  min: number;
+  max: number;
+  value: number | undefined;
+  gesture: { start: () => void; end: () => void };
+  onChange: (value: number) => void;
+}) {
   return (
     <div className={gradientStyles.adjustRow}>
       <span aria-hidden="true">{label}</span>
@@ -1050,7 +1189,14 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
     (value: number) => {
       // An animated property takes a keyframe at the playhead; with Auto-keyframe on, so does one that isn't animated yet.
       const animated = nodes.length > 0 && nodes.every((n) => isAnimated(editor, n.id, property));
-      if (motion && (animated || (autoKeyframe && nodes.length > 0))) addKeyframe(editor, nodes.map((n) => n.id), property, motionTime, toKeyframe(value));
+      if (motion && (animated || (autoKeyframe && nodes.length > 0)))
+        addKeyframe(
+          editor,
+          nodes.map((n) => n.id),
+          property,
+          motionTime,
+          toKeyframe(value),
+        );
       else apply(value);
     };
   // The point a layer turns around, which ⌥R reveals on the canvas.
@@ -1060,7 +1206,16 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
 
   const single = nodes.length === 1 ? nodes[0]! : null;
   const types = new Set(nodes.map((n) => n.type));
-  const typeLabel = types.size === 1 ? (single?.type === 'FRAME' && single.componentSet ? 'Component set' : single?.type === 'FRAME' && single.component ? 'Component' : single?.type === 'FRAME' && single.instance ? 'Instance' : TYPE_LABELS[nodes[0]!.type]) : 'Mixed';
+  const typeLabel =
+    types.size === 1
+      ? single?.type === 'FRAME' && single.componentSet
+        ? 'Component set'
+        : single?.type === 'FRAME' && single.component
+          ? 'Component'
+          : single?.type === 'FRAME' && single.instance
+            ? 'Instance'
+            : TYPE_LABELS[nodes[0]!.type]
+      : 'Mixed';
 
   // Multi-selection X/Y are the selection bounds in world space; single is parent-relative.
   const bounds = single ? null : editor.selectionBounds(nodes.map((n) => n.id));
@@ -1088,8 +1243,8 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
     });
 
   const geometryNodes = nodes.filter(hasGeometry);
-  const radiusNodes = nodes.filter((n): n is Extract<SceneNode, { type: 'FRAME' | 'RECTANGLE' | 'POLYGON' | 'STAR' }> =>
-    n.type === 'FRAME' || n.type === 'RECTANGLE' || n.type === 'POLYGON' || n.type === 'STAR',
+  const radiusNodes = nodes.filter(
+    (n): n is Extract<SceneNode, { type: 'FRAME' | 'RECTANGLE' | 'POLYGON' | 'STAR' }> => n.type === 'FRAME' || n.type === 'RECTANGLE' || n.type === 'POLYGON' || n.type === 'STAR',
   );
   const boxNodes = nodes.filter((n): n is Extract<SceneNode, { type: 'FRAME' | 'RECTANGLE' }> => n.type === 'FRAME' || n.type === 'RECTANGLE');
   const independentCorners = boxNodes.length === nodes.length && boxNodes.every((n) => n.cornerRadii !== undefined);
@@ -1103,7 +1258,12 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
   const hasSection = nodes.some((n) => n.type === 'SECTION');
   // Constraints apply to layers inside frames.
   // Constraints apply to layers inside frames; children of auto layout frames use resizing instead.
-  const constrainable = nodes.length > 0 && nodes.every((n) => { const parent = editor.doc.get(n.parent.id); return parent?.type === 'FRAME' && (!isAutoLayoutFrame(parent) || n.layoutPositioning === 'ABSOLUTE'); });
+  const constrainable =
+    nodes.length > 0 &&
+    nodes.every((n) => {
+      const parent = editor.doc.get(n.parent.id);
+      return parent?.type === 'FRAME' && (!isAutoLayoutFrame(parent) || n.layoutPositioning === 'ABSOLUTE');
+    });
   const horizontalConstraint = val(shared(nodes, (n) => n.constraints?.horizontal ?? 'MIN'));
   const verticalConstraint = val(shared(nodes, (n) => n.constraints?.vertical ?? 'MIN'));
   const changeConstraint = (axis: 'horizontal' | 'vertical', value: Constraint) =>
@@ -1167,13 +1327,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
               />
             </MotionField>
             {!motion && single && (
-              <IconButton
-                icon="target"
-                label="Edit rotation origin"
-                tooltip="The point the layer turns around"
-                pressed={editingAnchor}
-                onClick={() => editor.commands.run('motion.editAnchor')}
-              />
+              <IconButton icon="target" label="Edit rotation origin" tooltip="The point the layer turns around" pressed={editingAnchor} onClick={() => editor.commands.run('motion.editAnchor')} />
             )}
             <div className={styles.segmented}>
               <SegmentButton
@@ -1232,31 +1386,31 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       <Section title="Layout">
         <div className={styles.row}>
           <MotionField nodes={nodes} property="width" motion={motion}>
-          <VariableNumberField
-            nodes={nodes}
-            field="width"
-            label="W"
-            ariaLabel="Width"
-            testId="field-w"
-            min={0}
-            value={val(shared(nodes, (n) => n.size.width))}
-            {...gestureProps(resize)}
-            onChange={keyframes('width', (v) => resize.change((tx) => nodes.forEach((n) => setSize(tx, n, 'width', v))))}
-          />
+            <VariableNumberField
+              nodes={nodes}
+              field="width"
+              label="W"
+              ariaLabel="Width"
+              testId="field-w"
+              min={0}
+              value={val(shared(nodes, (n) => n.size.width))}
+              {...gestureProps(resize)}
+              onChange={keyframes('width', (v) => resize.change((tx) => nodes.forEach((n) => setSize(tx, n, 'width', v))))}
+            />
           </MotionField>
           <MotionField nodes={nodes} property="height" motion={motion}>
-          <VariableNumberField
-            nodes={nodes}
-            field="height"
-            label="H"
-            ariaLabel="Height"
-            testId="field-h"
-            min={0}
-            disabled={lines.length > 0}
-            value={val(shared(nodes, (n) => n.size.height))}
-            {...gestureProps(resize)}
-            onChange={keyframes('height', (v) => resize.change((tx) => nodes.forEach((n) => setSize(tx, n, 'height', v))))}
-          />
+            <VariableNumberField
+              nodes={nodes}
+              field="height"
+              label="H"
+              ariaLabel="Height"
+              testId="field-h"
+              min={0}
+              disabled={lines.length > 0}
+              value={val(shared(nodes, (n) => n.size.height))}
+              {...gestureProps(resize)}
+              onChange={keyframes('height', (v) => resize.change((tx) => nodes.forEach((n) => setSize(tx, n, 'height', v))))}
+            />
           </MotionField>
           {/* Lines have no height, so no proportions to keep. */}
           {lines.length === 0 ? (
@@ -1267,9 +1421,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
               pressed={nodes.every((n) => n.constrainProportions)}
               onClick={() => {
                 const on = !nodes.every((n) => n.constrainProportions);
-                editor.history.run(on ? 'Constrain proportions' : 'Unconstrain proportions', (tx) =>
-                  nodes.forEach((n) => setConstrainProportions(tx, tx.store.getOrThrow(n.id) as SceneNode, on)),
-                );
+                editor.history.run(on ? 'Constrain proportions' : 'Unconstrain proportions', (tx) => nodes.forEach((n) => setConstrainProportions(tx, tx.store.getOrThrow(n.id) as SceneNode, on)));
               }}
             />
           ) : (
@@ -1310,182 +1462,190 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       {motion && <AnimationsSection nodes={nodes} />}
       {motion && <EasingSection />}
       {!allSlices && (
-      <Section
-        title="Appearance"
-        styleAction={
-          <>
-            <VariableModeButton ids={nodes.map((n) => n.id)} />
-            <VisibilityControl nodes={nodes} />
-            <IconSelect label="Apply blend mode" icon="blendMode">
-              <select
-                aria-label="Layer blend mode"
-                value={val(shared(nodes, (n) => n.blendMode)) ?? ''}
-                onChange={(e) =>
-                  editor.history.run('Change blend mode', (tx) => nodes.forEach((n) => setBlendMode(tx, tx.store.getOrThrow(n.id) as SceneNode, e.target.value as BlendMode)))
-                }
-              >
-                {shared(nodes, (n) => n.blendMode) === MIXED && <option value="">Mixed</option>}
-                {LAYER_BLEND_OPTIONS.map(([mode, label]) => (
-                  <option key={mode} value={mode}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </IconSelect>
-          </>
-        }
-        actions={bindable && single ? <PropertyBinding layerId={single.id} type="BOOLEAN" /> : undefined}>
-        <div className={styles.row}>
-          <MotionField nodes={nodes} property="opacity" motion={motion}>
-          <VariableNumberField
-            nodes={nodes}
-            field="opacity"
-            label={<Icon name="opacity" size={16} />}
-            ariaLabel="Opacity"
-            testId="field-opacity"
-            suffix="%"
-            min={0}
-            max={100}
-            decimals={0}
-            value={val(shared(nodes, (n) => Math.round(n.opacity * 100)))}
-            {...gestureProps(appearance)}
-            onChange={keyframes('opacity', (v) => appearance.change((tx) => nodes.forEach((n) => setOpacity(tx, n, v))), (v) => v / 100)}
-          />
-          </MotionField>
-          {radiusNodes.length === nodes.length ? (
-            <VariableNumberField
-              nodes={radiusNodes}
-              field="cornerRadius"
-              label={<Icon name="radius" size={16} />}
-              ariaLabel="Corner radius"
-              testId="field-radius"
-              min={0}
-              value={radiusNodes.some((n) => 'cornerRadii' in n && n.cornerRadii) ? undefined : val(shared(radiusNodes, (n) => n.cornerRadius ?? 0))}
-              onGestureStart={radius.start}
-              onGestureEnd={radius.end}
-              onChange={(v) => radius.change((tx) => radiusNodes.forEach((n) => setCornerRadius(tx, n, v)))}
-            />
-          ) : (
-            <span />
-          )}
-          {boxNodes.length === nodes.length ? (
-            <IconButton
-              icon="radius"
-              label="Independent corners"
-              pressed={independentCorners}
-              onClick={() =>
-                editor.history.run(independentCorners ? 'Uniform corners' : 'Independent corners', (tx) =>
-                  boxNodes.forEach((n) => {
-                    const r = n.cornerRadius;
-                    setCornerRadii(tx, n, independentCorners ? undefined : { topLeft: r, topRight: r, bottomRight: r, bottomLeft: r });
-                  }),
-                )
-              }
-            />
-          ) : (
-            <span />
-          )}
-        </div>
-        <div className={styles.grid2}>
-          {pointed.length === nodes.length && (
-            <NumberField
-              label="#"
-              ariaLabel="Count"
-              testId="field-count"
-              min={3}
-              max={60}
-              decimals={0}
-              value={val(shared(pointed, (n) => (n.type === 'POLYGON' || n.type === 'STAR' ? n.pointCount : 0)))}
-              onGestureStart={pointCount.start}
-              onGestureEnd={pointCount.end}
-              onChange={(v) => pointCount.change((tx) => pointed.forEach((n) => setPointCount(tx, n, v)))}
-            />
-          )}
-          {stars.length === nodes.length && (
-            <NumberField
-              label="◎"
-              ariaLabel="Ratio"
-              testId="field-ratio"
-              suffix="%"
-              min={0}
-              max={100}
-              decimals={0}
-              value={val(shared(stars, (n) => (n.type === 'STAR' ? Math.round(n.innerRadius * 100) : 0)))}
-              onGestureStart={ratio.start}
-              onGestureEnd={ratio.end}
-              onChange={(v) => ratio.change((tx) => stars.forEach((n) => setInnerRadius(tx, n, v)))}
-            />
-          )}
-        </div>
-        {draw && (
-          <SliderRow
-            label="Opacity"
-            min={0}
-            max={100}
-            value={val(shared(nodes, (n) => Math.round(n.opacity * 100)))}
-            gesture={appearance}
-            onChange={(v) => appearance.change((tx) => nodes.forEach((n) => setOpacity(tx, n, v)))}
-          />
-        )}
-        {independentCorners && (
-          <div className={styles.grid2}>
-            {CORNERS.map(([corner, label]) => (
-              <NumberField
-                key={corner}
-                label={label}
-                ariaLabel={`${CORNER_NAMES[corner]} radius`}
-                testId={`field-radius-${corner}`}
+        <Section
+          title="Appearance"
+          styleAction={
+            <>
+              <VariableModeButton ids={nodes.map((n) => n.id)} />
+              <VisibilityControl nodes={nodes} />
+              <IconSelect label="Apply blend mode" icon="blendMode">
+                <select
+                  aria-label="Layer blend mode"
+                  value={val(shared(nodes, (n) => n.blendMode)) ?? ''}
+                  onChange={(e) => editor.history.run('Change blend mode', (tx) => nodes.forEach((n) => setBlendMode(tx, tx.store.getOrThrow(n.id) as SceneNode, e.target.value as BlendMode)))}
+                >
+                  {shared(nodes, (n) => n.blendMode) === MIXED && <option value="">Mixed</option>}
+                  {LAYER_BLEND_OPTIONS.map(([mode, label]) => (
+                    <option key={mode} value={mode}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </IconSelect>
+            </>
+          }
+          actions={bindable && single ? <PropertyBinding layerId={single.id} type="BOOLEAN" /> : undefined}
+        >
+          <div className={styles.row}>
+            <MotionField nodes={nodes} property="opacity" motion={motion}>
+              <VariableNumberField
+                nodes={nodes}
+                field="opacity"
+                label={<Icon name="opacity" size={16} />}
+                ariaLabel="Opacity"
+                testId="field-opacity"
+                suffix="%"
                 min={0}
-                value={val(shared(boxNodes, (n) => n.cornerRadii?.[corner] ?? n.cornerRadius))}
+                max={100}
+                decimals={0}
+                value={val(shared(nodes, (n) => Math.round(n.opacity * 100)))}
+                {...gestureProps(appearance)}
+                onChange={keyframes(
+                  'opacity',
+                  (v) => appearance.change((tx) => nodes.forEach((n) => setOpacity(tx, n, v))),
+                  (v) => v / 100,
+                )}
+              />
+            </MotionField>
+            {radiusNodes.length === nodes.length ? (
+              <VariableNumberField
+                nodes={radiusNodes}
+                field="cornerRadius"
+                label={<Icon name="radius" size={16} />}
+                ariaLabel="Corner radius"
+                testId="field-radius"
+                min={0}
+                value={radiusNodes.some((n) => 'cornerRadii' in n && n.cornerRadii) ? undefined : val(shared(radiusNodes, (n) => n.cornerRadius ?? 0))}
                 onGestureStart={radius.start}
                 onGestureEnd={radius.end}
-                onChange={(v) =>
-                  radius.change((tx) =>
+                onChange={(v) => radius.change((tx) => radiusNodes.forEach((n) => setCornerRadius(tx, n, v)))}
+              />
+            ) : (
+              <span />
+            )}
+            {boxNodes.length === nodes.length ? (
+              <IconButton
+                icon="radius"
+                label="Independent corners"
+                pressed={independentCorners}
+                onClick={() =>
+                  editor.history.run(independentCorners ? 'Uniform corners' : 'Independent corners', (tx) =>
                     boxNodes.forEach((n) => {
-                      const current = (tx.store.getOrThrow(n.id) as typeof n).cornerRadii;
-                      if (current) setCornerRadii(tx, n, { ...current, [corner]: v });
+                      const r = n.cornerRadius;
+                      setCornerRadii(tx, n, independentCorners ? undefined : { topLeft: r, topRight: r, bottomRight: r, bottomLeft: r });
                     }),
                   )
                 }
               />
-            ))}
+            ) : (
+              <span />
+            )}
           </div>
-        )}
-        {radiusNodes.length === nodes.length && (
-          <div className={styles.smoothingRow}>
-            <div className={gradientStyles.adjustRow}>
-              <span aria-hidden="true">Smoothing</span>
-              <input
-                type="range"
+          <div className={styles.grid2}>
+            {pointed.length === nodes.length && (
+              <NumberField
+                label="#"
+                ariaLabel="Count"
+                testId="field-count"
+                min={3}
+                max={60}
+                decimals={0}
+                value={val(shared(pointed, (n) => (n.type === 'POLYGON' || n.type === 'STAR' ? n.pointCount : 0)))}
+                onGestureStart={pointCount.start}
+                onGestureEnd={pointCount.end}
+                onChange={(v) => pointCount.change((tx) => pointed.forEach((n) => setPointCount(tx, n, v)))}
+              />
+            )}
+            {stars.length === nodes.length && (
+              <NumberField
+                label="◎"
+                ariaLabel="Ratio"
+                testId="field-ratio"
+                suffix="%"
                 min={0}
                 max={100}
-                step={1}
-                aria-label="Corner smoothing"
-                value={smoothing ?? 0}
-                onPointerDown={smoothingGesture.start}
-                onPointerUp={smoothingGesture.end}
-                onPointerCancel={smoothingGesture.end}
-                onBlur={smoothingGesture.end}
-                onChange={(e) => smoothingGesture.change((tx) => radiusNodes.forEach((n) => setCornerSmoothing(tx, n, Number(e.target.value))))}
+                decimals={0}
+                value={val(shared(stars, (n) => (n.type === 'STAR' ? Math.round(n.innerRadius * 100) : 0)))}
+                onGestureStart={ratio.start}
+                onGestureEnd={ratio.end}
+                onChange={(v) => ratio.change((tx) => stars.forEach((n) => setInnerRadius(tx, n, v)))}
               />
-              <output data-testid="corner-smoothing-value">{smoothing === undefined ? '–' : `${smoothing}%`}</output>
-            </div>
-            <button
-              type="button"
-              className={gradientStyles.textButton}
-              aria-pressed={smoothing === IOS_CORNER_SMOOTHING * 100}
-              title="Corner smoothing 60%, as on iOS"
-              onClick={() => editor.history.run('iOS corner smoothing', (tx) => radiusNodes.forEach((n) => setCornerSmoothing(tx, n, IOS_CORNER_SMOOTHING * 100)))}
-            >
-              iOS
-            </button>
+            )}
           </div>
-        )}
-      </Section>
+          {draw && (
+            <SliderRow
+              label="Opacity"
+              min={0}
+              max={100}
+              value={val(shared(nodes, (n) => Math.round(n.opacity * 100)))}
+              gesture={appearance}
+              onChange={(v) => appearance.change((tx) => nodes.forEach((n) => setOpacity(tx, n, v)))}
+            />
+          )}
+          {independentCorners && (
+            <div className={styles.grid2}>
+              {CORNERS.map(([corner, label]) => (
+                <NumberField
+                  key={corner}
+                  label={label}
+                  ariaLabel={`${CORNER_NAMES[corner]} radius`}
+                  testId={`field-radius-${corner}`}
+                  min={0}
+                  value={val(shared(boxNodes, (n) => n.cornerRadii?.[corner] ?? n.cornerRadius))}
+                  onGestureStart={radius.start}
+                  onGestureEnd={radius.end}
+                  onChange={(v) =>
+                    radius.change((tx) =>
+                      boxNodes.forEach((n) => {
+                        const current = (tx.store.getOrThrow(n.id) as typeof n).cornerRadii;
+                        if (current) setCornerRadii(tx, n, { ...current, [corner]: v });
+                      }),
+                    )
+                  }
+                />
+              ))}
+            </div>
+          )}
+          {radiusNodes.length === nodes.length && (
+            <div className={styles.smoothingRow}>
+              <div className={gradientStyles.adjustRow}>
+                <span aria-hidden="true">Smoothing</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  aria-label="Corner smoothing"
+                  value={smoothing ?? 0}
+                  onPointerDown={smoothingGesture.start}
+                  onPointerUp={smoothingGesture.end}
+                  onPointerCancel={smoothingGesture.end}
+                  onBlur={smoothingGesture.end}
+                  onChange={(e) => smoothingGesture.change((tx) => radiusNodes.forEach((n) => setCornerSmoothing(tx, n, Number(e.target.value))))}
+                />
+                <output data-testid="corner-smoothing-value">{smoothing === undefined ? '–' : `${smoothing}%`}</output>
+              </div>
+              <button
+                type="button"
+                className={gradientStyles.textButton}
+                aria-pressed={smoothing === IOS_CORNER_SMOOTHING * 100}
+                title="Corner smoothing 60%, as on iOS"
+                onClick={() => editor.history.run('iOS corner smoothing', (tx) => radiusNodes.forEach((n) => setCornerSmoothing(tx, n, IOS_CORNER_SMOOTHING * 100)))}
+              >
+                iOS
+              </button>
+            </div>
+          )}
+        </Section>
       )}
       {texts.length === nodes.length && <TextContentSection texts={texts} />}
       {texts.length === nodes.length && (
-        <Section title="Typography" styleAction={<StyleButton slot="text" ids={texts.map((n) => n.id)} />} applied={<AppliedStyle slot="text" nodes={texts} />} actions={bindable && single?.type === 'TEXT' ? <PropertyBinding layerId={single.id} type="TEXT" /> : undefined}>
+        <Section
+          title="Typography"
+          styleAction={<StyleButton slot="text" ids={texts.map((n) => n.id)} />}
+          applied={<AppliedStyle slot="text" nodes={texts} />}
+          actions={bindable && single?.type === 'TEXT' ? <PropertyBinding layerId={single.id} type="TEXT" /> : undefined}
+        >
           <TypographyFields nodes={texts} />
         </Section>
       )}
@@ -1496,6 +1656,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
           {nodes.every((n) => n.type !== 'TEXT') && <PaintSection title="Stroke" field="strokes" nodes={geometryNodes} defaultPaint={() => solid(BLACK)} />}
         </>
       )}
+      <MirroringSection />
       <WidthPointSection />
       <VectorEraserSection />
       <VectorPaintSection />
@@ -1520,13 +1681,7 @@ function CreateComponentOptions() {
   const entries = ['object.createComponent', 'object.createMultipleComponents'].map((id) => commandItem(editor, id)).filter((e): e is MenuEntry => e !== null);
   return (
     <>
-      <IconButton
-        icon="chevronDown"
-        label="Create component options"
-        aria-haspopup="menu"
-        aria-expanded={anchor !== null}
-        onClick={(e) => setAnchor(e.currentTarget.getBoundingClientRect())}
-      />
+      <IconButton icon="chevronDown" label="Create component options" aria-haspopup="menu" aria-expanded={anchor !== null} onClick={(e) => setAnchor(e.currentTarget.getBoundingClientRect())} />
       {anchor && <Menu label="Create component options" entries={entries} anchor={anchor} placement="bottom-start" onClose={() => setAnchor(null)} />}
     </>
   );
@@ -1540,7 +1695,9 @@ function InstanceActions() {
   const commands = ['object.goToMainComponent', 'object.pushChangesToMain', 'object.restoreMainComponent', 'object.deleteSlotContents', 'object.detachInstance']
     .map((id) => commandItem(editor, id))
     // Restore main component only shows while the main component is missing, and Delete contents for a slot with content.
-    .filter((entry): entry is MenuEntry => entry !== null && !(entry.kind === 'item' && (entry.id === 'object.restoreMainComponent' || entry.id === 'object.deleteSlotContents') && entry.disabled === true));
+    .filter(
+      (entry): entry is MenuEntry => entry !== null && !(entry.kind === 'item' && (entry.id === 'object.restoreMainComponent' || entry.id === 'object.deleteSlotContents') && entry.disabled === true),
+    );
   const entries: MenuEntry[] = [
     {
       kind: 'submenu',
@@ -1660,7 +1817,12 @@ function CreatePropertyButton({ onChoose, onExpose }: { onChoose: (type: Compone
             { kind: 'item', id: 'instance-swap', label: 'Instance swap', onSelect: () => onChoose('INSTANCE_SWAP') },
             { kind: 'item', id: 'slot', label: 'Slot', onSelect: () => onChoose('SLOT') },
             // Expose properties from nested instances, when the component has some to expose.
-            ...(onExpose ? ([{ kind: 'separator', id: 'expose-separator' }, { kind: 'item', id: 'nested-instances', label: 'Nested instances', onSelect: onExpose }] satisfies MenuEntry[]) : []),
+            ...(onExpose
+              ? ([
+                  { kind: 'separator', id: 'expose-separator' },
+                  { kind: 'item', id: 'nested-instances', label: 'Nested instances', onSelect: onExpose },
+                ] satisfies MenuEntry[])
+              : []),
           ]}
           anchor={anchor}
           placement="bottom-start"
@@ -1736,7 +1898,17 @@ function CreatePropertyForm({ ownerId, type, onDone }: { ownerId: string; type: 
 }
 
 /** Checkboxes choosing the preferred components of an instance swap property. */
-function PreferredComponents({ label, components, preferred, onChange }: { label: string; components: readonly LocalComponent[]; preferred: readonly string[]; onChange: (preferred: string[]) => void }) {
+function PreferredComponents({
+  label,
+  components,
+  preferred,
+  onChange,
+}: {
+  label: string;
+  components: readonly LocalComponent[];
+  preferred: readonly string[];
+  onChange: (preferred: string[]) => void;
+}) {
   return (
     <div role="group" aria-label={label}>
       {components.map((component) => (
@@ -1916,7 +2088,12 @@ function SwapPropertyDefault({ ownerId, name, definition }: { ownerId: string; n
   const preferred = definition.preferredValues ?? [];
   return (
     <>
-      <select className={primitives.select} aria-label={`Default value of ${name}`} value={definition.defaultValue} onChange={(e) => setComponentPropertyDefault(editor, ownerId, name, e.target.value)}>
+      <select
+        className={primitives.select}
+        aria-label={`Default value of ${name}`}
+        value={definition.defaultValue}
+        onChange={(e) => setComponentPropertyDefault(editor, ownerId, name, e.target.value)}
+      >
         {!components.some((component) => component.id === definition.defaultValue) && (
           <option value={definition.defaultValue}>{(editor.doc.get(definition.defaultValue) as SceneNode | undefined)?.name ?? 'Missing component'}</option>
         )}
@@ -2007,8 +2184,7 @@ function ComponentPropertyRows({ ownerId, creating, onCreated }: { ownerId: stri
             />
           ) : (
             <span className={styles.hint} onDoubleClick={() => setRenaming(name)}>
-              {name}{' '}
-              {(definition.type === 'BOOLEAN' || definition.type === 'TEXT') && <PropertyDefaultVariableButton ownerId={ownerId} name={name} />}
+              {name} {(definition.type === 'BOOLEAN' || definition.type === 'TEXT') && <PropertyDefaultVariableButton ownerId={ownerId} name={name} />}
             </span>
           )}
           {definition.type === 'SLOT' ? (
@@ -2098,7 +2274,9 @@ function InstanceProperties({ instanceId, nested = false }: { instanceId: string
         const value = instancePropertyValue(editor, instanceId, name);
         if (definition.type === 'SLOT') return <InstanceSlotRow key={name} instanceId={instanceId} name={name} />;
         if (definition.type === 'INSTANCE_SWAP') {
-          return <InstanceSwapControl key={name} instanceId={instanceId} name={name} preferred={definition.preferredValues ?? []} value={typeof value === 'string' ? value : definition.defaultValue} />;
+          return (
+            <InstanceSwapControl key={name} instanceId={instanceId} name={name} preferred={definition.preferredValues ?? []} value={typeof value === 'string' ? value : definition.defaultValue} />
+          );
         }
         return definition.type === 'BOOLEAN' ? (
           <label key={name} className={styles.checkbox}>
@@ -2238,7 +2416,7 @@ function VariantPropertiesSection({ setId }: { setId: string }) {
       )}
       {errors.corrupted.length > 0 && (
         <p className={styles.hint} role="alert">
-          {errors.corrupted.length === 1 ? '1 variant name doesn\'t' : `${errors.corrupted.length} variant names don't`} follow the syntax Property=value, Property=value.
+          {errors.corrupted.length === 1 ? "1 variant name doesn't" : `${errors.corrupted.length} variant names don't`} follow the syntax Property=value, Property=value.
         </p>
       )}
       {menu && (
@@ -2264,11 +2442,12 @@ function ComponentSection({ node }: { node: SceneNode }) {
   if (!main || main.type !== 'FRAME' || !config) return null;
   const description = config.description ?? '';
   const link = config.link ?? '';
-  const docs = link && isSafeLink(link) ? (
-    <a href={link} target="_blank" rel="noreferrer noopener">
-      Open documentation
-    </a>
-  ) : null;
+  const docs =
+    link && isSafeLink(link) ? (
+      <a href={link} target="_blank" rel="noreferrer noopener">
+        Open documentation
+      </a>
+    ) : null;
   if (main.id !== node.id) {
     const variantOf = instanceVariant(editor, node.id);
     // The instance menu: swap this instance for another component of the file.
@@ -2303,34 +2482,34 @@ function ComponentSection({ node }: { node: SceneNode }) {
   }
   return (
     <>
-    <Section title="Component">
-      <textarea
-        key={`description-${main.id}-${description}`}
-        className={primitives.textInput}
-        aria-label="Component description"
-        placeholder="Add a description"
-        rows={3}
-        defaultValue={description}
-        onKeyDown={(e) => e.stopPropagation()}
-        onBlur={(e) => setComponentConfiguration(editor, main.id, { description: e.currentTarget.value })}
-      />
-      <input
-        key={`link-${main.id}-${link}`}
-        className={primitives.textInput}
-        type="url"
-        aria-label="Documentation link"
-        placeholder="Add a link to documentation"
-        defaultValue={link}
-        onKeyDown={(e) => {
-          e.stopPropagation();
-          if (e.key === 'Enter') e.currentTarget.blur();
-        }}
-        onBlur={(e) => setComponentConfiguration(editor, main.id, { link: e.currentTarget.value })}
-      />
-      {docs}
-    </Section>
-    {node.componentSet && <VariantPropertiesSection setId={node.id} />}
-    {node.component && canHaveProperties(editor, node.id) && <ComponentPropertiesSection ownerId={node.id} />}
+      <Section title="Component">
+        <textarea
+          key={`description-${main.id}-${description}`}
+          className={primitives.textInput}
+          aria-label="Component description"
+          placeholder="Add a description"
+          rows={3}
+          defaultValue={description}
+          onKeyDown={(e) => e.stopPropagation()}
+          onBlur={(e) => setComponentConfiguration(editor, main.id, { description: e.currentTarget.value })}
+        />
+        <input
+          key={`link-${main.id}-${link}`}
+          className={primitives.textInput}
+          type="url"
+          aria-label="Documentation link"
+          placeholder="Add a link to documentation"
+          defaultValue={link}
+          onKeyDown={(e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter') e.currentTarget.blur();
+          }}
+          onBlur={(e) => setComponentConfiguration(editor, main.id, { link: e.currentTarget.value })}
+        />
+        {docs}
+      </Section>
+      {node.componentSet && <VariantPropertiesSection setId={node.id} />}
+      {node.component && canHaveProperties(editor, node.id) && <ComponentPropertiesSection ownerId={node.id} />}
     </>
   );
 }
@@ -2361,10 +2540,49 @@ function WidthPointSection() {
         onChange={(v) =>
           gesture.change((tx) => {
             const current = (tx.store.getOrThrow(node.id) as Extract<SceneNode, { type: 'VECTOR' }>).strokeWidths ?? [];
-            tx.set(node.id, 'strokeWidths', current.map((w, i) => (selected.has(i) ? { ...w, width: v } : w)));
+            tx.set(
+              node.id,
+              'strokeWidths',
+              current.map((w, i) => (selected.has(i) ? { ...w, width: v } : w)),
+            );
           })
         }
       />
+    </Section>
+  );
+}
+
+/** How the handles of the points selected in vector edit mode follow each other. */
+function MirroringSection() {
+  const editor = useEditor();
+  const state = useEditorState((s) => s.vectorEdit);
+  const node = state ? editor.doc.get(state.nodeId) : undefined;
+  if (!state || state.vertices.length === 0 || node?.type !== 'VECTOR') return null;
+  const network = node.vectorNetwork;
+  const modes = new Set(state.vertices.filter((i) => network.vertices[i] !== undefined).map((i) => mirroringOf(network, i)));
+  if (modes.size === 0) return null;
+  const [only] = modes;
+  return (
+    <Section title="Mirroring">
+      <select
+        className={primitives.select}
+        aria-label="Handle mirroring"
+        data-testid="field-mirroring"
+        value={modes.size === 1 ? only : ''}
+        onKeyDown={(e) => e.stopPropagation()}
+        onChange={(e) => {
+          const mode = e.target.value as HandleMirroring;
+          editor.history.run('Change mirroring', (tx) => {
+            const current = (tx.store.getOrThrow(node.id) as Extract<SceneNode, { type: 'VECTOR' }>).vectorNetwork;
+            tx.set(node.id, 'vectorNetwork', setMirroring(current, state.vertices, mode));
+          });
+        }}
+      >
+        {modes.size > 1 && <option value="">Mixed</option>}
+        <option value="NONE">No mirroring</option>
+        <option value="ANGLE">Mirror angle</option>
+        <option value="ANGLE_AND_LENGTH">Mirror angle and length</option>
+      </select>
     </Section>
   );
 }
@@ -2413,17 +2631,7 @@ function VectorPaintSection() {
   );
 }
 
-function PaintSection({
-  title,
-  field,
-  nodes,
-  defaultPaint,
-}: {
-  title: string;
-  field: PaintField;
-  nodes: GeometryNode[];
-  defaultPaint: () => Paint;
-}) {
+function PaintSection({ title, field, nodes, defaultPaint }: { title: string; field: PaintField; nodes: GeometryNode[]; defaultPaint: () => Paint }) {
   const editor = useEditor();
   const gesture = useGesture(`Change ${title.toLowerCase()}`);
   const profile = useColorProfile();
@@ -2444,7 +2652,13 @@ function PaintSection({
   /** Sets one paint's blend mode on every selected layer, as its own undo step. */
   const setPaintBlend = (index: number, mode: BlendMode) =>
     editor.history.run(`Change ${title.toLowerCase()} blend mode`, (tx) =>
-      nodes.forEach((n) => write(tx, n, read(tx, n).map((p, i) => (i === index ? { ...p, blendMode: mode } : p)))),
+      nodes.forEach((n) =>
+        write(
+          tx,
+          n,
+          read(tx, n).map((p, i) => (i === index ? { ...p, blendMode: mode } : p)),
+        ),
+      ),
     );
   // Index of this list's gradient being edited on the canvas, if any.
   const gradientEdit = useEditorState((s) => s.gradientEdit);
@@ -2456,13 +2670,18 @@ function PaintSection({
     });
 
   /** Continuous gradient edits (scrubs, color picker) within the current gesture. */
-  const writeGradient = (index: number, edit: (g: GradientPaint) => GradientPaint) =>
-    writeAll((cur) => cur.map((p, i) => (i === index && isGradientPaint(p) ? edit(p) : p)));
+  const writeGradient = (index: number, edit: (g: GradientPaint) => GradientPaint) => writeAll((cur) => cur.map((p, i) => (i === index && isGradientPaint(p) ? edit(p) : p)));
 
   /** One-shot gradient edits (add, remove, flip) as their own undo step. */
   const editGradient = (index: number, label: string, edit: (g: GradientPaint) => GradientPaint) =>
     editor.history.run(label, (tx) =>
-      nodes.forEach((n) => write(tx, n, read(tx, n).map((p, i) => (i === index && isGradientPaint(p) ? edit(p) : p)))),
+      nodes.forEach((n) =>
+        write(
+          tx,
+          n,
+          read(tx, n).map((p, i) => (i === index && isGradientPaint(p) ? edit(p) : p)),
+        ),
+      ),
     );
 
   // Choosing Video in a paint's type menu asks for a file, then turns that paint into a video fill.
@@ -2480,7 +2699,11 @@ function PaintSection({
       await editor.images.add(video);
       editor.history.run(`Change ${title.toLowerCase()} type`, (tx) =>
         nodes.forEach((n) =>
-          write(tx, n, read(tx, n).map((p, i) => (i === index ? { ...videoPaintFor(poster, video.hash), opacity: p.opacity, visible: p.visible, blendMode: p.blendMode } : p))),
+          write(
+            tx,
+            n,
+            read(tx, n).map((p, i) => (i === index ? { ...videoPaintFor(poster, video.hash), opacity: p.opacity, visible: p.visible, blendMode: p.blendMode } : p)),
+          ),
         ),
       );
     } catch (e) {
@@ -2511,77 +2734,80 @@ function PaintSection({
             .reverse()
             .map(({ paint, index }) => (
               <Fragment key={index}>
-              <li className={styles.paintRow} data-hidden={!paint.visible || undefined} data-reorder-row="" tabIndex={-1} data-copy-property={`${field}:${index}`} onClick={focusPropertyRow}>
-                {/* The list shows the top paint first, so display positions run opposite to indices. */}
-                <ReorderHandle
-                  label={`Reorder ${title.toLowerCase()} ${list.length - index}`}
-                  position={list.length - 1 - index}
-                  count={list.length}
-                  onMove={(from, to) =>
-                    editor.history.run(`Reorder ${title.toLowerCase()}s`, (tx) =>
-                      nodes.forEach((n) => {
-                        const current = read(tx, n);
-                        write(tx, n, moveItem(current, current.length - 1 - from, current.length - 1 - to));
-                      }),
-                    )
-                  }
-                />
-                {/* The paint type is a chevron whose select opens on click, so the color control keeps the row's width. */}
-                <IconSelect label={PAINT_TYPE_LABELS[paint.type]} icon="caretDown" narrow>
-                  <select
-                    aria-label={`${title} ${list.length - index} type`}
-                    value={paint.type}
-                    onChange={(e) => {
-                      const type = e.target.value as PaintType;
-                      if (type === 'VIDEO' && paint.type !== 'VIDEO') {
-                        pickVideoFor.current = index;
-                        videoInput.current?.click();
-                        return;
-                      }
-                      editor.history.run(`Change ${title.toLowerCase()} type`, (tx) =>
-                        nodes.forEach((n) =>
-                          write(tx, n, read(tx, n).map((p, i) => (i === index ? convertPaint(p, type) : p))),
-                        ),
-                      );
-                    }}
-                  >
-                    {/* Choosing Video asks for a video file; the others convert the paint in place. */}
-                    {PAINT_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {PAINT_TYPE_LABELS[type]}
-                      </option>
-                    ))}
-                  </select>
-                </IconSelect>
-                {paint.type === 'SOLID' && paint.boundVariables ? (
-                  <BoundPaint ids={nodes.map((n) => n.id)} field={field} index={index} paint={paint} label={`${title} ${list.length - index}`} />
-                ) : paint.type === 'SOLID' ? (
-                  <ColorControl
-                    label={`${title} ${list.length - index}`}
-                    color={paint.color}
-                    opacity={paint.opacity}
-                    onGestureStart={gesture.start}
-                    onGestureEnd={gesture.end}
-                    onColor={(c) => writeAll((cur) => cur.map((p, i) => (i === index && p.type === 'SOLID' ? { ...p, color: { ...c, a: 1 } } : p)))}
-                    onOpacity={(o) => writeAll((cur) => cur.map((p, i) => (i === index ? { ...p, opacity: o } : p)))}
-                    getContrastBackground={nodes.length === 1 ? () => backgroundColorBehind(editor.doc, editor.scene, editor.pageId, nodes[0]!.id) : undefined}
-                    blendMode={paint.blendMode}
-                    // The picker session is one gesture, so its blend change joins that undo step.
-                    onBlendMode={(mode) => writeAll((cur) => cur.map((p, i) => (i === index ? { ...p, blendMode: mode } : p)))}
+                <li className={styles.paintRow} data-hidden={!paint.visible || undefined} data-reorder-row="" tabIndex={-1} data-copy-property={`${field}:${index}`} onClick={focusPropertyRow}>
+                  {/* The list shows the top paint first, so display positions run opposite to indices. */}
+                  <ReorderHandle
+                    label={`Reorder ${title.toLowerCase()} ${list.length - index}`}
+                    position={list.length - 1 - index}
+                    count={list.length}
+                    onMove={(from, to) =>
+                      editor.history.run(`Reorder ${title.toLowerCase()}s`, (tx) =>
+                        nodes.forEach((n) => {
+                          const current = read(tx, n);
+                          write(tx, n, moveItem(current, current.length - 1 - from, current.length - 1 - to));
+                        }),
+                      )
+                    }
                   />
-                ) : (
-                  <span className={gradientStyles.summary}>
-                    {paint.type === 'PATTERN' ? (
-                      <span
-                        className={gradientStyles.swatch}
-                        role="img"
-                        aria-label={`${title} ${list.length - index} pattern`}
-                        style={{ background: 'repeating-linear-gradient(45deg, #b3b3b3 0 3px, #eeeeee 3px 6px)' }}
-                      />
-                    ) : paint.type === 'IMAGE' || paint.type === 'VIDEO' ? (
-                      <ImageSwatch hash={paint.imageHash} label={`${title} ${list.length - index} ${paint.type === 'VIDEO' ? 'video' : 'image'}`} />
-                    ) : (
-                      nodes.length === 1 ? (
+                  {/* The paint type is a chevron whose select opens on click, so the color control keeps the row's width. */}
+                  <IconSelect label={PAINT_TYPE_LABELS[paint.type]} icon="caretDown" narrow>
+                    <select
+                      aria-label={`${title} ${list.length - index} type`}
+                      value={paint.type}
+                      onChange={(e) => {
+                        const type = e.target.value as PaintType;
+                        if (type === 'VIDEO' && paint.type !== 'VIDEO') {
+                          pickVideoFor.current = index;
+                          videoInput.current?.click();
+                          return;
+                        }
+                        editor.history.run(`Change ${title.toLowerCase()} type`, (tx) =>
+                          nodes.forEach((n) =>
+                            write(
+                              tx,
+                              n,
+                              read(tx, n).map((p, i) => (i === index ? convertPaint(p, type) : p)),
+                            ),
+                          ),
+                        );
+                      }}
+                    >
+                      {/* Choosing Video asks for a video file; the others convert the paint in place. */}
+                      {PAINT_TYPES.map((type) => (
+                        <option key={type} value={type}>
+                          {PAINT_TYPE_LABELS[type]}
+                        </option>
+                      ))}
+                    </select>
+                  </IconSelect>
+                  {paint.type === 'SOLID' && paint.boundVariables ? (
+                    <BoundPaint ids={nodes.map((n) => n.id)} field={field} index={index} paint={paint} label={`${title} ${list.length - index}`} />
+                  ) : paint.type === 'SOLID' ? (
+                    <ColorControl
+                      label={`${title} ${list.length - index}`}
+                      color={paint.color}
+                      opacity={paint.opacity}
+                      onGestureStart={gesture.start}
+                      onGestureEnd={gesture.end}
+                      onColor={(c) => writeAll((cur) => cur.map((p, i) => (i === index && p.type === 'SOLID' ? { ...p, color: { ...c, a: 1 } } : p)))}
+                      onOpacity={(o) => writeAll((cur) => cur.map((p, i) => (i === index ? { ...p, opacity: o } : p)))}
+                      getContrastBackground={nodes.length === 1 ? () => backgroundColorBehind(editor.doc, editor.scene, editor.pageId, nodes[0]!.id) : undefined}
+                      blendMode={paint.blendMode}
+                      // The picker session is one gesture, so its blend change joins that undo step.
+                      onBlendMode={(mode) => writeAll((cur) => cur.map((p, i) => (i === index ? { ...p, blendMode: mode } : p)))}
+                    />
+                  ) : (
+                    <span className={gradientStyles.summary}>
+                      {paint.type === 'PATTERN' ? (
+                        <span
+                          className={gradientStyles.swatch}
+                          role="img"
+                          aria-label={`${title} ${list.length - index} pattern`}
+                          style={{ background: 'repeating-linear-gradient(45deg, #b3b3b3 0 3px, #eeeeee 3px 6px)' }}
+                        />
+                      ) : paint.type === 'IMAGE' || paint.type === 'VIDEO' ? (
+                        <ImageSwatch hash={paint.imageHash} label={`${title} ${list.length - index} ${paint.type === 'VIDEO' ? 'video' : 'image'}`} />
+                      ) : nodes.length === 1 ? (
                         <button
                           type="button"
                           className={gradientStyles.swatch}
@@ -2592,165 +2818,190 @@ function PaintSection({
                         />
                       ) : (
                         <span className={gradientStyles.swatch} role="img" aria-label={`${title} ${list.length - index} gradient`} style={{ background: gradientCss(paint, profile) }} />
-                      )
-                    )}
-                    <NumberField
-                      label=""
-                      ariaLabel={`${title} ${list.length - index} opacity`}
-                      suffix="%"
-                      min={0}
-                      max={100}
-                      decimals={0}
-                      value={Math.round(paint.opacity * 100)}
-                      onGestureStart={gesture.start}
-                      onGestureEnd={gesture.end}
-                      onChange={(v) => writeAll((cur) => cur.map((p, i) => (i === index ? { ...p, opacity: v / 100 } : p)))}
-                    />
-                  </span>
-                )}
-                <IconButton
-                  icon={paint.visible ? 'visibility' : 'eyeOff'}
-                  label={paint.visible ? `Hide ${title.toLowerCase()}` : `Show ${title.toLowerCase()}`}
-                  tooltip="Toggle visibility"
-                  onClick={() =>
-                    editor.history.run(`Toggle ${title.toLowerCase()}`, (tx) =>
-                      nodes.forEach((n) =>
-                        write(tx, n, read(tx, n).map((p, i) => (i === index ? { ...p, visible: !p.visible } : p))),
-                      ),
-                    )
-                  }
-                />
-                <IconButton
-                  icon="minus"
-                  label={`Remove ${title.toLowerCase()}`}
-                  tooltip="Remove"
-                  onClick={() =>
-                    editor.history.run(`Remove ${title.toLowerCase()}`, (tx) =>
-                      nodes.forEach((n) => write(tx, n, read(tx, n).filter((_, i) => i !== index))),
-                    )
-                  }
-                />
-              </li>
-              {paint.type === 'IMAGE' && (
-                <ImageSettings
-                  label={`${title} ${list.length - index}`}
-                  paint={paint}
-                  onEdit={(label, edit) =>
-                    editor.history.run(label, (tx) =>
-                      nodes.forEach((n) =>
-                        write(tx, n, read(tx, n).map((p, i) => (i === index && p.type === 'IMAGE' ? edit(p) : p))),
-                      ),
-                    )
-                  }
-                  onScrub={(edit) => writeAll((cur) => cur.map((p, i) => (i === index && p.type === 'IMAGE' ? edit(p) : p)))}
-                  onCrop={field === 'fills' && nodes.length === 1 ? () => beginCrop(editor, nodes[0]!.id, index) : undefined}
-                  cropLayer={field === 'fills' && nodes.length === 1 ? { id: nodes[0]!.id, size: nodes[0]!.size } : undefined}
-                  onGestureStart={gesture.start}
-                  onGestureEnd={gesture.end}
-                />
-              )}
-              {paint.type === 'VIDEO' && (
-                <VideoSettings
-                  label={`${title} ${list.length - index}`}
-                  paint={paint}
-                  onEdit={(label, edit) =>
-                    editor.history.run(label, (tx) =>
-                      nodes.forEach((n) =>
-                        write(tx, n, read(tx, n).map((p, i) => (i === index && p.type === 'VIDEO' ? edit(p) : p))),
-                      ),
-                    )
-                  }
-                  onScrub={(edit) => writeAll((cur) => cur.map((p, i) => (i === index && p.type === 'VIDEO' ? edit(p) : p)))}
-                  onCrop={nodes.length === 1 ? () => beginCrop(editor, nodes[0]!.id, index) : undefined}
-                  cropLayer={nodes.length === 1 ? { id: nodes[0]!.id, size: nodes[0]!.size } : undefined}
-                  onGestureStart={gesture.start}
-                  onGestureEnd={gesture.end}
-                />
-              )}
-              {paint.type === 'PATTERN' && (
-                <PatternSettings
-                  label={`${title} ${list.length - index}`}
-                  paint={paint}
-                  sourceName={(paint.sourceNodeId && editor.doc.get(paint.sourceNodeId)?.name) || null}
-                  onSelectSource={() => {
-                    void editor.pickLayerFromCanvas?.().then((sourceId) => {
-                      // A layer can't be its own pattern source.
-                      if (!sourceId || nodes.some((n) => n.id === sourceId)) return;
-                      editor.history.run('Select pattern source', (tx) =>
+                      )}
+                      <NumberField
+                        label=""
+                        ariaLabel={`${title} ${list.length - index} opacity`}
+                        suffix="%"
+                        min={0}
+                        max={100}
+                        decimals={0}
+                        value={Math.round(paint.opacity * 100)}
+                        onGestureStart={gesture.start}
+                        onGestureEnd={gesture.end}
+                        onChange={(v) => writeAll((cur) => cur.map((p, i) => (i === index ? { ...p, opacity: v / 100 } : p)))}
+                      />
+                    </span>
+                  )}
+                  <IconButton
+                    icon={paint.visible ? 'visibility' : 'eyeOff'}
+                    label={paint.visible ? `Hide ${title.toLowerCase()}` : `Show ${title.toLowerCase()}`}
+                    tooltip="Toggle visibility"
+                    onClick={() =>
+                      editor.history.run(`Toggle ${title.toLowerCase()}`, (tx) =>
                         nodes.forEach((n) =>
-                          write(tx, n, read(tx, n).map((p, i) => (i === index && p.type === 'PATTERN' ? { ...p, sourceNodeId: sourceId } : p))),
+                          write(
+                            tx,
+                            n,
+                            read(tx, n).map((p, i) => (i === index ? { ...p, visible: !p.visible } : p)),
+                          ),
                         ),
-                      );
-                    });
-                  }}
-                  onEdit={(label, edit) =>
-                    editor.history.run(label, (tx) =>
-                      nodes.forEach((n) =>
-                        write(tx, n, read(tx, n).map((p, i) => (i === index && p.type === 'PATTERN' ? edit(p) : p))),
-                      ),
-                    )
-                  }
-                  onScrub={(edit) => writeAll((cur) => cur.map((p, i) => (i === index && p.type === 'PATTERN' ? edit(p) : p)))}
-                  onGestureStart={gesture.start}
-                  onGestureEnd={gesture.end}
-                />
-              )}
-              {isGradientPaint(paint) && (
-                <li className={gradientStyles.stops} aria-label={`${title} ${list.length - index} gradient stops`}>
-                  <div className={gradientStyles.stopsHeader}>
-                    <span>Stops</span>
-                    <select
-                      className={primitives.select}
-                      aria-label={`${title} ${list.length - index} blend mode`}
-                      value={paint.blendMode}
-                      onChange={(e) => setPaintBlend(index, e.target.value as BlendMode)}
-                    >
-                      {PAINT_BLEND_OPTIONS.map(([mode, name]) => (
-                        <option key={mode} value={mode}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
-                    <button type="button" className={gradientStyles.textButton} onClick={() => editGradient(index, 'Flip gradient', reverseStops)}>
-                      Flip
-                    </button>
-                    <IconButton icon="plus" label={`Add ${title.toLowerCase()} stop`} onClick={() => editGradient(index, 'Add gradient stop', addStop)} />
-                  </div>
-                  {[...paint.gradientStops]
-                    .sort((a, b) => a.position - b.position)
-                    .map((stop, si, sorted) => (
-                      <div key={si} className={gradientStyles.stopRow}>
-                        <NumberField
-                          label=""
-                          ariaLabel={`Stop ${si + 1} position`}
-                          suffix="%"
-                          min={0}
-                          max={100}
-                          decimals={0}
-                          value={Math.round(stop.position * 100)}
-                          onGestureStart={gesture.start}
-                          onGestureEnd={gesture.end}
-                          onChange={(v) => writeGradient(index, (g) => updateStop(g, si, { position: v / 100 }))}
-                        />
-                        <ColorControl
-                          label={`Stop ${si + 1}`}
-                          color={stop.color}
-                          opacity={stop.color.a}
-                          onGestureStart={gesture.start}
-                          onGestureEnd={gesture.end}
-                          onColor={(c) => writeGradient(index, (g) => updateStop(g, si, { color: { ...c, a: stop.color.a } }))}
-                          onOpacity={(o) => writeGradient(index, (g) => updateStop(g, si, { color: { ...stop.color, a: o } }))}
-                        />
-                        <IconButton
-                          icon="minus"
-                          label={`Remove stop ${si + 1}`}
-                          disabled={sorted.length <= 2}
-                          onClick={() => editGradient(index, 'Remove gradient stop', (g) => removeStop(g, si))}
-                        />
-                      </div>
-                    ))}
+                      )
+                    }
+                  />
+                  <IconButton
+                    icon="minus"
+                    label={`Remove ${title.toLowerCase()}`}
+                    tooltip="Remove"
+                    onClick={() =>
+                      editor.history.run(`Remove ${title.toLowerCase()}`, (tx) =>
+                        nodes.forEach((n) =>
+                          write(
+                            tx,
+                            n,
+                            read(tx, n).filter((_, i) => i !== index),
+                          ),
+                        ),
+                      )
+                    }
+                  />
                 </li>
-              )}
+                {paint.type === 'IMAGE' && (
+                  <ImageSettings
+                    label={`${title} ${list.length - index}`}
+                    paint={paint}
+                    onEdit={(label, edit) =>
+                      editor.history.run(label, (tx) =>
+                        nodes.forEach((n) =>
+                          write(
+                            tx,
+                            n,
+                            read(tx, n).map((p, i) => (i === index && p.type === 'IMAGE' ? edit(p) : p)),
+                          ),
+                        ),
+                      )
+                    }
+                    onScrub={(edit) => writeAll((cur) => cur.map((p, i) => (i === index && p.type === 'IMAGE' ? edit(p) : p)))}
+                    onCrop={field === 'fills' && nodes.length === 1 ? () => beginCrop(editor, nodes[0]!.id, index) : undefined}
+                    cropLayer={field === 'fills' && nodes.length === 1 ? { id: nodes[0]!.id, size: nodes[0]!.size } : undefined}
+                    onGestureStart={gesture.start}
+                    onGestureEnd={gesture.end}
+                  />
+                )}
+                {paint.type === 'VIDEO' && (
+                  <VideoSettings
+                    label={`${title} ${list.length - index}`}
+                    paint={paint}
+                    onEdit={(label, edit) =>
+                      editor.history.run(label, (tx) =>
+                        nodes.forEach((n) =>
+                          write(
+                            tx,
+                            n,
+                            read(tx, n).map((p, i) => (i === index && p.type === 'VIDEO' ? edit(p) : p)),
+                          ),
+                        ),
+                      )
+                    }
+                    onScrub={(edit) => writeAll((cur) => cur.map((p, i) => (i === index && p.type === 'VIDEO' ? edit(p) : p)))}
+                    onCrop={nodes.length === 1 ? () => beginCrop(editor, nodes[0]!.id, index) : undefined}
+                    cropLayer={nodes.length === 1 ? { id: nodes[0]!.id, size: nodes[0]!.size } : undefined}
+                    onGestureStart={gesture.start}
+                    onGestureEnd={gesture.end}
+                  />
+                )}
+                {paint.type === 'PATTERN' && (
+                  <PatternSettings
+                    label={`${title} ${list.length - index}`}
+                    paint={paint}
+                    sourceName={(paint.sourceNodeId && editor.doc.get(paint.sourceNodeId)?.name) || null}
+                    onSelectSource={() => {
+                      void editor.pickLayerFromCanvas?.().then((sourceId) => {
+                        // A layer can't be its own pattern source.
+                        if (!sourceId || nodes.some((n) => n.id === sourceId)) return;
+                        editor.history.run('Select pattern source', (tx) =>
+                          nodes.forEach((n) =>
+                            write(
+                              tx,
+                              n,
+                              read(tx, n).map((p, i) => (i === index && p.type === 'PATTERN' ? { ...p, sourceNodeId: sourceId } : p)),
+                            ),
+                          ),
+                        );
+                      });
+                    }}
+                    onEdit={(label, edit) =>
+                      editor.history.run(label, (tx) =>
+                        nodes.forEach((n) =>
+                          write(
+                            tx,
+                            n,
+                            read(tx, n).map((p, i) => (i === index && p.type === 'PATTERN' ? edit(p) : p)),
+                          ),
+                        ),
+                      )
+                    }
+                    onScrub={(edit) => writeAll((cur) => cur.map((p, i) => (i === index && p.type === 'PATTERN' ? edit(p) : p)))}
+                    onGestureStart={gesture.start}
+                    onGestureEnd={gesture.end}
+                  />
+                )}
+                {isGradientPaint(paint) && (
+                  <li className={gradientStyles.stops} aria-label={`${title} ${list.length - index} gradient stops`}>
+                    <div className={gradientStyles.stopsHeader}>
+                      <span>Stops</span>
+                      <select
+                        className={primitives.select}
+                        aria-label={`${title} ${list.length - index} blend mode`}
+                        value={paint.blendMode}
+                        onChange={(e) => setPaintBlend(index, e.target.value as BlendMode)}
+                      >
+                        {PAINT_BLEND_OPTIONS.map(([mode, name]) => (
+                          <option key={mode} value={mode}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                      <button type="button" className={gradientStyles.textButton} onClick={() => editGradient(index, 'Flip gradient', reverseStops)}>
+                        Flip
+                      </button>
+                      <IconButton icon="plus" label={`Add ${title.toLowerCase()} stop`} onClick={() => editGradient(index, 'Add gradient stop', addStop)} />
+                    </div>
+                    {[...paint.gradientStops]
+                      .sort((a, b) => a.position - b.position)
+                      .map((stop, si, sorted) => (
+                        <div key={si} className={gradientStyles.stopRow}>
+                          <NumberField
+                            label=""
+                            ariaLabel={`Stop ${si + 1} position`}
+                            suffix="%"
+                            min={0}
+                            max={100}
+                            decimals={0}
+                            value={Math.round(stop.position * 100)}
+                            onGestureStart={gesture.start}
+                            onGestureEnd={gesture.end}
+                            onChange={(v) => writeGradient(index, (g) => updateStop(g, si, { position: v / 100 }))}
+                          />
+                          <ColorControl
+                            label={`Stop ${si + 1}`}
+                            color={stop.color}
+                            opacity={stop.color.a}
+                            onGestureStart={gesture.start}
+                            onGestureEnd={gesture.end}
+                            onColor={(c) => writeGradient(index, (g) => updateStop(g, si, { color: { ...c, a: stop.color.a } }))}
+                            onOpacity={(o) => writeGradient(index, (g) => updateStop(g, si, { color: { ...stop.color, a: o } }))}
+                          />
+                          <IconButton
+                            icon="minus"
+                            label={`Remove stop ${si + 1}`}
+                            disabled={sorted.length <= 2}
+                            onClick={() => editGradient(index, 'Remove gradient stop', (g) => removeStop(g, si))}
+                          />
+                        </div>
+                      ))}
+                  </li>
+                )}
               </Fragment>
             ))}
         </ul>
@@ -2822,9 +3073,7 @@ function PaintSection({
                 className={primitives.select}
                 aria-label={end === 'startCap' ? 'Start point' : 'End point'}
                 value={val(value) ?? ''}
-                onChange={(e) =>
-                  editor.history.run('Change end point', (tx) => nodes.forEach((n) => setLineCap(tx, n, end, e.target.value as StrokeCap)))
-                }
+                onChange={(e) => editor.history.run('Change end point', (tx) => nodes.forEach((n) => setLineCap(tx, n, end, e.target.value as StrokeCap)))}
               >
                 {value === MIXED && <option value="">Mixed</option>}
                 {CAP_OPTIONS.map(([cap, label]) => (
@@ -2860,7 +3109,13 @@ function EffectsSection({ nodes }: { nodes: SceneNode[] }) {
     editor.history.run(label, (tx) => nodes.forEach((n) => setEffects(tx, n, next((tx.store.getOrThrow(n.id) as SceneNode).effects ?? []))));
   const change = (index: number, patch: (effect: Effect) => Effect) =>
     gesture.change((tx) =>
-      nodes.forEach((n) => setEffects(tx, n, ((tx.store.getOrThrow(n.id) as SceneNode).effects ?? []).map((e, i) => (i === index ? patch(e) : e)))),
+      nodes.forEach((n) =>
+        setEffects(
+          tx,
+          n,
+          ((tx.store.getOrThrow(n.id) as SceneNode).effects ?? []).map((e, i) => (i === index ? patch(e) : e)),
+        ),
+      ),
     );
   const changeShadow = (index: number, patch: (shadow: ShadowEffect) => ShadowEffect) => change(index, (e) => (isShadow(e) ? patch(e) : e));
 
@@ -2917,10 +3172,43 @@ function EffectsSection({ nodes }: { nodes: SceneNode[] }) {
                   {isShadow(effect) ? (
                     <>
                       <div className={styles.grid2}>
-                        <NumberField label="X" ariaLabel={`${name} X`} testId={`field-effect-${index}-x`} value={effect.offset.x} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => changeShadow(index, (s) => ({ ...s, offset: { ...s.offset, x: v } }))} />
-                        <NumberField label="Y" ariaLabel={`${name} Y`} testId={`field-effect-${index}-y`} value={effect.offset.y} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => changeShadow(index, (s) => ({ ...s, offset: { ...s.offset, y: v } }))} />
-                        <NumberField label="Blur" ariaLabel={`${name} blur`} testId={`field-effect-${index}-blur`} min={0} value={effect.radius} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => changeShadow(index, (s) => ({ ...s, radius: v }))} />
-                        <NumberField label="Spread" ariaLabel={`${name} spread`} testId={`field-effect-${index}-spread`} value={effect.spread} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => changeShadow(index, (s) => ({ ...s, spread: v }))} />
+                        <NumberField
+                          label="X"
+                          ariaLabel={`${name} X`}
+                          testId={`field-effect-${index}-x`}
+                          value={effect.offset.x}
+                          onGestureStart={gesture.start}
+                          onGestureEnd={gesture.end}
+                          onChange={(v) => changeShadow(index, (s) => ({ ...s, offset: { ...s.offset, x: v } }))}
+                        />
+                        <NumberField
+                          label="Y"
+                          ariaLabel={`${name} Y`}
+                          testId={`field-effect-${index}-y`}
+                          value={effect.offset.y}
+                          onGestureStart={gesture.start}
+                          onGestureEnd={gesture.end}
+                          onChange={(v) => changeShadow(index, (s) => ({ ...s, offset: { ...s.offset, y: v } }))}
+                        />
+                        <NumberField
+                          label="Blur"
+                          ariaLabel={`${name} blur`}
+                          testId={`field-effect-${index}-blur`}
+                          min={0}
+                          value={effect.radius}
+                          onGestureStart={gesture.start}
+                          onGestureEnd={gesture.end}
+                          onChange={(v) => changeShadow(index, (s) => ({ ...s, radius: v }))}
+                        />
+                        <NumberField
+                          label="Spread"
+                          ariaLabel={`${name} spread`}
+                          testId={`field-effect-${index}-spread`}
+                          value={effect.spread}
+                          onGestureStart={gesture.start}
+                          onGestureEnd={gesture.end}
+                          onChange={(v) => changeShadow(index, (s) => ({ ...s, spread: v }))}
+                        />
                       </div>
                       <ColorControl
                         label={name}
@@ -3058,7 +3346,15 @@ function LayoutGuideSection({ nodes }: { nodes: SceneNode[] }) {
   const write = (label: string, next: (current: readonly LayoutGuide[]) => readonly LayoutGuide[]) =>
     editor.history.run(label, (tx) => nodes.forEach((n) => setLayoutGuides(tx, n, next(current(tx, n)))));
   const change = (index: number, patch: (guide: LayoutGuide) => LayoutGuide) =>
-    gesture.change((tx) => nodes.forEach((n) => setLayoutGuides(tx, n, current(tx, n).map((g, i) => (i === index ? patch(g) : g)))));
+    gesture.change((tx) =>
+      nodes.forEach((n) =>
+        setLayoutGuides(
+          tx,
+          n,
+          current(tx, n).map((g, i) => (i === index ? patch(g) : g)),
+        ),
+      ),
+    );
   const edit = (index: number, patch: Partial<LayoutGuide>) => write('Change layout guide', (cur) => cur.map((g, i) => (i === index ? { ...g, ...patch } : g)));
 
   return (
@@ -3098,7 +3394,15 @@ function LayoutGuideSection({ nodes }: { nodes: SceneNode[] }) {
                 <li className={gradientStyles.stops} aria-label={`${name} settings`}>
                   {guide.pattern === 'GRID' ? (
                     <div className={styles.grid2}>
-                      <NumberField label="Size" ariaLabel={`${name} size`} min={1} value={guide.sectionSize} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => change(index, (g) => ({ ...g, sectionSize: Math.max(1, v) }))} />
+                      <NumberField
+                        label="Size"
+                        ariaLabel={`${name} size`}
+                        min={1}
+                        value={guide.sectionSize}
+                        onGestureStart={gesture.start}
+                        onGestureEnd={gesture.end}
+                        onChange={(v) => change(index, (g) => ({ ...g, sectionSize: Math.max(1, v) }))}
+                      />
                     </div>
                   ) : (
                     <>
@@ -3152,7 +3456,15 @@ function LayoutGuideSection({ nodes }: { nodes: SceneNode[] }) {
                           onGestureEnd={gesture.end}
                           onChange={(v) => change(index, (g) => ({ ...g, offset: Math.max(0, v) }))}
                         />
-                        <NumberField label="Gutter" ariaLabel={`${name} gutter`} min={0} value={guide.gutterSize} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => change(index, (g) => ({ ...g, gutterSize: Math.max(0, v) }))} />
+                        <NumberField
+                          label="Gutter"
+                          ariaLabel={`${name} gutter`}
+                          min={0}
+                          value={guide.gutterSize}
+                          onGestureStart={gesture.start}
+                          onGestureEnd={gesture.end}
+                          onChange={(v) => change(index, (g) => ({ ...g, gutterSize: Math.max(0, v) }))}
+                        />
                       </div>
                     </>
                   )}
@@ -3188,8 +3500,7 @@ type StrokeSide = (typeof STROKE_SIDES)[number];
 type SideMode = 'all' | StrokeSide | 'custom';
 const SIDE_LABELS: Record<StrokeSide, string> = { top: 'Top', right: 'Right', bottom: 'Bottom', left: 'Left' };
 
-const sideWeights = (n: GeometryNode) =>
-  ('individualStrokeWeights' in n && n.individualStrokeWeights) || { top: n.strokeWeight, right: n.strokeWeight, bottom: n.strokeWeight, left: n.strokeWeight };
+const sideWeights = (n: GeometryNode) => ('individualStrokeWeights' in n && n.individualStrokeWeights) || { top: n.strokeWeight, right: n.strokeWeight, bottom: n.strokeWeight, left: n.strokeWeight };
 
 function sideMode(n: GeometryNode): SideMode {
   const individual = 'individualStrokeWeights' in n ? n.individualStrokeWeights : undefined;
@@ -3209,7 +3520,13 @@ function StrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
 
   const brushes = localBrushes(editor.doc);
   const dynamicGesture = useGesture('Change dynamic stroke');
-  const dynamic = val(shared(nodes, (n) => n.dynamicStroke, (a, b) => a?.frequency === b?.frequency && a?.wiggle === b?.wiggle && a?.smoothen === b?.smoothen));
+  const dynamic = val(
+    shared(
+      nodes,
+      (n) => n.dynamicStroke,
+      (a, b) => a?.frequency === b?.frequency && a?.wiggle === b?.wiggle && a?.smoothen === b?.smoothen,
+    ),
+  );
   const style = shared(nodes, (n) => (n.strokeDashes ? 'dashed' : 'solid'));
   const join = shared(nodes, (n) => n.strokeJoin ?? 'MITER');
   const dashes = style === 'dashed' ? nodes[0]!.strokeDashes : undefined;
@@ -3274,8 +3591,26 @@ function StrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
       </div>
       {dashes && (
         <div className={styles.grid2}>
-          <NumberField label="Dash" ariaLabel="Dash length" testId="field-dash" min={0} value={dashes[0]} onGestureStart={dashGesture.start} onGestureEnd={dashGesture.end} onChange={(v) => editDashes(0, v)} />
-          <NumberField label="Gap" ariaLabel="Gap length" testId="field-gap" min={0} value={dashes[1]} onGestureStart={dashGesture.start} onGestureEnd={dashGesture.end} onChange={(v) => editDashes(1, v)} />
+          <NumberField
+            label="Dash"
+            ariaLabel="Dash length"
+            testId="field-dash"
+            min={0}
+            value={dashes[0]}
+            onGestureStart={dashGesture.start}
+            onGestureEnd={dashGesture.end}
+            onChange={(v) => editDashes(0, v)}
+          />
+          <NumberField
+            label="Gap"
+            ariaLabel="Gap length"
+            testId="field-gap"
+            min={0}
+            value={dashes[1]}
+            onGestureStart={dashGesture.start}
+            onGestureEnd={dashGesture.end}
+            onChange={(v) => editDashes(1, v)}
+          />
           <select
             className={primitives.select}
             aria-label="Dash cap"
@@ -3327,7 +3662,13 @@ function StrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
           className={primitives.select}
           aria-label="Brush"
           value={val(shared(nodes, (n) => n.brushId ?? '')) ?? ''}
-          onChange={(e) => applyBrush(editor, nodes.map((n) => n.id), e.target.value || undefined)}
+          onChange={(e) =>
+            applyBrush(
+              editor,
+              nodes.map((n) => n.id),
+              e.target.value || undefined,
+            )
+          }
         >
           <option value="">No brush</option>
           {brushes.map((brush) => (
@@ -3342,15 +3683,38 @@ function StrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
         <input
           type="checkbox"
           checked={dynamic !== undefined}
-          onChange={(e) => run(e.target.checked ? 'Add dynamic stroke' : 'Remove dynamic stroke', (tx, n) => setDynamicStroke(tx, n, e.target.checked ? (dynamic ?? DEFAULT_DYNAMIC_STROKE) : undefined))}
+          onChange={(e) =>
+            run(e.target.checked ? 'Add dynamic stroke' : 'Remove dynamic stroke', (tx, n) => setDynamicStroke(tx, n, e.target.checked ? (dynamic ?? DEFAULT_DYNAMIC_STROKE) : undefined))
+          }
         />
         Dynamic stroke
       </label>
       {dynamic && (
         <>
-          <SliderRow label="Frequency" min={0} max={100} value={dynamic.frequency} gesture={dynamicGesture} onChange={(v) => dynamicGesture.change((tx) => nodes.forEach((n) => setDynamicStroke(tx, tx.store.getOrThrow(n.id) as GeometryNode, { ...dynamic, frequency: v })))} />
-          <SliderRow label="Wiggle" min={0} max={100} value={dynamic.wiggle} gesture={dynamicGesture} onChange={(v) => dynamicGesture.change((tx) => nodes.forEach((n) => setDynamicStroke(tx, tx.store.getOrThrow(n.id) as GeometryNode, { ...dynamic, wiggle: v })))} />
-          <SliderRow label="Smoothen" min={0} max={100} value={dynamic.smoothen} gesture={dynamicGesture} onChange={(v) => dynamicGesture.change((tx) => nodes.forEach((n) => setDynamicStroke(tx, tx.store.getOrThrow(n.id) as GeometryNode, { ...dynamic, smoothen: v })))} />
+          <SliderRow
+            label="Frequency"
+            min={0}
+            max={100}
+            value={dynamic.frequency}
+            gesture={dynamicGesture}
+            onChange={(v) => dynamicGesture.change((tx) => nodes.forEach((n) => setDynamicStroke(tx, tx.store.getOrThrow(n.id) as GeometryNode, { ...dynamic, frequency: v })))}
+          />
+          <SliderRow
+            label="Wiggle"
+            min={0}
+            max={100}
+            value={dynamic.wiggle}
+            gesture={dynamicGesture}
+            onChange={(v) => dynamicGesture.change((tx) => nodes.forEach((n) => setDynamicStroke(tx, tx.store.getOrThrow(n.id) as GeometryNode, { ...dynamic, wiggle: v })))}
+          />
+          <SliderRow
+            label="Smoothen"
+            min={0}
+            max={100}
+            value={dynamic.smoothen}
+            gesture={dynamicGesture}
+            onChange={(v) => dynamicGesture.change((tx) => nodes.forEach((n) => setDynamicStroke(tx, tx.store.getOrThrow(n.id) as GeometryNode, { ...dynamic, smoothen: v })))}
+          />
         </>
       )}
       {join === 'MITER' && (
@@ -3518,4 +3882,3 @@ function ScaleSection({ nodes }: { nodes: SceneNode[] }) {
     </Section>
   );
 }
-

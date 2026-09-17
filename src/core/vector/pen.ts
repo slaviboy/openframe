@@ -41,6 +41,40 @@ export const EMPTY_NETWORK: VectorNetwork = { vertices: [], segments: [], region
 export const penStart = (network: VectorNetwork = EMPTY_NETWORK): PenState => ({ network, last: null, outgoing: ZERO, chain: [], chainVertices: [] });
 
 /**
+ * A Pen session carrying on from a vertex of a path already drawn: the next click connects to it, which is how
+ * an open path is picked up and continued.
+ */
+export const penResume = (network: VectorNetwork, vertex: number): PenState => ({ network, last: vertex, outgoing: ZERO, chain: [], chainVertices: [vertex] });
+
+/** How many segments meet at each vertex, which is what tells an end of a path from the middle of one. */
+function degrees(network: VectorNetwork): number[] {
+  const out = new Array<number>(network.vertices.length).fill(0);
+  for (const segment of network.segments) {
+    for (const vertex of [segment.start, segment.end]) if (out[vertex] !== undefined) out[vertex] = out[vertex] + 1;
+  }
+  return out;
+}
+
+/**
+ * The end of an open path within `tolerance` of a point: a vertex exactly one segment meets, which is the only
+ * kind a path can be carried on from. Null when the point is on no such vertex.
+ */
+export function openEndAt(network: VectorNetwork, point: Vec2, tolerance: number): number | null {
+  const degree = degrees(network);
+  let best: number | null = null;
+  let bestDistance = tolerance;
+  network.vertices.forEach((v, i) => {
+    if (degree[i] !== 1) return;
+    const d = Math.hypot(v.x - point.x, v.y - point.y);
+    if (d <= bestDistance) {
+      best = i;
+      bestDistance = d;
+    }
+  });
+  return best;
+}
+
+/**
  * One Pen click. It adds a point at `point`, or uses the `existing` vertex under the pointer, and
  * connects it to the previous point. `handle` is how far the pointer was dragged while placing the
  * point: it becomes the point's outgoing control, and its mirror the incoming one, so the segment

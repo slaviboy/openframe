@@ -113,6 +113,8 @@ export interface OverlayInput {
   readonly measurements?: readonly MeasureLine[];
   /** Auto layout insertion indicator while moving children of an auto layout frame, in world coordinates. */
   readonly insertion?: readonly [Vec2, Vec2] | null;
+  /** The Pen's line from the point last placed to the pointer, in world coordinates. */
+  readonly penRubberBand?: readonly [Vec2, Vec2] | null;
   /** Equal-spacing indicators while moving, in world coordinates. */
   readonly gaps?: readonly GapIndicator[];
   /** Draw rulers and ruler guides. */
@@ -437,6 +439,20 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
     ctx.strokeStyle = theme.selection;
     ctx.lineWidth = 2;
     ctx.stroke();
+  }
+
+  // The Pen's trailing line: where the next segment would go, drawn thin and dashed so it reads as not yet there.
+  if (input.penRubberBand) {
+    const [from, to] = input.penRubberBand.map((point) => worldToScreen(editor.state.viewport, point));
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(from!.x, from!.y);
+    ctx.lineTo(to!.x, to!.y);
+    ctx.strokeStyle = theme.selection;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.restore();
   }
 
   if (input.guides && input.guides.length > 0) {
