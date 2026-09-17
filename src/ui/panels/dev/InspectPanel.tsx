@@ -16,9 +16,10 @@
  */
 
 import { canHaveDevStatus, devStatusLabel, setDevStatus, type DevStatusNode } from '@/editor/commands/dev-status';
+import { CODE_LANGUAGE_LABELS, CODE_UNITS, DEFAULT_UNIT_SCALE, generateCode, type CodeLanguage, type CodeUnit } from '@/core/dev/code-gen';
 import { rotationDegrees } from '@/editor/commands/properties';
 import type { SceneNode } from '@/core/schema/document';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import { formatNumber } from '../../primitives/math';
 import primitives from '../../primitives/primitives.module.css';
@@ -102,6 +103,7 @@ export function DevStatusControl({ node }: { node: DevStatusNode }) {
  */
 export function InspectPanel() {
   const editor = useEditor();
+  const [view, setView] = useState<'list' | 'code'>('list');
   const selection = useEditorState((s) => s.selection);
   useDocumentRevision();
   const nodes = selection.map((id) => editor.doc.get(id)).filter((node): node is SceneNode => node !== undefined && node.type !== 'PAGE' && node.type !== 'DOCUMENT');
@@ -131,6 +133,19 @@ export function InspectPanel() {
 
       {canHaveDevStatus(node) && <DevStatusControl node={node} />}
 
+      {/* Inspect reads the design either as a list of measurements or as the code that builds it. */}
+      <div className={styles.tabs} role="tablist" aria-label="Inspect view">
+        {(['list', 'code'] as const).map((value) => (
+          <button key={value} type="button" role="tab" className={styles.tab} aria-selected={view === value} data-selected={view === value || undefined} onClick={() => setView(value)}>
+            {value === 'list' ? 'List' : 'Code'}
+          </button>
+        ))}
+      </div>
+
+      {view === 'code' ? (
+        <CodeSection node={node} />
+      ) : (
+        <>
       <Group title="Position">
         <Row label="X" value={px(node.transform[4])} />
         <Row label="Y" value={px(node.transform[5])} />
@@ -155,6 +170,71 @@ export function InspectPanel() {
         <Row label="Opacity" value={`${formatNumber(node.opacity * 100, 0)}%`} />
         <Row label="Blend mode" value={node.blendMode.toLowerCase().replace(/_/g, ' ')} />
       </Group>
+        </>
+      )}
     </div>
+  );
+}
+
+/** The code that builds the selected layer, in the language and unit chosen. */
+function CodeSection({ node }: { node: SceneNode }) {
+  const [language, setLanguage] = useState<CodeLanguage>('CSS');
+  const [unit, setUnit] = useState<CodeUnit>('px');
+  const [scale, setScale] = useState<number | null>(null);
+  const units = CODE_UNITS[language];
+  const chosen = units.includes(unit) ? unit : units[0]!;
+  const code = generateCode(node, { language, unit: chosen, ...(scale === null ? {} : { scale }) });
+
+  return (
+    <section className={styles.group} aria-label="Code">
+      <div className={styles.codeControls}>
+        <select
+          className={primitives.select}
+          aria-label="Code language"
+          value={language}
+          onChange={(e) => {
+            const next = e.target.value as CodeLanguage;
+            setLanguage(next);
+            setUnit(CODE_UNITS[next][0]!);
+            setScale(null);
+          }}
+        >
+          {(Object.keys(CODE_LANGUAGE_LABELS) as CodeLanguage[]).map((value) => (
+            <option key={value} value={value}>
+              {CODE_LANGUAGE_LABELS[value]}
+            </option>
+          ))}
+        </select>
+        <select className={primitives.select} aria-label="Code unit" value={chosen} onChange={(e) => setUnit(e.target.value as CodeUnit)}>
+          {units.map((value) => (
+            <option key={value} value={value}>
+              {value}
+            </option>
+          ))}
+        </select>
+      </div>
+      {/* The unit scale: a root font size for rems, a scale factor for points and density-independent pixels. */}
+      <label className={styles.scale}>
+        <span>Unit scale</span>
+        <input
+          type="number"
+          className={primitives.textInput}
+          aria-label="Unit scale"
+          min={0.01}
+          step={0.5}
+          value={scale ?? DEFAULT_UNIT_SCALE[chosen]}
+          onChange={(e) => {
+            const next = Number(e.target.value);
+            setScale(Number.isFinite(next) && next > 0 ? next : null);
+          }}
+        />
+      </label>
+      <pre className={styles.code} data-testid="inspect-code">
+        {code}
+      </pre>
+      <button type="button" className={primitives.button} onClick={() => void navigator.clipboard?.writeText(code).catch(() => undefined)}>
+        Copy code
+      </button>
+    </section>
   );
 }

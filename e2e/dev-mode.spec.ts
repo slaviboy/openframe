@@ -111,3 +111,40 @@ test('a design is marked ready for dev, listed in the sidebar, and shows as chan
   await page.getByRole('treeitem', { name: /Frame 1/ }).click();
   await expect(page.getByRole('region', { name: 'Status' })).toContainText('Ready for dev');
 });
+
+test('Inspect writes the selection out as code, in the language and unit chosen', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 560, box.y + 380, { steps: 5 });
+  await page.mouse.up();
+  const width = await page.getByTestId('field-w').inputValue();
+
+  await page.keyboard.press('Shift+D');
+  const inspect = page.getByTestId('inspect-panel');
+  await inspect.getByRole('tab', { name: 'Code' }).click();
+  const code = page.getByTestId('inspect-code');
+  await expect(code).toContainText(`width: ${width}px;`);
+
+  // Rems divide by the root font size, which the unit scale sets.
+  await inspect.getByRole('combobox', { name: 'Code unit' }).selectOption('rem');
+  await expect(code).toContainText(`width: ${Number(width) / 16}rem;`);
+  await inspect.getByRole('spinbutton', { name: 'Unit scale' }).fill('10');
+  await expect(code).toContainText(`width: ${Number(width) / 10}rem;`);
+
+  // Another language writes the same layer its own way.
+  await inspect.getByRole('combobox', { name: 'Code language' }).selectOption('COMPOSE');
+  await expect(inspect.getByRole('combobox', { name: 'Code unit' })).toHaveValue('dp');
+  await expect(code).toContainText(`.size(width = ${width}.dp`);
+
+  await inspect.getByRole('combobox', { name: 'Code language' }).selectOption('SWIFTUI');
+  await expect(code).toContainText(`.frame(width: ${width}`);
+
+  // The List view is still there to go back to.
+  await inspect.getByRole('tab', { name: 'List' }).click();
+  await expect(code).toHaveCount(0);
+  await expect(inspect.getByRole('region', { name: 'Size' })).toBeVisible();
+});
