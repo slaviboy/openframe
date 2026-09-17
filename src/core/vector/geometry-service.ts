@@ -31,7 +31,7 @@ export interface GeometryService {
    * rule: dashes, caps, joins and the inside/outside alignment applied. Null when the layer draws no
    * stroke or its stroke can't be outlined.
    */
-  strokeOutline(node: SceneNode): PathCommand[] | null;
+  strokeOutline(node: SceneNode, store?: DocumentStore): PathCommand[] | null;
 
   /**
    * Eraser on a closed region: the region's area (in the network's space) minus a round stroke of

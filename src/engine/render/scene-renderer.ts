@@ -1226,6 +1226,44 @@ export class SceneRenderer {
    * centerline dashed, stroked with the layer's caps and joins, and — for inside or outside strokes
    * of closed shapes — a double-width stroke intersected with (or cut from) the shape.
    */
+  /**
+   * A path cut into the dashes a pattern draws, over each of its contours. Skia's own dashing takes only one
+   * length on and one off, so a longer pattern — dash, gap, dot, gap — is cut by hand here, the same way the
+   * renderer's dash effect draws it: the pattern repeats around the contour, starting half a dash in.
+   */
+  private dashedPath(path: Path, pattern: readonly number[]): Path | null {
+    const ck = this.ck;
+    // An odd-length pattern repeats doubled, so its dashes and gaps alternate the way they are drawn.
+    const steps = pattern.length % 2 === 0 ? pattern : [...pattern, ...pattern];
+    const cycle = steps.reduce((total, step) => total + Math.max(0, step), 0);
+    if (cycle <= 0) return null;
+    const builder = new ck.PathBuilder();
+    const iterator = new ck.ContourMeasureIter(path, false, 1);
+    let drawn = false;
+    for (let contour = iterator.next(); contour; contour = iterator.next()) {
+      const length = contour.length();
+      // The first dash is cut in half, as the drawn stroke does, so a closed shape starts on a dash.
+      let at = -steps[0]! / 2;
+      for (let i = 0; at < length; i = (i + 1) % steps.length) {
+        const step = Math.max(0, steps[i]!);
+        const [from, to] = [Math.max(0, at), Math.min(length, at + step)];
+        at += step;
+        // Even steps of the pattern are the dashes; the odd ones are the gaps between them.
+        if (i % 2 === 1 || to <= from) continue;
+        const segment = contour.getSegment(from, to, true);
+        builder.addPath(segment);
+        segment.delete();
+        drawn = true;
+      }
+      contour.delete();
+    }
+    iterator.delete();
+    const dashed = builder.detachAndDelete();
+    if (drawn) return dashed;
+    dashed.delete();
+    return null;
+  }
+
   /** The stretch of a path between two shares of its length, over each of its contours; null when none of it is left. */
   private trimmedPath(path: Path, start: number, end: number): Path | null {
     const ck = this.ck;
@@ -1260,14 +1298,41 @@ export class SceneRenderer {
     return null;
   }
 
-  strokeOutline(node: SceneNode): PathCommand[] | null {
+  /**
+   * The area a per-side stroke covers: the box grown by each side's weight with the box shrunk by it taken out,
+   * which is the ring `drawIndividualStrokes` paints. Per-side strokes take no corners, joins or dashes, as drawn.
+   */
+  private individualStrokeOutline(node: Extract<ShapeNode, { cornerRadius: number }>, s: IndividualStrokeWeights): PathCommand[] | null {
     const ck = this.ck;
-    if (node.type !== 'RECTANGLE' && node.type !== 'ELLIPSE' && node.type !== 'POLYGON' && node.type !== 'STAR' && node.type !== 'LINE' && node.type !== 'VECTOR') return null;
-    if (node.strokeWeight <= 0 || !node.strokes.some((p) => p.visible && p.opacity > 0)) return null;
-    if (node.type === 'RECTANGLE' && node.individualStrokeWeights) return null;
+    const k = node.strokeAlign === 'INSIDE' ? 0 : node.strokeAlign === 'CENTER' ? 0.5 : 1;
+    const { width: w, height: h } = node.size;
+    const innerL = (1 - k) * s.left;
+    const innerT = (1 - k) * s.top;
+    const outer = new ck.PathBuilder().addRect(ck.LTRBRect(-k * s.left, -k * s.top, w + k * s.right, h + k * s.bottom)).detachAndDelete();
+    const inner = new ck.PathBuilder().addRect(ck.LTRBRect(innerL, innerT, Math.max(innerL, w - (1 - k) * s.right), Math.max(innerT, h - (1 - k) * s.bottom))).detachAndDelete();
+    const ring: Path | null = ck.Path.MakeFromOp(outer, inner, ck.PathOp.Difference);
+    outer.delete();
+    inner.delete();
+    if (!ring) return null;
+    const commands = ring.isEmpty() ? null : this.commandsOf(ring);
+    ring.delete();
+    return commands;
+  }
+
+  strokeOutline(node: SceneNode, store?: DocumentStore): PathCommand[] | null {
+    const ck = this.ck;
+    const outlinable = node.type === 'RECTANGLE' || node.type === 'ELLIPSE' || node.type === 'POLYGON' || node.type === 'STAR' || node.type === 'LINE' || node.type === 'VECTOR';
+    // A frame's stroke runs around its box, and a boolean group's around the shape it combines to.
+    const combined = node.type === 'BOOLEAN_OPERATION' && store !== undefined;
+    if (!outlinable && node.type !== 'FRAME' && !combined) return null;
+    if (!('strokes' in node) || node.strokeWeight <= 0 || !node.strokes.some((p) => p.visible && p.opacity > 0)) return null;
+    if ((node.type === 'RECTANGLE' || node.type === 'FRAME') && node.individualStrokeWeights) return this.individualStrokeOutline(node, node.individualStrokeWeights);
     let area: Path | null = null;
     let centerline: Path | null;
-    if (node.type === 'LINE') {
+    if (combined) {
+      area = this.booleanPath(node, store!);
+      centerline = area;
+    } else if (node.type === 'LINE') {
       centerline = node.size.width > 0 ? new ck.PathBuilder().moveTo(0, 0).lineTo(node.size.width, 0).detachAndDelete() : null;
     } else if (node.type === 'VECTOR') {
       area = this.vectorFillPath(node);
@@ -1301,7 +1366,7 @@ export class SceneRenderer {
     }
     const dashes = node.strokeDashes && node.strokeDashes.some((d) => d > 0) ? node.strokeDashes : null;
     // Dashed strokes start and end with a half-length dash, as drawn.
-    const dashed = dashes ? centerline.makeDashed(dashes[0]!, dashes[1] ?? dashes[0]!, dashes[0]! / 2) : null;
+    const dashed = dashes ? this.dashedPath(centerline, dashes) : null;
     const aligned = node.strokeAlign !== 'CENTER' && area !== null && node.type !== 'LINE';
     const angle = node.strokeMiterAngle ?? DEFAULT_MITER_ANGLE;
     const endCap = node.type === 'VECTOR' && !dashes ? node.endpointCap : node.strokeCap;

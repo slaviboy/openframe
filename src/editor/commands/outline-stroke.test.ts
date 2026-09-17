@@ -16,7 +16,7 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { createEmptyDocument, keyOnTop, makeRectangle } from '@/core/document/factory';
+import { createEmptyDocument, keyOnTop, makeFrame, makeRectangle } from '@/core/document/factory';
 import type { PathCommand } from '@/core/geometry/corners';
 import { IdGenerator } from '@/core/ids/ids';
 import type { RectangleNode, VectorNode } from '@/core/schema/document';
@@ -79,6 +79,21 @@ describe('outline stroke', () => {
     editor.history.run('no fill', (tx) => tx.set(id, 'fills', []));
     await outlineStrokeSelection(editor, async () => null);
     expect(rect()).toBeUndefined();
+    expect(editor.doc.getOrThrow(editor.selection[0]!).type).toBe('VECTOR');
+  });
+
+  test('a frame with a stroke is offered too, and keeps its contents', async () => {
+    const frame = editor.history.run('frame', (tx) => {
+      const frameId = editor.ids.next();
+      const node = makeFrame({ id: frameId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'F', x: 0, y: 0, width: 80, height: 80 });
+      tx.create({ ...node, strokes: node.fills, strokeWeight: 2 });
+      return frameId;
+    });
+    editor.state.select([frame]);
+    expect(enabled()).toBe(true);
+    await outlineStrokeSelection(editor, async () => null);
+    // The frame stays where it was, with its outline beside it.
+    expect(editor.doc.getOrThrow(frame).type).toBe('FRAME');
     expect(editor.doc.getOrThrow(editor.selection[0]!).type).toBe('VECTOR');
   });
 

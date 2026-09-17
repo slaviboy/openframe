@@ -29,8 +29,8 @@ import type { FontLoader } from '@/core/text/glyph-paths';
 import { replaceTextWithOutlines, textOutlinesFor } from './outline-text';
 import { nextKeyAbove, selectedSceneNodes } from './selection-helpers';
 
-/** Layers whose strokes can be outlined. */
-const OUTLINED: ReadonlySet<string> = new Set(['RECTANGLE', 'ELLIPSE', 'POLYGON', 'STAR', 'LINE', 'VECTOR']);
+/** Layers whose strokes can be outlined: the shapes, plus frames and the shape a boolean group combines to. */
+const OUTLINED: ReadonlySet<string> = new Set(['RECTANGLE', 'ELLIPSE', 'POLYGON', 'STAR', 'LINE', 'VECTOR', 'FRAME', 'BOOLEAN_OPERATION']);
 
 const anyVisible = (paints: readonly Paint[]): boolean => paints.some((p) => p.visible && p.opacity > 0);
 
@@ -68,14 +68,15 @@ export async function outlineStrokeSelection(editor: Editor, load: FontLoader): 
     for (const original of ids) {
       const id = replaced.get(original) ?? original;
       const node = tx.store.getOrThrow(id) as SceneNode;
-      const commands = hasOutlinableStroke(node) ? geometry.strokeOutline(node) : null;
+      const commands = hasOutlinableStroke(node) ? geometry.strokeOutline(node, tx.store) : null;
       const network = commands ? commandsToNetwork(commands) : null;
       const bounds = network ? networkBounds(network) : null;
       if (!network || !bounds || !hasGeometry(node)) {
         selection.push(id);
         continue;
       }
-      const keepFill = node.type !== 'LINE' && anyVisible(node.fills);
+      // A frame keeps its contents, so it always stays; other layers with a visible fill keep that too.
+      const keepFill = node.type === 'FRAME' || (node.type !== 'LINE' && anyVisible(node.fills));
       // The outline is in the layer's local space: its box moves along the layer's own rotation.
       const t = node.transform;
       const offset = applyLinear(matrixOf(t), { x: bounds.x, y: bounds.y });
