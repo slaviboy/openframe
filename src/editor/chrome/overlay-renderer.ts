@@ -1120,9 +1120,30 @@ function drawGridTracks(ctx: CanvasRenderingContext2D, input: OverlayInput): voi
   const { editor, theme } = input;
   const selected = selectedGridTracks(editor);
   if (!selected) return;
+  const v = editor.state.viewport;
+
+  // Tracks picked out on the canvas stay washed over whether the frame is hovered or not, so what Delete or a
+  // drag would act on is always plain.
+  const picked = editor.state.getSnapshot().gridTracks;
+  if (picked && picked.frameId === selected.frameId) {
+    const bands = picked.axis === 'column' ? selected.columns : selected.rows;
+    const frame = editor.doc.get(selected.frameId);
+    const across = frame && 'size' in frame ? (picked.axis === 'column' ? frame.size.height : frame.size.width) : 0;
+    ctx.save();
+    ctx.fillStyle = theme.selection;
+    ctx.globalAlpha = 0.18;
+    for (const index of picked.indices) {
+      const band = bands[index];
+      if (!band) continue;
+      const from = worldToScreen(v, apply(selected.toWorld, picked.axis === 'column' ? { x: band.start, y: 0 } : { x: 0, y: band.start }));
+      const to = worldToScreen(v, apply(selected.toWorld, picked.axis === 'column' ? { x: band.start + band.length, y: across } : { x: across, y: band.start + band.length }));
+      ctx.fillRect(from.x, from.y, to.x - from.x, to.y - from.y);
+    }
+    ctx.restore();
+  }
+
   const hover = editor.state.getSnapshot().hoverId;
   if (!hover || (hover !== selected.frameId && !editor.doc.isAncestor(selected.frameId, hover))) return;
-  const v = editor.state.viewport;
   ctx.save();
   ctx.font = theme.font;
   ctx.fillStyle = theme.selection;

@@ -60,6 +60,25 @@ export function selectedGridTracks(editor: Editor): SelectedGridTracks | null {
   };
 }
 
+/** How far from a track's pill it can still be picked, in screen pixels: the pill is a small label. */
+const PILL_REACH_PX = 14;
+
+/** The track whose size pill a screen point is on, which is how a track is picked out on the canvas. */
+export function hitGridTrackPill(editor: Editor, screen: Vec2): { readonly selected: SelectedGridTracks; readonly axis: TrackAxis; readonly index: number } | null {
+  const selected = selectedGridTracks(editor);
+  if (!selected) return null;
+  const v = editor.state.viewport;
+  for (const handle of selected.handles) {
+    if (handle.kind !== 'pill') continue;
+    const at = worldToScreen(v, apply(selected.toWorld, handle.at));
+    // The pills sit just outside the frame's top and left sides, so the reach is wider along the side they run.
+    const withinX = handle.axis === 'column' ? Math.abs(screen.x - at.x) <= PILL_REACH_PX * 2 : Math.abs(screen.x - at.x) <= PILL_REACH_PX;
+    const withinY = handle.axis === 'column' ? Math.abs(screen.y - at.y) <= PILL_REACH_PX : Math.abs(screen.y - at.y) <= PILL_REACH_PX * 2;
+    if (withinX && withinY) return { selected, axis: handle.axis, index: handle.index };
+  }
+  return null;
+}
+
 /** The track edge under a screen point, near the frame's top side (column edges) or left side (row edges). */
 export function hitGridTrackEdge(editor: Editor, screen: Vec2, tolerancePx: number): { readonly selected: SelectedGridTracks; readonly axis: TrackAxis; readonly index: number } | null {
   const selected = selectedGridTracks(editor);

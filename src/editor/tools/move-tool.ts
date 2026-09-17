@@ -57,7 +57,8 @@ import { snapEqualGaps, type GapIndicator } from '@/core/scene/equal-gaps';
 import { measureBetween, type MeasureLine } from '@/core/scene/measure';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
 import { isSceneNode, type FrameNode, type GridTrack, type SceneNode } from '@/core/schema/document';
-import { hitGridTrackEdge } from '../interactions/grid-tracks';
+import { hitGridTrackEdge, hitGridTrackPill, selectedGridTracks } from '../interactions/grid-tracks';
+import { moveGridTrack } from '../commands/grid-tracks';
 import { resizedTrack } from '@/core/layout/grid-track-handles';
 import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
 import { flowInsertionIndex, flowInsertionLine, moveToFlowIndex } from '@/core/layout/flow-order';
@@ -209,6 +210,17 @@ type Gesture =
       axis: 'column' | 'row';
       index: number;
       startLength: number;
+      toWorld: Matrix;
+    }
+  /** Dragging a track's size pill carries that track to another place in the grid. */
+  | {
+      kind: 'grid-pill';
+      down: PointerInfo;
+      frameId: Id;
+      axis: 'column' | 'row';
+      index: number;
+      /** Where the track would land, which follows the pointer along the tracks. */
+      target: number;
       toWorld: Matrix;
     }
   /** Prototype tab: dragging the selection's + to a destination frame connects the selection to it. */
@@ -522,6 +534,18 @@ export class MoveTool implements Tool {
         return;
       }
     }
+    // A track's size pill picks that track out, so it can be moved or taken away.
+    if (this.id === 'move') {
+      const pill = hitGridTrackPill(editor, p.screen);
+      if (pill) {
+        const current = editor.state.getSnapshot().gridTracks;
+        const same = current?.frameId === pill.selected.frameId && current.axis === pill.axis;
+        const indices = p.shift && same ? (current.indices.includes(pill.index) ? current.indices.filter((i) => i !== pill.index) : [...current.indices, pill.index]) : [pill.index];
+        editor.state.selectGridTracks(indices.length > 0 ? { frameId: pill.selected.frameId, axis: pill.axis, indices: [...indices].sort((a, b) => a - b) } : null);
+        this.gesture = { kind: 'grid-pill', down: p, frameId: pill.selected.frameId, axis: pill.axis, index: pill.index, target: pill.index, toWorld: pill.selected.toWorld };
+        return;
+      }
+    }
     // Grid track edges near the selected grid frame's top or left side resize their track.
     if (this.id === 'move') {
       const edge = hitGridTrackEdge(editor, p.screen, this.env.hitTolerancePx);
@@ -743,6 +767,23 @@ export class MoveTool implements Tool {
         g.last = p;
         this.applyGridTrack(p);
         return;
+      case 'grid-pill': {
+        // The track lands where the pointer is along the tracks, which the pills run beside.
+        const selected = selectedGridTracks(this.env.editor);
+        const bands = selected ? (g.axis === 'column' ? selected.columns : selected.rows) : [];
+        const inverse = invert(g.toWorld);
+        const local = inverse ? apply(inverse, p.world) : null;
+        if (local && bands.length > 0) {
+          const along = g.axis === 'column' ? local.x : local.y;
+          const target = bands.findIndex((band) => along < band.start + band.length);
+          const next = target === -1 ? bands.length - 1 : target;
+          if (next !== g.target) {
+            this.gesture = { ...g, target: next };
+            this.env.editor.requestRender();
+          }
+        }
+        return;
+      }
       case 'layout-handle':
         g.last = p;
         this.applyLayoutHandle(p);
@@ -882,6 +923,10 @@ export class MoveTool implements Tool {
         break;
       case 'grid-track':
         editor.history.commit(g.tx);
+        break;
+      case 'grid-pill':
+        // A pill dropped on another track's place carries its own track there; dropped back, it only picks it out.
+        if (g.target !== g.index) moveGridTrack(editor, g.frameId, g.axis, g.index, g.target);
         break;
       case 'anchor':
       case 'text-path-start':

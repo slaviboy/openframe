@@ -54,6 +54,7 @@ import type { FontLoader } from '@/core/text/glyph-paths';
 import { canOutlineText, outlineTextSelection } from './outline-text';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
 import { deleteMarked, duplicateMarked } from './smart-selection';
+import { deleteGridTrack } from './grid-tracks';
 
 const hasSelection = (e: Editor) => e.selection.length > 0;
 
@@ -1039,6 +1040,14 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
         // A selected overlay badge deletes the overlay: the interactions opening it, not the frame.
         removeOverlayInteractions(e, overlay);
         e.state.selectOverlay(null);
+        return;
+      }
+      // Grid tracks picked out on the canvas are what Delete takes away, not the frame holding them.
+      const tracks = e.state.getSnapshot().gridTracks;
+      if (tracks && tracks.indices.length > 0) {
+        // Taken from the last one back, so the earlier ones keep the places they were picked out at.
+        for (const index of [...tracks.indices].sort((a, b) => b - a)) deleteGridTrack(e, tracks.frameId, tracks.axis, index);
+        e.state.selectGridTracks(null);
         return;
       }
       // Marked layers of a smart selection go on their own, the row or column closing up behind them.

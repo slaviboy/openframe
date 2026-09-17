@@ -112,6 +112,8 @@ export interface EditorState {
   readonly selectedConnections: readonly SelectedConnection[];
   /** The overlay frame whose badge is selected on the canvas (Delete removes the interactions opening it). */
   readonly selectedOverlay: Id | null;
+  /** Grid tracks picked out on the canvas: which frame, which way they run, and which of them. */
+  readonly gridTracks: { readonly frameId: Id; readonly axis: 'column' | 'row'; readonly indices: readonly number[] } | null;
   /**
    * Layers marked inside a smart selection, which duplicating, deleting and reordering act on while the rest of
    * the selection reflows around them. Marks belong to one selection and go when it changes.
@@ -255,6 +257,7 @@ export class EditorStore extends Observable<EditorState> {
       selectedConnections: [],
       selectedOverlay: null,
       markedLayers: [],
+      gridTracks: null,
       tool: 'move',
       spring: null,
       mode: 'design',
@@ -556,6 +559,7 @@ export class EditorStore extends Observable<EditorState> {
       selectedConnections: [],
       selectedOverlay: null,
       markedLayers: [],
+      gridTracks: null,
       croppingId: keepCrop ? this.state.croppingId : null,
       gradientEdit: keepGradient ? this.state.gradientEdit : null,
       blurEdit: keepBlur ? this.state.blurEdit : null,
@@ -591,8 +595,23 @@ export class EditorStore extends Observable<EditorState> {
 
   clearSelection(): void {
     if (this.state.selection.length || this.state.selectedGuide || this.state.selectedOverlay || this.state.croppingId || this.state.gradientEdit || this.state.blurEdit) {
-      this.setState({ selection: [], selectedGuide: null, selectedOverlay: null, markedLayers: [], croppingId: null, gradientEdit: null, blurEdit: null });
+      this.setState({ selection: [], selectedGuide: null, selectedOverlay: null, markedLayers: [], gridTracks: null, croppingId: null, gradientEdit: null, blurEdit: null });
     }
+  }
+
+  /** Picks grid tracks out on the canvas, or clears the choice when given none. */
+  selectGridTracks(tracks: EditorState['gridTracks']): void {
+    const current = this.state.gridTracks;
+    const same =
+      current === tracks ||
+      (current !== null &&
+        tracks !== null &&
+        current.frameId === tracks.frameId &&
+        current.axis === tracks.axis &&
+        current.indices.length === tracks.indices.length &&
+        current.indices.every((i, at) => i === tracks.indices[at]));
+    if (same) return;
+    this.setState({ gridTracks: tracks });
   }
 
   /** Marks layers inside a smart selection, or clears the marks when given none. */

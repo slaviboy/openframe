@@ -53,3 +53,49 @@ test('dragging a grid column edge on the canvas makes the column fixed', async (
   await expect(page.getByLabel('Column 1 size')).toHaveValue('140');
   await expect(page.getByLabel('Column 2 sizing')).toHaveValue('FLEX');
 });
+
+/** A 2 × 2 grid frame with four rectangles in it, ready to have its tracks picked at. */
+async function gridFrame(page: Page) {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await page.keyboard.press('f');
+  await drag(page, [300, 200], [600, 420]);
+  for (const [x, y] of [
+    [320, 220],
+    [440, 220],
+    [320, 320],
+    [440, 320],
+  ] as const) {
+    await page.keyboard.press('r');
+    await drag(page, [x, y], [x + 100, y + 80]);
+  }
+  await page.getByRole('treeitem', { name: /Frame 1/ }).click();
+  await page.getByRole('button', { name: 'Grid layout' }).click();
+  await expect(page.getByLabel('Number of columns')).toHaveValue('2');
+  return (await page.getByTestId('canvas').boundingBox())!;
+}
+
+test('a column is picked out by its pill, carried to another place, and taken away with Delete', async ({ page }) => {
+  const box = await gridFrame(page);
+  // Make the columns tell each other apart: the first one fixed at 140.
+  await page.mouse.move(box.x + 450, box.y + 300);
+  await drag(page, [420, 212], [460, 212]);
+  await expect(page.getByLabel('Column 1 sizing')).toHaveValue('FIXED');
+  await expect(page.getByLabel('Column 2 sizing')).toHaveValue('FLEX');
+
+  // The first column's pill sits above the middle of that column, just outside the frame's top side.
+  await page.mouse.move(box.x + 450, box.y + 300);
+  await page.mouse.click(box.x + 390, box.y + 192);
+  // Carrying it past the second column swaps the two, so the fixed one is now the second.
+  await page.mouse.move(box.x + 450, box.y + 300);
+  await drag(page, [390, 192], [540, 192]);
+  await expect(page.getByLabel('Column 1 sizing')).toHaveValue('FLEX');
+  await expect(page.getByLabel('Column 2 sizing')).toHaveValue('FIXED');
+
+  // Picking a column out and pressing Delete takes the column away, not the frame.
+  await page.mouse.move(box.x + 450, box.y + 300);
+  await page.mouse.click(box.x + 390, box.y + 192);
+  await page.keyboard.press('Delete');
+  await expect(page.getByLabel('Number of columns')).toHaveValue('1');
+  await expect(page.getByRole('treeitem', { name: /Frame 1/ })).toHaveCount(1);
+});
