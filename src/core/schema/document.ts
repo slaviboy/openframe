@@ -767,6 +767,8 @@ export const PageNodeSchema = z.object({
   annotations: z.array(AnnotationSchema).max(2000).optional(),
   /** The comments left on this page. Absent until one is written. */
   comments: z.array(CommentSchema).max(2000).optional(),
+  /** A page holding a library brought in from another file, rather than the file's own work. */
+  library: z.object({ name: z.string().min(1).max(200), importedAt: z.string().max(64) }).optional(),
   /** Canvas guides. Absent when the page has none. */
   guides: GuidesField,
   /** Variable modes set on the page, by collection id. */

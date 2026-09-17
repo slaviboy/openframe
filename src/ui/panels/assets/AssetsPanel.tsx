@@ -17,6 +17,9 @@
 
 import { useState } from 'react';
 import { assetTree, COMPONENT_DRAG_TYPE, componentLeafName, localComponents, type AssetFolder, type LocalComponent } from '@/editor/commands/insert-instance';
+import { importLibrary, importedLibraries, removeLibrary } from '@/editor/commands/libraries';
+import { readPackage } from '@/platform/package';
+import { pickPackageFile } from '../../images/pick-package';
 import { Icon } from '../../icons/Icon';
 import { useDocumentRevision, useEditor } from '../../hooks/useEditor';
 import styles from '../find/FindPanel.module.css';
@@ -38,7 +41,25 @@ export function AssetsPanel() {
   const [subFolders, setSubFolders] = useState(true);
   const [view, setView] = useState<'list' | 'grid'>('list');
   const [details, setDetails] = useState<LocalComponent | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const libraries = importedLibraries(editor);
   const needle = query.trim().toLowerCase();
+
+  /** Picks another Openframe file and brings its components in as a library. */
+  const bringIn = async () => {
+    setMessage(null);
+    const file = await pickPackageFile();
+    if (!file) return;
+    try {
+      const { store, images } = await readPackage(new Uint8Array(await file.arrayBuffer()));
+      for (const image of images) await editor.images.add(image);
+      const name = file.name.replace(/\.openframe$/i, '') || 'Library';
+      const result = importLibrary(editor, store, name);
+      setMessage(result === null ? `${name} has no components to lend.` : `Brought in ${result.components === 1 ? '1 component' : `${result.components} components`} from ${name}.`);
+    } catch {
+      setMessage('That file could not be read as an Openframe file.');
+    }
+  };
   // Descriptions are searched too, so they can tag components with keywords.
   const components = localComponents(editor).filter((c) => needle === '' || c.name.toLowerCase().includes(needle) || (c.description?.toLowerCase().includes(needle) ?? false));
 
@@ -111,6 +132,34 @@ export function AssetsPanel() {
           Show sub-folders
         </button>
       </div>
+      {/* Libraries brought in from other files: their components are listed below with the file's own. */}
+      <section className={assetStyles.libraries} aria-label="Libraries">
+        <div className={assetStyles.options}>
+          <button type="button" className={styles.chip} onClick={() => void bringIn()}>
+            Import library
+          </button>
+          {message !== null && (
+            <span className={styles.count} role="status">
+              {message}
+            </span>
+          )}
+        </div>
+        {libraries.length > 0 && (
+          <ul className={assetStyles.libraryList} aria-label="Imported libraries">
+            {libraries.map((library) => (
+              <li key={library.pageId}>
+                <button type="button" className={styles.chip} onClick={() => editor.state.setActivePage(library.pageId)}>
+                  {library.name}
+                </button>
+                <span className={styles.count}>{library.components === 1 ? '1 component' : `${library.components} components`}</span>
+                <button type="button" className={styles.chip} aria-label={`Remove library ${library.name}`} onClick={() => removeLibrary(editor, library.pageId)}>
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
       <p className={styles.count} role="status" aria-live="polite">
         {components.length === 0 ? (needle === '' ? 'No components in this file' : 'No matching components') : 'Local components'}
       </p>
