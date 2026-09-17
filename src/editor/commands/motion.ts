@@ -43,6 +43,11 @@ export function baseValue(node: SceneNode, property: AnimatedProperty): number {
       return rotationDegrees(node);
     case 'opacity':
       return node.opacity;
+    // Path trim is a share of the path, kept off the layer entirely while the whole of it is drawn.
+    case 'trimStart':
+      return 'strokeTrimStart' in node ? (node.strokeTrimStart ?? 0) : 0;
+    case 'trimEnd':
+      return 'strokeTrimEnd' in node ? (node.strokeTrimEnd ?? 1) : 1;
   }
 }
 
@@ -179,6 +184,8 @@ const presetBase = (node: SceneNode): PresetBase => ({
   height: baseValue(node, 'height'),
   rotation: baseValue(node, 'rotation'),
   opacity: baseValue(node, 'opacity'),
+  trimStart: baseValue(node, 'trimStart'),
+  trimEnd: baseValue(node, 'trimEnd'),
 });
 
 /**

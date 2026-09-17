@@ -32,6 +32,8 @@ export interface PresetBase {
   readonly height: number;
   readonly rotation: number;
   readonly opacity: number;
+  readonly trimStart: number;
+  readonly trimEnd: number;
 }
 
 /** One step a preset writes: a property, and its value at the start and the end of the run. */
@@ -47,6 +49,8 @@ export interface MotionPreset {
   readonly label: string;
   /** A composite style is several of the plain presets at once. */
   readonly composite?: boolean;
+  /** Path trim presets need a path stroked down its middle, so they are offered on one alone. */
+  readonly needsTrim?: boolean;
   steps(base: PresetBase): PresetStep[];
 }
 
@@ -98,6 +102,14 @@ const spin: MotionPreset = {
   steps: (base) => [{ property: 'rotation', from: base.rotation, to: base.rotation - 360 }],
 };
 
+/** Path trim: the stroke draws itself on, its end travelling from where the trim starts to where it ends. */
+const path: MotionPreset = {
+  id: 'PATH',
+  label: 'Path',
+  needsTrim: true,
+  steps: (base) => [{ property: 'trimEnd', from: base.trimStart, to: base.trimEnd, easing: { type: 'EASE_OUT' } }],
+};
+
 /** Composite styles: several presets at once, for motion with more to it than one property. */
 const popIn: MotionPreset = {
   id: 'POP_IN',
@@ -114,6 +126,6 @@ const flyIn: MotionPreset = {
 };
 
 /** The preset animations offered in the Animations section, the composite styles last. */
-export const MOTION_PRESETS: readonly MotionPreset[] = [fadeIn, fadeOut, slideIn, slideOut, scaleUp, scaleDown, spin, popIn, flyIn];
+export const MOTION_PRESETS: readonly MotionPreset[] = [fadeIn, fadeOut, slideIn, slideOut, scaleUp, scaleDown, spin, path, popIn, flyIn];
 
 export const presetById = (id: string): MotionPreset | undefined => MOTION_PRESETS.find((preset) => preset.id === id);

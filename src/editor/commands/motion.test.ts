@@ -19,7 +19,7 @@ import { beforeEach, describe, expect, test } from 'vitest';
 import { createEmptyDocument, keyOnTop, makeRectangle } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
 import { trackFor } from '@/core/motion/animation';
-import type { SceneNode } from '@/core/schema/document';
+import type { RectangleNode, SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { curveOffsetFor, hitMotionPathCurve, hitMotionPathKeyframe, keyframePositionAt, motionPath } from '../chrome/motion-path';
 import { MotionPreview } from '../motion/preview';
@@ -269,5 +269,36 @@ describe('bending a motion path', () => {
     expect(pageAnimation(editor)!.curves).toBeUndefined();
     // Nothing to bend: the last keyframe starts no stretch, and one keyframe alone is not a path.
     expect(curveMotionPath(editor, rect, 1000, { x: 0, y: 60 })).toBe(false);
+  });
+});
+
+describe('animating a path trim', () => {
+  const trim = () => (node() as RectangleNode).strokeTrimEnd;
+
+  test('is keyframed like any other property, and the preview draws the stroke partly on', () => {
+    addKeyframe(editor, [rect], 'trimEnd', 0, 0);
+    addKeyframe(editor, [rect], 'trimEnd', 1000, 1);
+
+    const preview = new MotionPreview(editor);
+    preview.show(500);
+    expect(trim()).toBe(0.5);
+    preview.clear();
+    // The file itself was never trimmed: the whole path is drawn again.
+    expect(trim()).toBeUndefined();
+  });
+
+  test('a new keyframe records the whole path, which is what an untrimmed stroke draws', () => {
+    addKeyframe(editor, [rect], 'trimEnd', 250);
+    expect(trackFor(pageAnimation(editor), rect, 'trimEnd')!.keyframes).toEqual([{ time: 250, value: 1 }]);
+    addKeyframe(editor, [rect], 'trimStart', 250);
+    expect(trackFor(pageAnimation(editor), rect, 'trimStart')!.keyframes).toEqual([{ time: 250, value: 0 }]);
+  });
+
+  test('the path preset draws the stroke on, from where the trim starts to where it ends', () => {
+    expect(applyMotionPreset(editor, [rect], 'PATH', 0)).toBe(true);
+    expect(trackFor(pageAnimation(editor), rect, 'trimEnd')!.keyframes).toEqual([
+      { time: 0, value: 0, easing: { type: 'EASE_OUT' } },
+      { time: 500, value: 1 },
+    ]);
   });
 });

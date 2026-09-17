@@ -615,6 +615,8 @@ function AnimationsSection({ nodes }: { nodes: SceneNode[] }) {
   useDocumentRevision();
   const ids = nodes.map((n) => n.id);
   const animated = ANIMATED_PROPERTIES.filter((property) => ids.length > 0 && ids.every((id) => isAnimated(editor, id, property)));
+  // A path animation trims a stroke, which needs one running down the middle of the path.
+  const trimmable = nodes.length > 0 && nodes.every((n) => 'strokeAlign' in n && n.strokeAlign === 'CENTER' && n.strokes.some((paint) => paint.visible && paint.opacity > 0));
   return (
     <Section title="Animations">
       <select
@@ -628,7 +630,7 @@ function AnimationsSection({ nodes }: { nodes: SceneNode[] }) {
       >
         <option value="">Add animation</option>
         {MOTION_PRESETS.filter((preset) => !preset.composite).map((preset) => (
-          <option key={preset.id} value={preset.id}>
+          <option key={preset.id} value={preset.id} disabled={preset.needsTrim && !trimmable}>
             {preset.label}
           </option>
         ))}
@@ -3071,15 +3073,23 @@ function StrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
   // Path trim: how much of the path the stroke is drawn along. Like the reference, only a centered stroke can be trimmed.
   const trimGesture = useGesture('Change path trim');
   const centered = nodes.every((n) => n.strokeAlign === 'CENTER');
+  const trimMotion = useEditorState((s) => s.mode) === 'motion';
+  const trimTime = useEditorState((s) => s.motion.time);
+  const trimAuto = useEditorState((s) => s.motion.autoKeyframe);
   const trimPercent = (key: 'strokeTrimStart' | 'strokeTrimEnd', whole: number) => {
     const share = val(shared(nodes, (n) => n[key] ?? whole));
     return share === undefined ? undefined : share * 100;
   };
-  const editTrim = (key: 'strokeTrimStart' | 'strokeTrimEnd', percent: number, whole: number) =>
-    trimGesture.change((tx) => {
-      const share = Math.min(1, Math.max(0, percent / 100));
-      nodes.forEach((n) => tx.set(n.id, key, share === whole ? undefined : share));
-    });
+  const editTrim = (key: 'strokeTrimStart' | 'strokeTrimEnd', property: AnimatedProperty, percent: number, whole: number) => {
+    const share = Math.min(1, Math.max(0, percent / 100));
+    // In Motion, editing a trim that is animated records a keyframe at the playhead instead of moving the stroke.
+    const ids = nodes.map((n) => n.id);
+    const animated = ids.length > 0 && ids.every((id) => isAnimated(editor, id, property));
+    if (trimMotion && (animated || (trimAuto && ids.length > 0))) addKeyframe(editor, ids, property, trimTime, share);
+    else trimGesture.change((tx) => nodes.forEach((n) => tx.set(n.id, key, share === whole ? undefined : share)));
+  };
+  /** A trim field's gesture handlers, left off in Motion: a keyframe write can't start while a gesture holds the file. */
+  const trimGestureProps = trimMotion ? {} : { onGestureStart: trimGesture.start, onGestureEnd: trimGesture.end };
 
   const editDashes = (index: 0 | 1, value: number) =>
     dashGesture.change((tx) =>
@@ -3135,32 +3145,34 @@ function StrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
       {/* Path trim draws only a share of the path, for a stroke that draws itself on or erases itself away. */}
       {centered && (
         <div className={styles.grid2}>
-          <NumberField
-            label="Trim"
-            ariaLabel="Path trim start"
-            testId="field-trim-start"
-            min={0}
-            max={100}
-            decimals={0}
-            suffix="%"
-            value={trimPercent('strokeTrimStart', 0)}
-            onGestureStart={trimGesture.start}
-            onGestureEnd={trimGesture.end}
-            onChange={(v) => editTrim('strokeTrimStart', v, 0)}
-          />
-          <NumberField
-            label="End"
-            ariaLabel="Path trim end"
-            testId="field-trim-end"
-            min={0}
-            max={100}
-            decimals={0}
-            suffix="%"
-            value={trimPercent('strokeTrimEnd', 1)}
-            onGestureStart={trimGesture.start}
-            onGestureEnd={trimGesture.end}
-            onChange={(v) => editTrim('strokeTrimEnd', v, 1)}
-          />
+          <MotionField nodes={nodes} property="trimStart" motion={trimMotion}>
+            <NumberField
+              label="Trim"
+              ariaLabel="Path trim start"
+              testId="field-trim-start"
+              min={0}
+              max={100}
+              decimals={0}
+              suffix="%"
+              value={trimPercent('strokeTrimStart', 0)}
+              {...trimGestureProps}
+              onChange={(v) => editTrim('strokeTrimStart', 'trimStart', v, 0)}
+            />
+          </MotionField>
+          <MotionField nodes={nodes} property="trimEnd" motion={trimMotion}>
+            <NumberField
+              label="End"
+              ariaLabel="Path trim end"
+              testId="field-trim-end"
+              min={0}
+              max={100}
+              decimals={0}
+              suffix="%"
+              value={trimPercent('strokeTrimEnd', 1)}
+              {...trimGestureProps}
+              onChange={(v) => editTrim('strokeTrimEnd', 'trimEnd', v, 1)}
+            />
+          </MotionField>
         </div>
       )}
       {/* A custom brush paints the stroke with its own shape; brushes are made from a closed vector layer. */}

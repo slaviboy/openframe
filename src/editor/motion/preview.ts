@@ -84,6 +84,9 @@ export class MotionPreview {
 function applyValues(tx: Transaction, node: SceneNode, properties: Partial<Record<AnimatedProperty, number>>): void {
   const id: Id = node.id;
   if (properties.opacity !== undefined) tx.set(id, 'opacity', Math.min(1, Math.max(0, properties.opacity)));
+  const share = (value: number) => Math.min(1, Math.max(0, value));
+  if (properties.trimStart !== undefined) tx.set(id, 'strokeTrimStart', share(properties.trimStart));
+  if (properties.trimEnd !== undefined) tx.set(id, 'strokeTrimEnd', share(properties.trimEnd));
   if (properties.width !== undefined || properties.height !== undefined) {
     const size = { width: Math.max(0, properties.width ?? node.size.width), height: Math.max(0, properties.height ?? node.size.height) };
     const share = node.anchor ?? { x: 0.5, y: 0.5 };

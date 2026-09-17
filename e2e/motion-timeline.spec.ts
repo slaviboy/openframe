@@ -357,3 +357,76 @@ test('a stretch of the motion path bends by the handle in its middle', async ({ 
   await current.press('Enter');
   await expect(page.getByTestId('field-y')).toHaveValue(String(startY));
 });
+
+test('a stroke draws itself on: path trim is keyframed, and the Path preset animates it', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 460, box.y + 310, { steps: 5 });
+  await page.mouse.up();
+
+  const stroke = page.getByRole('region', { name: 'Stroke' });
+  await stroke.getByRole('button', { name: 'Add stroke' }).click();
+  await stroke.getByRole('combobox', { name: 'Stroke position' }).selectOption('CENTER');
+
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+
+  // The whole path is drawn at the start, and none of it a second in.
+  await page.getByRole('button', { name: 'Add path trim end keyframe' }).click();
+  await expect(timeline.getByRole('group', { name: 'Path trim end track' })).toBeVisible();
+  const current = timeline.getByRole('textbox', { name: 'Current time' });
+  await current.fill('1000');
+  await current.press('Enter');
+  await page.getByTestId('field-trim-end').fill('0');
+  await page.getByTestId('field-trim-end').press('Enter');
+  await expect(timeline.getByRole('button', { name: /Path trim end keyframe at 1000 ms/ })).toBeVisible();
+
+  // Halfway along, half the path is drawn.
+  await current.fill('500');
+  await current.press('Enter');
+  await expect(page.getByTestId('field-trim-end')).toHaveValue('50%');
+
+  // Back in Design the stroke is whole again: the playhead never touched the file.
+  await page.getByRole('radio', { name: 'Design' }).check();
+  await expect(page.getByTestId('field-trim-end')).toHaveValue('100%');
+});
+
+test('the Path preset waits for a stroke it can trim', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 460, box.y + 310, { steps: 5 });
+  await page.mouse.up();
+
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  const animations = page.getByRole('region', { name: 'Animations' });
+  const add = animations.getByRole('combobox', { name: 'Add animation' });
+  // A layer with no stroke down the middle of its path has nothing to trim, so Path is offered but not available.
+  await expect(add.getByRole('option', { name: 'Path' })).toBeDisabled();
+
+  await page.getByRole('radio', { name: 'Design' }).check();
+  const stroke = page.getByRole('region', { name: 'Stroke' });
+  await stroke.getByRole('button', { name: 'Add stroke' }).click();
+  await stroke.getByRole('combobox', { name: 'Stroke position' }).selectOption('CENTER');
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  await expect(add.getByRole('option', { name: 'Path' })).toBeEnabled();
+
+  await add.selectOption('PATH');
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  await expect(timeline.getByRole('group', { name: 'Path trim end track' })).toBeVisible();
+  // It draws the stroke on: nothing at the start, the whole path half a second later.
+  const current = timeline.getByRole('textbox', { name: 'Current time' });
+  await current.fill('0');
+  await current.press('Enter');
+  await expect(page.getByTestId('field-trim-end')).toHaveValue('0%');
+  await current.fill('500');
+  await current.press('Enter');
+  await expect(page.getByTestId('field-trim-end')).toHaveValue('100%');
+});

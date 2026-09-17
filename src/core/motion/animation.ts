@@ -24,7 +24,7 @@ import type { AnimatedProperty, AnimationTrack, Keyframe, KeyframeEasing, Motion
 export const DEFAULT_ANIMATION: PageAnimation = { duration: 2000, playback: 'LOOP', tracks: [] };
 
 /** The properties a layer can be animated on, in the order the properties panel shows them. */
-export const ANIMATED_PROPERTIES: readonly AnimatedProperty[] = ['x', 'y', 'width', 'height', 'rotation', 'opacity'];
+export const ANIMATED_PROPERTIES: readonly AnimatedProperty[] = ['x', 'y', 'width', 'height', 'rotation', 'opacity', 'trimStart', 'trimEnd'];
 
 export const ANIMATED_PROPERTY_LABELS: Readonly<Record<AnimatedProperty, string>> = {
   x: 'X position',
@@ -33,6 +33,8 @@ export const ANIMATED_PROPERTY_LABELS: Readonly<Record<AnimatedProperty, string>
   height: 'Height',
   rotation: 'Rotation',
   opacity: 'Opacity',
+  trimStart: 'Path trim start',
+  trimEnd: 'Path trim end',
 };
 
 /** The track of a layer's property, if it has one. */

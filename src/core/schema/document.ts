@@ -623,7 +623,7 @@ export const GuideSchema = z.object({ axis: z.enum(['X', 'Y']), offset: finite }
 const GuidesField = z.array(GuideSchema).max(10_000).optional();
 
 /** The properties Motion animates: a layer's place, its size, how far it is turned, and how visible it is. */
-export const AnimatedPropertySchema = z.enum(['x', 'y', 'width', 'height', 'rotation', 'opacity']);
+export const AnimatedPropertySchema = z.enum(['x', 'y', 'width', 'height', 'rotation', 'opacity', 'trimStart', 'trimEnd']);
 
 /** How an animation moves from one keyframe to the next: a prototype easing, or Hold, which waits and then jumps. */
 export const KeyframeEasingSchema = z.union([PrototypeEasingSchema, z.object({ type: z.literal('HOLD') })]);
