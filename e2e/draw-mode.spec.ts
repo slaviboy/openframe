@@ -17,14 +17,14 @@
 
 import { expect, test } from './fixtures';
 
-test('⇧D switches between Design and Draw, and Draw has its own toolbar', async ({ page }) => {
+test('the switcher moves between Design and Draw, and Draw has its own toolbar', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
   const toolbar = page.getByRole('toolbar', { name: 'Tools' });
   await expect(page.getByRole('radio', { name: 'Design' })).toBeChecked();
   await expect(toolbar.getByRole('button', { name: /^Frame/ })).toBeVisible();
 
-  await page.keyboard.press('Shift+D');
+  await page.getByRole('radio', { name: 'Draw' }).check();
   await expect(page.getByRole('radio', { name: 'Draw' })).toBeChecked();
   // Draw keeps the move tools and the illustration tools; the design tools stand down.
   await expect(toolbar.getByRole('button', { name: /^Move \(/ })).toBeVisible();
@@ -42,8 +42,8 @@ test('⇧D switches between Design and Draw, and Draw has its own toolbar', asyn
   await page.mouse.up();
   await expect(page.getByRole('treeitem', { name: /Drawing|Vector|Line/ }).first()).toBeVisible();
 
-  // ⇧D goes back, and the design tools return.
-  await page.keyboard.press('Shift+D');
+  // Design again, and the design tools return.
+  await page.getByRole('radio', { name: 'Design' }).check();
   await expect(page.getByRole('radio', { name: 'Design' })).toBeChecked();
   await expect(toolbar.getByRole('button', { name: /^Frame/ })).toBeVisible();
 
@@ -64,7 +64,7 @@ test('Draw mode previews each layer and gives its properties sliders', async ({ 
   await page.mouse.up();
   await expect(page.getByRole('treeitem', { name: /Rectangle 1/ })).toBeVisible();
 
-  await page.keyboard.press('Shift+D');
+  await page.getByRole('radio', { name: 'Draw' }).check();
   // The layer's row shows what the layer looks like, drawn by the engine.
   const preview = page.getByRole('img', { name: 'Rectangle 1 preview' });
   await expect(preview).toBeVisible();
@@ -83,7 +83,7 @@ test('Draw mode previews each layer and gives its properties sliders', async ({ 
   await expect.poll(async () => zoom.textContent()).not.toBe(before);
 
   // Design keeps its own list and fields.
-  await page.keyboard.press('Shift+D');
+  await page.getByRole('radio', { name: 'Design' }).check();
   await expect(page.getByRole('img', { name: 'Rectangle 1 preview' })).toHaveCount(0);
   await expect(page.getByRole('slider', { name: 'Opacity slider' })).toHaveCount(0);
 });

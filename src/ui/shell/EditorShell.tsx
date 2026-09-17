@@ -43,6 +43,7 @@ import { NAV_RAIL_W, SIDEBAR_LEFT_DEFAULT, SIDEBAR_LEFT_MAX, SIDEBAR_LEFT_MIN, S
 import styles from './EditorShell.module.css';
 import { RailButton } from './RailButton';
 import { Toolbar } from './Toolbar';
+import { InspectPanel } from '../panels/dev/InspectPanel';
 import { MissingFontsNotice } from '../dialogs/MissingFontsDialog';
 
 /**
@@ -89,7 +90,7 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
       }
     }
     document.documentElement.dataset['mode'] = mode;
-    if (mode === 'design' || mode === 'draw' || mode === 'motion') viewPrefs.set({ mode });
+    if (mode === 'design' || mode === 'draw' || mode === 'motion' || mode === 'dev') viewPrefs.set({ mode });
   }, [mode, editorState]);
   // Version history replaces the properties panel while it is open, and while an earlier version is shown.
   const inVersionHistory = versionHistoryOpen || viewingVersion;
@@ -193,7 +194,10 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
             ) : (
               <>
                 <RightHeader />
-                {rightTab === 'prototype' ? (
+                {/* Dev Mode reads the design: the inspect panel stands in for the properties panel. */}
+                {mode === 'dev' ? (
+                  <InspectPanel />
+                ) : rightTab === 'prototype' ? (
                   <PrototypePanel />
                 ) : (
                   <PropertyLabelsContext.Provider value={propertyLabels}>

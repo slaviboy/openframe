@@ -279,11 +279,11 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 Nothing. The working tree is clean apart from anything noted above.
 
-## Next (M12, in order)
+## Next (M13, in order)
 
-M10 and M11 are finished: every row of theirs in `docs/FEATURE_MATRIX.md` is Implemented, bar the parts recorded as not possible offline. M12 is Motion mode — its ten rows in the matrix, in the order they are listed there, starting with the Timeline panel and the mode switcher's Motion option (Draw and Design already switch; Motion and Dev Mode still show without being choosable).
+M10, M11 and M12 are finished: every row of theirs in `docs/FEATURE_MATRIX.md` is Implemented, bar the parts recorded as a browser limitation (animated export needs WebCodecs for MP4 and WebM; GIF and SVG work). M13 is Dev Mode — rows 277 to 289 in the matrix, in the order they are listed there: the Dev Mode sidebar, the inspect panel, code generation, redlines and measurements, annotations, statuses, compare changes, variables in Dev Mode, assets, dev resources, the component playground and animation handoff code.
 
-The user asked for the milestones to be built one after another without stopping in between, so carry on into M13 when M12's rows are done.
+The user asked on 2026-09-17 for everything to be finished: after M13 and M14, go back and close the rows still In progress or Planned in the earlier milestones (M2 has the most, then M6, M1 and M5).
 
 ## What's left, by milestone
 

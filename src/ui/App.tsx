@@ -292,10 +292,18 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
         id: 'view.drawMode',
         label: 'Draw mode',
         category: 'View',
-        shortcuts: ['Shift+D'],
         checked: () => editor.state.getSnapshot().mode === 'draw',
         // Draw and Design share the editor; the toolbar and the panels change with the mode.
         run: () => editor.state.setMode(editor.state.getSnapshot().mode === 'draw' ? 'design' : 'draw'),
+      },
+      {
+        id: 'view.devMode',
+        label: 'Dev Mode',
+        category: 'View',
+        shortcuts: ['Shift+D'],
+        checked: () => editor.state.getSnapshot().mode === 'dev',
+        // Dev Mode reads the design rather than editing it: the inspect panel takes the properties panel's place.
+        run: () => editor.state.setMode(editor.state.getSnapshot().mode === 'dev' ? 'design' : 'dev'),
       },
       {
         id: 'view.assetsTab',

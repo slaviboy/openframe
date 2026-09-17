@@ -145,6 +145,12 @@ const GROUPS: readonly ToolGroup[] = [
   },
 ];
 
+/** Dev Mode's toolbar: only the tools that read the design. Nothing here draws, because Dev Mode does not edit. */
+const DEV_GROUPS: readonly ToolGroup[] = [
+  { label: 'Move tools', items: GROUPS[0]!.items.filter((item) => item.tool === 'move' || item.tool === 'hand') },
+  GROUPS.at(-1)!,
+];
+
 /** Draw mode's toolbar: the move tools, then the illustration tools. */
 const DRAW_GROUPS: readonly ToolGroup[] = [
   GROUPS[0]!,
@@ -158,7 +164,7 @@ const DRAW_GROUPS: readonly ToolGroup[] = [
   },
 ];
 
-/** The toolbar's mode switcher. Dev Mode arrives with M13. */
+/** The toolbar's mode switcher. */
 const MODES: readonly {
   readonly mode: EditorMode;
   readonly label: string;
@@ -168,7 +174,7 @@ const MODES: readonly {
   { mode: 'draw', label: 'Draw', icon: 'modeDraw', available: true },
   { mode: 'design', label: 'Design', icon: 'modeDesign', available: true },
   { mode: 'motion', label: 'Motion', icon: 'modeMotion', available: true },
-  { mode: 'dev', label: 'Dev Mode', icon: 'modeDev', available: false },
+  { mode: 'dev', label: 'Dev Mode', icon: 'modeDev', available: true },
 ];
 
 /** Vector edit mode's secondary toolbar. */
@@ -273,7 +279,7 @@ export function Toolbar() {
       )}
       {vectorTool === null && (
         <>
-          {(mode === 'draw' ? DRAW_GROUPS : GROUPS).map((group) => {
+          {(mode === 'draw' ? DRAW_GROUPS : mode === 'dev' ? DEV_GROUPS : GROUPS).map((group) => {
             const active = group.items.some((t) => t.tool === tool);
             const current = group.items.find((t) => t.tool === (active ? tool : picked[group.label])) ?? firstAvailable(group);
             return (
@@ -311,7 +317,7 @@ export function Toolbar() {
           <div className={styles.divider} role="separator" aria-orientation="vertical" />
           <div className={styles.modes} role="radiogroup" aria-label="Mode">
             {MODES.map((m) => (
-              <ModeOption key={m.mode} label={m.label} icon={m.icon} checked={mode === m.mode} available={m.available} shortcut={m.mode === 'draw' ? shortcut('view.drawMode') : undefined} onSelect={() => editor.state.setMode(m.mode)} />
+              <ModeOption key={m.mode} label={m.label} icon={m.icon} checked={mode === m.mode} available={m.available} shortcut={m.mode === 'dev' ? shortcut('view.devMode') : undefined} onSelect={() => editor.state.setMode(m.mode)} />
             ))}
           </div>
         </>

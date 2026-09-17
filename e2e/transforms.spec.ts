@@ -29,7 +29,7 @@ test('a linear repeat draws copies without layers, until the transform is applie
   await expect(page.getByRole('treeitem', { name: /Rectangle 1/ })).toBeVisible();
 
   // Transforms live in Draw mode.
-  await page.keyboard.press('Shift+D');
+  await page.getByRole('radio', { name: 'Draw' }).check();
   const transform = page.getByRole('region', { name: 'Transform' });
   await expect(transform).toBeVisible();
   await transform.getByRole('combobox', { name: 'Additional transform modifier' }).selectOption('LINEAR');
@@ -64,7 +64,7 @@ test('a radial repeat turns the copies around the group, and the settings persis
   await page.mouse.move(box.x + 560, box.y + 330, { steps: 5 });
   await page.mouse.up();
 
-  await page.keyboard.press('Shift+D');
+  await page.getByRole('radio', { name: 'Draw' }).check();
   const transform = page.getByRole('region', { name: 'Transform' });
   await transform.getByRole('combobox', { name: 'Additional transform modifier' }).selectOption('RADIAL');
   await expect(page.getByTestId('field-repeat-count')).toHaveValue('6');

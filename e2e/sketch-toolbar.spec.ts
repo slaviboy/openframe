@@ -69,7 +69,7 @@ test('the Brush paints a dynamic stroke, which the Stroke section adjusts', asyn
   const box = (await page.getByTestId('canvas').boundingBox())!;
 
   // The Brush lives in Draw's toolbar, next to the Pen and the Pencil.
-  await page.keyboard.press('Shift+D');
+  await page.getByRole('radio', { name: 'Draw' }).check();
   const toolbar = page.getByRole('toolbar', { name: 'Tools' });
   await toolbar.getByRole('button', { name: 'Creation tools' }).click();
   await page.getByRole('menuitemradio', { name: /Brush/ }).click();
