@@ -439,10 +439,11 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
   },
   {
     id: 'motion.editAnchor',
-    label: 'Edit anchor point',
+    label: 'Edit rotation origin',
     category: 'Object',
     shortcuts: ['Alt+R'],
-    enabled: (e) => e.state.getSnapshot().mode === 'motion' && e.selection.length === 1,
+    // The point a layer turns around is set wherever it is designed, not only where it is animated.
+    enabled: (e) => e.selection.length === 1,
     checked: (e) => e.state.getSnapshot().motion.editingAnchor,
     run: (e) => e.state.setMotion({ editingAnchor: !e.state.getSnapshot().motion.editingAnchor }),
   },

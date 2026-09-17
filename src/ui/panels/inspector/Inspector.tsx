@@ -1053,6 +1053,8 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       if (motion && (animated || (autoKeyframe && nodes.length > 0))) addKeyframe(editor, nodes.map((n) => n.id), property, motionTime, toKeyframe(value));
       else apply(value);
     };
+  // The point a layer turns around, which ⌥R reveals on the canvas.
+  const editingAnchor = useEditorState((s) => s.motion.editingAnchor);
   const spacing = useGesture('Change spacing');
   const smart = smartSelectionInfo(editor);
 
@@ -1164,6 +1166,15 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
                 onChange={keyframes('rotation', (deg) => rotate.change((tx) => nodes.forEach((n) => setRotation(tx, tx.store.getOrThrow(n.id) as SceneNode, deg))))}
               />
             </MotionField>
+            {!motion && single && (
+              <IconButton
+                icon="target"
+                label="Edit rotation origin"
+                tooltip="The point the layer turns around"
+                pressed={editingAnchor}
+                onClick={() => editor.commands.run('motion.editAnchor')}
+              />
+            )}
             <div className={styles.segmented}>
               <SegmentButton
                 icon="rotate90"

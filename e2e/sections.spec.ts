@@ -102,7 +102,6 @@ test('slice tool from the region tools menu', async ({ page }) => {
 });
 
 test('a slice exports the region it covers, not itself', async ({ page }) => {
-  await page.goto('/');
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
   const box = (await page.getByTestId('canvas').boundingBox())!;
 
@@ -127,4 +126,5 @@ test('a slice exports the region it covers, not itself', async ({ page }) => {
   await exportSection.getByRole('button', { name: /^Export/ }).click();
   const file = await download;
   expect(file.suggestedFilename()).toMatch(/Slice 1/);
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
 });

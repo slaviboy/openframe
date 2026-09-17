@@ -38,6 +38,15 @@ export function clipboardCommands(clipboard: ClipboardController): CommandDefini
       run: () => void clipboard.paste('over-selection'),
     },
     {
+      id: 'edit.pasteInPlace',
+      label: 'Paste in place',
+      category: 'Edit',
+      // ⌥⌘V: the content goes back at the very coordinates it was copied from, in view or not.
+      shortcuts: ['Mod+Alt+V'],
+      enabled: () => clipboard.canPaste(),
+      run: () => void clipboard.paste('in-place'),
+    },
+    {
       id: 'edit.copyProperties',
       label: 'Copy properties',
       category: 'Edit',

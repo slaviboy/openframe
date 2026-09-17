@@ -35,7 +35,7 @@ import { visibleWorldRect } from '../viewport/viewport';
 import type { ClipboardPayload } from './payload';
 import { acceptsLayers } from '@/core/document/instances';
 
-export type PasteMode = 'default' | 'over-selection' | 'replace';
+export type PasteMode = 'default' | 'in-place' | 'over-selection' | 'replace';
 
 const centerDelta = (from: Rect, to: Rect): Vec2 => ({
   x: Math.round(to.x + to.width / 2 - (from.x + from.width / 2)),
@@ -105,11 +105,11 @@ export function pastePayload(editor: Editor, payload: ClipboardPayload, mode: Pa
     parent = containerAt(editor, at);
     lo = topChildKey(store, parent);
     hi = null;
-  } else if (selectedFrame) {
+  } else if (selectedFrame && mode !== 'in-place') {
     parent = selectedFrame;
     lo = topChildKey(store, selectedFrame);
     hi = null;
-  } else if (topmost) {
+  } else if (topmost && mode !== 'in-place') {
     parent = store.parentOf(topmost)!;
     lo = keyOf(store, topmost);
     hi = nextKeyAbove(store, topmost);
@@ -122,7 +122,10 @@ export function pastePayload(editor: Editor, payload: ClipboardPayload, mode: Pa
   ({ parent, lo, hi } = acceptingSlot(store, payload, parent, lo, hi));
 
   let offset: Vec2 = { x: 0, y: 0 };
-  if (at) {
+  // Paste in place puts the content back at the very coordinates it was copied from, in view or not.
+  if (mode === 'in-place') {
+    offset = { x: 0, y: 0 };
+  } else if (at) {
     offset = centerDelta(payload.bounds, { x: at.x, y: at.y, width: 0, height: 0 });
   } else if (mode === 'over-selection' && selected.length > 0) {
     offset = centerDelta(payload.bounds, editor.selectionBounds(selected)!);

@@ -65,3 +65,33 @@ test('rotate a layer from outside its corner; undo restores; Shift snaps to 15°
   await page.getByRole('treeitem').first().click();
   await expect(page.getByTestId('field-rotation')).toHaveValue('-60°');
 });
+
+test('⌥R sets the point a layer turns around, while designing as well as in Motion', async ({ page }) => {
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 360, box.y + 260);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 460, box.y + 360, { steps: 5 });
+  await page.mouse.up();
+  const startX = Number(await page.getByTestId('field-x').inputValue());
+  const startY = Number(await page.getByTestId('field-y').inputValue());
+
+  // The rotation origin is set while designing, not only in Motion.
+  const origin = page.getByRole('button', { name: 'Edit rotation origin' });
+  await expect(origin).toBeVisible();
+  await origin.click();
+  await expect(origin).toHaveAttribute('aria-pressed', 'true');
+
+  // Dragging the target to the layer's top-left corner makes that the point it turns around.
+  await page.mouse.move(box.x + 410, box.y + 310);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 360, box.y + 260, { steps: 6 });
+  await page.mouse.up();
+  // Turning it now leaves that corner where it was.
+  await page.getByTestId('field-rotation').fill('90');
+  await page.getByTestId('field-rotation').press('Enter');
+  await expect.poll(async () => Math.round(Number(await page.getByTestId('field-x').inputValue()))).toBe(Math.round(startX));
+  await expect.poll(async () => Math.round(Number(await page.getByTestId('field-y').inputValue()))).toBe(Math.round(startY));
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+});

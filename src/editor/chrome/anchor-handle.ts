@@ -28,8 +28,9 @@ export const ANCHOR_HANDLE_SIZE = 14;
 
 /** The layer whose anchor point is being edited: a single selection, while Edit anchor point is on in Motion. */
 export function anchorTarget(editor: Editor): SceneNode | null {
+  // The point a layer turns around is the same in every mode; Motion is only where it is animated.
   const state = editor.state.getSnapshot();
-  if (state.mode !== 'motion' || !state.motion.editingAnchor) return null;
+  if (!state.motion.editingAnchor) return null;
   const [id, ...rest] = state.selection;
   if (id === undefined || rest.length > 0) return null;
   const node = editor.doc.get(id);

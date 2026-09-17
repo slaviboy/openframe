@@ -176,3 +176,29 @@ describe('clipboard encoding and validation', () => {
     expect(() => validateClipboardPayload(cyclic)).toThrow(ClipboardError);
   });
 });
+
+describe('paste in place', () => {
+  test('puts the content back at the very coordinates it was copied from', () => {
+    const source = rect(400, 300);
+    const payload = copy([source]);
+
+    // Far from where it was copied, so an ordinary paste would bring it into view instead.
+    editor.setViewport({ x: 5000, y: 5000, zoom: 1 });
+    editor.state.clearSelection();
+
+    const [pasted] = pastePayload(editor, payload, 'in-place');
+    expect(Math.round(bounds(pasted!).x)).toBe(400);
+    expect(Math.round(bounds(pasted!).y)).toBe(300);
+  });
+
+  test('goes onto the page rather than into whatever is selected', () => {
+    const source = rect(400, 300);
+    const payload = copy([source]);
+    const frame = add((id, p) => makeFrame({ id, parent: p, name: 'Card', x: 0, y: 0, width: 200, height: 200 }));
+
+    editor.state.select([frame]);
+    const [pasted] = pastePayload(editor, payload, 'in-place');
+    expect(editor.doc.parentOf(pasted!)).toBe(editor.pageId);
+    expect(Math.round(bounds(pasted!).x)).toBe(400);
+  });
+});
