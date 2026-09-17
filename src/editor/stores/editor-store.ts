@@ -101,6 +101,8 @@ export interface EditorState {
   readonly motion: MotionState;
   /** Dev Mode: the annotation category being filtered to, or null for all of them. */
   readonly annotationFilter: string | null;
+  /** Dev Mode: the timeline is shown, read-only, to watch an animation in. */
+  readonly devTimeline: boolean;
   readonly rightTab: RightPanelTab;
   readonly viewports: Readonly<Record<Id, Viewport>>;
   /** Layer rows expanded in the layers panel. */
@@ -216,6 +218,7 @@ export class EditorStore extends Observable<EditorState> {
       sketchStroke: DEFAULT_SKETCH_STROKE,
       motion: DEFAULT_MOTION,
       annotationFilter: null,
+      devTimeline: false,
       rightTab: 'design',
       viewports: {},
       expanded: new Set(),
@@ -386,6 +389,10 @@ export class EditorStore extends Observable<EditorState> {
 
   releaseSpring(): void {
     if (this.state.spring) this.setState({ tool: this.state.spring, spring: null });
+  }
+
+  setDevTimeline(devTimeline: boolean): void {
+    this.setState({ devTimeline });
   }
 
   setAnnotationFilter(annotationFilter: string | null): void {

@@ -279,3 +279,50 @@ test('Dev Mode shows a layer’s variables and the links left on it', async ({ p
   await page.getByRole('button', { name: /^Delete link/ }).click();
   await expect(page.getByRole('region', { name: 'Dev resources' }).getByRole('link')).toHaveCount(0);
 });
+
+test('an animated layer hands its animation over as code, with a read-only timeline to watch it in', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 520, box.y + 380, { steps: 5 });
+  await page.mouse.up();
+
+  // A slide over the first second of the animation.
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  const current = timeline.getByRole('textbox', { name: 'Current time' });
+  const startX = Number(await page.getByTestId('field-x').inputValue());
+  await page.getByRole('button', { name: 'Add x position keyframe' }).click();
+  await current.fill('1000');
+  await current.press('Enter');
+  await page.getByTestId('field-x').fill(String(startX + 100));
+  await page.getByTestId('field-x').press('Enter');
+
+  await page.getByRole('radio', { name: 'Dev Mode' }).check();
+  const motion = page.getByRole('region', { name: 'Motion' });
+  const code = page.getByTestId('animation-code');
+  await expect(code).toContainText('@keyframes rectangle-1 {');
+  // A keyframe a second into a two-second animation is halfway along it.
+  await expect(code).toContainText('50% {');
+  await expect(code).toContainText('animation: rectangle-1 2000ms linear infinite;');
+
+  await motion.getByRole('combobox', { name: 'Animation code format' }).selectOption('REACT');
+  await expect(code).toContainText('<motion.div');
+  await expect(code).toContainText('repeat: Infinity,');
+  await motion.getByRole('combobox', { name: 'Animation code format' }).selectOption('JSON');
+  await expect(code).toContainText('"duration": 2000,');
+
+  // The timeline view watches the animation without being able to change it.
+  await expect(page.getByRole('region', { name: 'Timeline' })).toHaveCount(0);
+  await motion.getByRole('button', { name: 'Show in timeline view' }).click();
+  const devTimeline = page.getByRole('region', { name: 'Timeline' });
+  await expect(devTimeline).toBeVisible();
+  await expect(devTimeline.getByRole('button', { name: 'Auto-keyframe' })).toHaveCount(0);
+  await expect(devTimeline.getByRole('button', { name: /X position keyframe at 0 ms/ })).toBeDisabled();
+
+  await motion.getByRole('button', { name: 'Hide timeline view' }).click();
+  await expect(page.getByRole('region', { name: 'Timeline' })).toHaveCount(0);
+});

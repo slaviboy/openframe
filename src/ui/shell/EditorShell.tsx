@@ -78,6 +78,7 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
   const inlinePreviewKey = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().inlinePreviewKey);
   const viewingVersion = useSyncExternalStore(session.session.subscribe, () => session.session.getSnapshot().viewing !== null);
   const mode = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().mode);
+  const devTimeline = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().devTimeline);
   // Draw mode has its own accent, from the mode on the root element (as the theme is), and is where the editor opens again.
   const modeRestored = useRef(false);
   useLayoutEffect(() => {
@@ -213,6 +214,8 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
           </aside>
         )}
         {mode === 'motion' && uiMode !== 'hidden' && <TimelinePanel />}
+        {/* Dev Mode watches an animation in the timeline without being able to change it. */}
+        {mode === 'dev' && devTimeline && uiMode !== 'hidden' && <TimelinePanel readOnly />}
         {uiMode !== 'hidden' && <Toolbar />}
         {inlinePreviewOpen && uiMode !== 'hidden' && <InlinePreview key={inlinePreviewKey} />}
         {variablesOpen && uiMode !== 'hidden' && <VariablesView onClose={() => editorState.setVariablesOpen(false)} />}

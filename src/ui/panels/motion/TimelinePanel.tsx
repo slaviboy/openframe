@@ -47,7 +47,7 @@ const formatTime = (ms: number, unit: 'MS' | 'S') => (unit === 'MS' ? `${Math.ro
  * The Motion timeline, across the bottom in Motion mode: the playback controls, the animation's timing, a ruler with
  * the playhead, and a track for each animated layer showing its keyframes.
  */
-export function TimelinePanel() {
+export function TimelinePanel({ readOnly = false }: { readOnly?: boolean } = {}) {
   const editor = useEditor();
   useDocumentRevision();
   const motion = useEditorState((s) => s.motion);
@@ -217,12 +217,12 @@ export function TimelinePanel() {
           label={motion.playing ? 'Pause' : 'Play'}
           onClick={() => editor.state.setMotion({ playing: !motion.playing })}
         />
-        <IconButton
+        {!readOnly && <IconButton
           icon="keyframe"
           label="Auto-keyframe"
           pressed={motion.autoKeyframe}
           onClick={() => editor.state.setMotion({ autoKeyframe: !motion.autoKeyframe })}
-        />
+        />}
         <label className={styles.field}>
           <span>Current</span>
           <input
@@ -303,6 +303,7 @@ export function TimelinePanel() {
                 animation={animation}
                 collapsed={motion.collapsed}
                 instance={isInstance}
+                locked={readOnly}
                 selected={selection.includes(id)}
                 time={motion.time}
                 percent={percent}
@@ -352,6 +353,7 @@ function LayerTrack({
   collapsed,
   selected,
   instance,
+  locked,
   time,
   percent,
   visibleMs,
@@ -365,6 +367,8 @@ function LayerTrack({
   collapsed: boolean;
   selected: boolean;
   instance: boolean;
+  /** Dev Mode's timeline view watches the animation without changing any of it. */
+  locked: boolean;
   time: number;
   percent: (time: number) => string;
   visibleMs: number;
@@ -401,14 +405,18 @@ function LayerTrack({
           extent={{ from: Math.min(...extent), to: Math.max(...extent) }}
           percent={percent}
           visibleMs={visibleMs}
-          ends={!instance}
-          onRetime={(from, to) => (instance ? setInstanceOffset(editor, nodeId, instanceOffset(editor.doc, nodeId) + from - Math.min(...extent)) : setLayerExtent(editor, nodeId, from, to))}
+          ends={!instance && !locked}
+          onRetime={(from, to) => {
+            if (locked) return;
+            if (instance) setInstanceOffset(editor, nodeId, instanceOffset(editor.doc, nodeId) + from - Math.min(...extent));
+            else setLayerExtent(editor, nodeId, from, to);
+          }}
         />
         {collapsed ? (
-          <TrackRow label={node.name} nodeId={nodeId} tracks={tracks} percent={percent} time={time} readOnly={instance} isSelected={isSelected} onSelect={onSelect} onSelectAll={onSelectAll} onDrag={onDrag} />
+          <TrackRow label={node.name} nodeId={nodeId} tracks={tracks} percent={percent} time={time} readOnly={instance || locked} isSelected={isSelected} onSelect={onSelect} onSelectAll={onSelectAll} onDrag={onDrag} />
         ) : (
           tracks.map((track) => (
-            <TrackRow key={track.property} label={ANIMATED_PROPERTY_LABELS[track.property]} nodeId={nodeId} tracks={[track]} percent={percent} time={time} readOnly={instance} isSelected={isSelected} onSelect={onSelect} onSelectAll={onSelectAll} onDrag={onDrag} />
+            <TrackRow key={track.property} label={ANIMATED_PROPERTY_LABELS[track.property]} nodeId={nodeId} tracks={[track]} percent={percent} time={time} readOnly={instance || locked} isSelected={isSelected} onSelect={onSelect} onSelectAll={onSelectAll} onDrag={onDrag} />
           ))
         )}
       </div>

@@ -286,7 +286,7 @@ Its **Tests** column must then name the covering tests.
 | Assets section (auto icon detection, downloads), export | dev-mode/inspect-designs/guide-to-inspecting.html | P1 | Export | M13 | Planned | |
 | Dev resources (links on layers) | dev-mode/turn-designs-to-code/link-dev-resources-to-layers-in-dev-mode.html | P2 | Document model | M13 | Planned (links stored locally; opening them is user-initiated) | |
 | Component playground | dev-mode/inspect-designs/guide-to-inspecting.html | P2 | Components | M13 | Planned | |
-| Animation handoff code (CSS / React / JSON) | dev-mode/turn-designs-to-code/hand-off-animations-to-development.html | P2 | Motion | M13 | Planned | |
+| Animation handoff code (CSS / React / JSON) | dev-mode/turn-designs-to-code/hand-off-animations-to-development.html | P2 | Motion | M13 | Implemented (an animated layer selected in Dev Mode carries a Motion section: the code that rebuilds its animation as CSS keyframes with the animation shorthand, as a Framer Motion component with its values as arrays against where they fall in the run, or as the animation's own data in JSON, with a Copy button. Show in timeline view opens the timeline under the canvas to watch it in, where the keyframes and the timing are read but not changed. The MCP server the reference hands the same detail to needs a server) | src/core/dev/animation-code.test.ts, e2e/dev-mode.spec.ts |
 | Code Connect, MCP server, VS Code extension, Dev Mode plugins, notifications, org admin settings | dev-mode/turn-designs-to-code/code-connect.html, reference-for-vs-code.html, dev-mode-across-your-organization/manage-dev-mode-settings-for-an-organization.html | — | Cloud | — | Not feasible offline | |
 
 ## 14. Import / export / files

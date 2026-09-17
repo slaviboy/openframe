@@ -16,7 +16,9 @@
  */
 
 import { canHaveDevStatus, devStatusLabel, setDevStatus, type DevStatusNode } from '@/editor/commands/dev-status';
+import { ANIMATION_CODE_LABELS, generateAnimationCode, type AnimationCodeFormat } from '@/core/dev/animation-code';
 import { CODE_LANGUAGE_LABELS, CODE_UNITS, DEFAULT_UNIT_SCALE, generateCode, type CodeLanguage, type CodeUnit } from '@/core/dev/code-gen';
+import { shownAnimation } from '@/editor/commands/motion';
 import { addDevResource, boundVariablesOf, deleteDevResource, devResources } from '@/editor/commands/dev-resources';
 import { deleteMeasurement, measurementsOf, setMeasurementLabel } from '@/editor/commands/measurements';
 import { rotationDegrees } from '@/editor/commands/properties';
@@ -174,6 +176,7 @@ export function InspectPanel() {
         <Row label="Opacity" value={`${formatNumber(node.opacity * 100, 0)}%`} />
         <Row label="Blend mode" value={node.blendMode.toLowerCase().replace(/_/g, ' ')} />
       </Group>
+      <MotionSection node={node} />
       <VariablesSection node={node} />
       <DevResourcesSection node={node} />
       <AnnotationsSection node={node} />
@@ -181,6 +184,41 @@ export function InspectPanel() {
         </>
       )}
     </div>
+  );
+}
+
+/** The animation a layer carries, as the code that rebuilds it, with a read-only timeline to watch it in. */
+function MotionSection({ node }: { node: SceneNode }) {
+  const editor = useEditor();
+  const inTimeline = useEditorState((s) => s.devTimeline);
+  useDocumentRevision();
+  const [format, setFormat] = useState<AnimationCodeFormat>('CSS');
+  const animation = shownAnimation(editor);
+  const code = generateAnimationCode(animation, node.id, node.name, format);
+  if (code === null) return null;
+
+  return (
+    <section className={styles.group} aria-label="Motion">
+      <h3 className={styles.groupTitle}>Motion</h3>
+      <div className={styles.codeControls}>
+        <select className={primitives.select} aria-label="Animation code format" value={format} onChange={(e) => setFormat(e.target.value as AnimationCodeFormat)}>
+          {(Object.keys(ANIMATION_CODE_LABELS) as AnimationCodeFormat[]).map((value) => (
+            <option key={value} value={value}>
+              {ANIMATION_CODE_LABELS[value]}
+            </option>
+          ))}
+        </select>
+        <button type="button" className={primitives.button} aria-pressed={inTimeline} onClick={() => editor.state.setDevTimeline(!inTimeline)}>
+          {inTimeline ? 'Hide timeline view' : 'Show in timeline view'}
+        </button>
+      </div>
+      <pre className={styles.code} data-testid="animation-code">
+        {code}
+      </pre>
+      <button type="button" className={primitives.button} onClick={() => void navigator.clipboard?.writeText(code).catch(() => undefined)}>
+        Copy animation code
+      </button>
+    </section>
   );
 }
 
