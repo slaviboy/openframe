@@ -862,6 +862,15 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     enabled: (e) => e.state.getSnapshot().vectorEdit !== null,
     run: (e) => setVectorEditTool(e, 'width'),
   },
+  // The Shape builder has no shortcut either: it is picked from the secondary toolbar.
+  {
+    id: 'vector.toolShapeBuilder',
+    label: 'Shape builder',
+    category: 'Edit',
+    palette: false,
+    enabled: (e) => e.state.getSnapshot().vectorEdit !== null,
+    run: (e) => setVectorEditTool(e, 'shapeBuilder'),
+  },
   {
     id: 'vector.deleteWidthPoints',
     label: 'Delete width points',

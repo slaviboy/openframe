@@ -21,6 +21,12 @@ import type { DocumentStore } from '../document/store';
 import type { SceneNode } from '../schema/document';
 import type { VectorNetwork } from './vector-network';
 
+/** One piece the Shape builder can work with: the shapes it lies inside, and the area it covers. */
+export interface ShapeFace {
+  readonly members: readonly number[];
+  readonly commands: PathCommand[];
+}
+
 /** How an offset path turns the corners it grows around: squared off, or rounded. */
 export type OffsetJoin = 'SQUARE' | 'ROUND';
 
@@ -38,6 +44,13 @@ export interface GeometryService {
    * `weight` along `path`, as path commands; [] when nothing is left, null when the stroke doesn't reach it.
    */
   regionMinusStroke(network: VectorNetwork, region: number, path: readonly Vec2[], weight: number): PathCommand[] | null;
+
+  /**
+   * Shape builder: the separate pieces a set of overlapping shapes cuts the plane into, each piece being the area
+   * inside one group of the shapes and outside all the others. `members` says which of the shapes a piece is
+   * inside. Pieces with no area are left out, and the shapes are read in the space they are given in.
+   */
+  shapeFaces(shapes: readonly (readonly PathCommand[])[]): readonly ShapeFace[];
 
   /**
    * The shape a boolean group comes to: its children's outlines combined by its operation, as path commands in

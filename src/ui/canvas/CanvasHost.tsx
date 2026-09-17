@@ -281,6 +281,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
         arcLabel: tools.moveTool.arcLabel,
         vectorLasso: tools.vectorEdit.lassoPath,
         vectorPaintHover: tools.vectorEdit.paintHover,
+        vectorShapeFaces: tools.vectorEdit.shapeBuilderHighlight,
         vectorEraser: tools.vectorEdit.eraserTrail,
         vectorWidthHover: tools.vectorEdit.widthHoverPoint,
         vectorCutLine: tools.vectorEdit.cutLine,

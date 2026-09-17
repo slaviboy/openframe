@@ -29,8 +29,8 @@ interface Contour {
   readonly closed: boolean;
 }
 
-/** Splits path commands into the contours they draw, each starting at its own move. */
-function contoursOf(commands: readonly PathCommand[]): Contour[] {
+/** Splits path commands into contours, saying of each whether it closes — which the shared reader doesn't. */
+function closedContoursOf(commands: readonly PathCommand[]): Contour[] {
   const out: Contour[] = [];
   let current: PathCommand[] = [];
   for (const command of commands) {
@@ -130,7 +130,7 @@ export function simplifyNetworkCommands(network: VectorNetwork, amount: number):
   const tolerance = extent(network) * REACH * Math.min(1, amount);
   if (tolerance <= 0) return null;
   const out: PathCommand[] = [];
-  for (const contour of contoursOf(networkStrokePath(network))) {
+  for (const contour of closedContoursOf(networkStrokePath(network))) {
     const points = flattenPath(contour.commands, 12);
     if (points.length < 2) continue;
     const kept = simplifyPolyline(points, tolerance);

@@ -48,6 +48,7 @@ beforeEach(() => {
     regionMinusStroke: () => null,
     regionHalves: () => null,
     booleanOutline: () => null,
+    shapeFaces: () => [],
     offsetNetwork: () => null,
   });
   id = editor.history.run('create', (tx) => {

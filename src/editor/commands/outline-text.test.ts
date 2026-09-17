@@ -137,6 +137,7 @@ describe('outlining a text layer’s stroke', () => {
       regionMinusStroke: () => null,
       regionHalves: () => null,
       booleanOutline: () => null,
+      shapeFaces: () => [],
       offsetNetwork: () => null,
     });
     await outlineStrokeSelection(editor, async () => boxFont('ab'));

@@ -193,7 +193,7 @@ export interface EditorState {
 }
 
 /** Tool of vector edit mode's secondary toolbar: Move (V) drags points; Lasso (Q) selects the points inside a drawn outline; Cut (X) breaks the path where it is clicked; Bend pulls Bézier handles out of a point; Paint (⇧B) fills closed regions; Eraser (⇧E) removes the area it is dragged over; Variable width sets the stroke's width at points along the path. */
-export type VectorEditTool = 'move' | 'lasso' | 'cut' | 'bend' | 'paint' | 'eraser' | 'width';
+export type VectorEditTool = 'move' | 'lasso' | 'cut' | 'bend' | 'paint' | 'eraser' | 'width' | 'shapeBuilder';
 
 /** Vector edit mode on a vector layer: the indices of its selected points, and the secondary toolbar's tool (absent: Move). */
 export interface VectorEditRef {

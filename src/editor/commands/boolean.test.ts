@@ -132,6 +132,7 @@ describe('changing and flattening a boolean group', () => {
       regionMinusStroke: () => null,
       regionHalves: () => null,
       offsetNetwork: () => null,
+      shapeFaces: () => [],
       booleanOutline: () => [{ op: 'M', x: 0, y: 0 }, { op: 'L', x: 30, y: 0 }, { op: 'L', x: 30, y: 30 }, { op: 'L', x: 0, y: 30 }, { op: 'Z' }],
     });
     await flattenSelection(editor, async () => null);

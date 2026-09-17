@@ -23,6 +23,10 @@ import type { Vec2 } from '@/core/math/vec';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
 import { DEFAULT_SHAPE_FILL, solid } from '@/core/document/factory';
 import type { HandleMirroring, Paint, Transform, VectorNode } from '@/core/schema/document';
+import type { PathCommand } from '@/core/geometry/corners';
+import type { ShapeFace } from '@/core/vector/geometry-service';
+import { faceAt } from '@/core/vector/shape-builder';
+import { extractFace, mergeFaces, shapeBuilderFaces, subtractFace } from '../commands/shape-builder';
 import { cutVertex, deleteVertices, healVertices, moveVertices, nearestOnSegments, splitSegment } from '@/core/vector/vector-edit';
 import { bendVertex, mirroredTangent, mirroringOf, moveHandles, oppositeEnd, setTangent, tangentAt, type SegmentEnd } from '@/core/vector/vector-bend';
 import { keyBetween } from '@/core/ids/fractional-index';
@@ -252,6 +256,10 @@ export class VectorEditController implements Tool {
   private lasso: LassoDrag | null = null;
   private handle: HandleGesture | null = null;
   private painting: PaintDrag | null = null;
+  /** The Shape builder's sweep: the pieces on offer and the ones gathered so far. */
+  private building: { readonly faces: readonly ShapeFace[]; chosen: number[]; swept: boolean } | null = null;
+  /** The piece the pointer is over, for the overlay to shade. */
+  private hoveredFace: number | null = null;
   private erasing: EraseDrag | null = null;
   private widthDrag: WidthDrag | null = null;
   private cutDrag: CutDrag | null = null;
@@ -268,6 +276,18 @@ export class VectorEditController implements Tool {
     return (
       this.drag !== null || this.lasso !== null || this.handle !== null || this.painting !== null || this.erasing !== null || this.widthDrag !== null || this.cutDrag !== null || this.boxDrag !== null
     );
+  }
+
+  /**
+   * The Shape builder's pieces as the overlay shades them: the ones gathered by a sweep, or the one under the
+   * pointer, in the edited layer's space. Empty when the Shape builder isn't the tool in hand.
+   */
+  get shapeBuilderHighlight(): readonly (readonly PathCommand[])[] {
+    const state = this.editor.state.getSnapshot().vectorEdit;
+    if (state?.tool !== 'shapeBuilder') return [];
+    if (this.building) return this.building.chosen.map((i) => this.building!.faces[i]!.commands);
+    if (this.hoveredFace === null) return [];
+    return [shapeBuilderFaces(this.editor)[this.hoveredFace]?.commands ?? []];
   }
 
   /** Screen outline of the lasso being drawn, for the overlay. */
@@ -367,6 +387,20 @@ export class VectorEditController implements Tool {
         erased: false,
       };
       this.erase(p);
+      return;
+    }
+    if (state.tool === 'shapeBuilder') {
+      const inverse = invert(toWorld);
+      if (!inverse) return;
+      const faces = shapeBuilderFaces(editor);
+      const at = faceAt(faces, apply(inverse, p.world));
+      // ⌥ takes a piece away at once; otherwise the press begins a sweep that gathers the pieces it crosses.
+      if (p.alt) {
+        if (at !== null) subtractFace(editor, faces, at);
+        return;
+      }
+      this.building = { faces, chosen: at === null ? [] : [at], swept: false };
+      this.editor.requestRender();
       return;
     }
     if (state.tool === 'paint') {
@@ -524,6 +558,10 @@ export class VectorEditController implements Tool {
       this.erase(p);
       return;
     }
+    if (this.editor.state.getSnapshot().vectorEdit?.tool === 'shapeBuilder') {
+      this.moveShapeBuilder(p);
+      return;
+    }
     if (this.editor.state.getSnapshot().vectorEdit?.tool === 'paint') {
       const node = editedVector(this.editor);
       const region = node ? this.regionUnder(node, p.world) : null;
@@ -561,7 +599,50 @@ export class VectorEditController implements Tool {
     this.editor.requestRender();
   }
 
+  /**
+   * The Shape builder following the pointer: a sweep gathers every piece it crosses, and without one the piece
+   * under the pointer is shaded so it can be seen before it is clicked.
+   */
+  private moveShapeBuilder(p: PointerInfo): void {
+    const node = editedVector(this.editor);
+    const inverse = node ? invert(this.editor.scene.worldTransform(node.id)) : null;
+    if (!inverse) return;
+    const local = apply(inverse, p.world);
+    const b = this.building;
+    if (b) {
+      const at = faceAt(b.faces, local);
+      b.swept = true;
+      if (at !== null && !b.chosen.includes(at)) {
+        b.chosen.push(at);
+        this.editor.requestRender();
+      }
+      return;
+    }
+    const at = faceAt(shapeBuilderFaces(this.editor), local);
+    if (at !== this.hoveredFace) {
+      this.hoveredFace = at;
+      this.editor.requestRender();
+    }
+  }
+
+  /** The Shape builder's press ending: a sweep merges what it gathered, a click takes one piece to its own layer. */
+  private finishShapeBuilder(): void {
+    const b = this.building;
+    this.building = null;
+    if (!b) return;
+    this.hoveredFace = null;
+    if (b.chosen.length === 0) return;
+    // A sweep across several pieces joins them; a click on one takes it out onto a layer of its own.
+    if (b.swept && b.chosen.length > 1) mergeFaces(this.editor, b.faces, b.chosen);
+    else extractFace(this.editor, b.faces, b.chosen[0]!);
+    this.editor.requestRender();
+  }
+
   pointerUp(): void {
+    if (this.building) {
+      this.finishShapeBuilder();
+      return;
+    }
     const boxDrag = this.boxDrag;
     if (boxDrag) {
       this.boxDrag = null;

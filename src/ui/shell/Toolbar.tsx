@@ -202,6 +202,12 @@ const VECTOR_TOOLS: readonly {
     icon: 'width',
     command: 'vector.toolWidth',
   },
+  {
+    tool: 'shapeBuilder',
+    label: 'Shape builder',
+    icon: 'boolean',
+    command: 'vector.toolShapeBuilder',
+  },
 ];
 
 const firstAvailable = (group: ToolGroup): ToolItem => group.items.find((i) => i.command) ?? group.items[0]!;

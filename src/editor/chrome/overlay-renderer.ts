@@ -25,6 +25,7 @@ import { apply, type Matrix } from '@/core/math/matrix';
 import type { Rect } from '@/core/math/rect';
 import type { Vec2 } from '@/core/math/vec';
 import type { GapIndicator } from '@/core/scene/equal-gaps';
+import type { PathCommand } from '@/core/geometry/corners';
 import type { MeasureLine } from '@/core/scene/measure';
 import { spacingHandles } from '@/core/scene/smart-selection';
 import { smartSelectionInfo } from '../commands/smart-selection';
@@ -99,6 +100,8 @@ export interface OverlayInput {
   readonly vectorLasso?: readonly Vec2[] | null;
   /** The region the Paint tool would change, and whether it would remove the region's fill. */
   readonly vectorPaintHover?: { readonly region: number; readonly remove: boolean } | null;
+  /** The pieces the Shape builder would act on, in the edited layer's space. */
+  readonly vectorShapeFaces?: readonly (readonly PathCommand[])[];
   /** The eraser's path on screen and its width, while erasing in vector edit mode. */
   readonly vectorEraser?: { readonly points: readonly Vec2[]; readonly width: number } | null;
   /** Where the Variable width tool would add a width point (screen). */
@@ -966,6 +969,30 @@ function drawVectorEdit(ctx: CanvasRenderingContext2D, input: OverlayInput): voi
     }
     ctx.strokeStyle = hover.remove ? '#f24822' : theme.selection;
     ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.restore();
+  }
+  // The pieces the Shape builder is over or has gathered, washed over so they can be told apart.
+  for (const face of input.vectorShapeFaces ?? []) {
+    ctx.save();
+    ctx.beginPath();
+    for (const command of face) {
+      if (command.op === 'Z') ctx.closePath();
+      else if (command.op === 'C') {
+        const [c1, c2, to] = [toScreen({ x: command.x1, y: command.y1 }), toScreen({ x: command.x2, y: command.y2 }), toScreen(command)];
+        ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, to.x, to.y);
+      } else {
+        const to = toScreen(command);
+        if (command.op === 'M') ctx.moveTo(to.x, to.y);
+        else ctx.lineTo(to.x, to.y);
+      }
+    }
+    ctx.fillStyle = theme.selection;
+    ctx.globalAlpha = 0.25;
+    ctx.fill('evenodd');
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = theme.selection;
+    ctx.lineWidth = 1;
     ctx.stroke();
     ctx.restore();
   }

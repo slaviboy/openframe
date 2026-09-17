@@ -25,7 +25,7 @@ import { maskRuns } from '@/core/scene/masks';
 import { arcCommands } from '@/core/geometry/arc';
 import { strokeChain, variableWidthOutline } from '@/core/vector/vector-width';
 import { networkStrokePath, regionFillPath, type VectorNetwork } from '@/core/vector/vector-network';
-import type { OffsetJoin } from '@/core/vector/geometry-service';
+import type { OffsetJoin, ShapeFace } from '@/core/vector/geometry-service';
 import { dynamicStrokePath, hasDynamicStroke } from '@/core/vector/dynamic-stroke';
 import { brushStrokeOutlines, isBrush } from '@/core/vector/brush';
 import { pathRunFor } from '@/core/vector/text-path';
@@ -146,6 +146,9 @@ half4 main(float2 p) {
 
 /** Sections have slightly rounded corners and no radius control. */
 export const SECTION_CORNER_RADIUS = 2;
+/** How many shapes the Shape builder reads at once: every group of them is tried, so the work doubles with each. */
+const MAX_FACE_SHAPES = 8;
+
 const COS30 = Math.cos(Math.PI / 6);
 const SIN30 = 0.5;
 
@@ -1529,6 +1532,50 @@ export class SceneRenderer {
     shape.delete();
     stroke.delete();
     return merged;
+  }
+
+  /**
+   * Shape builder (GeometryService): the pieces overlapping shapes cut the plane into. A piece is the area inside
+   * one group of the shapes and outside every other, so the pieces together cover the shapes exactly once and can
+   * be taken apart, merged or dropped one at a time.
+   *
+   * Every group of the shapes is tried, so the work doubles with each shape; past `MAX_FACE_SHAPES` only that many
+   * are read, which keeps a selection of a great many shapes from hanging the editor.
+   */
+  shapeFaces(shapes: readonly (readonly PathCommand[])[]): readonly ShapeFace[] {
+    const ck = this.ck;
+    const paths = shapes.slice(0, MAX_FACE_SHAPES).map((commands) => this.pathFrom(commands));
+    const faces: ShapeFace[] = [];
+    for (let mask = 1; mask < 1 << paths.length; mask++) {
+      const members = paths.map((_, i) => i).filter((i) => (mask & (1 << i)) !== 0);
+      // Inside every shape of the group…
+      let piece: Path | null = null;
+      for (const i of members) {
+        const shape = paths[i]!;
+        if (!piece) {
+          piece = new ck.PathBuilder().addPath(shape)?.detachAndDelete() ?? null;
+          continue;
+        }
+        const next: Path | null = ck.Path.MakeFromOp(piece, shape, ck.PathOp.Intersect);
+        piece.delete();
+        piece = next;
+      }
+      // …and outside all the rest.
+      for (let i = 0; piece && i < paths.length; i++) {
+        if (members.includes(i)) continue;
+        const next: Path | null = ck.Path.MakeFromOp(piece, paths[i]!, ck.PathOp.Difference);
+        piece.delete();
+        piece = next;
+      }
+      if (!piece) continue;
+      if (!piece.isEmpty()) {
+        const commands = this.commandsOf(piece);
+        if (commands.length > 0) faces.push({ members, commands });
+      }
+      piece.delete();
+    }
+    for (const path of paths) path.delete();
+    return faces;
   }
 
   /** A boolean group's combined shape as path commands (GeometryService); null when it combines nothing. */
