@@ -28,7 +28,21 @@ import { isGuideRect, SNAP_THRESHOLD_PX, snapCandidatesFor } from '../interactio
 import { guideWorldLine, hitGuide } from '../interactions/guides';
 import { adoptCoveredLayers, duplicateNodes } from '../commands/structure';
 import { setIgnoreAutoLayout, setLayoutSizing } from '../commands/auto-layout';
-import { applySpacing, captureSpacingStarts, smartSelectionInfo, spacingHandleAt, type SmartSelectionInfo } from '../commands/smart-selection';
+import {
+  applyReorder,
+  applySpacing,
+  beginReorder,
+  captureSpacingStarts,
+  markedSmartSelection,
+  reorderIndexAt,
+  reorderIndexOf,
+  reorderLine,
+  smartRingAt,
+  smartSelectionInfo,
+  spacingHandleAt,
+  type ReorderState,
+  type SmartSelectionInfo,
+} from '../commands/smart-selection';
 import { canParent } from '@/core/document/containment';
 import type { DuplicateMemory } from '../editor';
 import type { Vec2 } from '@/core/math/vec';
@@ -92,8 +106,13 @@ import { acceptsLayers } from '@/core/document/instances';
 
 type Gesture =
   | { kind: 'idle' }
-  /** `toggleOnClick`: Shift-press on an already-selected layer deselects it only if no drag follows. */
-  | { kind: 'pending-move'; down: PointerInfo; targets: Id[]; toggleOnClick?: Id }
+  /**
+   * `toggleOnClick`: Shift-press on an already-selected layer deselects it only if no drag follows.
+   * `keepSelection`: the press marked a layer within a smart selection, which the selection itself outlives.
+   */
+  | { kind: 'pending-move'; down: PointerInfo; targets: Id[]; toggleOnClick?: Id; keepSelection?: true }
+  /** Dragging the marked layers of a smart selection into another place in the row or column. */
+  | { kind: 'reorder'; down: PointerInfo; tx: Transaction; state: ReorderState; index: number }
   | {
       kind: 'move';
       down: PointerInfo;
@@ -214,6 +233,39 @@ export class MoveTool implements Tool {
   /** Equal-spacing indicators of the move in progress (world coordinates). */
   get gapIndicators(): readonly GapIndicator[] {
     return this.gesture.kind === 'move' ? this.gesture.gaps : [];
+  }
+
+  /** The blue line showing where a reorder within a smart selection will drop the marked layers, in world space. */
+  get reorderInsertion(): readonly [Vec2, Vec2] | null {
+    const g = this.gesture;
+    return g.kind === 'reorder' ? reorderLine(g.state, g.index) : null;
+  }
+
+  /**
+   * Starts dragging the marked layers of a smart selection to another place in it. Returns false when there is no
+   * such selection to reorder, leaving the press to move the layers as any other.
+   */
+  private beginReorderDrag(p: PointerInfo): boolean {
+    const { editor } = this.env;
+    const state = markedSmartSelection(editor);
+    if (!state || state.marked.length === state.info.ids.length) return false;
+    const tx = editor.history.begin('Reorder');
+    const reorder = beginReorder(tx, editor, state.info, state.marked);
+    this.gesture = { kind: 'reorder', down: p, tx, state: reorder, index: reorderIndexOf(reorder) };
+    this.updateReorder(p);
+    return true;
+  }
+
+  /** Drops the marked layers into the place the pointer is over, laying the row out around them. */
+  private updateReorder(p: PointerInfo): void {
+    const g = this.gesture;
+    if (g.kind !== 'reorder') return;
+    const index = reorderIndexAt(g.state, p.world);
+    if (index === g.index) return;
+    this.gesture = { ...g, index };
+    applyReorder(g.tx, g.state, index);
+    g.tx.flushPreview();
+    this.env.editor.requestRender();
   }
 
   /** The auto layout insertion indicator while moving children of an auto layout frame, in world space. */
@@ -538,6 +590,19 @@ export class MoveTool implements Tool {
       this.gesture = { kind: 'spacing', tx, down: p, last: p, info: smart, starts, gap: smart.selection.gap };
       return;
     }
+    // Smart selection: the pink ring at a layer's center marks it, so duplicating or deleting acts on it alone.
+    if (smart && !p.mod) {
+      const ring = smartRingAt(editor, smart, p.screen, this.env.hitTolerancePx);
+      if (ring !== null) {
+        const marked = editor.state.getSnapshot().markedLayers;
+        // Double-clicking any layer of a row or column marks the whole of it.
+        if (p.clickCount >= 2) editor.state.markLayers(smart.ids);
+        else if (p.shift) editor.state.markLayers(marked.includes(ring) ? marked.filter((id) => id !== ring) : [...marked, ring]);
+        else editor.state.markLayers([ring]);
+        this.gesture = { kind: 'pending-move', down: p, targets: [...editor.selection], keepSelection: true };
+        return;
+      }
+    }
 
     // Section titles select (and drag) their section; double-click renames it.
     editor.scene.ensure(editor.pageId);
@@ -604,6 +669,8 @@ export class MoveTool implements Tool {
         if (Math.hypot(p.screen.x - g.down.screen.x, p.screen.y - g.down.screen.y) < this.env.dragThresholdPx) return;
         const { editor } = this.env;
         editor.scene.ensure(editor.pageId);
+        // Dragging the marked layers of a smart selection carries them to another place in the row or column.
+        if (g.keepSelection && !p.alt && this.beginReorderDrag(p)) return;
         let targets = g.targets.filter((id) => isInteractive(editor.doc, id));
         const tx = editor.history.begin(p.alt && targets.length > 0 ? 'Duplicate' : 'Move');
         let duplicated: DuplicateMemory | null = null;
@@ -623,6 +690,9 @@ export class MoveTool implements Tool {
       case 'move':
         g.last = p;
         this.applyMove(p);
+        return;
+      case 'reorder':
+        this.updateReorder(p);
         return;
       case 'marquee': {
         g.current = p.world;
@@ -765,14 +835,14 @@ export class MoveTool implements Tool {
           break;
         }
         // A click (no drag) on an already-selected layer inside a multi-selection selects just that layer.
-        if (!p.shift && g.targets.length > 1) {
+        if (!p.shift && !g.keepSelection && g.targets.length > 1) {
           const deepest = hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, { tolerance: 0 });
           if (deepest) {
             const target = selectionTarget(editor.doc, editor.pageId, deepest, [], p.mod);
             if (g.targets.includes(target)) editor.state.select([target]);
           }
         }
-        if (p.clickCount >= 2) {
+        if (p.clickCount >= 2 && !g.keepSelection) {
           const only = editor.selection.length === 1 ? editor.selection[0]! : null;
           // Double-clicking a text layer edits its text with the caret at the click.
           if (only && editor.doc.get(only)?.type === 'TEXT' && beginTextEditAt(editor, only, p.world)) break;
@@ -804,6 +874,11 @@ export class MoveTool implements Tool {
       case 'resize':
         this.adoptIntoSections(g.tx, g.starts);
         editor.history.commit(g.tx);
+        break;
+      case 'reorder':
+        // A drop back where they came from leaves no step in the history.
+        if (g.index === reorderIndexOf(g.state)) editor.history.cancel(g.tx);
+        else editor.history.commit(g.tx);
         break;
       case 'grid-track':
         editor.history.commit(g.tx);
@@ -898,7 +973,8 @@ export class MoveTool implements Tool {
       g.kind === 'arc' ||
       g.kind === 'radius' ||
       g.kind === 'layout-handle' ||
-      g.kind === 'grid-track'
+      g.kind === 'grid-track' ||
+      g.kind === 'reorder'
     ) {
       editor.history.cancel(g.tx);
       return true;

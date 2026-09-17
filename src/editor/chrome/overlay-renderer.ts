@@ -53,7 +53,19 @@ import type { GuideRef } from '../stores/editor-store';
 import { RULER_SIZE, rulerTicks } from './rulers';
 import { worldToScreen } from '../viewport/viewport';
 import type { ChromeTheme } from './chrome-theme';
-import { forEachSection, handlePoint, isLineFrame, screenQuad, sectionTitleRect, selectionFrame, type SelectionFrame, addVariantButtonRect, ADD_INSTANCES_LABEL, addInstancesButtonRect, hoveredInstanceSlots } from './selection-geometry';
+import {
+  forEachSection,
+  handlePoint,
+  isLineFrame,
+  screenQuad,
+  sectionTitleRect,
+  selectionFrame,
+  type SelectionFrame,
+  addVariantButtonRect,
+  ADD_INSTANCES_LABEL,
+  addInstancesButtonRect,
+  hoveredInstanceSlots,
+} from './selection-geometry';
 import { variantsOf } from '@/core/document/variants';
 import { slotIndicators } from '@/core/document/component-properties';
 import { noodleBetween, type Noodle } from '@/core/prototype/connections';
@@ -113,7 +125,11 @@ export interface OverlayInput {
   /** Outline every mask on the page (View › Mask outlines). */
   readonly maskOutlines?: boolean;
   /** Selected connections being dragged: the pointer (screen) and the frame they would lead to. */
-  readonly connectionDrag?: { readonly refs: readonly { readonly sourceId: Id; readonly reactionIndex: number; readonly actionIndex: number }[]; readonly end: Vec2; readonly destination: Id | null } | null;
+  readonly connectionDrag?: {
+    readonly refs: readonly { readonly sourceId: Id; readonly reactionIndex: number; readonly actionIndex: number }[];
+    readonly end: Vec2;
+    readonly destination: Id | null;
+  } | null;
   /** A connection being dragged from the + handle (screen points), and the frame it would connect to. */
   readonly connectDrag?: { readonly start: Vec2; readonly end: Vec2; readonly destination: Id | null } | null;
   /** A flow starting point's tag being dragged by its name (screen point), and the frame it would move to. */
@@ -220,7 +236,11 @@ function drawPrototypeChrome(ctx: CanvasRenderingContext2D, input: OverlayInput,
     const source = screenRectOf(editor, connection.sourceId);
     const moved = dragging && isRef(dragging.refs, connection);
     // Dragged connections follow the pointer, or end on the frame under it.
-    const destinationRect = moved ? (dragging.destination ? screenRectOf(editor, dragging.destination) : { x: dragging.end.x, y: dragging.end.y, width: 0, height: 0 }) : screenRectOf(editor, connection.destinationId);
+    const destinationRect = moved
+      ? dragging.destination
+        ? screenRectOf(editor, dragging.destination)
+        : { x: dragging.end.x, y: dragging.end.y, width: 0, height: 0 }
+      : screenRectOf(editor, connection.destinationId);
     if (!source || !destinationRect) continue;
     const noodle = noodleBetween(source, destinationRect);
     const selectedNoodle = isRef(selectedConnections, connection);
@@ -468,11 +488,10 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
   for (const saved of drawnMeasurements(editor)) drawMeasurements(ctx, input, saved.lines, theme.spacing, saved.label);
   if (input.measurements && input.measurements.length > 0) drawMeasurements(ctx, input, input.measurements, theme.guide);
   if (input.gaps && input.gaps.length > 0) {
-    const lines = input.gaps.map(
-      (gap): MeasureLine =>
-        gap.axis === 'x'
-          ? { axis: 'x', distance: gap.distance, from: { x: gap.from, y: gap.at }, to: { x: gap.to, y: gap.at } }
-          : { axis: 'y', distance: gap.distance, from: { x: gap.at, y: gap.from }, to: { x: gap.at, y: gap.to } },
+    const lines = input.gaps.map((gap): MeasureLine =>
+      gap.axis === 'x'
+        ? { axis: 'x', distance: gap.distance, from: { x: gap.from, y: gap.at }, to: { x: gap.to, y: gap.at } }
+        : { axis: 'y', distance: gap.distance, from: { x: gap.at, y: gap.from }, to: { x: gap.at, y: gap.to } },
     );
     drawMeasurements(ctx, input, lines, theme.spacing);
   }
@@ -858,16 +877,19 @@ function drawSmartSelection(ctx: CanvasRenderingContext2D, input: OverlayInput):
   const info = smartSelectionInfo(editor);
   if (!info) return;
   const v = editor.state.viewport;
+  const marked = new Set(editor.state.getSnapshot().markedLayers);
   ctx.save();
   ctx.strokeStyle = theme.spacing;
+  ctx.fillStyle = theme.spacing;
   ctx.lineWidth = 2;
-  for (const rect of info.rects) {
+  for (const [i, rect] of info.rects.entries()) {
     const c = worldToScreen(v, { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 });
     ctx.beginPath();
     ctx.arc(c.x, c.y, 5, 0, Math.PI * 2);
-    ctx.stroke();
+    // A marked layer's ring is filled in, which is what says duplicating or deleting will act on it alone.
+    if (marked.has(info.ids[i]!)) ctx.fill();
+    else ctx.stroke();
   }
-  ctx.fillStyle = theme.spacing;
   for (const handle of spacingHandles(info.rects, info.selection)) {
     const p = worldToScreen(v, handle);
     const [w, h] = info.selection.axis === 'x' ? [3, 14] : [14, 3];
@@ -950,7 +972,11 @@ function drawVectorEdit(ctx: CanvasRenderingContext2D, input: OverlayInput): voi
         ctx.strokeStyle = pink;
         ctx.lineWidth = 1;
         ctx.stroke();
-        for (const [q, r] of [[a, 3], [b, 3], [c, 4]] as const) {
+        for (const [q, r] of [
+          [a, 3],
+          [b, 3],
+          [c, 4],
+        ] as const) {
           ctx.beginPath();
           ctx.arc(q.x, q.y, r, 0, Math.PI * 2);
           ctx.fillStyle = q === c && selectedWidths.has(i) ? pink : theme.handleFill;

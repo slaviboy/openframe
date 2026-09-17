@@ -53,8 +53,9 @@ test('⌘V with several frames selected pastes a copy into each at the same rela
   await expect(page.getByRole('treeitem', { name: /^Rectangle 1/ })).toHaveCount(3);
   await expect(page.getByTestId('inspector')).toContainText('2 layers');
 
-  // The copy in Frame 2 sits 20, 30 from that frame's corner, like the original.
-  const inFrame2 = await point(page, 695, 205);
+  // The copy in Frame 2 sits 20, 30 from that frame's corner, like the original. Clicked away from its center,
+  // where the two copies' smart selection puts a ring that marks rather than selects.
+  const inFrame2 = await point(page, 678, 188);
   await page.mouse.click(inFrame2.x, inFrame2.y);
   await expect(page.getByTestId('field-x')).toHaveValue('20');
   await expect(page.getByTestId('field-y')).toHaveValue('30');

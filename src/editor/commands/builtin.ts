@@ -24,7 +24,7 @@ import type { Editor } from '../editor';
 import { removeGuide } from '../interactions/guides';
 import { captureStart, translateNodes } from '../interactions/transform';
 import { marqueeSelect } from '@/core/scene/hit-test';
-import { nextZoomStep, panBy, zoomAt , visibleWorldRect } from '../viewport/viewport';
+import { nextZoomStep, panBy, zoomAt, visibleWorldRect } from '../viewport/viewport';
 import { alignSelection, distributeSelection } from './align';
 import { reorder } from './arrange';
 import type { CommandDefinition } from './registry';
@@ -49,6 +49,7 @@ import { canResetOverrides, resetSelectedOverrides } from './reset-overrides';
 import { canGoToMainComponent, canPushChangesToMain, canRestoreMainComponent, goToMainComponent, pushChangesToMain, restoreMainComponent } from './main-component';
 import { canOutlineStroke, outlineStrokeSelection } from './outline-stroke';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
+import { deleteMarked, duplicateMarked } from './smart-selection';
 
 const hasSelection = (e: Editor) => e.selection.length > 0;
 
@@ -135,7 +136,13 @@ function nudge(e: Editor, dx: number, dy: number): void {
     });
     return;
   }
-  e.history.run('Nudge', (tx) => translateNodes(tx, ids.map((id) => captureStart(tx, e.scene, id)), { x: dx, y: dy }));
+  e.history.run('Nudge', (tx) =>
+    translateNodes(
+      tx,
+      ids.map((id) => captureStart(tx, e.scene, id)),
+      { x: dx, y: dy },
+    ),
+  );
 }
 
 /** How large the keyboard's selection box starts, in world units, and how far a key moves or grows it. */
@@ -155,11 +162,7 @@ function moveKeyboardBox(e: Editor, dx: number, dy: number, resize: boolean): vo
   const box = e.state.getSnapshot().keyboardBox;
   if (!box) return;
   const step = KEYBOARD_BOX_STEP / Math.max(0.01, e.state.viewport.zoom);
-  e.state.setKeyboardBox(
-    resize
-      ? { ...box, width: Math.max(1, box.width + dx * step), height: Math.max(1, box.height + dy * step) }
-      : { ...box, x: box.x + dx * step, y: box.y + dy * step },
-  );
+  e.state.setKeyboardBox(resize ? { ...box, width: Math.max(1, box.width + dx * step), height: Math.max(1, box.height + dy * step) } : { ...box, x: box.x + dx * step, y: box.y + dy * step });
 }
 
 /** Selects whatever the keyboard's box covers, and puts the box away. */
@@ -255,7 +258,10 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     category: 'Edit',
     shortcuts: ['Mod+D'],
     enabled: hasLayerSelection,
-    run: (e) => duplicateSelection(e),
+    // Marked layers of a smart selection are copied into the row or column, the rest moving along to make room.
+    run: (e) => {
+      if (duplicateMarked(e) === null) duplicateSelection(e);
+    },
   },
   {
     id: 'object.group',
@@ -625,24 +631,22 @@ const TEXT_FORMAT_COMMANDS: CommandDefinition[] = [
       ['text.directionLtr', 'Use left to right text direction', 'LTR'],
       ['text.directionRtl', 'Use right to left text direction', 'RTL'],
     ] as const
-  ).map(
-    ([id, label, direction]): CommandDefinition => ({
-      id,
-      label,
-      category: 'Text',
-      enabled: (e) => selectedTextLayers(e).length > 0,
-      // While editing one layer, the paragraphs under the caret or selection; otherwise whole layers.
-      checked: (e) => {
+  ).map(([id, label, direction]): CommandDefinition => ({
+    id,
+    label,
+    category: 'Text',
+    enabled: (e) => selectedTextLayers(e).length > 0,
+    // While editing one layer, the paragraphs under the caret or selection; otherwise whole layers.
+    checked: (e) => {
+      const layers = selectedTextLayers(e);
+      return layers.length > 0 && layers.every((n) => n.type === 'TEXT' && paragraphDirections(n, layers.length === 1 ? textSelectionRange(e, n.id) : null).every((d) => d === direction));
+    },
+    run: (e) =>
+      e.history.run(label, (tx) => {
         const layers = selectedTextLayers(e);
-        return layers.length > 0 && layers.every((n) => n.type === 'TEXT' && paragraphDirections(n, layers.length === 1 ? textSelectionRange(e, n.id) : null).every((d) => d === direction));
-      },
-      run: (e) =>
-        e.history.run(label, (tx) => {
-          const layers = selectedTextLayers(e);
-          layers.forEach((n) => setTextDirection(tx, n, direction, layers.length === 1 ? textSelectionRange(e, n.id) : null));
-        }),
-    }),
-  ),
+        layers.forEach((n) => setTextDirection(tx, n, direction, layers.length === 1 ? textSelectionRange(e, n.id) : null));
+      }),
+  })),
   {
     id: 'text.createLink',
     label: 'Create link',
@@ -659,31 +663,27 @@ const TEXT_FORMAT_COMMANDS: CommandDefinition[] = [
       ['text.bulletedList', 'Bulleted list', 'UNORDERED', 'Mod+Shift+8'],
       ['text.numberedList', 'Numbered list', 'ORDERED', 'Mod+Shift+7'],
     ] as const
-  ).map(
-    ([id, label, type, shortcut]): CommandDefinition => ({
-      id,
-      label,
-      category: 'Text',
-      shortcuts: [shortcut],
-      enabled: (e) => selectedTextLayers(e).length > 0,
-      run: (e) => e.history.run(label, (tx) => selectedTextLayers(e).forEach((n) => toggleListType(tx, n, type))),
-    }),
-  ),
+  ).map(([id, label, type, shortcut]): CommandDefinition => ({
+    id,
+    label,
+    category: 'Text',
+    shortcuts: [shortcut],
+    enabled: (e) => selectedTextLayers(e).length > 0,
+    run: (e) => e.history.run(label, (tx) => selectedTextLayers(e).forEach((n) => toggleListType(tx, n, type))),
+  })),
   ...(
     [
       ['text.underline', 'Underline', 'UNDERLINE', ['Alt+U', 'Ctrl+U']],
       ['text.strikethrough', 'Strikethrough', 'STRIKETHROUGH', ['Mod+Shift+X']],
     ] as const
-  ).map(
-    ([id, label, decoration, shortcuts]): CommandDefinition => ({
-      id,
-      label,
-      category: 'Text',
-      shortcuts,
-      enabled: (e) => selectedTextLayers(e).length > 0,
-      run: (e) => e.history.run(label, (tx) => selectedTextLayers(e).forEach((n) => toggleTextDecoration(tx, n, decoration))),
-    }),
-  ),
+  ).map(([id, label, decoration, shortcuts]): CommandDefinition => ({
+    id,
+    label,
+    category: 'Text',
+    shortcuts,
+    enabled: (e) => selectedTextLayers(e).length > 0,
+    run: (e) => e.history.run(label, (tx) => selectedTextLayers(e).forEach((n) => toggleTextDecoration(tx, n, decoration))),
+  })),
   ...(
     [
       ['text.increaseFontSize', 'Increase font size', 'fontSize', 1, 'Mod+Shift+.'],
@@ -695,19 +695,17 @@ const TEXT_FORMAT_COMMANDS: CommandDefinition[] = [
       ['text.increaseLineHeight', 'Increase line height', 'lineHeight', 1, 'Alt+Shift+.'],
       ['text.decreaseLineHeight', 'Decrease line height', 'lineHeight', -1, 'Alt+Shift+,'],
     ] as const
-  ).map(
-    ([id, label, property, direction, shortcut]): CommandDefinition => ({
-      id,
-      label,
-      category: 'Text',
-      shortcuts: [shortcut],
-      enabled: (e) => selectedTextLayers(e).length > 0,
-      run: (e) => {
-        const context = { fonts: e.textLayout?.availableFonts() ?? [], autoLineHeight: (size: number) => autoLineHeight(e, size) };
-        e.history.run(label, (tx) => selectedTextLayers(e).forEach((n) => stepTextProperty(tx, n, property, direction, context)));
-      },
-    }),
-  ),
+  ).map(([id, label, property, direction, shortcut]): CommandDefinition => ({
+    id,
+    label,
+    category: 'Text',
+    shortcuts: [shortcut],
+    enabled: (e) => selectedTextLayers(e).length > 0,
+    run: (e) => {
+      const context = { fonts: e.textLayout?.availableFonts() ?? [], autoLineHeight: (size: number) => autoLineHeight(e, size) };
+      e.history.run(label, (tx) => selectedTextLayers(e).forEach((n) => stepTextProperty(tx, n, property, direction, context)));
+    },
+  })),
 ];
 
 export const BUILTIN_COMMANDS: CommandDefinition[] = [
@@ -895,16 +893,14 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
       ['object.booleanIntersect', 'INTERSECT', 'I'],
       ['object.booleanExclude', 'EXCLUDE', 'E'],
     ] as const
-  ).map(
-    ([id, operation, key]): CommandDefinition => ({
-      id,
-      label: `${BOOLEAN_NAMES[operation]} selection`,
-      category: 'Object',
-      shortcuts: [`Shift+Alt+${key}`],
-      enabled: canBooleanSelection,
-      run: (e) => booleanSelection(e, operation),
-    }),
-  ),
+  ).map(([id, operation, key]): CommandDefinition => ({
+    id,
+    label: `${BOOLEAN_NAMES[operation]} selection`,
+    category: 'Object',
+    shortcuts: [`Shift+Alt+${key}`],
+    enabled: canBooleanSelection,
+    run: (e) => booleanSelection(e, operation),
+  })),
   // Listed first so Return applies a crop before it selects children.
   {
     id: 'image.applyCrop',
@@ -925,20 +921,18 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
       beginCrop(e, e.selection[0]!);
     },
   },
-  ...(['bold', 'italic'] as const).map(
-    (axis): CommandDefinition => ({
-      id: `text.${axis}`,
-      label: axis === 'bold' ? 'Bold' : 'Italic',
-      category: 'Text',
-      shortcuts: [axis === 'bold' ? 'Mod+B' : 'Mod+I'],
-      // While editing, the text input handles these for the selected characters.
-      enabled: (e) => e.state.getSnapshot().textEdit === null && e.selection.length > 0 && e.selection.every((id) => e.doc.get(id)?.type === 'TEXT'),
-      run: (e) =>
-        e.history.run(axis === 'bold' ? 'Bold' : 'Italic', (tx) =>
-          e.selection.forEach((id) => toggleFontStyle(tx, e.doc.getOrThrow(id) as Parameters<typeof toggleFontStyle>[1], axis, e.textLayout?.availableFonts() ?? [])),
-        ),
-    }),
-  ),
+  ...(['bold', 'italic'] as const).map((axis): CommandDefinition => ({
+    id: `text.${axis}`,
+    label: axis === 'bold' ? 'Bold' : 'Italic',
+    category: 'Text',
+    shortcuts: [axis === 'bold' ? 'Mod+B' : 'Mod+I'],
+    // While editing, the text input handles these for the selected characters.
+    enabled: (e) => e.state.getSnapshot().textEdit === null && e.selection.length > 0 && e.selection.every((id) => e.doc.get(id)?.type === 'TEXT'),
+    run: (e) =>
+      e.history.run(axis === 'bold' ? 'Bold' : 'Italic', (tx) =>
+        e.selection.forEach((id) => toggleFontStyle(tx, e.doc.getOrThrow(id) as Parameters<typeof toggleFontStyle>[1], axis, e.textLayout?.availableFonts() ?? [])),
+      ),
+  })),
   ...TEXT_FORMAT_COMMANDS,
   // Before Select children, so Return on a text layer edits its text.
   {
@@ -1000,6 +994,8 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
         e.state.selectOverlay(null);
         return;
       }
+      // Marked layers of a smart selection go on their own, the row or column closing up behind them.
+      if (deleteMarked(e)) return;
       const ids = e.selection.filter((id) => e.doc.has(id));
       e.history.run('Delete', (tx) => {
         for (const id of ids) if (tx.store.has(id)) tx.delete(id);
@@ -1024,10 +1020,12 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     shortcuts: ['Mod+A'],
     run: (e) => {
       const scope = selectAllScope(e);
-      e.state.select(e.doc.children(scope).filter((id) => {
-        const n = e.doc.get(id);
-        return n !== undefined && isSceneNode(n) && n.visible && !n.locked;
-      }));
+      e.state.select(
+        e.doc.children(scope).filter((id) => {
+          const n = e.doc.get(id);
+          return n !== undefined && isSceneNode(n) && n.visible && !n.locked;
+        }),
+      );
     },
   },
   {
@@ -1066,15 +1064,13 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
       ['edit.selectSameInstance', 'Select all with same instance', 'instance'],
       ['edit.selectSameProperties', 'Select all with same properties', 'properties'],
     ] as const
-  ).map(
-    ([id, label, property]): CommandDefinition => ({
-      id,
-      label,
-      category: 'Edit',
-      enabled: (e) => layersWithSame(e, property).length > 0,
-      run: (e) => e.state.select(layersWithSame(e, property)),
-    }),
-  ),
+  ).map(([id, label, property]): CommandDefinition => ({
+    id,
+    label,
+    category: 'Edit',
+    enabled: (e) => layersWithSame(e, property).length > 0,
+    run: (e) => e.state.select(layersWithSame(e, property)),
+  })),
   {
     id: 'edit.deselect',
     label: 'Deselect all',
@@ -1116,16 +1112,14 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
       ['arrange.bringToFront', 'Bring to front', 'front', ['Mod+Alt+]']],
       ['arrange.sendToBack', 'Send to back', 'back', ['Mod+Alt+[']],
     ] as const
-  ).map(
-    ([id, label, direction, shortcuts]): CommandDefinition => ({
-      id,
-      label,
-      category: 'Arrange',
-      shortcuts,
-      enabled: hasSelection,
-      run: (e) => e.history.run(label, (tx) => reorder(tx, e.selection, direction)),
-    }),
-  ),
+  ).map(([id, label, direction, shortcuts]): CommandDefinition => ({
+    id,
+    label,
+    category: 'Arrange',
+    shortcuts,
+    enabled: hasSelection,
+    run: (e) => e.history.run(label, (tx) => reorder(tx, e.selection, direction)),
+  })),
   {
     id: 'page.add',
     label: 'Add page',

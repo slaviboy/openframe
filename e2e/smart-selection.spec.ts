@@ -59,3 +59,37 @@ test('an evenly spaced selection shows "space between"; editing it respaces the 
   expect(x2 - x1).toBe(60);
   expect(x3 - x2).toBe(60);
 });
+
+test('marking a layer in the row: ⌘D copies it in, Delete takes it out, and the row closes up', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('toolbar', { name: 'Tools' })).toBeVisible();
+  // Three 50 px squares with 30 px gaps: 400, 480, 560.
+  await drawRect(page, 400, 300);
+  await drawRect(page, 480, 300);
+  await drawRect(page, 560, 300);
+
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.mouse.click(box.x + 800, box.y + 600);
+  await page.keyboard.press(`${mod}+a`);
+  await expect(page.getByTestId('field-spacing')).toHaveValue('30');
+  const wasAt = await xOf(page, 'Rectangle 3');
+  await page.keyboard.press(`${mod}+a`);
+
+  // Clicking the pink ring at the middle layer's center marks it; the selection stays the whole row.
+  await page.mouse.click(box.x + 505, box.y + 325);
+  await expect(page.getByTestId('inspector')).toContainText('3 layers');
+
+  await page.keyboard.press(`${mod}+d`);
+  await expect(page.getByRole('treeitem', { name: /Rectangle/ })).toHaveCount(4);
+  // The copy goes in after the layer it came from, so the last square moves along by a square and a gap.
+  expect((await xOf(page, 'Rectangle 3')) - wasAt).toBe(80);
+
+  await page.keyboard.press(`${mod}+z`);
+  // Away from the ring first: a second click on the same spot would read as a double-click, which marks the row.
+  await page.mouse.click(box.x + 800, box.y + 600);
+  await page.keyboard.press(`${mod}+a`);
+  await page.mouse.click(box.x + 505, box.y + 325);
+  await page.keyboard.press('Delete');
+  await expect(page.getByRole('treeitem', { name: /Rectangle/ })).toHaveCount(2);
+  expect((await xOf(page, 'Rectangle 3')) - wasAt).toBe(-80);
+});

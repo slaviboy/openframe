@@ -228,7 +228,14 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
       if (!surface || !renderer) return;
       const v = editor.state.viewport;
       try {
-        renderer.render(surface.getCanvas(), editor.doc, editor.scene, editor.pageId, { ...v, ...size }, { ...outlinesRef.current, cropping: editor.state.getSnapshot().croppingId, colorProfile: surfaceProfile });
+        renderer.render(
+          surface.getCanvas(),
+          editor.doc,
+          editor.scene,
+          editor.pageId,
+          { ...v, ...size },
+          { ...outlinesRef.current, cropping: editor.state.getSnapshot().croppingId, colorProfile: surfaceProfile },
+        );
         surface.flush();
       } catch (error) {
         console.error('Openframe: scene render failed', error);
@@ -244,7 +251,13 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
       if (x < 0 || y < 0 || x >= sceneCanvas.width || y >= sceneCanvas.height) return null;
       renderScene();
       const image = surface.makeImageSnapshot([x, y, x + 1, y + 1]);
-      const pixel = image.readPixels(0, 0, { width: 1, height: 1, colorType: ck.ColorType.RGBA_8888, alphaType: ck.AlphaType.Unpremul, colorSpace: surfaceProfile === 'DISPLAY_P3' ? ck.ColorSpace.DISPLAY_P3 : ck.ColorSpace.SRGB }) as Uint8Array | null;
+      const pixel = image.readPixels(0, 0, {
+        width: 1,
+        height: 1,
+        colorType: ck.ColorType.RGBA_8888,
+        alphaType: ck.AlphaType.Unpremul,
+        colorSpace: surfaceProfile === 'DISPLAY_P3' ? ck.ColorSpace.DISPLAY_P3 : ck.ColorSpace.SRGB,
+      }) as Uint8Array | null;
       image.delete();
       return pixel ? { r: pixel[0]! / 255, g: pixel[1]! / 255, b: pixel[2]! / 255, a: 1 } : null;
     });
@@ -274,7 +287,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
         guides: tools.snapGuides,
         measurements: tools.moveTool.measurements,
         gaps: tools.moveTool.gapIndicators,
-        insertion: tools.moveTool.flowInsertion,
+        insertion: tools.moveTool.flowInsertion ?? tools.moveTool.reorderInsertion,
         rulers: rulersRef.current,
         pixelGrid: pixelGridRef.current,
         layoutGuides: layoutGuidesRef.current,
@@ -629,7 +642,8 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
       }
       if (e.code !== 'Period' && e.code !== 'Comma') return false;
       const direction = e.code === 'Period' ? 1 : -1;
-      const property = mod && e.shiftKey && !e.altKey ? 'fontSize' : mod && e.altKey && !e.shiftKey ? 'fontWeight' : !mod && e.altKey && e.shiftKey ? 'lineHeight' : !mod && e.altKey ? 'letterSpacing' : null;
+      const property =
+        mod && e.shiftKey && !e.altKey ? 'fontSize' : mod && e.altKey && !e.shiftKey ? 'fontWeight' : !mod && e.altKey && e.shiftKey ? 'lineHeight' : !mod && e.altKey ? 'letterSpacing' : null;
       if (!property) return false;
       const context = { fonts: editor.textLayout?.availableFonts() ?? [], autoLineHeight: (size: number) => autoLineHeight(editor, size) };
       return run('Change text', (tx) => stepTextProperty(tx, target.node, property, direction, context, range));
@@ -751,17 +765,28 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
   }, [editor, tools]);
 
   return (
-    <div ref={containerRef} className={styles.host} data-testid="canvas" data-canvas-host="" data-ready={status.kind === 'ready' || undefined} data-spelling={spellingReady || undefined} data-keyboard-box={keyboardBox !== null || undefined}>
+    <div
+      ref={containerRef}
+      className={styles.host}
+      data-testid="canvas"
+      data-canvas-host=""
+      data-ready={status.kind === 'ready' || undefined}
+      data-spelling={spellingReady || undefined}
+      data-keyboard-box={keyboardBox !== null || undefined}
+    >
       <canvas ref={sceneRef} className={styles.layer} aria-hidden="true" />
-      <canvas
-        ref={overlayRef}
-        className={styles.layer}
-        role="application"
-        aria-label="Design canvas"
-        aria-roledescription="canvas"
+      <canvas ref={overlayRef} className={styles.layer} role="application" aria-label="Design canvas" aria-roledescription="canvas" tabIndex={-1} />
+      <textarea
+        ref={textInputRef}
+        className={styles.textInput}
+        aria-label="Text editor"
+        data-testid="text-input"
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
         tabIndex={-1}
       />
-      <textarea ref={textInputRef} className={styles.textInput} aria-label="Text editor" data-testid="text-input" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} tabIndex={-1} />
       {status.kind === 'error' && (
         <div className={styles.message} role="alert">
           {status.message}

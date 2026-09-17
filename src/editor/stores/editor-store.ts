@@ -25,7 +25,29 @@ import type { SegmentEnd } from '@/core/vector/vector-bend';
 import { DEFAULT_VIEWPORT, type Viewport } from '../viewport/viewport';
 import { Observable } from './observable';
 
-export type ToolId = 'move' | 'hand' | 'scale' | 'frame' | 'section' | 'slice' | 'rectangle' | 'line' | 'arrow' | 'ellipse' | 'polygon' | 'star' | 'text' | 'image' | 'eyedropper' | 'pickLayer' | 'pen' | 'pencil' | 'brush' | 'textOnPath' | 'measure' | 'comment';
+export type ToolId =
+  | 'move'
+  | 'hand'
+  | 'scale'
+  | 'frame'
+  | 'section'
+  | 'slice'
+  | 'rectangle'
+  | 'line'
+  | 'arrow'
+  | 'ellipse'
+  | 'polygon'
+  | 'star'
+  | 'text'
+  | 'image'
+  | 'eyedropper'
+  | 'pickLayer'
+  | 'pen'
+  | 'pencil'
+  | 'brush'
+  | 'textOnPath'
+  | 'measure'
+  | 'comment';
 
 /** Fixed point for the Scale panel: one of nine positions on the selection bounds. */
 export type ScaleAnchor = 'nw' | 'n' | 'ne' | 'w' | 'c' | 'e' | 'sw' | 's' | 'se';
@@ -90,6 +112,11 @@ export interface EditorState {
   readonly selectedConnections: readonly SelectedConnection[];
   /** The overlay frame whose badge is selected on the canvas (Delete removes the interactions opening it). */
   readonly selectedOverlay: Id | null;
+  /**
+   * Layers marked inside a smart selection, which duplicating, deleting and reordering act on while the rest of
+   * the selection reflows around them. Marks belong to one selection and go when it changes.
+   */
+  readonly markedLayers: readonly Id[];
   readonly hoverId: Id | null;
   readonly tool: ToolId;
   /** Tool to return to after a temporary tool (e.g. holding Space for hand). */
@@ -214,7 +241,10 @@ export type EditorDialog = 'batchRename' | 'nudgeAmount' | 'missingFonts' | 'exp
 
 /** Transient, non-document editor state. Never persisted inside the document. */
 export class EditorStore extends Observable<EditorState> {
-  constructor(private readonly doc: DocumentStore, pageId: Id) {
+  constructor(
+    private readonly doc: DocumentStore,
+    pageId: Id,
+  ) {
     super({
       activePageId: pageId,
       selection: [],
@@ -222,6 +252,7 @@ export class EditorStore extends Observable<EditorState> {
       hoverId: null,
       selectedConnections: [],
       selectedOverlay: null,
+      markedLayers: [],
       tool: 'move',
       spring: null,
       mode: 'design',
@@ -383,7 +414,20 @@ export class EditorStore extends Observable<EditorState> {
 
   setActivePage(pageId: Id): void {
     if (this.doc.get(pageId)?.type !== 'PAGE') return;
-    this.setState({ activePageId: pageId, selection: [], selectedGuide: null, selectedOverlay: null, hoverId: null, renamingId: null, croppingId: null, gradientEdit: null, blurEdit: null, textEdit: null, multiEditSetId: null, addInstancesSlotId: null });
+    this.setState({
+      activePageId: pageId,
+      selection: [],
+      selectedGuide: null,
+      selectedOverlay: null,
+      hoverId: null,
+      renamingId: null,
+      croppingId: null,
+      gradientEdit: null,
+      blurEdit: null,
+      textEdit: null,
+      multiEditSetId: null,
+      addInstancesSlotId: null,
+    });
   }
 
   setViewport(viewport: Viewport, pageId: Id = this.state.activePageId): void {
@@ -509,6 +553,7 @@ export class EditorStore extends Observable<EditorState> {
       selectedGuide: null,
       selectedConnections: [],
       selectedOverlay: null,
+      markedLayers: [],
       croppingId: keepCrop ? this.state.croppingId : null,
       gradientEdit: keepGradient ? this.state.gradientEdit : null,
       blurEdit: keepBlur ? this.state.blurEdit : null,
@@ -544,8 +589,16 @@ export class EditorStore extends Observable<EditorState> {
 
   clearSelection(): void {
     if (this.state.selection.length || this.state.selectedGuide || this.state.selectedOverlay || this.state.croppingId || this.state.gradientEdit || this.state.blurEdit) {
-      this.setState({ selection: [], selectedGuide: null, selectedOverlay: null, croppingId: null, gradientEdit: null, blurEdit: null });
+      this.setState({ selection: [], selectedGuide: null, selectedOverlay: null, markedLayers: [], croppingId: null, gradientEdit: null, blurEdit: null });
     }
+  }
+
+  /** Marks layers inside a smart selection, or clears the marks when given none. */
+  markLayers(ids: readonly Id[]): void {
+    const marked = ids.filter((id) => this.state.selection.includes(id));
+    const current = this.state.markedLayers;
+    if (marked.length === current.length && marked.every((id, i) => id === current[i])) return;
+    this.setState({ markedLayers: marked });
   }
 
   setExpanded(id: Id, expanded: boolean): void {

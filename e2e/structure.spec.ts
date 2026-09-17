@@ -56,8 +56,9 @@ test('group, ungroup, duplicate with repeated offset, and flip via shortcuts', a
 
   // Duplicate one rectangle, move the copy, then ⌘D twice repeats the offset.
   // Select Rectangle 1 on the canvas so arrow keys nudge (arrow keys in a focused layers tree navigate the tree).
+  // Away from its center, where the two rectangles' smart selection puts a ring that marks rather than selects.
   const box = (await page.getByTestId('canvas').boundingBox())!;
-  await page.mouse.click(box.x + 420, box.y + 320);
+  await page.mouse.click(box.x + 408, box.y + 308);
   await page.keyboard.press(`${mod}+d`);
   await page.keyboard.press('Shift+ArrowRight');
   await page.keyboard.press(`${mod}+d`);
