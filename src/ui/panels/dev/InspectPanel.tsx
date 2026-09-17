@@ -17,6 +17,7 @@
 
 import { canHaveDevStatus, devStatusLabel, setDevStatus, type DevStatusNode } from '@/editor/commands/dev-status';
 import { CODE_LANGUAGE_LABELS, CODE_UNITS, DEFAULT_UNIT_SCALE, generateCode, type CodeLanguage, type CodeUnit } from '@/core/dev/code-gen';
+import { deleteMeasurement, measurementsOf, setMeasurementLabel } from '@/editor/commands/measurements';
 import { rotationDegrees } from '@/editor/commands/properties';
 import type { SceneNode } from '@/core/schema/document';
 import { useState, type ReactNode } from 'react';
@@ -113,6 +114,7 @@ export function InspectPanel() {
     return (
       <div className={styles.panel} data-testid="inspect-panel">
         <p className={styles.empty}>{nodes.length === 0 ? 'Select a layer to inspect it.' : 'Select a single layer to inspect it.'}</p>
+        <MeasurementsSection />
       </div>
     );
   }
@@ -170,9 +172,41 @@ export function InspectPanel() {
         <Row label="Opacity" value={`${formatNumber(node.opacity * 100, 0)}%`} />
         <Row label="Blend mode" value={node.blendMode.toLowerCase().replace(/_/g, ' ')} />
       </Group>
+      <MeasurementsSection />
         </>
       )}
     </div>
+  );
+}
+
+/** The measurements saved on the page: what each reads, and the button that takes it away. */
+function MeasurementsSection() {
+  const editor = useEditor();
+  useDocumentRevision();
+  const saved = measurementsOf(editor);
+  if (saved.length === 0) return null;
+  return (
+    <section className={styles.group} aria-label="Measurements">
+      <h3 className={styles.groupTitle}>Measurements</h3>
+      {saved.map((measurement, index) => (
+        <div key={measurement.id} className={styles.row}>
+          <input
+            className={primitives.textInput}
+            aria-label={`Measurement ${index + 1} label`}
+            defaultValue={measurement.label ?? ''}
+            placeholder="Distance"
+            onBlur={(e) => setMeasurementLabel(editor, measurement.id, e.currentTarget.value)}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key === 'Enter') e.currentTarget.blur();
+            }}
+          />
+          <button type="button" className={primitives.button} aria-label={`Delete measurement ${index + 1}`} onClick={() => deleteMeasurement(editor, measurement.id)}>
+            Delete
+          </button>
+        </div>
+      ))}
+    </section>
   );
 }
 

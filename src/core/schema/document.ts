@@ -670,6 +670,18 @@ export const MotionCurveSchema = z.object({
   y: z.number().finite(),
 });
 
+/**
+ * A measurement saved on a page: the distance between two layers, drawn for everyone who opens the file. This is the
+ * one that is kept, as against the measuring that ⌥ shows while the pointer is held over a layer.
+ */
+export const MeasurementSchema = z.object({
+  id: z.string().min(1).max(64),
+  fromId: IdSchema,
+  toId: IdSchema,
+  /** Text shown instead of the distance, once one has been written. */
+  label: z.string().max(200).optional(),
+});
+
 /** A page's animation: how long it runs, how it plays, and the tracks it holds. */
 export const PageAnimationSchema = z.object({
   /** Milliseconds; a new animation is 2000 ms long. */
@@ -686,6 +698,8 @@ export const PageNodeSchema = z.object({
   backgroundColor: ColorSchema,
   /** Motion: the animation on this page. Absent until something is animated. */
   animation: PageAnimationSchema.optional(),
+  /** Dev Mode: the measurements saved on this page. Absent until one is drawn. */
+  measurements: z.array(MeasurementSchema).max(1000).optional(),
   /** Canvas guides. Absent when the page has none. */
   guides: GuidesField,
   /** Variable modes set on the page, by collection id. */
@@ -1265,6 +1279,7 @@ export type Keyframe = z.infer<typeof KeyframeSchema>;
 export type KeyframeEasing = z.infer<typeof KeyframeEasingSchema>;
 export type AnimationTrack = z.infer<typeof AnimationTrackSchema>;
 export type DevStatus = z.infer<typeof DevStatusSchema>;
+export type Measurement = z.infer<typeof MeasurementSchema>;
 export type MotionCurve = z.infer<typeof MotionCurveSchema>;
 export type PageAnimation = z.infer<typeof PageAnimationSchema>;
 export type StyleNode = z.infer<typeof StyleNodeSchema>;

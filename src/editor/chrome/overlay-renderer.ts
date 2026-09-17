@@ -61,6 +61,7 @@ import { flowsOf } from '@/core/prototype/flows';
 import { CONNECT_HANDLE_SIZE, connectHandle, FLOW_TAG_ICON_WIDTH, overlayBadgeRect, overlayFrames, screenBounds, setFlowTags, shownConnections, type FlowTagRect } from './prototype-geometry';
 import { animatedGifHash } from '../images/animated-gif';
 import { TEXT_PATH_HANDLE_SIZE, textPathHandle } from './text-path-handle';
+import { drawnMeasurements } from '../commands/measurements';
 import { ANCHOR_HANDLE_SIZE, anchorHandle } from './anchor-handle';
 import { MOTION_PATH_CURVE_SIZE, MOTION_PATH_KEYFRAME_SIZE, motionPath } from './motion-path';
 
@@ -436,6 +437,8 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
     ctx.stroke();
   }
 
+  // The measurements saved on the page, which everyone who opens the file sees, as against ⌥'s passing ones.
+  for (const saved of drawnMeasurements(editor)) drawMeasurements(ctx, input, saved.lines, theme.spacing, saved.label);
   if (input.measurements && input.measurements.length > 0) drawMeasurements(ctx, input, input.measurements, theme.guide);
   if (input.gaps && input.gaps.length > 0) {
     const lines = input.gaps.map(
@@ -1065,7 +1068,7 @@ function drawLayoutHandles(ctx: CanvasRenderingContext2D, input: OverlayInput): 
 }
 
 /** Red distance lines with end ticks and a centered label for each measurement. */
-function drawMeasurements(ctx: CanvasRenderingContext2D, input: OverlayInput, lines: readonly MeasureLine[], color: string): void {
+function drawMeasurements(ctx: CanvasRenderingContext2D, input: OverlayInput, lines: readonly MeasureLine[], color: string, label?: string): void {
   const { editor, theme } = input;
   const v = editor.state.viewport;
   const crisp = (n: number) => Math.round(n) + 0.5;
@@ -1100,7 +1103,7 @@ function drawMeasurements(ctx: CanvasRenderingContext2D, input: OverlayInput, li
   for (const line of lines) {
     const a = worldToScreen(v, line.from);
     const b = worldToScreen(v, line.to);
-    const text = formatNumber(line.distance);
+    const text = label ?? formatNumber(line.distance);
     const w = Math.ceil(ctx.measureText(text).width) + 8;
     const cx = (a.x + b.x) / 2;
     const cy = (a.y + b.y) / 2;

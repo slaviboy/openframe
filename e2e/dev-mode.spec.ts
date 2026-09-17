@@ -148,3 +148,46 @@ test('Inspect writes the selection out as code, in the language and unit chosen'
   await expect(code).toHaveCount(0);
   await expect(inspect.getByRole('region', { name: 'Size' })).toBeVisible();
 });
+
+test('⇧M saves a measurement between two layers, which is labelled, kept and removed', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  // Two rectangles with a gap between them.
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 300, box.y + 260);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 360, box.y + 320, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 500, box.y + 260);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 560, box.y + 320, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByRole('treeitem', { name: /Rectangle 2/ })).toBeVisible();
+
+  await page.keyboard.press('Shift+D');
+  // ⇧M takes the measurement tool, and a drag from one rectangle to the other saves the distance.
+  await page.keyboard.press('Shift+M');
+  await expect(page.getByRole('toolbar', { name: 'Tools' }).getByRole('button', { name: /^Measurement/ })).toHaveAttribute('aria-pressed', 'true');
+  await page.mouse.move(box.x + 330, box.y + 290);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 530, box.y + 290, { steps: 10 });
+  await page.mouse.up();
+
+  const measurements = page.getByRole('region', { name: 'Measurements' });
+  await expect(measurements).toBeVisible();
+  const label = measurements.getByRole('textbox', { name: 'Measurement 1 label' });
+  await label.fill('Gutter');
+  await label.press('Enter');
+
+  // It belongs to the file, so it is still there after a reload.
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+  await page.reload();
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await expect(page.getByRole('region', { name: 'Measurements' }).getByRole('textbox', { name: 'Measurement 1 label' })).toHaveValue('Gutter');
+
+  await page.getByRole('button', { name: 'Delete measurement 1' }).click();
+  await expect(page.getByRole('region', { name: 'Measurements' })).toHaveCount(0);
+});

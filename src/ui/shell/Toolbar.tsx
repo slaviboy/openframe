@@ -148,6 +148,7 @@ const GROUPS: readonly ToolGroup[] = [
 /** Dev Mode's toolbar: only the tools that read the design. Nothing here draws, because Dev Mode does not edit. */
 const DEV_GROUPS: readonly ToolGroup[] = [
   { label: 'Move tools', items: GROUPS[0]!.items.filter((item) => item.tool === 'move' || item.tool === 'hand') },
+  { label: 'Handoff tools', items: [{ tool: 'measure', label: 'Measurement', icon: 'width', command: 'tools.measure' }] },
   GROUPS.at(-1)!,
 ];
 
