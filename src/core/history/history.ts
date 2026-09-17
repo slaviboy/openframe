@@ -48,6 +48,8 @@ export interface TransactionOptions {
    * redo — for derived updates nobody asked for, such as refitting text once its fonts load.
    */
   readonly undoable?: boolean | undefined;
+  /** False keeps the change from being carried between a component and its instances; see `Transaction.syncInstances`. */
+  readonly syncInstances?: boolean | undefined;
 }
 
 export type ChangeListener = (change: ChangeSet) => void;
@@ -99,6 +101,13 @@ export class Transaction {
   private closed = false;
   /** Resizing frames in this transaction leaves their children alone (⌘ while resizing, the Scale tool). */
   ignoreConstraints = false;
+
+  /**
+   * Whether edits in this transaction are carried between a component and its instances. The Motion preview turns it
+   * off: it shows an instance's layers where the animation puts them, which is deliberately not where the component
+   * has them, and reconciling would pull them straight back.
+   */
+  syncInstances = true;
 
   constructor(
     readonly store: DocumentStore,
@@ -263,6 +272,7 @@ export class History<Meta> {
         for (const finalize of this.options.previewFinalizers ?? []) finalize(open);
       },
     );
+    if (options.syncInstances === false) tx.syncInstances = false;
     this.active = { tx, metaBefore: this.options.captureMeta(), mergeKey: options.mergeKey };
     this.activeUndoable = options.undoable ?? true;
     return tx;

@@ -766,6 +766,8 @@ export const FrameNodeSchema = z.object({
   componentPropertyDefinitions: z.record(z.string().min(1).max(200), ComponentPropertyDefinitionSchema).optional(),
   /** Present when the frame is an instance of a main component. */
   instance: z.object({ mainId: IdSchema }).optional(),
+  /** An animated instance: how far along the timeline it has been dragged, in milliseconds. Absent while it starts with the animation. */
+  animationOffset: z.number().int().min(0).max(600_000).optional(),
   /** A nested instance in a main component whose component properties the component's instances show with their own. */
   isExposedInstance: z.literal(true).optional(),
   /** Frame guides (for frames directly on the page or in a section). Absent when none. */

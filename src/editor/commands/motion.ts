@@ -17,6 +17,7 @@
 
 import type { KeyframeRef } from '@/core/motion/animation';
 import { DEFAULT_ANIMATION, keyframeAt, layerExtent, retimeLayer, moveKeyframe, pathSegmentAt, removeKeyframe, setCurve, setKeyframe, setKeyframeEasing, trackFor, valueAt } from '@/core/motion/animation';
+import { animatedInstances, instanceOffset, instanceTracks, withInstances } from '@/core/motion/instances';
 import { presetById, PRESET_DURATION, type PresetBase } from '@/core/motion/presets';
 import type { Id } from '@/core/ids/ids';
 import { isSceneNode, type AnimatedProperty, type KeyframeEasing, type PageAnimation, type PageNode, type PrototypeEasing, type SceneNode, type VariableNode } from '@/core/schema/document';
@@ -51,6 +52,24 @@ export function resolvedAnimation(editor: Editor, pageId: Id = editor.pageId): P
     }),
   }));
   return { ...animation, tracks };
+}
+
+/**
+ * The animation as the canvas shows it: easing variables looked up, and every animated instance running its main
+ * component's tracks on its own layers. Editing works on the stored animation, which holds neither.
+ */
+export function shownAnimation(editor: Editor, pageId: Id = editor.pageId): PageAnimation | undefined {
+  return withInstances(editor.doc, resolvedAnimation(editor, pageId), pageId);
+}
+
+/** How far along the timeline an instance has been dragged, as one undo step. */
+export function setInstanceOffset(editor: Editor, instanceId: Id, offset: number): boolean {
+  const node = editor.doc.get(instanceId);
+  if (node?.type !== 'FRAME' || !node.instance) return false;
+  const at = Math.max(0, Math.min(600_000, Math.round(offset)));
+  if ((node.animationOffset ?? 0) === at) return false;
+  editor.history.run('Move instance', (tx) => tx.set(instanceId, 'animationOffset', at === 0 ? undefined : at), { mergeKey: `instance-offset:${instanceId}` });
+  return true;
 }
 
 /** What a layer's animated property is in the file itself, which is what a new keyframe records. */
@@ -120,6 +139,7 @@ export function deleteKeyframe(editor: Editor, ids: readonly Id[], property: Ani
 }
 
 export type { KeyframeRef } from '@/core/motion/animation';
+export { animatedInstances, instanceOffset, instanceTracks };
 
 /** Moves keyframes by `delta` milliseconds, as one undo step; they stop at the animation's start. */
 export function moveKeyframes(editor: Editor, refs: readonly KeyframeRef[], delta: number): boolean {

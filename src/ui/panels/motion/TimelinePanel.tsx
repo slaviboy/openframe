@@ -16,10 +16,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
-import { ANIMATED_PROPERTY_LABELS, animatedLayers, layerExtent, playheadAt, valueAt } from '@/core/motion/animation';
+import { ANIMATED_PROPERTY_LABELS, animatedLayers, playheadAt, valueAt } from '@/core/motion/animation';
 import type { Id } from '@/core/ids/ids';
 import type { AnimationTrack, PageAnimation, PageNode, SceneNode } from '@/core/schema/document';
-import { animationOf, deleteKeyframes, moveKeyframes, setAnimationDuration, setAnimationPlayback, setLayerExtent, setSegmentEasing, type KeyframeRef } from '@/editor/commands/motion';
+import { animatedInstances, animationOf, deleteKeyframes, instanceOffset, instanceTracks, moveKeyframes, setAnimationDuration, setAnimationPlayback, setInstanceOffset, setLayerExtent, setSegmentEasing, type KeyframeRef } from '@/editor/commands/motion';
 import { EASING_LABELS, makeEasing } from '@/core/prototype/reactions';
 import type { KeyframeEasing } from '@/core/schema/document';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
@@ -55,7 +55,9 @@ export function TimelinePanel() {
   const pageId = useEditorState((s) => s.activePageId);
   const page = editor.doc.get(pageId) as PageNode | undefined;
   const animation = animationOf(page);
+  // The layers with tracks of their own, and then every instance running its main component's animation.
   const layers = useMemo(() => animatedLayers(animation), [animation]);
+  const instances = useMemo(() => animatedInstances(editor.doc, animation, pageId), [editor, animation, pageId]);
   const rulerRef = useRef<HTMLDivElement>(null);
   const tracksRef = useRef<HTMLUListElement>(null);
   /** The box being swept over the tracks, in screen coordinates, while one is being dragged. */
@@ -290,16 +292,17 @@ export function TimelinePanel() {
           <span className={styles.playhead} style={{ left: percent(motion.time) }} data-testid="playhead" />
         </div>
 
-        {layers.length === 0 ? (
+        {layers.length === 0 && instances.length === 0 ? (
           <p className={styles.empty}>Select a layer and add a keyframe from the properties panel to animate it.</p>
         ) : (
           <ul className={styles.tracks} aria-label="Layer tracks" onPointerDown={sweep} ref={tracksRef}>
-            {layers.map((id) => (
+            {[...layers.map((id) => [id, false] as const), ...instances.map((id) => [id, true] as const)].map(([id, isInstance]) => (
               <LayerTrack
-                key={id}
+                key={`${id}:${isInstance}`}
                 nodeId={id}
                 animation={animation}
                 collapsed={motion.collapsed}
+                instance={isInstance}
                 selected={selection.includes(id)}
                 time={motion.time}
                 percent={percent}
@@ -348,6 +351,7 @@ function LayerTrack({
   animation,
   collapsed,
   selected,
+  instance,
   time,
   percent,
   visibleMs,
@@ -360,6 +364,7 @@ function LayerTrack({
   animation: PageAnimation;
   collapsed: boolean;
   selected: boolean;
+  instance: boolean;
   time: number;
   percent: (time: number) => string;
   visibleMs: number;
@@ -370,8 +375,10 @@ function LayerTrack({
 }) {
   const editor = useEditor();
   const node = editor.doc.get(nodeId) as SceneNode | undefined;
-  const tracks = animation.tracks.filter((track) => track.nodeId === nodeId);
-  if (!node) return null;
+  // An instance runs its main component's animation, so its rows are read from there and shown but not edited.
+  const tracks = instance ? instanceTracks(editor.doc, animation, nodeId) : animation.tracks.filter((track) => track.nodeId === nodeId);
+  const extent = tracks.flatMap((track) => track.keyframes.map((k) => k.time));
+  if (!node || tracks.length === 0) return null;
   // The layer wears the icon and, for a component or an instance, the color it has in the layers panel.
   const icon = layerIcon(node);
   return (
@@ -389,12 +396,19 @@ function LayerTrack({
         {node.name}
       </button>
       <div className={styles.layerRows}>
-        <TrackSpan nodeId={nodeId} animation={animation} percent={percent} visibleMs={visibleMs} />
+        <TrackSpan
+          label={node.name}
+          extent={{ from: Math.min(...extent), to: Math.max(...extent) }}
+          percent={percent}
+          visibleMs={visibleMs}
+          ends={!instance}
+          onRetime={(from, to) => (instance ? setInstanceOffset(editor, nodeId, instanceOffset(editor.doc, nodeId) + from - Math.min(...extent)) : setLayerExtent(editor, nodeId, from, to))}
+        />
         {collapsed ? (
-          <TrackRow label={node.name} nodeId={nodeId} tracks={tracks} percent={percent} time={time} isSelected={isSelected} onSelect={onSelect} onSelectAll={onSelectAll} onDrag={onDrag} />
+          <TrackRow label={node.name} nodeId={nodeId} tracks={tracks} percent={percent} time={time} readOnly={instance} isSelected={isSelected} onSelect={onSelect} onSelectAll={onSelectAll} onDrag={onDrag} />
         ) : (
           tracks.map((track) => (
-            <TrackRow key={track.property} label={ANIMATED_PROPERTY_LABELS[track.property]} nodeId={nodeId} tracks={[track]} percent={percent} time={time} isSelected={isSelected} onSelect={onSelect} onSelectAll={onSelectAll} onDrag={onDrag} />
+            <TrackRow key={track.property} label={ANIMATED_PROPERTY_LABELS[track.property]} nodeId={nodeId} tracks={[track]} percent={percent} time={time} readOnly={instance} isSelected={isSelected} onSelect={onSelect} onSelectAll={onSelectAll} onDrag={onDrag} />
           ))
         )}
       </div>
@@ -406,10 +420,8 @@ function LayerTrack({
  * A layer's animation as one bar across the timeline: dragging the bar moves the whole track, and pulling either end
  * stretches it, so everything the layer does runs later, earlier, longer or shorter together.
  */
-function TrackSpan({ nodeId, animation, percent, visibleMs }: { nodeId: Id; animation: PageAnimation; percent: (time: number) => string; visibleMs: number }) {
-  const editor = useEditor();
+function TrackSpan({ label, extent, percent, visibleMs, ends, onRetime }: { label: string; extent: { readonly from: number; readonly to: number } | undefined; percent: (time: number) => string; visibleMs: number; ends: boolean; onRetime: (from: number, to: number) => void }) {
   const laneRef = useRef<HTMLDivElement>(null);
-  const extent = layerExtent(animation, nodeId);
   if (!extent) return null;
 
   const drag = (end: 'both' | 'from' | 'to') => (e: ReactPointerEvent<HTMLElement>) => {
@@ -425,7 +437,7 @@ function TrackSpan({ nodeId, animation, percent, visibleMs }: { nodeId: Id; anim
       const from = end === 'to' ? origin.from : Math.max(0, origin.from + delta);
       const to = end === 'from' ? origin.to : origin.to + delta;
       // Pulling one end past the other holds the track at nothing wide rather than turning it inside out.
-      setLayerExtent(editor, nodeId, Math.min(from, to), Math.max(from, to));
+      onRetime(Math.min(from, to), Math.max(from, to));
     };
     const up = (ev: PointerEvent) => {
       target.releasePointerCapture(ev.pointerId);
@@ -442,12 +454,13 @@ function TrackSpan({ nodeId, animation, percent, visibleMs }: { nodeId: Id; anim
         className={styles.span}
         role="button"
         tabIndex={-1}
-        aria-label={`${editor.doc.get(nodeId)?.name ?? 'Layer'} track from ${Math.round(extent.from)} to ${Math.round(extent.to)} ms`}
+        aria-label={`${label} track from ${Math.round(extent.from)} to ${Math.round(extent.to)} ms`}
         style={{ left: percent(extent.from), width: `calc(${percent(extent.to)} - ${percent(extent.from)})` }}
         onPointerDown={drag('both')}
       >
-        <span className={styles.spanHandle} data-end="from" role="button" tabIndex={-1} aria-label="Track start" onPointerDown={drag('from')} />
-        <span className={styles.spanHandle} data-end="to" role="button" tabIndex={-1} aria-label="Track end" onPointerDown={drag('to')} />
+        {/* An instance is moved along the timeline but not stretched: its length belongs to its main component. */}
+        {ends && <span className={styles.spanHandle} data-end="from" role="button" tabIndex={-1} aria-label="Track start" onPointerDown={drag('from')} />}
+        {ends && <span className={styles.spanHandle} data-end="to" role="button" tabIndex={-1} aria-label="Track end" onPointerDown={drag('to')} />}
       </div>
     </div>
   );
@@ -460,6 +473,7 @@ function TrackRow({
   tracks,
   percent,
   time,
+  readOnly,
   isSelected,
   onSelect,
   onSelectAll,
@@ -470,6 +484,7 @@ function TrackRow({
   tracks: readonly AnimationTrack[];
   percent: (time: number) => string;
   time: number;
+  readOnly: boolean;
   isSelected: (ref: KeyframeRef) => boolean;
   onSelect: (ref: KeyframeRef, add: boolean) => void;
   onSelectAll: (refs: readonly KeyframeRef[]) => void;
@@ -478,9 +493,13 @@ function TrackRow({
   const editor = useEditor();
   return (
     <div className={styles.track} role="group" aria-label={`${label} track`}>
-      <button type="button" className={styles.trackName} aria-label={`Select ${label} keyframes`} onClick={() => onSelectAll(tracks.flatMap((track) => track.keyframes.map((k) => ({ nodeId, property: track.property, time: k.time }))))}>
-        {label}
-      </button>
+      {readOnly ? (
+        <span className={styles.trackName}>{label}</span>
+      ) : (
+        <button type="button" className={styles.trackName} aria-label={`Select ${label} keyframes`} onClick={() => onSelectAll(tracks.flatMap((track) => track.keyframes.map((k) => ({ nodeId, property: track.property, time: k.time }))))}>
+          {label}
+        </button>
+      )}
       <div className={styles.trackLane}>
         {tracks.flatMap((track) =>
           track.keyframes.slice(0, -1).map((keyframe, i) => {
@@ -494,6 +513,7 @@ function TrackRow({
                 title={`${ANIMATED_PROPERTY_LABELS[track.property]}: ${easing ? easingLabel(easing) : 'Linear'}`}
               >
                 <span className={styles.segmentLine} data-eased={easing ? '' : undefined} />
+                {readOnly ? null : (
                 <select
                   aria-label={`${ANIMATED_PROPERTY_LABELS[track.property]} easing from ${Math.round(keyframe.time)} ms`}
                   value={easing?.type ?? 'LINEAR'}
@@ -506,6 +526,7 @@ function TrackRow({
                     </option>
                   ))}
                 </select>
+                )}
               </label>
             );
           }),
@@ -521,11 +542,13 @@ function TrackRow({
                 data-keyframe={`${nodeId}|${track.property}|${keyframe.time}`}
                 style={{ left: percent(keyframe.time) }}
                 aria-label={`${ANIMATED_PROPERTY_LABELS[track.property]} keyframe at ${Math.round(keyframe.time)} ms`}
-                aria-pressed={isSelected(ref)}
+                aria-pressed={readOnly ? undefined : isSelected(ref)}
+                disabled={readOnly}
                 data-current={keyframe.time === Math.round(time) || undefined}
                 data-selected={isSelected(ref) || undefined}
                 title={`${ANIMATED_PROPERTY_LABELS[track.property]}: ${Math.round(valueAt(track, keyframe.time) * 100) / 100}`}
                 onPointerDown={(e) => {
+                  if (readOnly) return;
                   onSelect(ref, e.shiftKey);
                   onDrag(ref, e);
                 }}

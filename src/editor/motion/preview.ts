@@ -19,7 +19,7 @@ import type { Transaction } from '@/core/history/history';
 import { valuesAt } from '@/core/motion/animation';
 import type { Id } from '@/core/ids/ids';
 import { isSceneNode, type AnimatedProperty, type SceneNode, type Transform } from '@/core/schema/document';
-import { resolvedAnimation } from '../commands/motion';
+import { shownAnimation } from '../commands/motion';
 import { rotationDegrees, setRotation } from '../commands/properties';
 import type { Editor } from '../editor';
 
@@ -44,8 +44,8 @@ export class MotionPreview {
 
   /** Shows the animation at `time`. Nothing is shown at a moment where no track has anything to say. */
   show(time: number): void {
-    // Easings bound to variables are looked up before the animation is read.
-    const animation = resolvedAnimation(this.editor);
+    // Easing variables are looked up, and animated instances run their component's tracks, before the animation is read.
+    const animation = shownAnimation(this.editor);
     const values = valuesAt(animation, time);
     const key = `${time}:${animation?.tracks.length ?? 0}`;
     if (values.size === 0) {
@@ -54,7 +54,7 @@ export class MotionPreview {
     }
     if (key === this.shown) return;
     this.clear();
-    const tx = this.editor.history.begin('Motion preview');
+    const tx = this.editor.history.begin('Motion preview', { syncInstances: false });
     for (const [id, properties] of values) {
       const node = tx.store.get(id);
       if (!node || !isSceneNode(node)) continue;

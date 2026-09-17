@@ -27,6 +27,8 @@ const LINK_FIELDS: ReadonlySet<string> = new Set(['id', 'parent', 'component', '
 /** An instance's own placement: set on the instance itself and never taken from the main component. */
 const ROOT_PLACEMENT: ReadonlySet<string> = new Set([
   'transform',
+  // Where the instance sits on the Motion timeline is its own, not the component's.
+  'animationOffset',
   'constraints',
   'constrainProportions',
   'layoutSizingHorizontal',
@@ -534,6 +536,8 @@ function syncStructure(tx: Transaction, nextId: () => Id, linked: (id: Id) => Li
  */
 export function createComponentFinalizer(nextId: () => Id): Finalizer {
   return (tx) => {
+    // The Motion preview shows layers where the animation puts them, which a component must not pull back.
+    if (!tx.syncInstances) return;
     const store = tx.store;
     let links: Map<Id, Link[]> | null = null;
     const linked = (id: Id): Link[] => (links ??= linkIndex(store)).get(id) ?? [];

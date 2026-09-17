@@ -2238,6 +2238,8 @@ function VariantPropertiesSection({ setId }: { setId: string }) {
 
 function ComponentSection({ node }: { node: SceneNode }) {
   const editor = useEditor();
+  // Component properties are edited in Design; in Motion an instance only says when its animation runs.
+  const motionMode = useEditorState((s) => s.mode) === 'motion';
   if (node.type !== 'FRAME') return null;
   const main = node.component || node.componentSet ? node : node.instance ? editor.doc.get(node.instance.mainId) : undefined;
   const config = main?.type === 'FRAME' ? (main.component ?? main.componentSet) : undefined;
@@ -2254,15 +2256,28 @@ function ComponentSection({ node }: { node: SceneNode }) {
     // The instance menu: swap this instance for another component of the file.
     return (
       <Section title="Component">
-        <select className={primitives.select} aria-label="Swap instance" value={variantOf ? (defaultVariant(editor.doc, variantOf.set.id)?.id ?? main.id) : main.id} onChange={(e) => swapInstanceFor(editor, node.id, e.target.value)}>
+        <select
+          className={primitives.select}
+          aria-label="Swap instance"
+          disabled={motionMode}
+          value={variantOf ? (defaultVariant(editor.doc, variantOf.set.id)?.id ?? main.id) : main.id}
+          onChange={(e) => swapInstanceFor(editor, node.id, e.target.value)}
+        >
           {localComponents(editor).map((component) => (
             <option key={component.id} value={component.id}>
               {component.name}
             </option>
           ))}
         </select>
-        <VariantControls instanceId={node.id} />
-        <InstanceProperties instanceId={node.id} />
+        {/* An instance's component properties belong to Design; Motion only says when its animation runs. */}
+        {motionMode ? (
+          <p className={styles.hint}>Switch to Design to change this instance’s component properties.</p>
+        ) : (
+          <>
+            <VariantControls instanceId={node.id} />
+            <InstanceProperties instanceId={node.id} />
+          </>
+        )}
         {description && <p className={styles.hint}>{description}</p>}
         {docs}
       </Section>
