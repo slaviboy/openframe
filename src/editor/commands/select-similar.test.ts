@@ -16,13 +16,15 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { BLACK, createEmptyDocument, keyOnTop, makeEllipse, makeFrame, makeGroup, makeRectangle, makeSection, solid } from '@/core/document/factory';
+import { BLACK, createEmptyDocument, keyOnTop, makeEllipse, makeFrame, makeGroup, makeRectangle, makeSection, makeText, solid } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
 import { layersAt } from '@/core/scene/hit-test';
 import type { Node } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { BUILTIN_COMMANDS } from './builtin';
 import { layersWithSame, matchingLayers } from './select-similar';
+import { createComponent } from './components';
+import { insertInstance } from './insert-instance';
 
 let editor: Editor;
 
@@ -112,5 +114,44 @@ describe('select all with same', () => {
     editor.commands.run('edit.selectSameStroke');
     expect(editor.selection).toEqual([b]);
     expect(layersWithSame(editor, 'fill')).not.toContain(hidden);
+  });
+});
+
+describe('selecting all with the same effect, font or instance', () => {
+  const shadow = [{ type: 'DROP_SHADOW' as const, color: { r: 0, g: 0, b: 0, a: 0.25 }, offset: { x: 0, y: 2 }, radius: 4, spread: 0, visible: true, blendMode: 'NORMAL' as const, showShadowBehindNode: false }];
+
+  test('layers carrying the same effects are found together', () => {
+    const a = add(makeRectangle, 'A', 0, 0, 50, 50, editor.pageId, { effects: shadow } as Partial<Node>);
+    const b = add(makeRectangle, 'B', 80, 0, 50, 50, editor.pageId, { effects: shadow } as Partial<Node>);
+    const plain = add(makeRectangle, 'C', 160, 0, 50, 50);
+
+    editor.state.select([a]);
+    expect(layersWithSame(editor, 'effect').sort()).toEqual([a, b].sort());
+    // A layer with no effects has nothing to match on.
+    editor.state.select([plain]);
+    expect(layersWithSame(editor, 'effect')).toEqual([]);
+  });
+
+  test('text layers set in the same face and size are found together', () => {
+    const a = add(makeText, 'One', 0, 0, 100, 20);
+    const b = add(makeText, 'Two', 0, 40, 100, 20);
+    add(makeText, 'Three', 0, 80, 100, 20, editor.pageId, { fontSize: 48 } as Partial<Node>);
+
+    editor.state.select([a]);
+    expect(layersWithSame(editor, 'font').sort()).toEqual([a, b].sort());
+    // A layer that is not text is never a match for a font.
+    editor.state.select([add(makeRectangle, 'Box', 0, 120, 50, 50)]);
+    expect(layersWithSame(editor, 'font')).toEqual([]);
+  });
+
+  test('instances of the same component are found together', () => {
+    const rect = add(makeRectangle, 'Base', 0, 0, 50, 50);
+    editor.state.select([rect]);
+    const main = createComponent(editor)!;
+    const one = insertInstance(editor, main, { x: 300, y: 300 })!;
+    const two = insertInstance(editor, main, { x: 500, y: 300 })!;
+
+    editor.state.select([one]);
+    expect(layersWithSame(editor, 'instance').sort()).toEqual([one, two].sort());
   });
 });

@@ -66,7 +66,7 @@ export function matchingLayers(editor: Editor, ids: readonly Id[] = selectedScen
   return [...result];
 }
 
-export type SameProperty = 'fill' | 'stroke' | 'properties';
+export type SameProperty = 'fill' | 'stroke' | 'effect' | 'font' | 'instance' | 'properties';
 
 function signature(node: SceneNode, property: SameProperty): string | null {
   if (property === 'properties') {
@@ -74,6 +74,12 @@ function signature(node: SceneNode, property: SameProperty): string | null {
     const corner = 'cornerRadius' in node ? node.cornerRadius : null;
     return canonicalStringify([node.type, node.opacity, node.blendMode, geometry, corner]);
   }
+  // The effects a layer carries, whatever kind of layer it is.
+  if (property === 'effect') return node.effects && node.effects.length > 0 ? canonicalStringify(node.effects) : null;
+  // A text layer's typeface, and the size and weight it is set in.
+  if (property === 'font') return node.type === 'TEXT' ? canonicalStringify([node.fontName, node.fontSize]) : null;
+  // The component an instance is of, so every instance of the same one is found.
+  if (property === 'instance') return node.type === 'FRAME' && node.instance ? node.instance.mainId : null;
   if (!hasGeometry(node)) return null;
   if (property === 'fill') return node.fills.length > 0 ? canonicalStringify(node.fills) : null;
   return node.strokes.length > 0 ? canonicalStringify([node.strokes, node.strokeWeight, node.strokeAlign]) : null;

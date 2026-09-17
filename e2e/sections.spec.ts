@@ -100,3 +100,31 @@ test('slice tool from the region tools menu', async ({ page }) => {
   await expect(page.getByTestId('field-w')).toHaveValue('120');
   await expect(page.getByRole('region', { name: 'Appearance' })).toHaveCount(0);
 });
+
+test('a slice exports the region it covers, not itself', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  // A rectangle, with a slice laid over part of it.
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 300, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 500, box.y + 400, { steps: 5 });
+  await page.mouse.up();
+
+  await page.keyboard.press('s');
+  await page.mouse.move(box.x + 340, box.y + 280);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 440, box.y + 360, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByRole('treeitem', { name: /Slice 1/ })).toBeVisible();
+
+  // The slice exports what lies within it.
+  const exportSection = page.getByRole('region', { name: 'Export' });
+  await exportSection.getByRole('button', { name: 'Add export' }).click();
+  const download = page.waitForEvent('download');
+  await exportSection.getByRole('button', { name: /^Export/ }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toMatch(/Slice 1/);
+});

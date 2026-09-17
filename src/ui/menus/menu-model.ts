@@ -61,7 +61,7 @@ const MAIN_MENU: readonly (readonly [string, readonly (readonly string[])[]])[] 
       ['edit.duplicate', 'edit.delete'],
       ['edit.find'],
       ['edit.selectAll', 'edit.selectInverse', 'edit.selectMatching'],
-      ['edit.selectSameFill', 'edit.selectSameStroke', 'edit.selectSameProperties'],
+      ['edit.selectSameFill', 'edit.selectSameStroke', 'edit.selectSameEffect', 'edit.selectSameFont', 'edit.selectSameInstance', 'edit.selectSameProperties'],
     ],
   ],
   [

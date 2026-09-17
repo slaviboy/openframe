@@ -1060,6 +1060,9 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     [
       ['edit.selectSameFill', 'Select all with same fill', 'fill'],
       ['edit.selectSameStroke', 'Select all with same stroke', 'stroke'],
+      ['edit.selectSameEffect', 'Select all with same effect', 'effect'],
+      ['edit.selectSameFont', 'Select all with same font', 'font'],
+      ['edit.selectSameInstance', 'Select all with same instance', 'instance'],
       ['edit.selectSameProperties', 'Select all with same properties', 'properties'],
     ] as const
   ).map(
