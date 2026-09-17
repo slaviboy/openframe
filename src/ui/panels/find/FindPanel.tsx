@@ -16,7 +16,7 @@
  */
 
 import { useState } from 'react';
-import { findLayers, type FindCategory, type FindResult } from '@/core/document/find';
+import { findLayers, replaceInText, type FindCategory, type FindResult, type FindScope } from '@/core/document/find';
 import { isSceneNode } from '@/core/schema/document';
 import { Icon } from '../../icons/Icon';
 import { layerIcon } from '../../icons/layer-icons';
@@ -45,9 +45,13 @@ export function FindPanel() {
   const selection = useEditorState((s) => s.selection);
   const [query, setQuery] = useState('');
   const [allPages, setAllPages] = useState(false);
+  const [scope, setScope] = useState<FindScope>('name');
+  const [replacement, setReplacement] = useState('');
   const [filters, setFilters] = useState<ReadonlySet<FindCategory>>(new Set());
 
-  const results = findLayers(editor.doc, allPages ? editor.doc.pages() : [pageId], query, filters);
+  const results = findLayers(editor.doc, allPages ? editor.doc.pages() : [pageId], query, filters, 1000, scope);
+  // Only the layers found by their text can be rewritten; a name match says nothing about what the text says.
+  const inText = results.filter((result) => result.inText);
   const active = selection.length === 1 ? results.findIndex((r) => r.id === selection[0]) : -1;
 
   const choose = (result: FindResult) => {
@@ -110,6 +114,17 @@ export function FindPanel() {
             All pages
           </button>
         </div>
+        <div className={styles.scope} role="group" aria-label="Search over">
+          <button type="button" className={styles.chip} aria-pressed={scope === 'name'} onClick={() => setScope('name')}>
+            Names
+          </button>
+          <button type="button" className={styles.chip} aria-pressed={scope === 'text'} onClick={() => setScope('text')}>
+            Text
+          </button>
+          <button type="button" className={styles.chip} aria-pressed={scope === 'both'} onClick={() => setScope('both')}>
+            Both
+          </button>
+        </div>
         <div className={styles.filters} role="group" aria-label="Layer types">
           {FILTERS.map(([category, label]) => (
             <button key={category} type="button" className={styles.chip} aria-pressed={filters.has(category)} onClick={() => toggleFilter(category)}>
@@ -118,8 +133,32 @@ export function FindPanel() {
           ))}
         </div>
       </div>
+      {/* Replace works on the text that was found, so it is offered once the search is reading text at all. */}
+      {scope !== 'name' && (
+        <div className={styles.replace}>
+          <input
+            className={styles.input}
+            aria-label="Replace with"
+            placeholder="Replace with"
+            value={replacement}
+            onChange={(e) => setReplacement(e.target.value)}
+            onKeyDown={(e) => e.stopPropagation()}
+          />
+          <button
+            type="button"
+            className={styles.chip}
+            disabled={inText.length === 0}
+            onClick={() => {
+              const changes = replaceInText(editor.doc, inText.map((result) => result.id), query, replacement);
+              if (changes.length > 0) editor.history.run('Replace text', (tx) => changes.forEach((change) => tx.set(change.id, 'characters', change.characters)));
+            }}
+          >
+            Replace all
+          </button>
+        </div>
+      )}
       <p className={styles.count} role="status" aria-live="polite">
-        {query.trim() === '' ? 'Type to find layers by name' : `${results.length} ${results.length === 1 ? 'result' : 'results'}`}
+        {query.trim() === '' ? 'Type to find layers' : `${results.length} ${results.length === 1 ? 'result' : 'results'}`}
       </p>
       <ul className={styles.results} aria-label="Find results">
         {results.map((result, index) => {

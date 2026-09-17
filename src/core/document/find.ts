@@ -40,12 +40,17 @@ export const FIND_CATEGORY: Record<SceneNode['type'], FindCategory> = {
 export interface FindResult {
   readonly id: Id;
   readonly pageId: Id;
+  /** Where in the layer's text the query was found; absent when it was the layer's name that matched. */
+  readonly inText?: true;
 }
 
+/** What a search reads: the layers' names, the text they carry, or both. */
+export type FindScope = 'name' | 'text' | 'both';
+
 /**
- * Layers whose name contains `query` (case-insensitive), on the given pages in page order and
- * layers-panel order (topmost first, parents before children). Hidden and locked layers are
- * included. An empty query finds nothing; an empty category set means every type.
+ * Layers matching `query` (case-insensitive), on the given pages in page order and layers-panel order (topmost
+ * first, parents before children). `scope` says whether the layers' names are read, the text they carry, or both.
+ * Hidden and locked layers are included. An empty query finds nothing; an empty category set means every type.
  */
 export function findLayers(
   store: DocumentStore,
@@ -53,6 +58,7 @@ export function findLayers(
   query: string,
   categories: ReadonlySet<FindCategory> = new Set(),
   limit = 1000,
+  scope: FindScope = 'name',
 ): FindResult[] {
   const needle = query.trim().toLocaleLowerCase();
   if (!needle) return [];
@@ -63,12 +69,34 @@ export function findLayers(
       const id = children[i]!;
       const node = store.get(id);
       if (!node || !isSceneNode(node)) continue;
-      if (node.name.toLocaleLowerCase().includes(needle) && (categories.size === 0 || categories.has(FIND_CATEGORY[node.type]))) {
-        results.push({ id, pageId });
+      if (categories.size === 0 || categories.has(FIND_CATEGORY[node.type])) {
+        const byName = scope !== 'text' && node.name.toLocaleLowerCase().includes(needle);
+        const byText = scope !== 'name' && node.type === 'TEXT' && node.characters.toLocaleLowerCase().includes(needle);
+        // A layer found by its text is marked, so replacing knows which results it may rewrite.
+        if (byName) results.push({ id, pageId });
+        else if (byText) results.push({ id, pageId, inText: true });
       }
       visit(id, pageId);
     }
   };
   for (const pageId of pageIds) visit(pageId, pageId);
   return results;
+}
+
+/**
+ * Rewrites every run of `query` in the text of the layers given, as one undo step. Text carried by a layer whose
+ * content follows a component property is left alone, since it is the property that says what it reads.
+ */
+export function replaceInText(store: DocumentStore, ids: readonly Id[], query: string, replacement: string): { readonly id: Id; readonly characters: string }[] {
+  const needle = query.trim();
+  if (needle === '') return [];
+  const pattern = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  const out: { id: Id; characters: string }[] = [];
+  for (const id of ids) {
+    const node = store.get(id);
+    if (!node || !isSceneNode(node) || node.type !== 'TEXT') continue;
+    const next = node.characters.replace(pattern, replacement);
+    if (next !== node.characters) out.push({ id, characters: next });
+  }
+  return out;
 }

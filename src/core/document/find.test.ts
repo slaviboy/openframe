@@ -19,8 +19,8 @@ import { describe, expect, test } from 'vitest';
 import { keyBetween } from '../ids/fractional-index';
 import { IdGenerator, ROOT_ID } from '../ids/ids';
 import type { Node } from '../schema/document';
-import { createEmptyDocument, keyOnTop, makeEllipse, makeFrame, makePage, makeRectangle, makeSlice } from './factory';
-import { findLayers } from './find';
+import { createEmptyDocument, keyOnTop, makeEllipse, makeFrame, makePage, makeRectangle, makeSlice, makeText } from './factory';
+import { findLayers, replaceInText } from './find';
 
 function doc() {
   const ids = new IdGenerator('f');
@@ -60,5 +60,50 @@ describe('findLayers', () => {
     expect(findLayers(d.store, [d.page1], 'card', new Set(['frame', 'slice'])).map((r) => r.id)).toEqual([d.cardSlice, d.card]);
     expect(findLayers(d.store, [d.page1, d.page2], 'a', new Set(), 2)).toHaveLength(2);
     expect(ROOT_ID).toBe('0:0');
+  });
+});
+
+describe('finding and replacing text', () => {
+  test('a search can read the text a layer carries as well as its name', () => {
+    const ids = new IdGenerator('t');
+    const store = createEmptyDocument({ name: 'D', now: 'n', appVersion: 't', ids });
+    const page = store.pages()[0]!;
+    store.applyOp({
+      kind: 'create',
+      node: { ...makeText({ id: 't1', parent: { id: page, key: keyOnTop(store, page) }, name: 'Heading', x: 0, y: 0, width: 100, height: 20 }), characters: 'Buy now' } as Node,
+    });
+
+    // By name only, the words inside it are not looked at.
+    expect(findLayers(store, [page], 'buy', new Set(), 1000, 'name')).toEqual([]);
+    expect(findLayers(store, [page], 'buy', new Set(), 1000, 'text')).toEqual([{ id: 't1', pageId: page, inText: true }]);
+    // Both reads either, and a name match is not marked as a text one.
+    expect(findLayers(store, [page], 'heading', new Set(), 1000, 'both')).toEqual([{ id: 't1', pageId: page }]);
+  });
+
+  test('replacing rewrites every run of the words, whatever their case', () => {
+    const ids = new IdGenerator('t');
+    const store = createEmptyDocument({ name: 'D', now: 'n', appVersion: 't', ids });
+    const page = store.pages()[0]!;
+    store.applyOp({
+      kind: 'create',
+      node: { ...makeText({ id: 't1', parent: { id: page, key: keyOnTop(store, page) }, name: 'Heading', x: 0, y: 0, width: 100, height: 20 }), characters: 'Buy now, buy later' } as Node,
+    });
+
+    expect(replaceInText(store, ['t1'], 'buy', 'Get')).toEqual([{ id: 't1', characters: 'Get now, Get later' }]);
+    // Words that are not there change nothing, and nor does an empty search.
+    expect(replaceInText(store, ['t1'], 'sell', 'Get')).toEqual([]);
+    expect(replaceInText(store, ['t1'], '  ', 'Get')).toEqual([]);
+  });
+
+  test('the words are taken as they are written, not as a pattern', () => {
+    const ids = new IdGenerator('t');
+    const store = createEmptyDocument({ name: 'D', now: 'n', appVersion: 't', ids });
+    const page = store.pages()[0]!;
+    store.applyOp({
+      kind: 'create',
+      node: { ...makeText({ id: 't1', parent: { id: page, key: keyOnTop(store, page) }, name: 'Heading', x: 0, y: 0, width: 100, height: 20 }), characters: 'Cost: $5.00 (each)' } as Node,
+    });
+    expect(replaceInText(store, ['t1'], '$5.00', '$6.00')).toEqual([{ id: 't1', characters: 'Cost: $6.00 (each)' }]);
+    expect(replaceInText(store, ['t1'], '(each)', 'per item')).toEqual([{ id: 't1', characters: 'Cost: $5.00 per item' }]);
   });
 });

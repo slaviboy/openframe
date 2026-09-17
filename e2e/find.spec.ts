@@ -68,3 +68,39 @@ test('⌘F finds layers by name and type, steps through results, and Esc returns
   await expect(find).toHaveCount(0);
   await expect(page.getByRole('tree', { name: 'Layers' })).toBeVisible();
 });
+
+test('find reads the text a layer carries, and replaces every run of it', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  await page.keyboard.press('t');
+  await page.mouse.click(box.x + 360, box.y + 280);
+  // The layer's name follows its first line, so the words to find are put on a second one.
+  await page.keyboard.type('Heading');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('Buy now, buy later');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+  await page.keyboard.press(`${mod}+f`);
+  const find = page.getByRole('region', { name: 'Find' });
+  await find.getByRole('searchbox', { name: 'Find layers' }).fill('buy');
+
+  // Names alone find nothing; reading the text finds the layer.
+  await expect(find.getByRole('status')).toHaveText('0 results');
+  await find.getByRole('group', { name: 'Search over' }).getByRole('button', { name: 'Text' }).click();
+  await expect(find.getByRole('status')).toHaveText('1 result');
+
+  // Replacing rewrites every run of the words, whatever their case.
+  await find.getByRole('textbox', { name: 'Replace with' }).fill('Get');
+  await find.getByRole('button', { name: 'Replace all' }).click();
+  await expect(find.getByRole('status')).toHaveText('0 results');
+
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+  await page.reload();
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await expect(page.getByRole('treeitem', { name: /Heading/ })).toBeVisible();
+  await page.getByRole('treeitem', { name: /Heading/ }).click();
+  await expect(page.getByRole('region', { name: 'Find' })).toHaveCount(0);
+});
