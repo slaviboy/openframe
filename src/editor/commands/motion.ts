@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { DEFAULT_ANIMATION, keyframeAt, removeKeyframe, setKeyframe, trackFor } from '@/core/motion/animation';
+import { DEFAULT_ANIMATION, keyframeAt, moveKeyframe, removeKeyframe, setKeyframe, trackFor } from '@/core/motion/animation';
 import type { Id } from '@/core/ids/ids';
 import { isSceneNode, type AnimatedProperty, type PageAnimation, type PageNode, type SceneNode } from '@/core/schema/document';
 import { rotationDegrees } from './properties';
@@ -46,12 +46,13 @@ export function baseValue(node: SceneNode, property: AnimatedProperty): number {
 }
 
 /** Writes the page's animation, as one undo step. */
-function writeAnimation(editor: Editor, label: string, next: (animation: PageAnimation) => PageAnimation): boolean {
+function writeAnimation(editor: Editor, label: string, next: (animation: PageAnimation) => PageAnimation, mergeKey?: string): boolean {
   const pageId = editor.pageId;
   const page = editor.doc.get(pageId);
   if (page?.type !== 'PAGE') return false;
   const animation = next(page.animation ?? DEFAULT_ANIMATION);
-  editor.history.run(label, (tx) => tx.set(pageId, 'animation', animation.tracks.length === 0 && animation.duration === DEFAULT_ANIMATION.duration && animation.playback === DEFAULT_ANIMATION.playback ? undefined : animation));
+  const plain = animation.tracks.length === 0 && animation.duration === DEFAULT_ANIMATION.duration && animation.playback === DEFAULT_ANIMATION.playback;
+  editor.history.run(label, (tx) => tx.set(pageId, 'animation', plain ? undefined : animation), mergeKey === undefined ? {} : { mergeKey });
   return true;
 }
 
@@ -72,8 +73,12 @@ export function isAnimated(editor: Editor, nodeId: Id, property: AnimatedPropert
 export function addKeyframe(editor: Editor, ids: readonly Id[], property: AnimatedProperty, time: number, value?: number): boolean {
   const layers = ids.map((id) => editor.doc.get(id)).filter((node): node is SceneNode => node !== undefined && isSceneNode(node));
   if (layers.length === 0) return false;
-  return writeAnimation(editor, 'Add keyframe', (animation) =>
-    layers.reduce((next, node) => setKeyframe(next, node.id, property, time, value ?? baseValue(node, property)), animation),
+  // Scrubbing a field writes the same keyframe over and over: they merge into one step.
+  return writeAnimation(
+    editor,
+    'Add keyframe',
+    (animation) => layers.reduce((next, node) => setKeyframe(next, node.id, property, time, value ?? baseValue(node, property)), animation),
+    `keyframe:${property}:${Math.round(time)}:${ids.join(',')}`,
   );
 }
 
@@ -81,6 +86,27 @@ export function addKeyframe(editor: Editor, ids: readonly Id[], property: Animat
 export function deleteKeyframe(editor: Editor, ids: readonly Id[], property: AnimatedProperty, time: number): boolean {
   if (ids.length === 0) return false;
   return writeAnimation(editor, 'Delete keyframe', (animation) => ids.reduce((next, id) => removeKeyframe(next, id, property, time), animation));
+}
+
+/** A keyframe on the timeline: which layer's property it belongs to, and when it is. */
+export interface KeyframeRef {
+  readonly nodeId: Id;
+  readonly property: AnimatedProperty;
+  readonly time: number;
+}
+
+/** Moves keyframes by `delta` milliseconds, as one undo step; they stop at the animation's start. */
+export function moveKeyframes(editor: Editor, refs: readonly KeyframeRef[], delta: number): boolean {
+  if (refs.length === 0 || Math.round(delta) === 0) return false;
+  return writeAnimation(editor, 'Move keyframe', (animation) =>
+    refs.reduce((next, ref) => moveKeyframe(next, ref.nodeId, ref.property, ref.time, Math.max(0, ref.time + delta)), animation),
+  );
+}
+
+/** Removes keyframes, as one undo step. */
+export function deleteKeyframes(editor: Editor, refs: readonly KeyframeRef[]): boolean {
+  if (refs.length === 0) return false;
+  return writeAnimation(editor, 'Delete keyframe', (animation) => refs.reduce((next, ref) => removeKeyframe(next, ref.nodeId, ref.property, ref.time), animation));
 }
 
 /** How long the animation runs, in milliseconds. */

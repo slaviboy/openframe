@@ -173,3 +173,8 @@
 .keyframe[data-current] {
   background: var(--accent);
 }
+
+.keyframe[data-selected] {
+  border-color: var(--fg-primary);
+  box-shadow: 0 0 0 1px var(--fg-primary);
+}

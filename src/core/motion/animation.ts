@@ -97,6 +97,16 @@ export function removeKeyframe(animation: PageAnimation, nodeId: Id, property: A
   return { ...animation, tracks: animation.tracks.map((track) => (track === existing ? { ...track, keyframes } : track)) };
 }
 
+/** An animation with a keyframe moved to another moment, keeping its value; a keyframe already there gives way. */
+export function moveKeyframe(animation: PageAnimation, nodeId: Id, property: AnimatedProperty, from: number, to: number): PageAnimation {
+  const track = trackFor(animation, nodeId, property);
+  const keyframe = keyframeAt(track, Math.round(from));
+  if (!track || !keyframe) return animation;
+  const at = Math.max(0, Math.round(to));
+  const keyframes = ordered([...track.keyframes.filter((k) => k.time !== keyframe.time && k.time !== at), { time: at, value: keyframe.value }]);
+  return { ...animation, tracks: animation.tracks.map((t) => (t === track ? { ...t, keyframes } : t)) };
+}
+
 /** An animation without any track of the layers given (used when they are deleted). */
 export function withoutLayers(animation: PageAnimation, ids: ReadonlySet<Id>): PageAnimation {
   return { ...animation, tracks: animation.tracks.filter((track) => !ids.has(track.nodeId)) };

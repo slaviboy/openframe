@@ -104,3 +104,45 @@ test('the timeline plays with Space, and its timing controls hold', async ({ pag
   await expect(page.getByRole('radio', { name: 'Motion' })).toBeChecked();
   await expect(page.getByRole('region', { name: 'Timeline' }).getByRole('button', { name: 'Playback' })).toHaveText('Once');
 });
+
+test('keyframes on the timeline are selected, dragged and deleted', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 460, box.y + 310, { steps: 5 });
+  await page.mouse.up();
+
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+
+  // Auto-keyframe records a keyframe for a property that is not animated yet.
+  await timeline.getByRole('button', { name: 'Auto-keyframe' }).click();
+  const current = timeline.getByRole('textbox', { name: 'Current time' });
+  await current.fill('400');
+  await current.press('Enter');
+  const startX = Number(await page.getByTestId('field-x').inputValue());
+  await page.getByTestId('field-x').fill(String(startX + 120));
+  await page.getByTestId('field-x').press('Enter');
+  const keyframe = timeline.getByRole('button', { name: /X position keyframe at 400 ms/ });
+  await expect(keyframe).toBeVisible();
+
+  // Dragging it along the lane moves it in time.
+  const lane = (await keyframe.boundingBox())!;
+  await page.mouse.move(lane.x + lane.width / 2, lane.y + lane.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(lane.x + lane.width / 2 + 120, lane.y + lane.height / 2, { steps: 8 });
+  await page.mouse.up();
+  await expect(timeline.getByRole('button', { name: /X position keyframe at 400 ms/ })).toHaveCount(0);
+  const moved = timeline.getByRole('button', { name: /X position keyframe at/ });
+  await expect(moved).toHaveCount(1);
+  await expect(moved).toHaveAttribute('aria-pressed', 'true');
+
+  // Delete takes the selected keyframe away, and undo brings it back.
+  await moved.press('Delete');
+  await expect(timeline.getByRole('button', { name: /X position keyframe at/ })).toHaveCount(0);
+  await page.keyboard.press('ControlOrMeta+Z');
+  await expect(timeline.getByRole('button', { name: /X position keyframe at/ })).toHaveCount(1);
+});

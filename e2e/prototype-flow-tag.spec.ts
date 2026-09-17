@@ -119,9 +119,17 @@ test('double-clicking a flow starting point tag renames the flow in a field on t
   const flowName = panel.getByRole('region', { name: 'Flow starting point' }).getByLabel('Flow name');
   await expect(flowName).toHaveValue('Flow 1');
 
-  // Escape leaves the name as it was.
-  await page.mouse.dblclick(box.x + 390, box.y + 169);
+  // The tag is drawn on the canvas, which has nothing to await, so the double-click is retried until it lands.
   const field = page.getByRole('textbox', { name: 'Rename flow' });
+  const openRename = async () => {
+    await expect(async () => {
+      await page.mouse.dblclick(box.x + 390, box.y + 169);
+      await expect(field).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 10_000 });
+  };
+
+  // Escape leaves the name as it was.
+  await openRename();
   await expect(field).toHaveValue('Flow 1');
   await field.fill('Onboarding');
   await field.press('Escape');
@@ -129,7 +137,7 @@ test('double-clicking a flow starting point tag renames the flow in a field on t
   await expect(flowName).toHaveValue('Flow 1');
 
   // Enter renames the flow.
-  await page.mouse.dblclick(box.x + 390, box.y + 169);
+  await openRename();
   await field.fill('Checkout');
   await field.press('Enter');
   await expect(field).toHaveCount(0);

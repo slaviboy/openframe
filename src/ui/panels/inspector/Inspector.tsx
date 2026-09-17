@@ -856,10 +856,15 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
   // playhead records a keyframe there rather than moving the layer itself.
   const motion = mode === 'motion';
   const motionTime = useEditorState((s) => s.motion.time);
+  const autoKeyframe = useEditorState((s) => s.motion.autoKeyframe);
+  /** A field's gesture handlers, left off in Motion: a keyframe write can't start while a gesture holds the document. */
+  const gestureProps = (gesture: { start: () => void; end: () => void }) => (motion ? {} : { onGestureStart: gesture.start, onGestureEnd: gesture.end });
   const keyframes =
     (property: AnimatedProperty, apply: (value: number) => void, toKeyframe: (value: number) => number = (value) => value) =>
     (value: number) => {
-      if (motion && nodes.length > 0 && nodes.every((n) => isAnimated(editor, n.id, property))) addKeyframe(editor, nodes.map((n) => n.id), property, motionTime, toKeyframe(value));
+      // An animated property takes a keyframe at the playhead; with Auto-keyframe on, so does one that isn't animated yet.
+      const animated = nodes.length > 0 && nodes.every((n) => isAnimated(editor, n.id, property));
+      if (motion && (animated || (autoKeyframe && nodes.length > 0))) addKeyframe(editor, nodes.map((n) => n.id), property, motionTime, toKeyframe(value));
       else apply(value);
     };
   const spacing = useGesture('Change spacing');
@@ -949,10 +954,10 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         <AlignRow />
         <div className={styles.grid2}>
           <MotionField nodes={nodes} property="x" motion={motion}>
-            <NumberField label="X" ariaLabel="X position" tooltip="X-position" testId="field-x" value={x} onGestureStart={move.start} onGestureEnd={move.end} onChange={keyframes('x', (v) => setAxis('x', v))} />
+            <NumberField label="X" ariaLabel="X position" tooltip="X-position" testId="field-x" value={x} {...gestureProps(move)} onChange={keyframes('x', (v) => setAxis('x', v))} />
           </MotionField>
           <MotionField nodes={nodes} property="y" motion={motion}>
-            <NumberField label="Y" ariaLabel="Y position" tooltip="Y-position" testId="field-y" value={y} onGestureStart={move.start} onGestureEnd={move.end} onChange={keyframes('y', (v) => setAxis('y', v))} />
+            <NumberField label="Y" ariaLabel="Y position" tooltip="Y-position" testId="field-y" value={y} {...gestureProps(move)} onChange={keyframes('y', (v) => setAxis('y', v))} />
           </MotionField>
         </div>
         {/* Sections never rotate or flip. */}
@@ -965,8 +970,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
                 testId="field-rotation"
                 suffix="°"
                 value={val(shared(nodes, rotationDegrees))}
-                onGestureStart={rotate.start}
-                onGestureEnd={rotate.end}
+                {...gestureProps(rotate)}
                 onChange={keyframes('rotation', (deg) => rotate.change((tx) => nodes.forEach((n) => setRotation(tx, tx.store.getOrThrow(n.id) as SceneNode, deg))))}
               />
             </MotionField>
@@ -1035,8 +1039,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             testId="field-w"
             min={0}
             value={val(shared(nodes, (n) => n.size.width))}
-            onGestureStart={resize.start}
-            onGestureEnd={resize.end}
+            {...gestureProps(resize)}
             onChange={keyframes('width', (v) => resize.change((tx) => nodes.forEach((n) => setSize(tx, n, 'width', v))))}
           />
           </MotionField>
@@ -1050,8 +1053,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             min={0}
             disabled={lines.length > 0}
             value={val(shared(nodes, (n) => n.size.height))}
-            onGestureStart={resize.start}
-            onGestureEnd={resize.end}
+            {...gestureProps(resize)}
             onChange={keyframes('height', (v) => resize.change((tx) => nodes.forEach((n) => setSize(tx, n, 'height', v))))}
           />
           </MotionField>
@@ -1142,8 +1144,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             max={100}
             decimals={0}
             value={val(shared(nodes, (n) => Math.round(n.opacity * 100)))}
-            onGestureStart={appearance.start}
-            onGestureEnd={appearance.end}
+            {...gestureProps(appearance)}
             onChange={keyframes('opacity', (v) => appearance.change((tx) => nodes.forEach((n) => setOpacity(tx, n, v))), (v) => v / 100)}
           />
           </MotionField>

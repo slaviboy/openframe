@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { ANIMATED_PROPERTY_LABELS, animatedLayers, playheadAt, valueAt } from '@/core/motion/animation';
 import type { Id } from '@/core/ids/ids';
 import type { AnimationTrack, PageAnimation, PageNode, SceneNode } from '@/core/schema/document';
-import { animationOf, deleteKeyframe, setAnimationDuration, setAnimationPlayback } from '@/editor/commands/motion';
+import { animationOf, deleteKeyframes, moveKeyframes, setAnimationDuration, setAnimationPlayback, type KeyframeRef } from '@/editor/commands/motion';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import { Icon } from '../../icons/Icon';
 import { IconButton } from '../../primitives/IconButton';
@@ -48,6 +48,40 @@ export function TimelinePanel() {
   const animation = animationOf(page);
   const layers = useMemo(() => animatedLayers(animation), [animation]);
   const rulerRef = useRef<HTMLDivElement>(null);
+  /** The keyframes picked out on the timeline, which move and delete together. */
+  const [selected, setSelected] = useState<readonly KeyframeRef[]>([]);
+  const isSelected = useCallback((ref: KeyframeRef) => selected.some((k) => k.nodeId === ref.nodeId && k.property === ref.property && k.time === ref.time), [selected]);
+
+  /** Dragging keyframes: ⇧ snaps to tenths of the animation, and the selection follows to its new times. */
+  const dragKeyframes = useCallback(
+    (ref: KeyframeRef, e: ReactPointerEvent<HTMLButtonElement>) => {
+      const lane = e.currentTarget.parentElement;
+      if (!lane) return;
+      const width = lane.getBoundingClientRect().width || 1;
+      const startX = e.clientX;
+      const picked = isSelected(ref) ? selected : [ref];
+      setSelected(picked);
+      const target = e.currentTarget;
+      target.setPointerCapture(e.pointerId);
+      let delta = 0;
+      const move = (ev: PointerEvent) => {
+        const raw = ((ev.clientX - startX) / width) * animation.duration;
+        const snap = animation.duration / 10;
+        delta = Math.round(ev.shiftKey ? Math.round((ref.time + raw) / snap) * snap - ref.time : raw);
+      };
+      const up = (ev: PointerEvent) => {
+        target.releasePointerCapture(ev.pointerId);
+        target.removeEventListener('pointermove', move);
+        target.removeEventListener('pointerup', up);
+        if (delta !== 0 && moveKeyframes(editor, picked, delta)) {
+          setSelected(picked.map((k) => ({ ...k, time: Math.max(0, k.time + delta) })));
+        }
+      };
+      target.addEventListener('pointermove', move);
+      target.addEventListener('pointerup', up);
+    },
+    [animation.duration, editor, isSelected, selected],
+  );
 
   // Playing moves the playhead until it is paused (or the animation ends, played once).
   useEffect(() => {
@@ -79,7 +113,20 @@ export function TimelinePanel() {
   const percent = (time: number) => `${(time / Math.max(1, animation.duration)) * 100}%`;
 
   return (
-    <section className={styles.timeline} aria-label="Timeline" data-testid="timeline">
+    <section
+      className={styles.timeline}
+      aria-label="Timeline"
+      data-testid="timeline"
+      tabIndex={-1}
+      onKeyDown={(e) => {
+        if (e.key !== 'Delete' && e.key !== 'Backspace') return;
+        if (selected.length === 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        deleteKeyframes(editor, selected);
+        setSelected([]);
+      }}
+    >
       <header className={styles.controls}>
         <IconButton
           icon={motion.playing ? 'pause' : 'present'}
@@ -152,7 +199,18 @@ export function TimelinePanel() {
         ) : (
           <ul className={styles.tracks} aria-label="Layer tracks">
             {layers.map((id) => (
-              <LayerTrack key={id} nodeId={id} animation={animation} collapsed={motion.collapsed} selected={selection.includes(id)} time={motion.time} percent={percent} />
+              <LayerTrack
+                key={id}
+                nodeId={id}
+                animation={animation}
+                collapsed={motion.collapsed}
+                selected={selection.includes(id)}
+                time={motion.time}
+                percent={percent}
+                isSelected={isSelected}
+                onSelect={(ref, add) => setSelected(add ? (current) => [...current.filter((k) => !(k.nodeId === ref.nodeId && k.property === ref.property && k.time === ref.time)), ref] : [ref])}
+                onDrag={dragKeyframes}
+              />
             ))}
           </ul>
         )}
@@ -169,6 +227,9 @@ function LayerTrack({
   selected,
   time,
   percent,
+  isSelected,
+  onSelect,
+  onDrag,
 }: {
   nodeId: Id;
   animation: PageAnimation;
@@ -176,6 +237,9 @@ function LayerTrack({
   selected: boolean;
   time: number;
   percent: (time: number) => string;
+  isSelected: (ref: KeyframeRef) => boolean;
+  onSelect: (ref: KeyframeRef, add: boolean) => void;
+  onDrag: (ref: KeyframeRef, e: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
   const editor = useEditor();
   const node = editor.doc.get(nodeId) as SceneNode | undefined;
@@ -189,10 +253,10 @@ function LayerTrack({
       </button>
       <div className={styles.layerRows}>
         {collapsed ? (
-          <TrackRow label={node.name} tracks={tracks} percent={percent} time={time} onRemove={(track, at) => deleteKeyframe(editor, [nodeId], track.property, at)} />
+          <TrackRow label={node.name} nodeId={nodeId} tracks={tracks} percent={percent} time={time} isSelected={isSelected} onSelect={onSelect} onDrag={onDrag} />
         ) : (
           tracks.map((track) => (
-            <TrackRow key={track.property} label={ANIMATED_PROPERTY_LABELS[track.property]} tracks={[track]} percent={percent} time={time} onRemove={(t, at) => deleteKeyframe(editor, [nodeId], t.property, at)} />
+            <TrackRow key={track.property} label={ANIMATED_PROPERTY_LABELS[track.property]} nodeId={nodeId} tracks={[track]} percent={percent} time={time} isSelected={isSelected} onSelect={onSelect} onDrag={onDrag} />
           ))
         )}
       </div>
@@ -203,16 +267,22 @@ function LayerTrack({
 /** A row of keyframes: the diamonds sit where their keyframes are, and clicking one moves the playhead to it. */
 function TrackRow({
   label,
+  nodeId,
   tracks,
   percent,
   time,
-  onRemove,
+  isSelected,
+  onSelect,
+  onDrag,
 }: {
   label: string;
+  nodeId: Id;
   tracks: readonly AnimationTrack[];
   percent: (time: number) => string;
   time: number;
-  onRemove: (track: AnimationTrack, time: number) => void;
+  isSelected: (ref: KeyframeRef) => boolean;
+  onSelect: (ref: KeyframeRef, add: boolean) => void;
+  onDrag: (ref: KeyframeRef, e: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
   const editor = useEditor();
   return (
@@ -220,19 +290,27 @@ function TrackRow({
       <span className={styles.trackName}>{label}</span>
       <div className={styles.trackLane}>
         {tracks.flatMap((track) =>
-          track.keyframes.map((keyframe) => (
-            <button
-              key={`${track.property}-${keyframe.time}`}
-              type="button"
-              className={styles.keyframe}
-              style={{ left: percent(keyframe.time) }}
-              aria-label={`${ANIMATED_PROPERTY_LABELS[track.property]} keyframe at ${Math.round(keyframe.time)} ms`}
-              data-current={keyframe.time === Math.round(time) || undefined}
-              title={`${ANIMATED_PROPERTY_LABELS[track.property]}: ${Math.round(valueAt(track, keyframe.time) * 100) / 100}`}
-              onClick={() => editor.state.setMotion({ time: keyframe.time, playing: false })}
-              onDoubleClick={() => onRemove(track, keyframe.time)}
-            />
-          )),
+          track.keyframes.map((keyframe) => {
+            const ref: KeyframeRef = { nodeId, property: track.property, time: keyframe.time };
+            return (
+              <button
+                key={`${track.property}-${keyframe.time}`}
+                type="button"
+                className={styles.keyframe}
+                style={{ left: percent(keyframe.time) }}
+                aria-label={`${ANIMATED_PROPERTY_LABELS[track.property]} keyframe at ${Math.round(keyframe.time)} ms`}
+                aria-pressed={isSelected(ref)}
+                data-current={keyframe.time === Math.round(time) || undefined}
+                data-selected={isSelected(ref) || undefined}
+                title={`${ANIMATED_PROPERTY_LABELS[track.property]}: ${Math.round(valueAt(track, keyframe.time) * 100) / 100}`}
+                onPointerDown={(e) => {
+                  onSelect(ref, e.shiftKey);
+                  onDrag(ref, e);
+                }}
+                onClick={() => editor.state.setMotion({ time: keyframe.time, playing: false })}
+              />
+            );
+          }),
         )}
       </div>
     </div>
