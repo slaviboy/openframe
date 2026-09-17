@@ -279,11 +279,11 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 Nothing. The working tree is clean apart from anything noted above.
 
-## Next (M13, in order)
+## Next (M14, then the backfill)
 
-M10, M11 and M12 are finished: every row of theirs in `docs/FEATURE_MATRIX.md` is Implemented, bar the parts recorded as a browser limitation (animated export needs WebCodecs for MP4 and WebM; GIF and SVG work). M13 is Dev Mode — rows 277 to 289 in the matrix, in the order they are listed there: the Dev Mode sidebar, the inspect panel, code generation, redlines and measurements, annotations, statuses, compare changes, variables in Dev Mode, assets, dev resources, the component playground and animation handoff code.
+M10 through M13 are finished: every row of theirs in `docs/FEATURE_MATRIX.md` is Implemented, bar the parts recorded as a browser limitation (animated export needs WebCodecs for MP4 and WebM; GIF and SVG work). Dev Mode is whole: the mode itself, the inspect panel with its List and Code views, code generation in five languages, saved measurements, annotations, handoff statuses, the ready for dev and focus views, compare changes by property, code and eye, variables and their suggestions, assets, dev resources, the component playground and animation handoff code.
 
-The user asked on 2026-09-17 for everything to be finished: after M13 and M14, go back and close the rows still In progress or Planned in the earlier milestones (M2 has the most, then M6, M1 and M5).
+M14 is next: libraries and comments. After it, go back and close the rows still In progress or Planned in the earlier milestones — M2 has the most (18), then M6 (14), M1 (11) and M5 (7). The user asked on 2026-09-17 for everything to be finished, so none of those rows are to be left.
 
 ## What's left, by milestone
 
