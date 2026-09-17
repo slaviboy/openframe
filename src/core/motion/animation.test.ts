@@ -17,7 +17,7 @@
 
 import { describe, expect, test } from 'vitest';
 import type { PageAnimation } from '../schema/document';
-import { DEFAULT_ANIMATION, animatedLayers, keyframeAt, playheadAt, removeKeyframe, setKeyframe, trackFor, valueAt, valuesAt, withoutLayers } from './animation';
+import { DEFAULT_ANIMATION, animatedLayers, ease, keyframeAt, moveKeyframe, playheadAt, removeKeyframe, setKeyframe, setKeyframeEasing, trackFor, valueAt, valuesAt, withoutLayers } from './animation';
 
 /** A square that slides from x 0 to x 100 over the first second, and fades in over half of it. */
 const slide: PageAnimation = {
@@ -86,6 +86,36 @@ describe('an animation', () => {
   test('the tracks of layers that are gone go with them', () => {
     expect(withoutLayers(slide, new Set(['a'])).tracks).toEqual([]);
     expect(withoutLayers(slide, new Set(['z'])).tracks).toHaveLength(2);
+  });
+
+  test('a keyframe is moved to another moment, keeping its value', () => {
+    const moved = moveKeyframe(slide, 'a', 'x', 1000, 1500);
+    expect(trackFor(moved, 'a', 'x')!.keyframes).toEqual([
+      { time: 0, value: 0 },
+      { time: 1500, value: 100 },
+    ]);
+    // A keyframe already at the destination gives way, and one that isn't there changes nothing.
+    expect(trackFor(moveKeyframe(slide, 'a', 'x', 1000, 0), 'a', 'x')!.keyframes).toEqual([{ time: 0, value: 100 }]);
+    expect(moveKeyframe(slide, 'a', 'x', 999, 0)).toBe(slide);
+  });
+
+  test('easing shapes the move between two keyframes', () => {
+    // Without easing the value runs straight.
+    expect(ease(undefined, 0.25)).toBe(0.25);
+    // Hold waits at the first value and jumps at the end.
+    expect(ease({ type: 'HOLD' }, 0.99)).toBe(0);
+    expect(ease({ type: 'HOLD' }, 1)).toBe(1);
+    // Ease in starts slowly, so it is behind a straight line halfway along.
+    expect(ease({ type: 'EASE_IN' }, 0.5)).toBeLessThan(0.5);
+    expect(ease({ type: 'EASE_OUT' }, 0.5)).toBeGreaterThan(0.5);
+
+    const held = setKeyframeEasing(slide, 'a', 'x', 0, { type: 'HOLD' });
+    const track = trackFor(held, 'a', 'x')!;
+    expect(valueAt(track, 500)).toBe(0);
+    expect(valueAt(track, 1000)).toBe(100);
+
+    // Taking the easing off runs it straight again.
+    expect(trackFor(setKeyframeEasing(held, 'a', 'x', 0, undefined), 'a', 'x')!.keyframes[0]!.easing).toBeUndefined();
   });
 
   test('the playhead follows the playback mode', () => {

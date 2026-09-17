@@ -16,7 +16,9 @@
  */
 
 import type { Id } from '../ids/ids';
-import type { AnimatedProperty, AnimationTrack, Keyframe, PageAnimation } from '../schema/document';
+import { evaluateEasing } from '../anim/easing';
+import { toEasing } from '../prototype/reactions';
+import type { AnimatedProperty, AnimationTrack, Keyframe, KeyframeEasing, PageAnimation } from '../schema/document';
 
 /** A new animation: two seconds, played over and over, with nothing animated yet. */
 export const DEFAULT_ANIMATION: PageAnimation = { duration: 2000, playback: 'LOOP', tracks: [] };
@@ -59,7 +61,7 @@ export function valueAt(track: AnimationTrack, time: number): number {
     const from = keyframes[i - 1]!;
     const span = to.time - from.time;
     const t = span > 0 ? (time - from.time) / span : 1;
-    return from.value + (to.value - from.value) * t;
+    return from.value + (to.value - from.value) * ease(from.easing, t);
   }
   return last.value;
 }
@@ -74,6 +76,24 @@ export function valuesAt(animation: PageAnimation | undefined, time: number): Ma
     out.set(track.nodeId, values);
   }
   return out;
+}
+
+/** How far along the move is at `t`, given the easing that starts the segment; without one it runs straight. */
+export function ease(easing: KeyframeEasing | undefined, t: number): number {
+  if (!easing) return t;
+  return evaluateEasing(easing.type === 'HOLD' ? { type: 'hold' } : toEasing(easing), t);
+}
+
+/** An animation with the easing set on the segment that starts at a keyframe (undefined runs it straight). */
+export function setKeyframeEasing(animation: PageAnimation, nodeId: Id, property: AnimatedProperty, time: number, easing: KeyframeEasing | undefined): PageAnimation {
+  const track = trackFor(animation, nodeId, property);
+  if (!track || !keyframeAt(track, Math.round(time))) return animation;
+  const keyframes = track.keyframes.map((keyframe) => {
+    if (keyframe.time !== Math.round(time)) return keyframe;
+    const { easing: _previous, ...rest } = keyframe;
+    return easing ? { ...rest, easing } : rest;
+  });
+  return { ...animation, tracks: animation.tracks.map((t) => (t === track ? { ...t, keyframes } : t)) };
 }
 
 /** Keyframes in time order, with only one at any moment. */

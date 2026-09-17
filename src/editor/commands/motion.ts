@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-import { DEFAULT_ANIMATION, keyframeAt, moveKeyframe, removeKeyframe, setKeyframe, trackFor } from '@/core/motion/animation';
+import { DEFAULT_ANIMATION, keyframeAt, moveKeyframe, removeKeyframe, setKeyframe, setKeyframeEasing, trackFor } from '@/core/motion/animation';
 import type { Id } from '@/core/ids/ids';
-import { isSceneNode, type AnimatedProperty, type PageAnimation, type PageNode, type SceneNode } from '@/core/schema/document';
+import { isSceneNode, type AnimatedProperty, type KeyframeEasing, type PageAnimation, type PageNode, type SceneNode } from '@/core/schema/document';
 import { rotationDegrees } from './properties';
 import type { Editor } from '../editor';
 
@@ -107,6 +107,11 @@ export function moveKeyframes(editor: Editor, refs: readonly KeyframeRef[], delt
 export function deleteKeyframes(editor: Editor, refs: readonly KeyframeRef[]): boolean {
   if (refs.length === 0) return false;
   return writeAnimation(editor, 'Delete keyframe', (animation) => refs.reduce((next, ref) => removeKeyframe(next, ref.nodeId, ref.property, ref.time), animation));
+}
+
+/** The easing of the stretch that starts at a keyframe; without one the move runs straight. */
+export function setSegmentEasing(editor: Editor, ref: KeyframeRef, easing: KeyframeEasing | undefined): boolean {
+  return writeAnimation(editor, 'Change easing', (animation) => setKeyframeEasing(animation, ref.nodeId, ref.property, ref.time, easing));
 }
 
 /** How long the animation runs, in milliseconds. */

@@ -614,11 +614,16 @@ const GuidesField = z.array(GuideSchema).max(10_000).optional();
 /** The properties Motion animates: a layer's place, its size, how far it is turned, and how visible it is. */
 export const AnimatedPropertySchema = z.enum(['x', 'y', 'width', 'height', 'rotation', 'opacity']);
 
+/** How an animation moves from one keyframe to the next: a prototype easing, or Hold, which waits and then jumps. */
+export const KeyframeEasingSchema = z.union([PrototypeEasingSchema, z.object({ type: z.literal('HOLD') })]);
+
 /** A value a layer's property takes at a moment in the animation. */
 export const KeyframeSchema = z.object({
   /** Milliseconds from the animation's start. */
   time: z.number().int().min(0).max(600_000),
   value: z.number().finite(),
+  /** The easing from this keyframe to the next; absent means a straight line. */
+  easing: KeyframeEasingSchema.optional(),
 });
 
 /** One property of one layer over time: its keyframes, earliest first. */
@@ -1215,6 +1220,7 @@ export type PageNode = z.infer<typeof PageNodeSchema>;
 export type RepeatTransform = z.infer<typeof RepeatTransformSchema>;
 export type AnimatedProperty = z.infer<typeof AnimatedPropertySchema>;
 export type Keyframe = z.infer<typeof KeyframeSchema>;
+export type KeyframeEasing = z.infer<typeof KeyframeEasingSchema>;
 export type AnimationTrack = z.infer<typeof AnimationTrackSchema>;
 export type PageAnimation = z.infer<typeof PageAnimationSchema>;
 export type StyleNode = z.infer<typeof StyleNodeSchema>;

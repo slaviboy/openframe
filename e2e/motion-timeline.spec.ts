@@ -146,3 +146,45 @@ test('keyframes on the timeline are selected, dragged and deleted', async ({ pag
   await page.keyboard.press('ControlOrMeta+Z');
   await expect(timeline.getByRole('button', { name: /X position keyframe at/ })).toHaveCount(1);
 });
+
+test('the stretch between keyframes takes an easing, which shapes the animation', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 460, box.y + 310, { steps: 5 });
+  await page.mouse.up();
+
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  const startX = Number(await page.getByTestId('field-x').inputValue());
+  await page.getByRole('button', { name: 'Add x position keyframe' }).click();
+  const current = timeline.getByRole('textbox', { name: 'Current time' });
+  await current.fill('1000');
+  await current.press('Enter');
+  await page.getByTestId('field-x').fill(String(startX + 100));
+  await page.getByTestId('field-x').press('Enter');
+
+  // Halfway along a straight line, the layer is halfway.
+  await current.fill('500');
+  await current.press('Enter');
+  const linear = Number(await page.getByTestId('field-x').inputValue());
+  expect(linear).toBeGreaterThan(startX + 40);
+  expect(linear).toBeLessThan(startX + 60);
+
+  // Hold keeps the first value until the next keyframe.
+  const easing = timeline.getByRole('combobox', { name: /X position easing from 0 ms/ });
+  await easing.selectOption('HOLD');
+  await expect.poll(async () => Number(await page.getByTestId('field-x').inputValue())).toBe(startX);
+
+  // Ease out covers more ground early, so halfway it is past the middle.
+  await easing.selectOption('EASE_OUT');
+  await expect.poll(async () => Number(await page.getByTestId('field-x').inputValue())).toBeGreaterThan(linear);
+
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+  await page.reload();
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await expect(page.getByRole('region', { name: 'Timeline' }).getByRole('combobox', { name: /X position easing from 0 ms/ })).toHaveValue('EASE_OUT');
+});

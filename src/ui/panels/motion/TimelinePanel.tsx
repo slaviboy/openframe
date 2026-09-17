@@ -19,7 +19,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { ANIMATED_PROPERTY_LABELS, animatedLayers, playheadAt, valueAt } from '@/core/motion/animation';
 import type { Id } from '@/core/ids/ids';
 import type { AnimationTrack, PageAnimation, PageNode, SceneNode } from '@/core/schema/document';
-import { animationOf, deleteKeyframes, moveKeyframes, setAnimationDuration, setAnimationPlayback, type KeyframeRef } from '@/editor/commands/motion';
+import { animationOf, deleteKeyframes, moveKeyframes, setAnimationDuration, setAnimationPlayback, setSegmentEasing, type KeyframeRef } from '@/editor/commands/motion';
+import { EASING_LABELS } from '@/core/prototype/reactions';
+import type { KeyframeEasing } from '@/core/schema/document';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import { Icon } from '../../icons/Icon';
 import { IconButton } from '../../primitives/IconButton';
@@ -219,6 +221,27 @@ export function TimelinePanel() {
   );
 }
 
+/** The easings a segment can take on the timeline: the prototype presets and springs, plus Hold, which waits and jumps. */
+const EASING_CHOICES: readonly (readonly [string, string])[] = [
+  ['LINEAR', 'Linear'],
+  ['EASE_IN', EASING_LABELS.EASE_IN],
+  ['EASE_OUT', EASING_LABELS.EASE_OUT],
+  ['EASE_IN_AND_OUT', EASING_LABELS.EASE_IN_AND_OUT],
+  ['EASE_IN_BACK', EASING_LABELS.EASE_IN_BACK],
+  ['EASE_OUT_BACK', EASING_LABELS.EASE_OUT_BACK],
+  ['EASE_IN_AND_OUT_BACK', EASING_LABELS.EASE_IN_AND_OUT_BACK],
+  ['GENTLE', EASING_LABELS.GENTLE],
+  ['QUICK', EASING_LABELS.QUICK],
+  ['BOUNCY', EASING_LABELS.BOUNCY],
+  ['SLOW', EASING_LABELS.SLOW],
+  ['HOLD', 'Hold'],
+];
+
+const easingLabel = (easing: KeyframeEasing) => EASING_CHOICES.find(([type]) => type === easing.type)?.[1] ?? 'Linear';
+
+/** The easing a choice stands for; Linear is no easing at all. */
+const easingFor = (type: string): KeyframeEasing | undefined => (type === 'LINEAR' ? undefined : ({ type } as KeyframeEasing));
+
 /** One layer's tracks: a row per animated property (or one row for the layer, collapsed), with its keyframes. */
 function LayerTrack({
   nodeId,
@@ -289,6 +312,34 @@ function TrackRow({
     <div className={styles.track} role="group" aria-label={`${label} track`}>
       <span className={styles.trackName}>{label}</span>
       <div className={styles.trackLane}>
+        {tracks.flatMap((track) =>
+          track.keyframes.slice(0, -1).map((keyframe, i) => {
+            const next = track.keyframes[i + 1]!;
+            const easing = keyframe.easing;
+            return (
+              <label
+                key={`segment-${track.property}-${keyframe.time}`}
+                className={styles.segment}
+                style={{ left: percent(keyframe.time), width: `calc(${percent(next.time)} - ${percent(keyframe.time)})` }}
+                title={`${ANIMATED_PROPERTY_LABELS[track.property]}: ${easing ? easingLabel(easing) : 'Linear'}`}
+              >
+                <span className={styles.segmentLine} data-eased={easing ? '' : undefined} />
+                <select
+                  aria-label={`${ANIMATED_PROPERTY_LABELS[track.property]} easing from ${Math.round(keyframe.time)} ms`}
+                  value={easing?.type ?? 'LINEAR'}
+                  onChange={(e) => setSegmentEasing(editor, { nodeId, property: track.property, time: keyframe.time }, easingFor(e.target.value))}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  {EASING_CHOICES.map(([type, label]) => (
+                    <option key={type} value={type}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            );
+          }),
+        )}
         {tracks.flatMap((track) =>
           track.keyframes.map((keyframe) => {
             const ref: KeyframeRef = { nodeId, property: track.property, time: keyframe.time };
