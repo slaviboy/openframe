@@ -20,7 +20,7 @@ import { instanceToSwap, swapInstanceFor } from '@/editor/commands/swap-instance
 import type { CanvasKit, Surface } from 'canvaskit-wasm';
 import type { Id } from '@/core/ids/ids';
 import type { Vec2 } from '@/core/math/vec';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { DARK_CHROME, LIGHT_CHROME } from '@/editor/chrome/chrome-theme';
 import { drawOverlay } from '@/editor/chrome/overlay-renderer';
 import type { Editor } from '@/editor/editor';
@@ -127,6 +127,9 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
   const contextMenuRef = useRef(onContextMenu);
   // Exposed as data-spelling once the spell checker is installed (E2E waits for it).
   const [spellingReady, setSpellingReady] = useState(false);
+  // The keyboard's selection box is drawn on the canvas, so the host says when one is out.
+  const subscribeState = useCallback((listener: () => void) => editor.state.subscribe(listener), [editor]);
+  const keyboardBox = useSyncExternalStore(subscribeState, () => editor.state.getSnapshot().keyboardBox);
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
 
   useEffect(() => {
@@ -748,7 +751,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
   }, [editor, tools]);
 
   return (
-    <div ref={containerRef} className={styles.host} data-testid="canvas" data-canvas-host="" data-ready={status.kind === 'ready' || undefined} data-spelling={spellingReady || undefined}>
+    <div ref={containerRef} className={styles.host} data-testid="canvas" data-canvas-host="" data-ready={status.kind === 'ready' || undefined} data-spelling={spellingReady || undefined} data-keyboard-box={keyboardBox !== null || undefined}>
       <canvas ref={sceneRef} className={styles.layer} aria-hidden="true" />
       <canvas
         ref={overlayRef}

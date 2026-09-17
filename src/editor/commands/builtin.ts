@@ -23,7 +23,8 @@ import { isSceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 import { removeGuide } from '../interactions/guides';
 import { captureStart, translateNodes } from '../interactions/transform';
-import { nextZoomStep, panBy, zoomAt } from '../viewport/viewport';
+import { marqueeSelect } from '@/core/scene/hit-test';
+import { nextZoomStep, panBy, zoomAt , visibleWorldRect } from '../viewport/viewport';
 import { alignSelection, distributeSelection } from './align';
 import { reorder } from './arrange';
 import type { CommandDefinition } from './registry';
@@ -136,6 +137,95 @@ function nudge(e: Editor, dx: number, dy: number): void {
   }
   e.history.run('Nudge', (tx) => translateNodes(tx, ids.map((id) => captureStart(tx, e.scene, id)), { x: dx, y: dy }));
 }
+
+/** How large the keyboard's selection box starts, in world units, and how far a key moves or grows it. */
+const KEYBOARD_BOX_SIZE = 200;
+const KEYBOARD_BOX_STEP = 20;
+
+/** The box the keyboard moves about, started in the middle of what is in view. */
+function startKeyboardBox(e: Editor): void {
+  const view = visibleWorldRect(e.state.viewport, e.canvasSize.width, e.canvasSize.height);
+  const width = Math.min(KEYBOARD_BOX_SIZE, view.width / 2);
+  const height = Math.min(KEYBOARD_BOX_SIZE, view.height / 2);
+  e.state.setKeyboardBox({ x: view.x + view.width / 2 - width / 2, y: view.y + view.height / 2 - height / 2, width, height });
+}
+
+/** Moves the keyboard's box, or with ⇧ grows it from its top-left corner. */
+function moveKeyboardBox(e: Editor, dx: number, dy: number, resize: boolean): void {
+  const box = e.state.getSnapshot().keyboardBox;
+  if (!box) return;
+  const step = KEYBOARD_BOX_STEP / Math.max(0.01, e.state.viewport.zoom);
+  e.state.setKeyboardBox(
+    resize
+      ? { ...box, width: Math.max(1, box.width + dx * step), height: Math.max(1, box.height + dy * step) }
+      : { ...box, x: box.x + dx * step, y: box.y + dy * step },
+  );
+}
+
+/** Selects whatever the keyboard's box covers, and puts the box away. */
+function commitKeyboardBox(e: Editor): void {
+  const box = e.state.getSnapshot().keyboardBox;
+  e.state.setKeyboardBox(null);
+  if (!box) return;
+  e.scene.ensure(e.pageId);
+  e.state.select(marqueeSelect(e.doc, e.scene, e.pageId, box, e.pageId, false));
+}
+
+const KEYBOARD_BOX_COMMANDS: CommandDefinition[] = [
+  {
+    id: 'view.keyboardBoxCommit',
+    label: 'Select what the box covers',
+    category: 'Edit',
+    shortcuts: ['Enter'],
+    palette: false,
+    enabled: (e: Editor) => e.state.getSnapshot().keyboardBox !== null,
+    run: commitKeyboardBox,
+  },
+  {
+    id: 'view.keyboardBoxCancel',
+    label: 'Put the selection box away',
+    category: 'Edit',
+    shortcuts: ['Escape'],
+    palette: false,
+    enabled: (e: Editor) => e.state.getSnapshot().keyboardBox !== null,
+    run: (e: Editor) => e.state.setKeyboardBox(null),
+  },
+  {
+    id: 'view.keyboardBox',
+    label: 'Box selection with the keyboard',
+    category: 'Edit',
+    shortcuts: ['Alt+Space'],
+    // The box is moved with the arrows, grown with ⇧, taken with Enter and put away with Escape.
+    run: (e: Editor) => (e.state.getSnapshot().keyboardBox === null ? startKeyboardBox(e) : commitKeyboardBox(e)),
+  },
+  ...(
+    [
+      ['Left', -1, 0, 'ArrowLeft'],
+      ['Right', 1, 0, 'ArrowRight'],
+      ['Up', 0, -1, 'ArrowUp'],
+      ['Down', 0, 1, 'ArrowDown'],
+    ] as const
+  ).flatMap(([name, x, y, key]): CommandDefinition[] => [
+    {
+      id: `view.keyboardBoxMove${name}`,
+      label: `Move the selection box ${name.toLowerCase()}`,
+      category: 'Edit' as const,
+      shortcuts: [`Alt+${key}`],
+      palette: false,
+      enabled: (e: Editor) => e.state.getSnapshot().keyboardBox !== null,
+      run: (e: Editor) => moveKeyboardBox(e, x, y, false),
+    },
+    {
+      id: `view.keyboardBoxGrow${name}`,
+      label: `Grow the selection box ${name.toLowerCase()}`,
+      category: 'Edit' as const,
+      shortcuts: [`Alt+Shift+${key}`],
+      palette: false,
+      enabled: (e: Editor) => e.state.getSnapshot().keyboardBox !== null,
+      run: (e: Editor) => moveKeyboardBox(e, x, y, true),
+    },
+  ]),
+];
 
 const NUDGE_COMMANDS: CommandDefinition[] = (
   [
@@ -868,6 +958,7 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
       if (first) beginTextEdit(e, first, { mirrors: rest });
     },
   },
+  ...KEYBOARD_BOX_COMMANDS,
   ...TOOL_COMMANDS,
   ...NUDGE_COMMANDS,
   ...STRUCTURE_COMMANDS,

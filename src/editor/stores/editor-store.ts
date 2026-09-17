@@ -111,6 +111,8 @@ export interface EditorState {
   readonly openCommentId: string | null;
   /** Comments are kept off the canvas (⇧C). */
   readonly commentsHidden: boolean;
+  /** The box being moved about with the keyboard (⌥Space), in world coordinates; null when none is. */
+  readonly keyboardBox: { readonly x: number; readonly y: number; readonly width: number; readonly height: number } | null;
   readonly rightTab: RightPanelTab;
   readonly viewports: Readonly<Record<Id, Viewport>>;
   /** Layer rows expanded in the layers panel. */
@@ -231,6 +233,7 @@ export class EditorStore extends Observable<EditorState> {
       pendingComment: null,
       openCommentId: null,
       commentsHidden: false,
+      keyboardBox: null,
       rightTab: 'design',
       viewports: {},
       expanded: new Set(),
@@ -409,6 +412,10 @@ export class EditorStore extends Observable<EditorState> {
 
   setOpenComment(openCommentId: string | null): void {
     this.setState({ openCommentId, pendingComment: null });
+  }
+
+  setKeyboardBox(keyboardBox: EditorState['keyboardBox']): void {
+    this.setState({ keyboardBox });
   }
 
   setCommentsHidden(commentsHidden: boolean): void {

@@ -477,6 +477,18 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
     drawMeasurements(ctx, input, lines, theme.spacing);
   }
 
+  // The box moved about with the keyboard (⌥Space), drawn like a marquee so it reads the same way.
+  const keyboardBox = state.keyboardBox;
+  if (keyboardBox) {
+    const a = worldToScreen(editor.state.viewport, { x: keyboardBox.x, y: keyboardBox.y });
+    const b = worldToScreen(editor.state.viewport, { x: keyboardBox.x + keyboardBox.width, y: keyboardBox.y + keyboardBox.height });
+    ctx.fillStyle = theme.selectionFill;
+    ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
+    ctx.strokeStyle = theme.selection;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(Math.round(a.x) + 0.5, Math.round(a.y) + 0.5, Math.round(b.x - a.x), Math.round(b.y - a.y));
+  }
+
   if (input.marquee) {
     const v = editor.state.viewport;
     const p = worldToScreen(v, input.marquee);
