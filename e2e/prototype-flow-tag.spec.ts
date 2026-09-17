@@ -134,6 +134,9 @@ test('double-clicking a flow starting point tag renames the flow in a field on t
   await field.fill('Onboarding');
   await field.press('Escape');
   await expect(field).toHaveCount(0);
+  // A retried double-click can land on the frame instead of its tag and take the selection with it, so the frame is
+  // picked again before its flow is read.
+  await page.getByRole('treeitem', { name: 'Frame 1' }).click();
   await expect(flowName).toHaveValue('Flow 1');
 
   // Enter renames the flow.

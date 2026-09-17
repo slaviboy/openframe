@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { SceneIndex } from '@/core/scene/scene-index';
+import type { Id } from '@/core/ids/ids';
 import { compareVersions, type LayerChange } from '@/core/dev/compare';
 import { generateCode } from '@/core/dev/code-gen';
 import type { DocumentStore } from '@/core/document/store';
@@ -24,6 +26,9 @@ import type { VersionInfo } from '@/platform/idb/persistence';
 import { useDocumentRevision, useEditor, useSession } from '../../hooks/useEditor';
 import primitives from '../../primitives/primitives.module.css';
 import styles from './InspectPanel.module.css';
+
+/** How large each drawing is in the comparison, in CSS pixels. */
+const THUMBNAIL_SIZE = 160;
 
 /** How a version reads in the list of ones to compare against. */
 const versionLabel = (version: VersionInfo) => version.name ?? new Date(version.createdAt).toLocaleString();
@@ -43,7 +48,8 @@ export function CompareSection() {
   const [chosen, setChosen] = useState<string>('');
   const [saved, setSaved] = useState<DocumentStore | null>(null);
   const [failed, setFailed] = useState(false);
-  const [view, setView] = useState<'properties' | 'code'>('properties');
+  const [view, setView] = useState<'properties' | 'code' | 'visual'>('properties');
+  const [overlaid, setOverlaid] = useState(false);
 
   useEffect(() => {
     void app.listVersions().then(setVersions, () => setVersions([]));
@@ -87,9 +93,9 @@ export function CompareSection() {
       {saved !== null && (
         <>
           <div className={styles.tabs} role="tablist" aria-label="Compare view">
-            {(['properties', 'code'] as const).map((value) => (
+            {(['properties', 'code', 'visual'] as const).map((value) => (
               <button key={value} type="button" role="tab" className={styles.tab} aria-selected={view === value} data-selected={view === value || undefined} onClick={() => setView(value)}>
-                {value === 'properties' ? 'Properties' : 'Code'}
+                {value === 'properties' ? 'Properties' : value === 'code' ? 'Code' : 'Visual'}
               </button>
             ))}
           </div>
@@ -115,6 +121,8 @@ export function CompareSection() {
                 </div>
               ))
             )
+          ) : view === 'visual' ? (
+            <VisualCompare saved={saved} nodeId={selected ?? null} overlaid={overlaid} onOverlaid={setOverlaid} />
           ) : layer === undefined ? (
             <p className={styles.empty}>Select a layer to compare its code.</p>
           ) : (
@@ -132,5 +140,50 @@ export function CompareSection() {
         </>
       )}
     </section>
+  );
+}
+
+/** The two drawings of a layer, set beside each other or laid over one another. */
+function VisualCompare({ saved, nodeId, overlaid, onOverlaid }: { saved: DocumentStore; nodeId: Id | null; overlaid: boolean; onOverlaid: (value: boolean) => void }) {
+  const editor = useEditor();
+  const revision = useDocumentRevision();
+
+  // The drawings are made as the layer or the file changes, and let go of when they are replaced.
+  const images = useMemo(() => {
+    const engine = editor.thumbnails;
+    if (engine === null || nodeId === null) return { before: null, after: null };
+    const draw = (store: DocumentStore, pageId: Id | null) => {
+      if (pageId === null) return null;
+      const bytes = engine.thumbnail(store, new SceneIndex(store), pageId, nodeId, THUMBNAIL_SIZE, 2);
+      return bytes === null ? null : URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'image/png' }));
+    };
+    return { before: draw(saved, saved.pageOf(nodeId)), after: draw(editor.doc, editor.doc.pageOf(nodeId)) };
+    // The revision is what says the file has moved on, so the drawing of it is made again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, saved, nodeId, revision]);
+
+  useEffect(
+    () => () => {
+      if (images.before) URL.revokeObjectURL(images.before);
+      if (images.after) URL.revokeObjectURL(images.after);
+    },
+    [images],
+  );
+
+  if (nodeId === null) return <p className={styles.empty}>Select a layer to compare how it looks.</p>;
+  if (editor.thumbnails === null) return <p className={styles.empty}>The rendering engine is still loading.</p>;
+  if (images.before === null && images.after === null) return <p className={styles.empty}>This layer has nothing to draw.</p>;
+
+  return (
+    <>
+      <label className={styles.scale}>
+        <span>Overlay</span>
+        <input type="checkbox" aria-label="Lay the drawings over one another" checked={overlaid} onChange={(e) => onOverlaid(e.target.checked)} />
+      </label>
+      <div className={overlaid ? styles.overlay : styles.sideBySide} data-testid="compare-visual">
+        {images.before !== null && <img className={styles.shot} src={images.before} alt="The layer as the version has it" />}
+        {images.after !== null && <img className={styles.shot} src={images.after} alt="The layer as the file has it" />}
+      </div>
+    </>
   );
 }

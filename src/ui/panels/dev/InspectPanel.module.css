@@ -196,3 +196,37 @@
   color: var(--accent);
   font-size: var(--text-sm);
 }
+
+/* The two drawings of a layer, beside each other or laid over one another. */
+.sideBySide {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  margin-bottom: var(--space-2);
+}
+
+.overlay {
+  position: relative;
+  margin-bottom: var(--space-2);
+}
+
+.overlay .shot {
+  position: absolute;
+  inset: 0;
+}
+
+.overlay .shot:first-child {
+  position: relative;
+}
+
+/* Over one another, the newer drawing is half seen so the older shows through. */
+.overlay .shot:last-child {
+  opacity: 0.5;
+}
+
+.shot {
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover);
+}

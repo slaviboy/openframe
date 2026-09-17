@@ -438,6 +438,14 @@ test('Dev Mode compares the file with a saved version, by property and by code',
   await compare.getByRole('tab', { name: 'Code' }).click();
   await expect(page.getByTestId('compare-code-before')).toContainText(`width: ${startWidth}px;`);
   await expect(page.getByTestId('compare-code-after')).toContainText('width: 260px;');
+
+  // The Visual view draws the layer both ways, beside each other or laid over one another.
+  await compare.getByRole('tab', { name: 'Visual' }).click();
+  const visual = page.getByTestId('compare-visual');
+  await expect(visual.getByRole('img', { name: 'The layer as the version has it' })).toBeVisible();
+  await expect(visual.getByRole('img', { name: 'The layer as the file has it' })).toBeVisible();
+  await compare.getByRole('checkbox', { name: 'Lay the drawings over one another' }).check();
+  await expect(visual.getByRole('img', { name: 'The layer as the file has it' })).toBeVisible();
 });
 
 test('the focus view looks at one design on its own, and marks the work on it done', async ({ page }) => {
