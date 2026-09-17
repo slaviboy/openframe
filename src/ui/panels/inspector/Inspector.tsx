@@ -42,10 +42,12 @@ import { moveItem } from '@/core/collections/move-item';
 import { DEFAULT_DYNAMIC_STROKE } from '@/core/vector/dynamic-stroke';
 import { applyBrush, localBrushes } from '@/editor/commands/brushes';
 import { addRepeatTransform, applyTransforms, removeRepeatTransform, setRepeatTransform } from '@/editor/commands/transforms';
-import { addKeyframe, applyMotionPreset, deleteKeyframe, hasKeyframe, isAnimated, removeAnimatedProperty } from '@/editor/commands/motion';
-import { ANIMATED_PROPERTIES, ANIMATED_PROPERTY_LABELS } from '@/core/motion/animation';
+import { addKeyframe, animationOf, applyMotionPreset, deleteKeyframe, hasKeyframe, isAnimated, removeAnimatedProperty, setSegmentEasing } from '@/editor/commands/motion';
+import { ANIMATED_PROPERTIES, ANIMATED_PROPERTY_LABELS, keyframeAt, trackFor } from '@/core/motion/animation';
+import { EASING_LABELS, EASING_TYPES, makeEasing, type EasingType } from '@/core/prototype/reactions';
+import { EasingGraph } from '../prototype/EasingGraph';
 import { MOTION_PRESETS } from '@/core/motion/presets';
-import type { AnimatedProperty } from '@/core/schema/document';
+import type { AnimatedProperty, KeyframeEasing, PageNode } from '@/core/schema/document';
 import { IOS_CORNER_SMOOTHING } from '@/core/geometry/corners';
 import { backgroundColorBehind } from '@/core/color/contrast';
 import { useColorProfile } from '../../hooks/useColorProfile';
@@ -606,6 +608,73 @@ function TransformSection({ nodes, motion }: { nodes: SceneNode[]; motion?: bool
 }
 
 /**
+ * Easing (Motion): the shape of the stretch that starts at each keyframe picked on the timeline. Beside the presets it
+ * takes a custom Bézier or spring, drawn and dragged on the same graph a prototype's easing uses.
+ */
+function EasingSection() {
+  const editor = useEditor();
+  const picked = useEditorState((s) => s.motion.selectedKeyframes);
+  useDocumentRevision();
+  if (picked.length === 0) return null;
+  const animation = animationOf(editor.doc.get(editor.pageId) as PageNode | undefined);
+  const first = picked[0]!;
+  const track = trackFor(animation, first.nodeId, first.property);
+  const current: KeyframeEasing = keyframeAt(track, first.time)?.easing ?? { type: 'LINEAR' };
+  // The graph plays over the stretch the easing shapes, so it runs at the pace the animation will.
+  const after = track?.keyframes.find((k) => k.time > first.time);
+  const durationMs = Math.max(1, (after?.time ?? animation.duration) - first.time);
+  const apply = (easing: KeyframeEasing | undefined) => picked.forEach((ref) => setSegmentEasing(editor, ref, easing));
+
+  return (
+    <Section title="Easing">
+      <select
+        className={primitives.select}
+        aria-label="Keyframe easing"
+        value={current.type}
+        onChange={(e) => {
+          const type = e.target.value;
+          if (type === 'HOLD') apply({ type: 'HOLD' });
+          else if (type === 'LINEAR') apply(undefined);
+          else apply(makeEasing(type as EasingType, current.type === 'HOLD' ? undefined : current));
+        }}
+      >
+        <optgroup label="Curves">
+          {EASING_TYPES.filter((type) => !MOTION_SPRINGS.has(type)).map((type) => (
+            <option key={type} value={type}>
+              {EASING_LABELS[type]}
+            </option>
+          ))}
+        </optgroup>
+        <optgroup label="Springs">
+          {EASING_TYPES.filter((type) => MOTION_SPRINGS.has(type)).map((type) => (
+            <option key={type} value={type}>
+              {EASING_LABELS[type]}
+            </option>
+          ))}
+        </optgroup>
+        <option value="HOLD">Hold</option>
+      </select>
+      {current.type === 'CUSTOM_CUBIC_BEZIER' && (
+        <div className={styles.grid2}>
+          <NumberField label="X1" ariaLabel="Bezier X1" testId="field-bezier-x1" min={0} max={1} step={0.01} value={current.x1} onChange={(x1) => apply({ ...current, x1 })} />
+          <NumberField label="Y1" ariaLabel="Bezier Y1" testId="field-bezier-y1" min={-10} max={10} step={0.01} value={current.y1} onChange={(y1) => apply({ ...current, y1 })} />
+          <NumberField label="X2" ariaLabel="Bezier X2" testId="field-bezier-x2" min={0} max={1} step={0.01} value={current.x2} onChange={(x2) => apply({ ...current, x2 })} />
+          <NumberField label="Y2" ariaLabel="Bezier Y2" testId="field-bezier-y2" min={-10} max={10} step={0.01} value={current.y2} onChange={(y2) => apply({ ...current, y2 })} />
+        </div>
+      )}
+      {current.type === 'CUSTOM_SPRING' && (
+        <div className={styles.grid2}>
+          <NumberField label="Stiffness" ariaLabel="Spring stiffness" testId="field-spring-stiffness" min={1} max={10_000} value={current.stiffness} onChange={(stiffness) => apply({ ...current, stiffness })} />
+          <NumberField label="Damping" ariaLabel="Spring damping" testId="field-spring-damping" min={0} max={1000} value={current.damping} onChange={(damping) => apply({ ...current, damping })} />
+          <NumberField label="Mass" ariaLabel="Spring mass" testId="field-spring-mass" min={0.1} max={100} step={0.1} value={current.mass} onChange={(mass) => apply({ ...current, mass })} />
+        </div>
+      )}
+      {current.type !== 'HOLD' && <EasingGraph easing={current} durationMs={durationMs} suffix="" onChange={(easing) => apply(easing)} />}
+    </Section>
+  );
+}
+
+/**
  * Animations (Motion): the preset animations a layer can take, and the properties it is animated on. A preset writes its
  * keyframes from the playhead, worked out from what the layer is now; a composite style writes several at once.
  */
@@ -820,6 +889,9 @@ function MotionField({ nodes, property, motion, children }: { nodes: readonly Sc
     </span>
   );
 }
+
+/** The springs among the easings, kept apart from the curves in the Easing menu. */
+const MOTION_SPRINGS: ReadonlySet<EasingType> = new Set(['GENTLE', 'QUICK', 'BOUNCY', 'SLOW', 'CUSTOM_SPRING']);
 
 /** A sidebar section; `styleAction` (the Apply styles button) sits before the actions, and `applied` (the applied style) above the body. */
 function Section({ title, actions, styleAction, applied, children }: { title: string; actions?: ReactNode; styleAction?: ReactNode; applied?: ReactNode; children?: ReactNode }) {
@@ -1178,6 +1250,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       {draw && <TransformSection nodes={nodes} />}
       {motion && <TransformSection nodes={nodes} motion />}
       {motion && <AnimationsSection nodes={nodes} />}
+      {motion && <EasingSection />}
       {!allSlices && (
       <Section
         title="Appearance"

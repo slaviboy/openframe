@@ -15,12 +15,12 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react';
 import { ANIMATED_PROPERTY_LABELS, animatedLayers, playheadAt, valueAt } from '@/core/motion/animation';
 import type { Id } from '@/core/ids/ids';
 import type { AnimationTrack, PageAnimation, PageNode, SceneNode } from '@/core/schema/document';
 import { animationOf, deleteKeyframes, moveKeyframes, setAnimationDuration, setAnimationPlayback, setSegmentEasing, type KeyframeRef } from '@/editor/commands/motion';
-import { EASING_LABELS } from '@/core/prototype/reactions';
+import { EASING_LABELS, makeEasing } from '@/core/prototype/reactions';
 import type { KeyframeEasing } from '@/core/schema/document';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import { Icon } from '../../icons/Icon';
@@ -50,8 +50,12 @@ export function TimelinePanel() {
   const animation = animationOf(page);
   const layers = useMemo(() => animatedLayers(animation), [animation]);
   const rulerRef = useRef<HTMLDivElement>(null);
-  /** The keyframes picked out on the timeline, which move and delete together. */
-  const [selected, setSelected] = useState<readonly KeyframeRef[]>([]);
+  /** The keyframes picked out on the timeline, which move and delete together, and share an easing. */
+  const selected = motion.selectedKeyframes;
+  const setSelected = useCallback((next: readonly KeyframeRef[] | ((current: readonly KeyframeRef[]) => readonly KeyframeRef[])) => {
+    const state = editor.state.getSnapshot().motion;
+    editor.state.setMotion({ selectedKeyframes: typeof next === 'function' ? next(state.selectedKeyframes) : next });
+  }, [editor]);
   const isSelected = useCallback((ref: KeyframeRef) => selected.some((k) => k.nodeId === ref.nodeId && k.property === ref.property && k.time === ref.time), [selected]);
 
   /** Dragging keyframes: ⇧ snaps to tenths of the animation, and the selection follows to its new times. */
@@ -82,7 +86,7 @@ export function TimelinePanel() {
       target.addEventListener('pointermove', move);
       target.addEventListener('pointerup', up);
     },
-    [animation.duration, editor, isSelected, selected],
+    [animation.duration, editor, isSelected, selected, setSelected],
   );
 
   // Playing moves the playhead until it is paused (or the animation ends, played once).
@@ -234,13 +238,16 @@ const EASING_CHOICES: readonly (readonly [string, string])[] = [
   ['QUICK', EASING_LABELS.QUICK],
   ['BOUNCY', EASING_LABELS.BOUNCY],
   ['SLOW', EASING_LABELS.SLOW],
+  ['CUSTOM_CUBIC_BEZIER', EASING_LABELS.CUSTOM_CUBIC_BEZIER],
+  ['CUSTOM_SPRING', EASING_LABELS.CUSTOM_SPRING],
   ['HOLD', 'Hold'],
 ];
 
 const easingLabel = (easing: KeyframeEasing) => EASING_CHOICES.find(([type]) => type === easing.type)?.[1] ?? 'Linear';
 
-/** The easing a choice stands for; Linear is no easing at all. */
-const easingFor = (type: string): KeyframeEasing | undefined => (type === 'LINEAR' ? undefined : ({ type } as KeyframeEasing));
+/** The easing a choice stands for; Linear is no easing at all, and a custom one starts from its default shape. */
+const easingFor = (type: string): KeyframeEasing | undefined =>
+  type === 'LINEAR' ? undefined : type === 'CUSTOM_CUBIC_BEZIER' || type === 'CUSTOM_SPRING' ? makeEasing(type) : ({ type } as KeyframeEasing);
 
 /** One layer's tracks: a row per animated property (or one row for the layer, collapsed), with its keyframes. */
 function LayerTrack({

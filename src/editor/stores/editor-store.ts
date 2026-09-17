@@ -18,6 +18,7 @@
 import type { DocumentStore } from '@/core/document/store';
 import type { Id } from '@/core/ids/ids';
 import type { CropAspect } from '@/core/image/crop';
+import type { KeyframeRef } from '@/core/motion/animation';
 import type { Color, DynamicStroke, Paint } from '@/core/schema/document';
 import { DEFAULT_DYNAMIC_STROKE } from '@/core/vector/dynamic-stroke';
 import type { SegmentEnd } from '@/core/vector/vector-bend';
@@ -43,9 +44,11 @@ export interface MotionState {
   readonly collapsed: boolean;
   /** Edit anchor point (⌥R): the target a layer turns and scales around is shown, and can be dragged. */
   readonly editingAnchor: boolean;
+  /** The keyframes picked on the timeline; each carries the easing of the stretch that starts at it. */
+  readonly selectedKeyframes: readonly KeyframeRef[];
 }
 
-export const DEFAULT_MOTION: MotionState = { time: 0, playing: false, autoKeyframe: false, unit: 'MS', collapsed: false, editingAnchor: false };
+export const DEFAULT_MOTION: MotionState = { time: 0, playing: false, autoKeyframe: false, unit: 'MS', collapsed: false, editingAnchor: false, selectedKeyframes: [] };
 
 /** A sketch's stroke: its color, how thick it is, whether it is dashed, and the Brush's hand-drawn bumps. */
 export interface SketchStroke {

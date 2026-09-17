@@ -37,6 +37,13 @@ export const ANIMATED_PROPERTY_LABELS: Readonly<Record<AnimatedProperty, string>
   trimEnd: 'Path trim end',
 };
 
+/** A keyframe on the timeline: which layer's property it belongs to, and when it is. */
+export interface KeyframeRef {
+  readonly nodeId: Id;
+  readonly property: AnimatedProperty;
+  readonly time: number;
+}
+
 /** The track of a layer's property, if it has one. */
 export function trackFor(animation: PageAnimation | undefined, nodeId: Id, property: AnimatedProperty): AnimationTrack | undefined {
   return animation?.tracks.find((track) => track.nodeId === nodeId && track.property === property);

@@ -430,3 +430,50 @@ test('the Path preset waits for a stroke it can trim', async ({ page }) => {
   await current.press('Enter');
   await expect(page.getByTestId('field-trim-end')).toHaveValue('100%');
 });
+
+test('a keyframe picked on the timeline takes a custom bezier or spring from the Easing section', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 460, box.y + 310, { steps: 5 });
+  await page.mouse.up();
+
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  const startX = Number(await page.getByTestId('field-x').inputValue());
+  await page.getByRole('button', { name: 'Add x position keyframe' }).click();
+  const current = timeline.getByRole('textbox', { name: 'Current time' });
+  await current.fill('1000');
+  await current.press('Enter');
+  await page.getByTestId('field-x').fill(String(startX + 100));
+  await page.getByTestId('field-x').press('Enter');
+
+  // The Easing section waits for a keyframe to be picked, since a keyframe is what carries an easing.
+  await expect(page.getByRole('region', { name: 'Easing' })).toHaveCount(0);
+  await timeline.getByRole('button', { name: /X position keyframe at 0 ms/ }).click();
+  const easing = page.getByRole('region', { name: 'Easing' });
+  await expect(easing.getByRole('combobox', { name: 'Keyframe easing' })).toHaveValue('LINEAR');
+
+  // A custom bezier opens its four handles, which shape the stretch.
+  await easing.getByRole('combobox', { name: 'Keyframe easing' }).selectOption('CUSTOM_CUBIC_BEZIER');
+  await expect(page.getByTestId('field-bezier-x1')).toBeVisible();
+  await page.getByTestId('field-bezier-y2').fill('0.2');
+  await page.getByTestId('field-bezier-y2').press('Enter');
+  await current.fill('500');
+  await current.press('Enter');
+  // Held back at the end of the curve, the layer is short of the middle halfway along.
+  await expect.poll(async () => Number(await page.getByTestId('field-x').inputValue())).toBeLessThan(startX + 50);
+
+  // A custom spring takes its own three numbers instead.
+  await easing.getByRole('combobox', { name: 'Keyframe easing' }).selectOption('CUSTOM_SPRING');
+  await expect(page.getByTestId('field-spring-stiffness')).toBeVisible();
+  await expect(page.getByTestId('field-bezier-x1')).toHaveCount(0);
+
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+  await page.reload();
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await expect(page.getByRole('region', { name: 'Timeline' }).getByRole('combobox', { name: /X position easing from 0 ms/ })).toHaveValue('CUSTOM_SPRING');
+});

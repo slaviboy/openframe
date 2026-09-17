@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { KeyframeRef } from '@/core/motion/animation';
 import { DEFAULT_ANIMATION, keyframeAt, moveKeyframe, pathSegmentAt, removeKeyframe, setCurve, setKeyframe, setKeyframeEasing, trackFor, valueAt } from '@/core/motion/animation';
 import { presetById, PRESET_DURATION, type PresetBase } from '@/core/motion/presets';
 import type { Id } from '@/core/ids/ids';
@@ -94,12 +95,7 @@ export function deleteKeyframe(editor: Editor, ids: readonly Id[], property: Ani
   return writeAnimation(editor, 'Delete keyframe', (animation) => ids.reduce((next, id) => removeKeyframe(next, id, property, time), animation));
 }
 
-/** A keyframe on the timeline: which layer's property it belongs to, and when it is. */
-export interface KeyframeRef {
-  readonly nodeId: Id;
-  readonly property: AnimatedProperty;
-  readonly time: number;
-}
+export type { KeyframeRef } from '@/core/motion/animation';
 
 /** Moves keyframes by `delta` milliseconds, as one undo step; they stop at the animation's start. */
 export function moveKeyframes(editor: Editor, refs: readonly KeyframeRef[], delta: number): boolean {
