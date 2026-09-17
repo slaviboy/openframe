@@ -27,6 +27,7 @@ import { effectOutset } from '../effects/effects';
 import { distanceToSegment, lineCapSize, pointInPolygon, polygonPoints, starPoints } from '../geometry/shapes';
 import { flattenPath, rectangleCorners, resolveCornerRadii, roundedPolygon } from '../geometry/corners';
 import { networkOutlines } from '../vector/vector-network';
+import { strokeChain, variableWidthOutline } from '../vector/vector-width';
 import { hasGeometry, isSceneNode, type Node, type SceneNode, type StrokeCap } from '../schema/document';
 
 export const matrixOf = (t: readonly number[]): Matrix => ({ a: t[0]!, b: t[1]!, c: t[2]!, d: t[3]!, e: t[4]!, f: t[5]! });
@@ -40,7 +41,13 @@ export function strokeOutset(node: Node): number {
     return marker(node.startCap) || marker(node.endCap) ? half + lineCapSize(node.strokeWeight) / 2 : half;
   }
   const individual = 'individualStrokeWeights' in node ? node.individualStrokeWeights : undefined;
-  const weight = individual ? Math.max(individual.top, individual.right, individual.bottom, individual.left) : node.strokeWeight;
+  // A stroke whose width varies reaches as far as its widest point.
+  const varying = node.type === 'VECTOR' ? node.strokeWidths : undefined;
+  const weight = individual
+    ? Math.max(individual.top, individual.right, individual.bottom, individual.left)
+    : varying?.length
+      ? Math.max(node.strokeWeight, ...varying.map((point) => point.width))
+      : node.strokeWeight;
   switch (node.strokeAlign) {
     case 'INSIDE':
       return 0;
@@ -212,10 +219,23 @@ export function nodeContainsLocal(node: SceneNode, p: Vec2, tolerance: number): 
       return points.some((a, i) => distanceToSegment(p, a, points[(i + 1) % points.length]!) <= tolerance);
     }
     case 'VECTOR': {
-      const reach = node.strokeWeight / 2 + tolerance;
+      const widths = node.strokeWidths;
+      const widest = widths?.length ? Math.max(node.strokeWeight, ...widths.map((point) => point.width)) : node.strokeWeight;
+      const reach = widest / 2 + tolerance;
       if (!containsPoint({ x: -reach, y: -reach, width: w + reach * 2, height: h + reach * 2 }, p)) return false;
       const outlines = networkOutlines(node.vectorNetwork);
       if (outlines.fills.some((polygon) => pointInPolygon(p, polygon))) return true;
+      // A stroke whose width varies is hit where it is actually drawn, not within a width it only reaches in places.
+      const chain = widths?.length && !node.strokeDashes ? strokeChain(node.vectorNetwork) : null;
+      if (chain) {
+        let inside = false;
+        for (const polygon of variableWidthOutline(chain, widths!, node.strokeWeight)) if (pointInPolygon(p, polygon)) inside = !inside;
+        if (inside) return true;
+        if (tolerance <= 0) return false;
+        return variableWidthOutline(chain, widths!, node.strokeWeight).some((polygon) =>
+          polygon.some((a, i) => distanceToSegment(p, polygon[(i + polygon.length - 1) % polygon.length]!, a) <= tolerance),
+        );
+      }
       return outlines.strokes.some(({ points, closed }) =>
         points.some((a, i) => (i > 0 && distanceToSegment(p, points[i - 1]!, a) <= reach) || (closed && i === points.length - 1 && distanceToSegment(p, a, points[0]!) <= reach)),
       );

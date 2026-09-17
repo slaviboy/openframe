@@ -62,3 +62,38 @@ test('the Variable width tool adds a width point on the stroke, and its width fi
   await page.keyboard.press('ControlOrMeta+Z');
   await expect.poll(isDark).toBe(false);
 });
+
+test('a width profile shapes the stroke, and the tapered stroke outlines as it is drawn', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  const at = (x: number, y: number) => [box.x + x, box.y + y] as const;
+
+  // An open line drawn with the Pen, given a stroke wide enough to see taper in.
+  await page.keyboard.press('p');
+  await page.mouse.click(...at(400, 300));
+  await page.mouse.click(...at(600, 300));
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('v');
+  await page.getByTestId('field-stroke-weight').fill('20');
+  await page.getByTestId('field-stroke-weight').press('Enter');
+
+  // The weight field keeps focus after Enter, so the canvas is given it back before Enter opens vector edit mode.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press('Enter');
+  const tool = page.getByRole('button', { name: 'Variable width' });
+  await tool.click();
+  await expect(tool).toHaveAttribute('aria-pressed', 'true');
+  const profile = page.getByTestId('field-width-profile');
+  await expect(profile).toHaveValue('uniform');
+  await profile.selectOption('taper-end');
+  await expect(profile).toHaveValue('taper-end');
+
+  // Outlining a tapered stroke follows the shape it is drawn as, so the outline is no taller than the stroke.
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('ControlOrMeta+Alt+O');
+  await expect(page.getByTestId('inspector')).toContainText('Vector');
+  const height = Number(await page.getByTestId('field-h').inputValue());
+  expect(height).toBeGreaterThan(0);
+  expect(height).toBeLessThanOrEqual(21);
+});

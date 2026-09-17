@@ -24,6 +24,74 @@ export interface WidthPoint {
   readonly width: number;
 }
 
+/**
+ * The shapes a stroke's width can be given along its length. Each is a list of the width at a position, as a
+ * share of the stroke's own weight, so a profile keeps its shape whatever the weight is set to.
+ */
+export const WIDTH_PROFILES: readonly { readonly id: string; readonly label: string; readonly shape: readonly (readonly [number, number])[] }[] = [
+  { id: 'uniform', label: 'Uniform', shape: [] },
+  {
+    id: 'taper-end',
+    label: 'Taper to the end',
+    shape: [
+      [0, 1],
+      [1, 0.05],
+    ],
+  },
+  {
+    id: 'taper-start',
+    label: 'Taper from the start',
+    shape: [
+      [0, 0.05],
+      [1, 1],
+    ],
+  },
+  {
+    id: 'taper-both',
+    label: 'Taper at both ends',
+    shape: [
+      [0, 0.05],
+      [0.5, 1],
+      [1, 0.05],
+    ],
+  },
+  {
+    id: 'bulge',
+    label: 'Wide in the middle',
+    shape: [
+      [0, 0.4],
+      [0.5, 1.4],
+      [1, 0.4],
+    ],
+  },
+  {
+    id: 'waist',
+    label: 'Narrow in the middle',
+    shape: [
+      [0, 1],
+      [0.5, 0.3],
+      [1, 1],
+    ],
+  },
+];
+
+/** The width points a profile lays down for a stroke of `weight`; the uniform profile lays down none. */
+export function profileWidthPoints(profileId: string, weight: number): WidthPoint[] {
+  const profile = WIDTH_PROFILES.find((entry) => entry.id === profileId);
+  if (!profile) return [];
+  return profile.shape.map(([position, share]) => ({ position, width: Math.round(weight * share * 100) / 100 }));
+}
+
+/** Which profile a stroke's width points were laid down from, or null when they match none of them. */
+export function profileOf(points: readonly WidthPoint[], weight: number): string | null {
+  if (points.length === 0) return 'uniform';
+  const near = (a: number, b: number) => Math.abs(a - b) < 0.02;
+  const match = WIDTH_PROFILES.find(
+    (profile) => profile.shape.length === points.length && profile.shape.every(([position, share], i) => near(position, points[i]!.position) && near(share * weight, points[i]!.width)),
+  );
+  return match?.id ?? null;
+}
+
 /** A path without branches, flattened into an ordered polyline. */
 export interface StrokeChain {
   readonly points: readonly Vec2[];
@@ -147,7 +215,10 @@ export function nearestOnChain(chain: StrokeChain, p: Vec2): { position: number;
 export function chainPointAt(chain: StrokeChain, position: number): { point: Vec2; normal: Vec2 } {
   const total = chain.lengths[chain.lengths.length - 1]!;
   const target = Math.max(0, Math.min(1, position)) * total;
-  const i = Math.max(1, chain.lengths.findIndex((l) => l >= target));
+  const i = Math.max(
+    1,
+    chain.lengths.findIndex((l) => l >= target),
+  );
   const a = chain.points[i - 1]!;
   const b = chain.points[i]!;
   const span = chain.lengths[i]! - chain.lengths[i - 1]!;

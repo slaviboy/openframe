@@ -136,6 +136,7 @@ import { swapInstanceFor } from '@/editor/commands/swap-instance';
 import { canResetOverrides, overrideLabel, resetSelectedOverride, resetSelectedOverrides, selectionOverriddenFields } from '@/editor/commands/reset-overrides';
 import { eraserWeight, vectorEditPaint } from '@/editor/interactions/vector-edit';
 import { mirroringOf, setMirroring } from '@/core/vector/vector-bend';
+import { profileOf, profileWidthPoints, WIDTH_PROFILES } from '@/core/vector/vector-width';
 import { invert, applyLinear } from '@/core/math/matrix';
 import {
   DEFAULT_MITER_ANGLE,
@@ -1657,6 +1658,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         </>
       )}
       <MirroringSection />
+      <WidthProfileSection />
       <WidthPointSection />
       <VectorEraserSection />
       <VectorPaintSection />
@@ -2511,6 +2513,39 @@ function ComponentSection({ node }: { node: SceneNode }) {
       {node.componentSet && <VariantPropertiesSection setId={node.id} />}
       {node.component && canHaveProperties(editor, node.id) && <ComponentPropertiesSection ownerId={node.id} />}
     </>
+  );
+}
+
+/** The shape a stroke's width takes along its length, while the Variable width tool is picked. */
+function WidthProfileSection() {
+  const editor = useEditor();
+  const state = useEditorState((s) => s.vectorEdit);
+  const node = state ? editor.doc.get(state.nodeId) : undefined;
+  if (state?.tool !== 'width' || node?.type !== 'VECTOR') return null;
+  const current = profileOf(node.strokeWidths ?? [], node.strokeWeight);
+  return (
+    <Section title="Width profile">
+      <select
+        className={primitives.select}
+        aria-label="Width profile"
+        data-testid="field-width-profile"
+        value={current ?? ''}
+        onKeyDown={(e) => e.stopPropagation()}
+        onChange={(e) => {
+          const points = profileWidthPoints(e.target.value, node.strokeWeight);
+          editor.history.run('Change width profile', (tx) => tx.set(node.id, 'strokeWidths', points.length > 0 ? points : undefined));
+          // The points a profile laid down are not the ones that were selected before it.
+          editor.state.setVectorEdit({ ...state, widthPoints: [] });
+        }}
+      >
+        {current === null && <option value="">Custom</option>}
+        {WIDTH_PROFILES.map((profile) => (
+          <option key={profile.id} value={profile.id}>
+            {profile.label}
+          </option>
+        ))}
+      </select>
+    </Section>
   );
 }
 

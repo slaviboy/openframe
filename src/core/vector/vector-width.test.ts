@@ -17,7 +17,7 @@
 
 import { describe, expect, test } from 'vitest';
 import { straightSegment, type VectorNetwork } from './vector-network';
-import { addWidthPoint, chainPointAt, nearestOnChain, snapPosition, strokeChain, variableWidthOutline, widthAt } from './vector-width';
+import { addWidthPoint, chainPointAt, nearestOnChain, profileOf, profileWidthPoints, snapPosition, strokeChain, variableWidthOutline, widthAt, WIDTH_PROFILES } from './vector-width';
 
 const line: VectorNetwork = {
   vertices: [
@@ -72,10 +72,14 @@ describe('variable width strokes', () => {
   });
 
   test('the outline of an open path runs along one side and back along the other', () => {
-    const outline = variableWidthOutline(strokeChain(line)!, [
-      { position: 0, width: 2 },
-      { position: 1, width: 10 },
-    ], 1);
+    const outline = variableWidthOutline(
+      strokeChain(line)!,
+      [
+        { position: 0, width: 2 },
+        { position: 1, width: 10 },
+      ],
+      1,
+    );
     expect(outline).toEqual([
       [
         { x: 0, y: 1 },
@@ -92,8 +96,27 @@ describe('variable width strokes', () => {
     expect(chainPointAt(chain, 0.75)).toEqual({ point: { x: 100, y: 50 }, normal: { x: -1, y: 0 } });
     expect(snapPosition(chain, [], 0.26, 0.02)).toBe(0.25);
     expect(snapPosition(chain, [], 0.4, 0.02)).toBe(0.4);
-    expect(snapPosition(chain, [{ position: 0.6, width: 1 }, { position: 0.9, width: 1 }], 0.74, 0.02)).toBe(0.75);
-    expect(addWidthPoint([{ position: 0.2, width: 5 }, { position: 0.8, width: 5 }], 0.5, 7)).toEqual({
+    expect(
+      snapPosition(
+        chain,
+        [
+          { position: 0.6, width: 1 },
+          { position: 0.9, width: 1 },
+        ],
+        0.74,
+        0.02,
+      ),
+    ).toBe(0.75);
+    expect(
+      addWidthPoint(
+        [
+          { position: 0.2, width: 5 },
+          { position: 0.8, width: 5 },
+        ],
+        0.5,
+        7,
+      ),
+    ).toEqual({
       points: [
         { position: 0.2, width: 5 },
         { position: 0.5, width: 7 },
@@ -101,5 +124,30 @@ describe('variable width strokes', () => {
       ],
       index: 1,
     });
+  });
+});
+
+describe('width profiles', () => {
+  test('a profile lays down its points at the stroke’s own weight, and is read back', () => {
+    const points = profileWidthPoints('taper-end', 10);
+    expect(points).toEqual([
+      { position: 0, width: 10 },
+      { position: 1, width: 0.5 },
+    ]);
+    expect(profileOf(points, 10)).toBe('taper-end');
+    // At another weight the same shape is laid down again, so the profile keeps its look.
+    expect(profileOf(profileWidthPoints('taper-end', 4), 4)).toBe('taper-end');
+  });
+
+  test('no points at all is the uniform profile, and points of one’s own match none', () => {
+    expect(profileOf([], 10)).toBe('uniform');
+    expect(profileWidthPoints('uniform', 10)).toEqual([]);
+    expect(profileOf([{ position: 0.3, width: 7 }], 10)).toBeNull();
+  });
+
+  test('every profile can be laid down and read back at a weight', () => {
+    for (const profile of WIDTH_PROFILES) {
+      expect(profileOf(profileWidthPoints(profile.id, 12), 12)).toBe(profile.id);
+    }
   });
 });

@@ -1301,6 +1301,35 @@ export class SceneRenderer {
     return null;
   }
 
+  /** Polygons joined into one filled area, their self-overlaps taken out, as path commands. */
+  private polygonsOutline(polygons: readonly (readonly { readonly x: number; readonly y: number }[])[]): PathCommand[] | null {
+    const ck = this.ck;
+    const builder = new ck.PathBuilder();
+    let drawn = false;
+    for (const polygon of polygons) {
+      if (polygon.length < 3) continue;
+      builder.addPolygon(
+        polygon.flatMap((p) => [p.x, p.y]),
+        true,
+      );
+      drawn = true;
+    }
+    const path = builder.detachAndDelete();
+    if (!drawn) {
+      path.delete();
+      return null;
+    }
+    // A union with an empty path removes the overlaps where the two sides of the stroke cross.
+    const empty = new ck.PathBuilder().detachAndDelete();
+    const simplified: Path | null = ck.Path.MakeFromOp(path, empty, ck.PathOp.Union);
+    empty.delete();
+    path.delete();
+    if (!simplified) return null;
+    const commands = simplified.isEmpty() ? null : this.commandsOf(simplified);
+    simplified.delete();
+    return commands;
+  }
+
   /**
    * The area a per-side stroke covers: the box grown by each side's weight with the box shrunk by it taken out,
    * which is the ring `drawIndividualStrokes` paints. Per-side strokes take no corners, joins or dashes, as drawn.
@@ -1330,6 +1359,11 @@ export class SceneRenderer {
     if (!outlinable && node.type !== 'FRAME' && !combined) return null;
     if (!('strokes' in node) || node.strokeWeight <= 0 || !node.strokes.some((p) => p.visible && p.opacity > 0)) return null;
     if ((node.type === 'RECTANGLE' || node.type === 'FRAME') && node.individualStrokeWeights) return this.individualStrokeOutline(node, node.individualStrokeWeights);
+    // A stroke whose width varies along the path is outlined as the shape it is drawn as, not by stroking a line.
+    if (node.type === 'VECTOR' && node.strokeWidths?.length && !node.strokeDashes) {
+      const chain = strokeChain(node.vectorNetwork);
+      if (chain) return this.polygonsOutline(variableWidthOutline(chain, node.strokeWidths, node.strokeWeight));
+    }
     let area: Path | null = null;
     let centerline: Path | null;
     if (combined) {
