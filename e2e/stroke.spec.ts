@@ -57,3 +57,33 @@ test('stroke style, join and sides are editable and persist', async ({ page }) =
   await expect(page.getByTestId('field-stroke-top')).toHaveValue('1');
   await expect(page.getByTestId('field-stroke-bottom')).toHaveValue('2');
 });
+
+test('path trim draws part of the stroke, and its values persist', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('toolbar', { name: 'Tools' })).toBeVisible();
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 420, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 560, box.y + 400, { steps: 5 });
+  await page.mouse.up();
+
+  const stroke = page.getByRole('region', { name: 'Stroke' });
+  await stroke.getByRole('button', { name: 'Add stroke' }).click();
+  // A path can only be trimmed where the stroke runs down the middle of it, so the fields wait for that.
+  await expect(page.getByTestId('field-trim-start')).toHaveCount(0);
+  await stroke.getByRole('combobox', { name: 'Stroke position' }).selectOption('CENTER');
+  await expect(page.getByTestId('field-trim-start')).toHaveValue('0%');
+  await expect(page.getByTestId('field-trim-end')).toHaveValue('100%');
+
+  await page.getByTestId('field-trim-start').fill('25');
+  await page.getByTestId('field-trim-start').press('Enter');
+  await page.getByTestId('field-trim-end').fill('75');
+  await page.getByTestId('field-trim-end').press('Enter');
+
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+  await page.reload();
+  await page.getByRole('treeitem', { name: /Rectangle 1/ }).click();
+  await expect(page.getByTestId('field-trim-start')).toHaveValue('25%');
+  await expect(page.getByTestId('field-trim-end')).toHaveValue('75%');
+});

@@ -81,3 +81,49 @@ describe('stroke styles', () => {
     expect(top(21, 40)).toBe(false);
   });
 });
+
+describe('path trim', () => {
+  /** The middles of the rectangle's four edges, which a quarter of its path covers one of. */
+  const edges = [
+    [40, 20],
+    [60, 40],
+    [40, 60],
+    [20, 40],
+  ] as const;
+  const drawn = (at: (x: number, y: number) => boolean) => edges.filter(([x, y]) => at(x, y)).length;
+  const trimmed = (patch: Partial<RectangleNode>) => render({ strokeWeight: 2, strokeAlign: 'CENTER', ...patch });
+
+  test('draws only the share of the path between its trim points', () => {
+    expect(drawn(trimmed({}))).toBe(4);
+    const half = trimmed({ strokeTrimEnd: 0.5 });
+    const rest = trimmed({ strokeTrimStart: 0.5 });
+    expect(drawn(half)).toBe(2);
+    expect(drawn(rest)).toBe(2);
+    // The two halves are the path between them: every edge belongs to one or the other.
+    expect(edges.every(([x, y]) => half(x, y) !== rest(x, y))).toBe(true);
+    // Trimmed down to nothing, no stroke is drawn at all.
+    expect(drawn(trimmed({ strokeTrimEnd: 0 }))).toBe(0);
+  });
+
+  test('wraps back around the path when it starts past where it ends', () => {
+    const spinner = trimmed({ strokeTrimStart: 0.75, strokeTrimEnd: 0.25 });
+    expect(drawn(spinner)).toBe(2);
+    // The quarters left out are the ones in the middle, which the trim runs around rather than through.
+    const middle = trimmed({ strokeTrimStart: 0.25, strokeTrimEnd: 0.75 });
+    expect(edges.every(([x, y]) => spinner(x, y) !== middle(x, y))).toBe(true);
+  });
+
+  test('is left out of account on a stroke that is not centered', () => {
+    // An inside stroke sits within the edge rather than over it, so it is sampled just inside the corners.
+    const within = [
+      [40, 21],
+      [59, 40],
+      [40, 59],
+      [21, 40],
+    ] as const;
+    const inside = render({ strokeWeight: 2, strokeAlign: 'INSIDE' });
+    const asked = render({ strokeWeight: 2, strokeAlign: 'INSIDE', strokeTrimEnd: 0.5 });
+    expect(within.every(([x, y]) => inside(x, y))).toBe(true);
+    expect(within.every(([x, y]) => inside(x, y) === asked(x, y))).toBe(true);
+  });
+});

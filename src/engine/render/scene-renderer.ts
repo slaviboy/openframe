@@ -607,8 +607,11 @@ export class SceneRenderer {
     }
     if (node.strokeWeight <= 0) return;
     const path = shapePath ?? this.shapePath(node);
+    // Path trim draws only the share of the path between the trim points; like the reference it needs a centered stroke.
+    const trimmed = node.strokeAlign === 'CENTER' ? this.trimStroke(node, path) : undefined;
+    const along = trimmed === undefined ? path : trimmed;
     this.applyStrokeStyle(node);
-    for (const paint of node.strokes) {
+    for (const paint of trimmed === null ? [] : node.strokes) {
       if (!paint.visible || paint.opacity <= 0) continue;
       this.configurePaint(this.strokePaint, paint, node.size);
       const w = node.strokeWeight;
@@ -625,11 +628,25 @@ export class SceneRenderer {
           if (box) canvas.clipRRect(box, clipOp, true);
         }
       }
-      this.drawShape(canvas, node, this.strokePaint, path);
+      this.drawShape(canvas, node, this.strokePaint, along);
       canvas.restore();
     }
     this.resetStrokeStyle();
+    trimmed?.delete();
     if (!shapePath) path?.delete();
+  }
+
+  /** The path a trimmed stroke is drawn along: undefined when the whole of it is, null when none of it is. */
+  private trimStroke(node: ShapeNode, path: Path | null): Path | null | undefined {
+    const start = node.strokeTrimStart ?? 0;
+    const end = node.strokeTrimEnd ?? 1;
+    if (start === 0 && end === 1) return undefined;
+    const box = path ? null : this.boxRRect(node);
+    const source = path ?? (box ? new this.ck.PathBuilder().addRRect(box).detachAndDelete() : null);
+    if (!source) return undefined;
+    const trimmed = this.trimmedPath(source, start, end);
+    if (source !== path) source.delete();
+    return trimmed;
   }
 
   /**
@@ -1182,6 +1199,34 @@ export class SceneRenderer {
    * centerline dashed, stroked with the layer's caps and joins, and — for inside or outside strokes
    * of closed shapes — a double-width stroke intersected with (or cut from) the shape.
    */
+  /** The stretch of a path between two shares of its length, over each of its contours; null when none of it is left. */
+  private trimmedPath(path: Path, start: number, end: number): Path | null {
+    const ck = this.ck;
+    const from = Math.min(Math.max(start, 0), 1);
+    const to = Math.min(Math.max(end, 0), 1);
+    const builder = new ck.PathBuilder();
+    const iterator = new ck.ContourMeasureIter(path, false, 1);
+    let drawn = false;
+    for (let contour = iterator.next(); contour; contour = iterator.next()) {
+      const length = contour.length();
+      // A trim that starts past where it ends wraps back around the contour, which is how a spinner is made.
+      const spans: readonly (readonly [number, number])[] = from <= to ? [[from * length, to * length]] : [[from * length, length], [0, to * length]];
+      for (const [a, b] of spans) {
+        if (length <= 0 || b - a <= 0) continue;
+        const segment = contour.getSegment(a, b, true);
+        builder.addPath(segment);
+        segment.delete();
+        drawn = true;
+      }
+      contour.delete();
+    }
+    iterator.delete();
+    const trimmed = builder.detachAndDelete();
+    if (drawn) return trimmed;
+    trimmed.delete();
+    return null;
+  }
+
   strokeOutline(node: SceneNode): PathCommand[] | null {
     const ck = this.ck;
     if (node.type !== 'RECTANGLE' && node.type !== 'ELLIPSE' && node.type !== 'POLYGON' && node.type !== 'STAR' && node.type !== 'LINE' && node.type !== 'VECTOR') return null;
@@ -1209,6 +1254,17 @@ export class SceneRenderer {
     if (!centerline) {
       release();
       return null;
+    }
+    // Path trim draws only the share of the path between the trim points. Like the reference it needs a centered stroke,
+    // and is left out of account on any other, which would have the stroke follow the shape's edge instead.
+    if (node.strokeAlign === 'CENTER' && ((node.strokeTrimStart ?? 0) !== 0 || (node.strokeTrimEnd ?? 1) !== 1)) {
+      const trimmed = this.trimmedPath(centerline, node.strokeTrimStart ?? 0, node.strokeTrimEnd ?? 1);
+      if (centerline !== area) centerline.delete();
+      centerline = trimmed;
+      if (!centerline) {
+        release();
+        return null;
+      }
     }
     const dashes = node.strokeDashes && node.strokeDashes.some((d) => d > 0) ? node.strokeDashes : null;
     // Dashed strokes start and end with a half-length dash, as drawn.

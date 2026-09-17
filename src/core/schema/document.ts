@@ -583,6 +583,12 @@ const GeometryFields = {
   strokeJoin: StrokeJoinSchema.optional(),
   /** Miter joins become bevels at corners sharper than this angle, in degrees; absent means 28.96. */
   strokeMiterAngle: z.number().min(0).max(180).optional(),
+  /**
+   * Path trim: the shares of the path the stroke is drawn between, so a stroke can be drawn on or erased. Absent
+   * while the whole path is drawn. A start past the end wraps back around the path, which is how a spinner is made.
+   */
+  strokeTrimStart: z.number().min(0).max(1).optional(),
+  strokeTrimEnd: z.number().min(0).max(1).optional(),
   /** Dynamic stroke: a hand-drawn, bumpy stroke. Absent for a plain one. */
   dynamicStroke: DynamicStrokeSchema.optional(),
   /** The custom brush the stroke is painted with, while one is applied. */

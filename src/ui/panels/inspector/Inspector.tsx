@@ -3068,6 +3068,19 @@ function StrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
   const boxes = nodes.every((n) => n.type === 'FRAME' || n.type === 'RECTANGLE');
   const mode = shared(nodes, sideMode);
 
+  // Path trim: how much of the path the stroke is drawn along. Like the reference, only a centered stroke can be trimmed.
+  const trimGesture = useGesture('Change path trim');
+  const centered = nodes.every((n) => n.strokeAlign === 'CENTER');
+  const trimPercent = (key: 'strokeTrimStart' | 'strokeTrimEnd', whole: number) => {
+    const share = val(shared(nodes, (n) => n[key] ?? whole));
+    return share === undefined ? undefined : share * 100;
+  };
+  const editTrim = (key: 'strokeTrimStart' | 'strokeTrimEnd', percent: number, whole: number) =>
+    trimGesture.change((tx) => {
+      const share = Math.min(1, Math.max(0, percent / 100));
+      nodes.forEach((n) => tx.set(n.id, key, share === whole ? undefined : share));
+    });
+
   const editDashes = (index: 0 | 1, value: number) =>
     dashGesture.change((tx) =>
       nodes.forEach((n) => {
@@ -3117,6 +3130,37 @@ function StrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
             <option value="ROUND">Round</option>
             <option value="SQUARE">Square</option>
           </select>
+        </div>
+      )}
+      {/* Path trim draws only a share of the path, for a stroke that draws itself on or erases itself away. */}
+      {centered && (
+        <div className={styles.grid2}>
+          <NumberField
+            label="Trim"
+            ariaLabel="Path trim start"
+            testId="field-trim-start"
+            min={0}
+            max={100}
+            decimals={0}
+            suffix="%"
+            value={trimPercent('strokeTrimStart', 0)}
+            onGestureStart={trimGesture.start}
+            onGestureEnd={trimGesture.end}
+            onChange={(v) => editTrim('strokeTrimStart', v, 0)}
+          />
+          <NumberField
+            label="End"
+            ariaLabel="Path trim end"
+            testId="field-trim-end"
+            min={0}
+            max={100}
+            decimals={0}
+            suffix="%"
+            value={trimPercent('strokeTrimEnd', 1)}
+            onGestureStart={trimGesture.start}
+            onGestureEnd={trimGesture.end}
+            onChange={(v) => editTrim('strokeTrimEnd', v, 1)}
+          />
         </div>
       )}
       {/* A custom brush paints the stroke with its own shape; brushes are made from a closed vector layer. */}
