@@ -70,3 +70,44 @@ test('another Openframe file is brought in as a library, and taken out again', a
   await expect(reloaded.getByRole('list', { name: 'Imported libraries' })).toHaveCount(0);
   await expect(reloaded.getByRole('list', { name: 'Local components' }).getByRole('button', { name: /Component 1/ })).toHaveCount(1);
 });
+
+test('Check designs finds a value written out where a variable carries it, and uses the variable', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+
+  // A number variable carrying 8.
+  await page.getByRole('button', { name: 'Variables', exact: true }).click();
+  const variables = page.getByRole('region', { name: 'Variables' });
+  await variables.getByRole('button', { name: 'Create collection' }).last().click();
+  await variables.getByRole('button', { name: 'Create variable' }).click();
+  await page.getByRole('menuitem', { name: 'Number' }).click();
+  const value = variables.getByRole('table', { name: 'Collection variables' }).getByRole('textbox', { name: 'Number Mode 1' });
+  await value.fill('8');
+  await value.press('Enter');
+  await page.keyboard.press('Escape');
+
+  // A rectangle with that very radius, written out by hand.
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 350, box.y + 280);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 470, box.y + 360, { steps: 5 });
+  await page.mouse.up();
+  await page.getByTestId('field-radius').fill('8');
+  await page.getByTestId('field-radius').press('Enter');
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+  await page.keyboard.press('ControlOrMeta+K');
+  const search = page.getByRole('combobox', { name: 'Search commands' });
+  await search.fill('Check designs');
+  await expect(page.getByRole('option', { name: /Check designs/ }).first()).toBeVisible();
+  await search.press('Enter');
+
+  const dialog = page.getByRole('dialog', { name: 'Check designs' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('list', { name: 'Design issues' })).toContainText('is written out where');
+
+  // Taking the suggestion binds the variable, which puts the issue right, so it leaves the list.
+  await dialog.getByRole('button', { name: /^Use / }).first().click();
+  await expect(dialog).toContainText('Nothing on this page needs putting right.');
+});

@@ -23,6 +23,7 @@ import { PackageError } from '@/platform/package';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { bootstrap, type AppSession } from '@/app/bootstrap';
 import { addAnnotation } from '@/editor/commands/annotations';
+import { CheckDesignsDialog } from './dialogs/CheckDesignsDialog';
 import type { Vec2 } from '@/core/math/vec';
 import { placeImages } from '@/editor/commands/images';
 import { screenToWorld } from '@/editor/viewport/viewport';
@@ -114,6 +115,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
   const [uiMode, setUiMode] = useState<UiMode>('full');
   const uiModeRef = useRef(uiMode);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [checkDesigns, setCheckDesigns] = useState(false);
   const shortcutsOpenRef = useRef(shortcutsOpen);
   const clipboardRef = useRef<ClipboardController | null>(null);
   // "Paste here" is built when the menu opens (an event), so render never touches the clipboard controller.
@@ -298,6 +300,13 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
         run: () => editor.state.setMode(editor.state.getSnapshot().mode === 'draw' ? 'design' : 'draw'),
       },
       {
+        id: 'edit.checkDesigns',
+        label: 'Check designs',
+        category: 'Edit',
+        // The check reads the page against the variables, styles and libraries the file already has.
+        run: () => setCheckDesigns(true),
+      },
+      {
         id: 'view.comments',
         label: 'Show comments',
         category: 'View',
@@ -460,6 +469,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
       )}
       {shortcutsOpen && uiMode !== 'hidden' && <ShortcutsPanel editor={editor} onClose={closeShortcuts} />}
       {palette && <CommandPalette editor={editor} mode={palette} onClose={closePalette} />}
+      {checkDesigns && <CheckDesignsDialog editor={editor} onClose={() => setCheckDesigns(false)} />}
       {editorState.addInstancesSlotId && <AddInstancesDialog editor={editor} slotId={editorState.addInstancesSlotId} onClose={() => editor.state.openAddInstances(null)} />}
       {editorState.dialog === 'batchRename' && <BatchRenameDialog editor={editor} onClose={closeDialog} />}
       {editorState.dialog === 'nudgeAmount' && <NudgeDialog onClose={closeDialog} />}
