@@ -226,3 +226,45 @@ test('a preset animation keyframes a layer from the properties panel', async ({ 
   await animations.getByRole('button', { name: 'Remove width animation' }).click();
   await expect(animations.getByRole('list', { name: 'Animated properties' })).not.toContainText('Width');
 });
+
+test('the anchor point is revealed with ⌥R, dragged, and turns the layer around it', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 500, box.y + 330, { steps: 5 });
+  await page.mouse.up();
+
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  const transform = page.getByRole('region', { name: 'Transform' });
+  const edit = transform.getByRole('button', { name: 'Edit anchor point' });
+  await expect(edit).toHaveAttribute('aria-pressed', 'false');
+
+  // ⌥R reveals the target, which sits in the middle of the layer until it is moved.
+  await page.mouse.click(box.x + 700, box.y + 140);
+  await page.getByRole('treeitem', { name: /Rectangle 1/ }).click();
+  await page.keyboard.press('Alt+R');
+  await expect(edit).toHaveAttribute('aria-pressed', 'true');
+  await expect(transform.getByRole('button', { name: 'Reset anchor point' })).toHaveCount(0);
+
+  // Dragging it to the layer's top-left corner anchors it there.
+  await page.mouse.move(box.x + 450, box.y + 290);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 400, box.y + 250, { steps: 8 });
+  await page.mouse.up();
+  await expect(transform.getByRole('button', { name: 'Reset anchor point' })).toBeVisible();
+
+  // Turning the layer now swings it around that corner, which stays where it is.
+  const x = Number(await page.getByTestId('field-x').inputValue());
+  const y = Number(await page.getByTestId('field-y').inputValue());
+  await page.getByTestId('field-rotation').fill('90');
+  await page.getByTestId('field-rotation').press('Enter');
+  await expect.poll(async () => Math.round(Number(await page.getByTestId('field-x').inputValue()))).toBe(Math.round(x));
+  await expect.poll(async () => Math.round(Number(await page.getByTestId('field-y').inputValue()))).toBe(Math.round(y));
+
+  // Reset puts it back in the middle.
+  await transform.getByRole('button', { name: 'Reset anchor point' }).click();
+  await expect(transform.getByRole('button', { name: 'Reset anchor point' })).toHaveCount(0);
+});

@@ -61,6 +61,7 @@ import { flowsOf } from '@/core/prototype/flows';
 import { CONNECT_HANDLE_SIZE, connectHandle, FLOW_TAG_ICON_WIDTH, overlayBadgeRect, overlayFrames, screenBounds, setFlowTags, shownConnections, type FlowTagRect } from './prototype-geometry';
 import { animatedGifHash } from '../images/animated-gif';
 import { TEXT_PATH_HANDLE_SIZE, textPathHandle } from './text-path-handle';
+import { ANCHOR_HANDLE_SIZE, anchorHandle } from './anchor-handle';
 
 /** The label an animated GIF gets next to its size. */
 const GIF_TAG = 'GIF';
@@ -348,6 +349,22 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
     drawSizeLabel(ctx, quad, frame, theme, isLineFrame(editor, frame), animatedGifHash(editor, frame.nodeId) !== undefined);
     const addVariant = addVariantButtonRect(editor);
     if (addVariant) drawAddVariantButton(ctx, addVariant, theme);
+    // Motion: the target a layer turns and scales around.
+    const anchor = anchorHandle(editor);
+    if (anchor) {
+      const r = ANCHOR_HANDLE_SIZE / 2;
+      ctx.strokeStyle = theme.selection;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(anchor.center.x, anchor.center.y, r, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(anchor.center.x - r - 3, anchor.center.y);
+      ctx.lineTo(anchor.center.x + r + 3, anchor.center.y);
+      ctx.moveTo(anchor.center.x, anchor.center.y - r - 3);
+      ctx.lineTo(anchor.center.x, anchor.center.y + r + 3);
+      ctx.stroke();
+    }
     // Text on a path: the handle that moves the text along its path.
     const textPath = textPathHandle(editor);
     if (textPath) {

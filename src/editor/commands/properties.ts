@@ -98,13 +98,19 @@ export function setConstrainProportions(tx: Transaction, node: SceneNode, on: bo
   tx.set(node.id, 'constrainProportions', on ? true : undefined);
 }
 
-/** Sets rotation around the layer's center, preserving any flip. */
+/** The point a layer turns and scales around, in its own coordinates: its anchor, or the middle of it. */
+export function anchorPoint(node: SceneNode): { x: number; y: number } {
+  const share = node.anchor ?? { x: 0.5, y: 0.5 };
+  return { x: node.size.width * share.x, y: node.size.height * share.y };
+}
+
+/** Sets rotation around the layer's anchor point (its middle unless one is set), preserving any flip. */
 export function setRotation(tx: Transaction, node: SceneNode, degrees: number): void {
   const current = tx.store.getOrThrow(node.id) as SceneNode;
   if (current.type === 'SECTION') return;
   const m = matrixOf(current.transform);
   const flipX = determinant(m) < 0;
-  const half = { x: current.size.width / 2, y: current.size.height / 2 };
+  const half = anchorPoint(current);
   const center = apply(m, half);
   const linear: Matrix = multiply(rotation((-degrees * Math.PI) / 180), scaling(flipX ? -1 : 1, 1));
   const offset = apply(linear, half);

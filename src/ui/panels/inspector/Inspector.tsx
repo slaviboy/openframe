@@ -540,14 +540,27 @@ function SelectionColorsSection({ nodes }: { nodes: SceneNode[] }) {
  * Transforms (Draw mode): the selection repeats around a center or along a line, without layers for the copies. The
  * settings say how many there are and how they are spread; Apply transforms turns them into layers.
  */
-function TransformSection({ nodes }: { nodes: SceneNode[] }) {
+function TransformSection({ nodes, motion }: { nodes: SceneNode[]; motion?: boolean }) {
   const editor = useEditor();
+  const editingAnchor = useEditorState((s) => s.motion.editingAnchor);
   const single = nodes.length === 1 ? nodes[0]! : null;
   const group = single?.type === 'GROUP' && single.repeat ? single : null;
   const repeat = group?.repeat;
   return (
     <Section title="Transform">
-      {!repeat && (
+      {motion && single && (
+        <>
+          <button type="button" className={gradientStyles.textButton} aria-pressed={editingAnchor} onClick={() => editor.commands.run('motion.editAnchor')}>
+            Edit anchor point
+          </button>
+          {single.anchor && (
+            <button type="button" className={gradientStyles.textButton} onClick={() => editor.history.run('Reset anchor point', (tx) => tx.set(single.id, 'anchor', undefined))}>
+              Reset anchor point
+            </button>
+          )}
+        </>
+      )}
+      {!motion && !repeat && (
         <select
           className={primitives.select}
           aria-label="Additional transform modifier"
@@ -561,7 +574,7 @@ function TransformSection({ nodes }: { nodes: SceneNode[] }) {
           <option value="LINEAR">Linear repeat</option>
         </select>
       )}
-      {group && repeat && (
+      {!motion && group && repeat && (
         <>
           <div className={styles.row}>
             <NumberField label="#" ariaLabel="Repeat count" testId="field-repeat-count" min={1} max={200} decimals={0} value={repeat.count} onChange={(v) => setRepeatTransform(editor, group.id, { count: Math.round(v) })} />
@@ -1161,6 +1174,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         )}
       </Section>
       {draw && <TransformSection nodes={nodes} />}
+      {motion && <TransformSection nodes={nodes} motion />}
       {motion && <AnimationsSection nodes={nodes} />}
       {!allSlices && (
       <Section

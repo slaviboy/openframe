@@ -41,9 +41,11 @@ export interface MotionState {
   readonly unit: 'MS' | 'S';
   /** The layer tracks are collapsed to one row each. */
   readonly collapsed: boolean;
+  /** Edit anchor point (⌥R): the target a layer turns and scales around is shown, and can be dragged. */
+  readonly editingAnchor: boolean;
 }
 
-export const DEFAULT_MOTION: MotionState = { time: 0, playing: false, autoKeyframe: false, unit: 'MS', collapsed: false };
+export const DEFAULT_MOTION: MotionState = { time: 0, playing: false, autoKeyframe: false, unit: 'MS', collapsed: false, editingAnchor: false };
 
 /** A sketch's stroke: its color, how thick it is, whether it is dashed, and the Brush's hand-drawn bumps. */
 export interface SketchStroke {

@@ -22,6 +22,7 @@ import { trackFor } from '@/core/motion/animation';
 import type { SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { MotionPreview } from '../motion/preview';
+import { anchorPoint, rotationDegrees, setRotation } from './properties';
 import { addKeyframe, applyMotionPreset, deleteKeyframe, hasKeyframe, isAnimated, pageAnimation, removeAnimatedProperty, setAnimationDuration, setAnimationPlayback } from './motion';
 
 let editor: Editor;
@@ -135,5 +136,36 @@ describe('the motion preview', () => {
     // Undo takes back the keyframes, not the preview.
     editor.history.undo();
     expect(trackFor(pageAnimation(editor), rect, 'x')!.keyframes).toEqual([{ time: 0, value: 0 }]);
+  });
+});
+
+describe('the anchor point', () => {
+  test('is the middle of a layer until one is set', () => {
+    expect(anchorPoint(node())).toEqual({ x: 30, y: 20 });
+    editor.history.run('anchor', (tx) => tx.set(rect, 'anchor', { x: 0, y: 0 }));
+    expect(anchorPoint(node())).toEqual({ x: 0, y: 0 });
+  });
+
+  test('a layer turns around it, so a corner anchor keeps that corner still', () => {
+    editor.history.run('anchor', (tx) => tx.set(rect, 'anchor', { x: 0, y: 0 }));
+    const before = { x: node().transform[4], y: node().transform[5] };
+    editor.history.run('rotate', (tx) => setRotation(tx, node(), 90));
+    expect(rotationDegrees(node())).toBeCloseTo(90, 6);
+    // The top-left corner is where it was; the rest of the layer swung around it.
+    expect(node().transform[4]).toBeCloseTo(before.x, 6);
+    expect(node().transform[5]).toBeCloseTo(before.y, 6);
+  });
+
+  test('a layer scaling in Motion keeps its anchor still', () => {
+    editor.history.run('anchor', (tx) => tx.set(rect, 'anchor', { x: 0, y: 0 }));
+    addKeyframe(editor, [rect], 'width', 0, 60);
+    addKeyframe(editor, [rect], 'width', 1000, 20);
+
+    const preview = new MotionPreview(editor);
+    preview.show(1000);
+    // Anchored at its left edge, the layer shrinks to the right and its x stays put.
+    expect(node().size.width).toBe(20);
+    expect(node().transform[4]).toBe(10);
+    preview.clear();
   });
 });

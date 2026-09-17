@@ -346,6 +346,15 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     run: (e) => e.state.setMotion({ playing: !e.state.getSnapshot().motion.playing }),
   },
   {
+    id: 'motion.editAnchor',
+    label: 'Edit anchor point',
+    category: 'Object',
+    shortcuts: ['Alt+R'],
+    enabled: (e) => e.state.getSnapshot().mode === 'motion' && e.selection.length === 1,
+    checked: (e) => e.state.getSnapshot().motion.editingAnchor,
+    run: (e) => e.state.setMotion({ editingAnchor: !e.state.getSnapshot().motion.editingAnchor }),
+  },
+  {
     id: 'object.radialRepeat',
     label: 'Add radial repeat',
     category: 'Object',

@@ -85,7 +85,13 @@ function applyValues(tx: Transaction, node: SceneNode, properties: Partial<Recor
   const id: Id = node.id;
   if (properties.opacity !== undefined) tx.set(id, 'opacity', Math.min(1, Math.max(0, properties.opacity)));
   if (properties.width !== undefined || properties.height !== undefined) {
-    tx.set(id, 'size', { width: Math.max(0, properties.width ?? node.size.width), height: Math.max(0, properties.height ?? node.size.height) });
+    const size = { width: Math.max(0, properties.width ?? node.size.width), height: Math.max(0, properties.height ?? node.size.height) };
+    const share = node.anchor ?? { x: 0.5, y: 0.5 };
+    // A layer scales around its anchor, so the anchor stays where it was while the size changes.
+    const shift = { x: (node.size.width - size.width) * share.x, y: (node.size.height - size.height) * share.y };
+    const t = node.transform;
+    tx.set(id, 'size', size);
+    tx.set(id, 'transform', [t[0], t[1], t[2], t[3], t[4] + t[0] * shift.x + t[2] * shift.y, t[5] + t[1] * shift.x + t[3] * shift.y] satisfies Transform);
   }
   if (properties.rotation !== undefined && properties.rotation !== rotationDegrees(node)) setRotation(tx, node, properties.rotation);
   if (properties.x !== undefined || properties.y !== undefined) {

@@ -482,6 +482,11 @@ const SceneFields = {
   ...BaseNodeFields,
   transform: TransformSchema,
   size: SizeSchema,
+  /**
+   * Motion: the point a layer turns and scales around, as a share of its own box (0–1 in each direction). Absent means
+   * the middle.
+   */
+  anchor: z.object({ x: z.number().min(-10).max(10), y: z.number().min(-10).max(10) }).optional(),
   opacity: unit,
   blendMode: BlendModeSchema,
   /** Shadows and blurs, in paint order. Absent when the layer has none. */
