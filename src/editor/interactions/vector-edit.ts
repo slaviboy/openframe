@@ -22,7 +22,9 @@ import type { Rect } from '@/core/math/rect';
 import type { Vec2 } from '@/core/math/vec';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
 import { DEFAULT_SHAPE_FILL, solid } from '@/core/document/factory';
-import type { HandleMirroring, Paint, Transform, VectorNode } from '@/core/schema/document';
+import { isSceneNode, type HandleMirroring, type Paint, type SceneNode, type Transform, type VectorNode } from '@/core/schema/document';
+import { makeVector } from '@/core/document/factory';
+import { shapeNetwork } from '@/core/vector/shape-networks';
 import type { PathCommand } from '@/core/geometry/corners';
 import type { ShapeFace } from '@/core/vector/geometry-service';
 import { faceAt } from '@/core/vector/shape-builder';
@@ -59,10 +61,35 @@ export function canBeginVectorEdit(editor: Editor): boolean {
 /** Enters vector edit mode on a vector layer (selecting it). */
 export function beginVectorEdit(editor: Editor, id: Id): boolean {
   const node = editor.doc.get(id);
-  if (node?.type !== 'VECTOR' || node.locked) return false;
-  editor.state.select([id]);
-  editor.state.setVectorEdit({ nodeId: id, vertices: [] });
+  if (!node || !isSceneNode(node) || node.locked) return false;
+  // A shape drawn some other way — a rectangle, an ellipse, a star — becomes a vector layer so its points can be
+  // moved. Its own settings (corners, point counts, arcs) are the shape's, so they go with the shape. Layers that
+  // hold other layers are left alone: a frame is not a shape whose points can be pulled about.
+  const target = node.type === 'VECTOR' ? id : EDITABLE_SHAPES.has(node.type) ? toVectorLayer(editor, node) : null;
+  if (target === null) return false;
+  editor.state.select([target]);
+  editor.state.setVectorEdit({ nodeId: target, vertices: [] });
   return true;
+}
+
+/** The shapes whose points can be edited: the ones that are only an outline, holding nothing inside them. */
+const EDITABLE_SHAPES: ReadonlySet<string> = new Set(['RECTANGLE', 'ELLIPSE', 'POLYGON', 'STAR', 'LINE']);
+
+/** Turns a shape into a vector layer of the same outline, in its place, and returns it; null when it has none. */
+function toVectorLayer(editor: Editor, node: SceneNode): Id | null {
+  const network = shapeNetwork(node);
+  if (!network || network.segments.length === 0) return null;
+  const vectorId = editor.ids.next();
+  editor.history.run('Edit points', (tx) => {
+    const { id: _id, type: _type, ...rest } = node as unknown as Record<string, unknown>;
+    const vector = makeVector({ id: vectorId, parent: node.parent, name: node.name, x: 0, y: 0, width: node.size.width, height: node.size.height }, network);
+    // The shape's own settings don't apply to a vector layer, so only what every layer carries comes across.
+    const { vectorNetwork: _network, size: _size, transform: _transform, parent: _parent, name: _name, ...defaults } = vector as unknown as Record<string, unknown>;
+    const carried = Object.fromEntries(Object.entries(rest).filter(([field]) => field in defaults));
+    tx.create({ ...vector, ...carried, id: vectorId, type: 'VECTOR', parent: node.parent, name: node.name, size: node.size, transform: node.transform, vectorNetwork: network } as SceneNode);
+    tx.delete(node.id);
+  });
+  return vectorId;
 }
 
 /** Leaves vector edit mode. */
@@ -229,6 +256,14 @@ type BoxDrag = {
   readonly startLocal: Vec2;
   readonly down: PointerInfo;
   moved: boolean;
+  /** How far the box has been carried by holding Space, in layer space. */
+  offset: Vec2;
+  /** Where the pointer was when Space went down, while it is held. */
+  carryFrom: Vec2 | null;
+  /** The points as the resize or turn last left them, which is what Space carries about. */
+  shaped: VectorNetwork | null;
+  /** Where the pointer was on the last move, which is where a carry starts from when Space goes down. */
+  lastLocal: Vec2 | null;
 } & ({ readonly kind: 'resize'; readonly handle: HandleId } | { readonly kind: 'rotate' });
 
 interface PointDrag {
@@ -270,6 +305,13 @@ export class VectorEditController implements Tool {
   private widthDrag: WidthDrag | null = null;
   private cutDrag: CutDrag | null = null;
   private boxDrag: BoxDrag | null = null;
+  /** Space is held, which carries whatever is being dragged about instead of resizing or turning it. */
+  private spaceHeld = false;
+
+  /** Told by the tool manager, which keeps Space from springing the Hand tool while a gesture is running. */
+  setSpaceHeld(held: boolean): void {
+    this.spaceHeld = held;
+  }
   private widthHover: Vec2 | null = null;
   private hover: { readonly region: number; readonly remove: boolean } | null = null;
 
@@ -515,6 +557,10 @@ export class VectorEditController implements Tool {
           startLocal: apply(boxInverse, p.world),
           down: p,
           moved: false,
+          offset: { x: 0, y: 0 },
+          carryFrom: null,
+          shaped: null,
+          lastLocal: null,
         };
         this.boxDrag = frameHandle ? { ...common, kind: 'resize', handle: frameHandle } : { ...common, kind: 'rotate' };
         return;
@@ -718,16 +764,32 @@ export class VectorEditController implements Tool {
     if (!g.moved && Math.hypot(p.screen.x - g.down.screen.x, p.screen.y - g.down.screen.y) < 3) return;
     g.moved = true;
     const local = apply(g.inverse, p.world);
+    // Holding Space carries the points about instead of resizing or turning them; letting go picks up where it left.
+    if (this.spaceHeld) {
+      // The carry starts where the pointer was when Space went down, which is where the last move left it.
+      const from = g.lastLocal ?? local;
+      if (!g.carryFrom) g.carryFrom = { x: from.x - g.offset.x, y: from.y - g.offset.y };
+      g.offset = { x: local.x - g.carryFrom.x, y: local.y - g.carryFrom.y };
+    } else {
+      g.carryFrom = null;
+    }
+    g.lastLocal = local;
+    // The resize reads the pointer as if the points had never been carried, and the result is carried after.
+    const pointer = { x: local.x - g.offset.x, y: local.y - g.offset.y };
     let network: VectorNetwork;
-    if (g.kind === 'resize') {
-      const edges = computeResize({ box: g.box, handle: g.handle, pointer: local, start: g.startLocal, keepAspect: p.shift, fromCenter: p.alt });
+    if (this.spaceHeld) {
+      network = g.shaped ?? g.start;
+    } else if (g.kind === 'resize') {
+      const edges = computeResize({ box: g.box, handle: g.handle, pointer, start: g.startLocal, keepAspect: p.shift, fromCenter: p.alt });
       network = scalePoints(g.start, g.vertices, g.box, edges);
     } else {
       const pivot = { x: g.box.x + g.box.width / 2, y: g.box.y + g.box.height / 2 };
-      let angle = Math.atan2(local.y - pivot.y, local.x - pivot.x) - Math.atan2(g.startLocal.y - pivot.y, g.startLocal.x - pivot.x);
+      let angle = Math.atan2(pointer.y - pivot.y, pointer.x - pivot.x) - Math.atan2(g.startLocal.y - pivot.y, g.startLocal.x - pivot.x);
       if (p.shift) angle = Math.round(angle / (Math.PI / 12)) * (Math.PI / 12);
       network = rotatePoints(g.start, g.vertices, pivot, angle);
     }
+    if (!this.spaceHeld) g.shaped = network;
+    if (g.offset.x !== 0 || g.offset.y !== 0) network = moveVertices(network, g.vertices, g.offset);
     refitVector(g.tx, state.nodeId, network, g.startTransform);
     g.tx.flushPreview();
     this.editor.requestRender();

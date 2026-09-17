@@ -33,10 +33,7 @@ const NAVIGATION_KEYS: ReadonlySet<string> = new Set(['Tab', 'Enter', 'ArrowUp',
 
 /** Focus is on the canvas or nowhere in particular (the page body). */
 const isCanvasContext = (target: EventTarget | null): boolean =>
-  target === null ||
-  target === document.body ||
-  target === document.documentElement ||
-  (target instanceof Element && target.closest('[data-canvas-host]') !== null);
+  target === null || target === document.body || target === document.documentElement || (target instanceof Element && target.closest('[data-canvas-host]') !== null);
 
 /** Focused controls where Space/Enter activate the control rather than the hand tool. */
 const isActivatableTarget = (target: EventTarget | null): boolean =>
@@ -60,7 +57,12 @@ export class KeyboardController {
     private readonly tools: ToolManager,
     private readonly target: Window = window,
   ) {
-    const defaults = new Map(editor.commands.all().filter((c) => c.shortcuts?.length).map((c) => [c.id, c.shortcuts!]));
+    const defaults = new Map(
+      editor.commands
+        .all()
+        .filter((c) => c.shortcuts?.length)
+        .map((c) => [c.id, c.shortcuts!]),
+    );
     this.keymap.setBindings(defaults);
     target.addEventListener('keydown', this.onKeyDown);
     target.addEventListener('keyup', this.onKeyUp);
@@ -95,7 +97,9 @@ export class KeyboardController {
       }
       if (!this.spaceDown && !e.repeat) {
         this.spaceDown = true;
-        this.editor.state.springTool('hand');
+        // Mid-drag, Space carries what is being dragged; with nothing running it holds the Hand tool.
+        if (this.tools.gestureRunning) this.tools.setSpaceHeld(true);
+        else this.editor.state.springTool('hand');
       }
       return;
     }
@@ -129,6 +133,7 @@ export class KeyboardController {
     this.tools.modifiersChanged({ shift: e.shiftKey, alt: e.altKey, mod: IS_MAC ? e.metaKey : e.ctrlKey, ctrl: e.ctrlKey });
     if (e.code === 'Space' && this.spaceDown) {
       this.spaceDown = false;
+      this.tools.setSpaceHeld(false);
       if (!this.tools.tool.active) this.editor.state.releaseSpring();
     }
   };
@@ -136,6 +141,7 @@ export class KeyboardController {
   private readonly onBlur = (): void => {
     if (this.spaceDown) {
       this.spaceDown = false;
+      this.tools.setSpaceHeld(false);
       this.editor.state.releaseSpring();
     }
   };

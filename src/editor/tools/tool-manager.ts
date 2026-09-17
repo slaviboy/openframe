@@ -215,6 +215,19 @@ export class ToolManager {
     return (this.pointerTool ?? this.tool).snapGuides ?? [];
   }
 
+  /**
+   * Space is held. While a gesture is running it carries what is being dragged about instead of springing the
+   * Hand tool, which is what lets a resize or a turn be repositioned without letting go.
+   */
+  setSpaceHeld(held: boolean): void {
+    this.vectorEdit.setSpaceHeld(held);
+  }
+
+  /** Whether some tool has a gesture running, which is what Space carries rather than panning the canvas. */
+  get gestureRunning(): boolean {
+    return this.vectorEdit.active || (this.pointerTool ?? this.tool).active;
+  }
+
   /** Rulers (and with them, ruler guides) are shown and interactive. Set by the UI. */
   setRulersVisible(visible: boolean): void {
     if (this.rulersVisible === visible) return;

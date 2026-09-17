@@ -58,16 +58,19 @@ beforeEach(() => {
   id = editor.history.run('create', (tx) => {
     const vectorId = editor.ids.next();
     tx.create(
-      makeVector({ id: vectorId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'Vector', x: 100, y: 100, width: 100, height: 100 }, {
-        vertices: [
-          { x: 0, y: 0 },
-          { x: 100, y: 0 },
-          { x: 100, y: 100 },
-          { x: 0, y: 100 },
-        ],
-        segments: [straightSegment(0, 1), straightSegment(1, 2), straightSegment(2, 3), straightSegment(3, 0)],
-        regions: [{ loops: [[0, 1, 2, 3]], windingRule: 'NONZERO' }],
-      }),
+      makeVector(
+        { id: vectorId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'Vector', x: 100, y: 100, width: 100, height: 100 },
+        {
+          vertices: [
+            { x: 0, y: 0 },
+            { x: 100, y: 0 },
+            { x: 100, y: 100 },
+            { x: 0, y: 100 },
+          ],
+          segments: [straightSegment(0, 1), straightSegment(1, 2), straightSegment(2, 3), straightSegment(3, 0)],
+          regions: [{ loops: [[0, 1, 2, 3]], windingRule: 'NONZERO' }],
+        },
+      ),
     );
     return vectorId;
   });
@@ -107,5 +110,29 @@ describe("the selected points' bounding box", () => {
     drag([200, 100], [220, 100]);
     expect(node().size).toEqual({ width: 100, height: 100 });
     expect(node().transform[4]).toBe(120);
+  });
+});
+
+describe('holding Space while dragging the box', () => {
+  test('Space carries the points instead of resizing them, and letting go resizes again', () => {
+    const before = node();
+    // Press the right edge's handle and start a resize. The corners are points, so the edge is what grabs the box.
+    tools.pointerDown(sample(200, 150));
+    tools.pointerMove(sample(220, 150));
+    expect(node().size.width).toBeGreaterThan(before.size.width);
+
+    // With Space held the points keep their size and travel with the pointer.
+    tools.setSpaceHeld(true);
+    const carried = node().size;
+    const at = node().transform[4];
+    tools.pointerMove(sample(260, 150));
+    expect(node().size).toEqual(carried);
+    expect(node().transform[4]).toBeGreaterThan(at);
+
+    // Letting Space go picks the resize up again from where the points now are.
+    tools.setSpaceHeld(false);
+    tools.pointerMove(sample(300, 150));
+    expect(node().size.width).toBeGreaterThan(carried.width);
+    tools.pointerUp(sample(300, 150));
   });
 });

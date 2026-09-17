@@ -16,7 +16,7 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { createEmptyDocument, keyOnTop, makeVector } from '@/core/document/factory';
+import { createEmptyDocument, keyOnTop, makeFrame, makeStar, makeVector } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
 import type { VectorNode } from '@/core/schema/document';
 import { straightSegment } from '@/core/vector/vector-network';
@@ -58,16 +58,19 @@ beforeEach(() => {
   id = editor.history.run('create', (tx) => {
     const vectorId = editor.ids.next();
     tx.create(
-      makeVector({ id: vectorId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'Vector', x: 100, y: 100, width: 100, height: 100 }, {
-        vertices: [
-          { x: 0, y: 0 },
-          { x: 100, y: 0 },
-          { x: 100, y: 100 },
-          { x: 0, y: 100 },
-        ],
-        segments: [straightSegment(0, 1), straightSegment(1, 2), straightSegment(2, 3), straightSegment(3, 0)],
-        regions: [{ loops: [[0, 1, 2, 3]], windingRule: 'NONZERO' }],
-      }),
+      makeVector(
+        { id: vectorId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'Vector', x: 100, y: 100, width: 100, height: 100 },
+        {
+          vertices: [
+            { x: 0, y: 0 },
+            { x: 100, y: 0 },
+            { x: 100, y: 100 },
+            { x: 0, y: 100 },
+          ],
+          segments: [straightSegment(0, 1), straightSegment(1, 2), straightSegment(2, 3), straightSegment(3, 0)],
+          regions: [{ loops: [[0, 1, 2, 3]], windingRule: 'NONZERO' }],
+        },
+      ),
     );
     return vectorId;
   });
@@ -115,5 +118,44 @@ describe('vector edit mode', () => {
     beginVectorEdit(editor, id);
     editor.state.select([]);
     expect(editState()).toBeNull();
+  });
+});
+
+describe('editing the points of a shape that is not a vector layer', () => {
+  test('a star becomes a vector layer of the same outline, in its place, with its appearance', () => {
+    const star = editor.history.run('star', (tx) => {
+      const starId = editor.ids.next();
+      const node = makeStar({ id: starId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'Star 1', x: 40, y: 60, width: 80, height: 80 });
+      tx.create({ ...node, opacity: 0.5 });
+      return starId;
+    });
+    editor.state.select([star]);
+    expect(beginVectorEdit(editor, star)).toBe(true);
+
+    const id = editor.state.getSnapshot().vectorEdit!.nodeId;
+    const node = editor.doc.getOrThrow(id) as VectorNode;
+    expect(node.type).toBe('VECTOR');
+    expect(editor.doc.has(star)).toBe(false);
+    expect(node.name).toBe('Star 1');
+    expect(node.opacity).toBe(0.5);
+    expect(node.size).toEqual({ width: 80, height: 80 });
+    expect([node.transform[4], node.transform[5]]).toEqual([40, 60]);
+    // A star has ten points around it, which are now the layer's own.
+    expect(node.vectorNetwork.vertices).toHaveLength(10);
+
+    // One undo puts the star back.
+    editor.history.undo();
+    expect(editor.doc.getOrThrow(star).type).toBe('STAR');
+  });
+
+  test('a layer that holds other layers is left alone, so a frame keeps its contents', () => {
+    const frame = editor.history.run('frame', (tx) => {
+      const frameId = editor.ids.next();
+      tx.create(makeFrame({ id: frameId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'F', x: 0, y: 0, width: 10, height: 10 }));
+      return frameId;
+    });
+    expect(beginVectorEdit(editor, frame)).toBe(false);
+    expect(editor.doc.getOrThrow(frame).type).toBe('FRAME');
+    expect(editor.state.getSnapshot().vectorEdit).toBeNull();
   });
 });
