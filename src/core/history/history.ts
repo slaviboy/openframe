@@ -191,6 +191,8 @@ export interface HistoryOptions<Meta> {
    * drag live. They must be safe to run repeatedly (compute from the ops' original values).
    */
   previewFinalizers?: Finalizer[];
+  /** Runs before a transaction starts, so a preview of the document (Motion's playhead) can stand down for the edit. */
+  beforeBegin?: () => void;
   /** Development invariant check run after every change. */
   validate?: (store: DocumentStore) => void;
   limit?: number;
@@ -251,6 +253,7 @@ export class History<Meta> {
   private activeUndoable = true;
 
   begin(label: string, options: TransactionOptions = {}): Transaction {
+    this.options.beforeBegin?.();
     if (this.active) throw new Error(`Cannot begin "${label}": "${this.active.tx.label}" is still active`);
     const tx = new Transaction(
       this.store,

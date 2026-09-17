@@ -85,10 +85,14 @@ export class KeyboardController {
     if (isEditableTarget(e.target)) return;
 
     if (e.defaultPrevented) return;
-    // Space holds the Hand tool; ⇧Space is a shortcut (Preview).
+    // Space holds the Hand tool; ⇧Space is a shortcut (Preview). In Motion it plays the animation instead.
     if (e.code === 'Space' && !e.shiftKey) {
       if (isActivatableTarget(e.target)) return;
       e.preventDefault();
+      if (this.editor.state.getSnapshot().mode === 'motion') {
+        if (!e.repeat) this.editor.commands.run('motion.playPause');
+        return;
+      }
       if (!this.spaceDown && !e.repeat) {
         this.spaceDown = true;
         this.editor.state.springTool('hand');

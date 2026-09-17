@@ -337,6 +337,15 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     run: (e) => ungroupSelection(e, { types: ['SECTION'], label: 'Remove section', allowEmpty: true }),
   },
   {
+    id: 'motion.playPause',
+    label: 'Play animation',
+    category: 'View',
+    // Space runs it from the keyboard controller, which holds the Hand tool with Space everywhere else.
+    enabled: (e) => e.state.getSnapshot().mode === 'motion',
+    checked: (e) => e.state.getSnapshot().motion.playing,
+    run: (e) => e.state.setMotion({ playing: !e.state.getSnapshot().motion.playing }),
+  },
+  {
     id: 'object.radialRepeat',
     label: 'Add radial repeat',
     category: 'Object',

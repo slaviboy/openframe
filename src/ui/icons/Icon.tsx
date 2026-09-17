@@ -117,6 +117,8 @@ const STROKE = {
 } as const;
 
 const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: ReactElement }> = {
+  pause: { viewBox: 24, body: <path fill="currentColor" d="M9 6a.5.5 0 0 1 .5.5v11a.5.5 0 0 1-1 0v-11A.5.5 0 0 1 9 6m6 0a.5.5 0 0 1 .5.5v11a.5.5 0 0 1-1 0v-11A.5.5 0 0 1 15 6" /> },
+  keyframe: { viewBox: 24, body: <path fill="currentColor" d="M11.293 6.293a1 1 0 0 1 1.414 0l5 5a1 1 0 0 1 0 1.414l-5 5a1 1 0 0 1-1.414 0l-5-5a1 1 0 0 1 0-1.414zM12 7.207 7.207 12 12 16.793 16.793 12z" /> },
   strokeWeight: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M6 6.5a.5.5 0 0 1 .5-.5h11a.5.5 0 0 1 0 1h-11a.5.5 0 0 1-.5-.5M7 10v1h10v-1zm-.25-1a.75.75 0 0 0-.75.75v1.5c0 .414.336.75.75.75h10.5a.75.75 0 0 0 .75-.75v-1.5a.75.75 0 0 0-.75-.75zM7 17v-2h10v2zm-1-2.25a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 .75.75v2.5a.75.75 0 0 1-.75.75H6.75a.75.75 0 0 1-.75-.75z" /> },
   more: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M7 11.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m6 0a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m4.5 1.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3" /> },
   rotation: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M9 8.5a.5.5 0 0 0-1 0v7a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 0-1H13a4 4 0 0 0-4-4zM9 12v3h3a3 3 0 0 0-3-3" /> },
@@ -577,6 +579,8 @@ const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: Rea
 };
 
 type FilledName =
+  | 'pause'
+  | 'keyframe'
   | 'strokeWeight'
   | 'more'
   | 'rotation'

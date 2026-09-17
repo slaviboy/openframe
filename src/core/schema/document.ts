@@ -611,10 +611,37 @@ export const DocumentNodeSchema = z.object({
 export const GuideSchema = z.object({ axis: z.enum(['X', 'Y']), offset: finite });
 const GuidesField = z.array(GuideSchema).max(10_000).optional();
 
+/** The properties Motion animates: a layer's place, its size, how far it is turned, and how visible it is. */
+export const AnimatedPropertySchema = z.enum(['x', 'y', 'width', 'height', 'rotation', 'opacity']);
+
+/** A value a layer's property takes at a moment in the animation. */
+export const KeyframeSchema = z.object({
+  /** Milliseconds from the animation's start. */
+  time: z.number().int().min(0).max(600_000),
+  value: z.number().finite(),
+});
+
+/** One property of one layer over time: its keyframes, earliest first. */
+export const AnimationTrackSchema = z.object({
+  nodeId: IdSchema,
+  property: AnimatedPropertySchema,
+  keyframes: z.array(KeyframeSchema).min(1).max(1000),
+});
+
+/** A page's animation: how long it runs, how it plays, and the tracks it holds. */
+export const PageAnimationSchema = z.object({
+  /** Milliseconds; a new animation is 2000 ms long. */
+  duration: z.number().int().min(1).max(600_000),
+  playback: z.enum(['LOOP', 'ONCE', 'PING_PONG']),
+  tracks: z.array(AnimationTrackSchema).max(2000),
+});
+
 export const PageNodeSchema = z.object({
   ...BaseNodeFields,
   type: z.literal('PAGE'),
   backgroundColor: ColorSchema,
+  /** Motion: the animation on this page. Absent until something is animated. */
+  animation: PageAnimationSchema.optional(),
   /** Canvas guides. Absent when the page has none. */
   guides: GuidesField,
   /** Variable modes set on the page, by collection id. */
@@ -1186,6 +1213,10 @@ export type CornerRadii = z.infer<typeof CornerRadiiSchema>;
 export type DocumentNode = z.infer<typeof DocumentNodeSchema>;
 export type PageNode = z.infer<typeof PageNodeSchema>;
 export type RepeatTransform = z.infer<typeof RepeatTransformSchema>;
+export type AnimatedProperty = z.infer<typeof AnimatedPropertySchema>;
+export type Keyframe = z.infer<typeof KeyframeSchema>;
+export type AnimationTrack = z.infer<typeof AnimationTrackSchema>;
+export type PageAnimation = z.infer<typeof PageAnimationSchema>;
 export type StyleNode = z.infer<typeof StyleNodeSchema>;
 export type BrushNode = z.infer<typeof BrushNodeSchema>;
 export type BrushKind = BrushNode['brushKind'];

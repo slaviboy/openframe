@@ -114,6 +114,9 @@ export class Editor {
   /** Layer thumbnails from the rendering engine (Assets grid); installed by the canvas host once the engine loads. */
   thumbnails: ThumbnailService | null = null;
 
+  /** Motion's preview of the animation at the playhead; it stands down whenever the document is edited. */
+  motionPreview: { clear(): void } | null = null;
+
   setThumbnails(thumbnails: ThumbnailService | null): void {
     this.thumbnails = thumbnails;
   }
@@ -171,6 +174,8 @@ export class Editor {
     this.history = new History<EditorMeta>({
       store: this.doc,
       isReadOnly: () => readOnly,
+      // Motion shows the animation at the playhead as a preview; an edit takes the document back first.
+      beforeBegin: () => this.motionPreview?.clear(),
       captureMeta: () => ({ pageId: this.state.activePageId, selection: this.state.selection }),
       restoreMeta: (meta) => {
         if (this.doc.has(meta.pageId) && meta.pageId !== this.state.activePageId) this.state.setActivePage(meta.pageId);

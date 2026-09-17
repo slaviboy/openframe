@@ -538,3 +538,10 @@
 .presetSize {
   color: var(--fg-secondary);
 }
+
+/* Motion: a field with its keyframe diamond beside it. */
+.motionRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--control-h);
+  align-items: center;
+}

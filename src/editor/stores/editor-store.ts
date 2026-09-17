@@ -30,6 +30,21 @@ export type ToolId = 'move' | 'hand' | 'scale' | 'frame' | 'section' | 'slice' |
 export type ScaleAnchor = 'nw' | 'n' | 'ne' | 'w' | 'c' | 'e' | 'sw' | 's' | 'se';
 export type EditorMode = 'design' | 'draw' | 'dev' | 'motion';
 
+/** The timeline's own state, which belongs to this editing session rather than the file. */
+export interface MotionState {
+  /** The playhead, in milliseconds from the animation's start. */
+  readonly time: number;
+  readonly playing: boolean;
+  /** Auto-keyframe: a change to a layer is recorded as a keyframe at the playhead. */
+  readonly autoKeyframe: boolean;
+  /** The unit the timeline counts in. */
+  readonly unit: 'MS' | 'S';
+  /** The layer tracks are collapsed to one row each. */
+  readonly collapsed: boolean;
+}
+
+export const DEFAULT_MOTION: MotionState = { time: 0, playing: false, autoKeyframe: false, unit: 'MS', collapsed: false };
+
 /** A sketch's stroke: its color, how thick it is, whether it is dashed, and the Brush's hand-drawn bumps. */
 export interface SketchStroke {
   readonly color: Color;
@@ -73,6 +88,8 @@ export interface EditorState {
   readonly mode: EditorMode;
   /** The stroke the Pencil gives a new sketch: set in its secondary toolbar, or sampled from a stroke with ⌘-click. */
   readonly sketchStroke: SketchStroke;
+  /** Motion: where the timeline's playhead is and how it is playing (the animation itself is on the page). */
+  readonly motion: MotionState;
   readonly rightTab: RightPanelTab;
   readonly viewports: Readonly<Record<Id, Viewport>>;
   /** Layer rows expanded in the layers panel. */
@@ -186,6 +203,7 @@ export class EditorStore extends Observable<EditorState> {
       spring: null,
       mode: 'design',
       sketchStroke: DEFAULT_SKETCH_STROKE,
+      motion: DEFAULT_MOTION,
       rightTab: 'design',
       viewports: {},
       expanded: new Set(),
@@ -356,6 +374,10 @@ export class EditorStore extends Observable<EditorState> {
 
   releaseSpring(): void {
     if (this.state.spring) this.setState({ tool: this.state.spring, spring: null });
+  }
+
+  setMotion(patch: Partial<MotionState>): void {
+    this.setState({ motion: { ...this.state.motion, ...patch } });
   }
 
   setSketchStroke(patch: Partial<SketchStroke>): void {

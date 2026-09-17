@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { useCallback, useLayoutEffect, useRef, useState, useSyncExternalStore, type ButtonHTMLAttributes, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import type { AppSession } from '@/app/bootstrap';
 import { formatShortcut } from '@/editor/keymap/keymap';
 import { applyUpdate, updates } from '@/platform/sw-register';
@@ -32,6 +32,8 @@ import { PagesPanel } from '../panels/pages/PagesPanel';
 import { VariablesView } from '../panels/variables/VariablesView';
 import { VersionHistoryPanel } from '../panels/versions/VersionHistoryPanel';
 import { PrototypePanel } from '../panels/prototype/PrototypePanel';
+import { TimelinePanel } from '../panels/motion/TimelinePanel';
+import { MotionPreview } from '@/editor/motion/preview';
 import { InlinePreview } from '../present/InlinePreview';
 import { Menu, type MenuEntry } from '../primitives/Menu';
 import { PropertyLabelsContext } from '../primitives/property-labels';
@@ -87,10 +89,21 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
       }
     }
     document.documentElement.dataset['mode'] = mode;
-    if (mode === 'design' || mode === 'draw') viewPrefs.set({ mode });
+    if (mode === 'design' || mode === 'draw' || mode === 'motion') viewPrefs.set({ mode });
   }, [mode, editorState]);
   // Version history replaces the properties panel while it is open, and while an earlier version is shown.
   const inVersionHistory = versionHistoryOpen || viewingVersion;
+
+  // Motion: the canvas shows the animation where the playhead is, as a preview the file never takes.
+  const motionTime = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().motion.time);
+  const revision = useSyncExternalStore((cb) => session.editor.history.subscribe(() => cb()), () => session.editor.doc.rev);
+  const preview = useRef<MotionPreview | null>(null);
+  useEffect(() => {
+    preview.current ??= new MotionPreview(session.editor);
+    if (mode === 'motion') preview.current.show(motionTime);
+    else preview.current.clear();
+  }, [session, mode, motionTime, revision]);
+  useEffect(() => () => preview.current?.dispose(), []);
 
   const showLeft = uiMode === 'full';
   const showRight = uiMode === 'full' || (uiMode === 'minimized' && (hasSelection || inVersionHistory));
@@ -192,6 +205,7 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
             <ResizeHandle label="Resize properties panel" side="start" width={rightWidth} min={SIDEBAR_RIGHT_MIN} max={SIDEBAR_RIGHT_MAX} onWidth={setRightWidth} />
           </aside>
         )}
+        {mode === 'motion' && uiMode !== 'hidden' && <TimelinePanel />}
         {uiMode !== 'hidden' && <Toolbar />}
         {inlinePreviewOpen && uiMode !== 'hidden' && <InlinePreview key={inlinePreviewKey} />}
         {variablesOpen && uiMode !== 'hidden' && <VariablesView onClose={() => editorState.setVariablesOpen(false)} />}

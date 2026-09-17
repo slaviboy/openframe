@@ -42,6 +42,9 @@ import { moveItem } from '@/core/collections/move-item';
 import { DEFAULT_DYNAMIC_STROKE } from '@/core/vector/dynamic-stroke';
 import { applyBrush, localBrushes } from '@/editor/commands/brushes';
 import { addRepeatTransform, applyTransforms, removeRepeatTransform, setRepeatTransform } from '@/editor/commands/transforms';
+import { addKeyframe, deleteKeyframe, hasKeyframe, isAnimated } from '@/editor/commands/motion';
+import { ANIMATED_PROPERTY_LABELS } from '@/core/motion/animation';
+import type { AnimatedProperty } from '@/core/schema/document';
 import { IOS_CORNER_SMOOTHING } from '@/core/geometry/corners';
 import { backgroundColorBehind } from '@/core/color/contrast';
 import { useColorProfile } from '../../hooks/useColorProfile';
@@ -713,6 +716,40 @@ function SliderRow({ label, min, max, value, gesture, onChange }: { label: strin
   );
 }
 
+/**
+ * Motion: the diamond beside a property that can be animated. It adds a keyframe at the playhead for what the layers
+ * are now, and takes one away where there already is one.
+ */
+function KeyframeButton({ nodes, property }: { nodes: readonly SceneNode[]; property: AnimatedProperty }) {
+  const editor = useEditor();
+  const time = useEditorState((s) => s.motion.time);
+  useDocumentRevision();
+  const ids = nodes.map((n) => n.id);
+  const at = ids.length > 0 && ids.every((id) => hasKeyframe(editor, id, property, time));
+  const animated = ids.some((id) => isAnimated(editor, id, property));
+  return (
+    <IconButton
+      icon="keyframe"
+      label={`${at ? 'Delete' : 'Add'} ${ANIMATED_PROPERTY_LABELS[property].toLowerCase()} keyframe`}
+      tooltip={at ? 'Delete keyframe' : 'Add keyframe'}
+      pressed={at}
+      data-animated={animated || undefined}
+      onClick={() => (at ? deleteKeyframe(editor, ids, property, time) : addKeyframe(editor, ids, property, time))}
+    />
+  );
+}
+
+/** A field with its keyframe diamond beside it while Motion is on; the plain field otherwise. */
+function MotionField({ nodes, property, motion, children }: { nodes: readonly SceneNode[]; property: AnimatedProperty; motion: boolean; children: ReactNode }) {
+  if (!motion) return <>{children}</>;
+  return (
+    <span className={styles.motionRow}>
+      {children}
+      <KeyframeButton nodes={nodes} property={property} />
+    </span>
+  );
+}
+
 /** A sidebar section; `styleAction` (the Apply styles button) sits before the actions, and `applied` (the applied style) above the body. */
 function Section({ title, actions, styleAction, applied, children }: { title: string; actions?: ReactNode; styleAction?: ReactNode; applied?: ReactNode; children?: ReactNode }) {
   return (
@@ -813,7 +850,18 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
   const ratio = useGesture('Change star ratio');
   const tool = useEditorState((s) => s.tool);
   // Draw mode: the illustration properties also take a slider, to balance feel against exact values.
-  const draw = useEditorState((s) => s.mode) === 'draw';
+  const mode = useEditorState((s) => s.mode);
+  const draw = mode === 'draw';
+  // Motion mode: the properties that can be animated take a keyframe diamond, and editing an animated one at the
+  // playhead records a keyframe there rather than moving the layer itself.
+  const motion = mode === 'motion';
+  const motionTime = useEditorState((s) => s.motion.time);
+  const keyframes =
+    (property: AnimatedProperty, apply: (value: number) => void, toKeyframe: (value: number) => number = (value) => value) =>
+    (value: number) => {
+      if (motion && nodes.length > 0 && nodes.every((n) => isAnimated(editor, n.id, property))) addKeyframe(editor, nodes.map((n) => n.id), property, motionTime, toKeyframe(value));
+      else apply(value);
+    };
   const spacing = useGesture('Change spacing');
   const smart = smartSelectionInfo(editor);
 
@@ -900,22 +948,28 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       <Section title="Position">
         <AlignRow />
         <div className={styles.grid2}>
-          <NumberField label="X" ariaLabel="X position" tooltip="X-position" testId="field-x" value={x} onGestureStart={move.start} onGestureEnd={move.end} onChange={(v) => setAxis('x', v)} />
-          <NumberField label="Y" ariaLabel="Y position" tooltip="Y-position" testId="field-y" value={y} onGestureStart={move.start} onGestureEnd={move.end} onChange={(v) => setAxis('y', v)} />
+          <MotionField nodes={nodes} property="x" motion={motion}>
+            <NumberField label="X" ariaLabel="X position" tooltip="X-position" testId="field-x" value={x} onGestureStart={move.start} onGestureEnd={move.end} onChange={keyframes('x', (v) => setAxis('x', v))} />
+          </MotionField>
+          <MotionField nodes={nodes} property="y" motion={motion}>
+            <NumberField label="Y" ariaLabel="Y position" tooltip="Y-position" testId="field-y" value={y} onGestureStart={move.start} onGestureEnd={move.end} onChange={keyframes('y', (v) => setAxis('y', v))} />
+          </MotionField>
         </div>
         {/* Sections never rotate or flip. */}
         {!hasSection && (
           <div className={styles.row}>
-            <NumberField
-              label={<Icon name="rotation" />}
-              ariaLabel="Rotation"
-              testId="field-rotation"
-              suffix="°"
-              value={val(shared(nodes, rotationDegrees))}
-              onGestureStart={rotate.start}
-              onGestureEnd={rotate.end}
-              onChange={(deg) => rotate.change((tx) => nodes.forEach((n) => setRotation(tx, tx.store.getOrThrow(n.id) as SceneNode, deg)))}
-            />
+            <MotionField nodes={nodes} property="rotation" motion={motion}>
+              <NumberField
+                label={<Icon name="rotation" />}
+                ariaLabel="Rotation"
+                testId="field-rotation"
+                suffix="°"
+                value={val(shared(nodes, rotationDegrees))}
+                onGestureStart={rotate.start}
+                onGestureEnd={rotate.end}
+                onChange={keyframes('rotation', (deg) => rotate.change((tx) => nodes.forEach((n) => setRotation(tx, tx.store.getOrThrow(n.id) as SceneNode, deg))))}
+              />
+            </MotionField>
             <div className={styles.segmented}>
               <SegmentButton
                 icon="rotate90"
@@ -972,6 +1026,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       </Section>
       <Section title="Layout">
         <div className={styles.row}>
+          <MotionField nodes={nodes} property="width" motion={motion}>
           <VariableNumberField
             nodes={nodes}
             field="width"
@@ -982,8 +1037,10 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             value={val(shared(nodes, (n) => n.size.width))}
             onGestureStart={resize.start}
             onGestureEnd={resize.end}
-            onChange={(v) => resize.change((tx) => nodes.forEach((n) => setSize(tx, n, 'width', v)))}
+            onChange={keyframes('width', (v) => resize.change((tx) => nodes.forEach((n) => setSize(tx, n, 'width', v))))}
           />
+          </MotionField>
+          <MotionField nodes={nodes} property="height" motion={motion}>
           <VariableNumberField
             nodes={nodes}
             field="height"
@@ -995,8 +1052,9 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             value={val(shared(nodes, (n) => n.size.height))}
             onGestureStart={resize.start}
             onGestureEnd={resize.end}
-            onChange={(v) => resize.change((tx) => nodes.forEach((n) => setSize(tx, n, 'height', v)))}
+            onChange={keyframes('height', (v) => resize.change((tx) => nodes.forEach((n) => setSize(tx, n, 'height', v))))}
           />
+          </MotionField>
           {/* Lines have no height, so no proportions to keep. */}
           {lines.length === 0 ? (
             <IconButton
@@ -1072,6 +1130,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         }
         actions={bindable && single ? <PropertyBinding layerId={single.id} type="BOOLEAN" /> : undefined}>
         <div className={styles.row}>
+          <MotionField nodes={nodes} property="opacity" motion={motion}>
           <VariableNumberField
             nodes={nodes}
             field="opacity"
@@ -1085,8 +1144,9 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             value={val(shared(nodes, (n) => Math.round(n.opacity * 100)))}
             onGestureStart={appearance.start}
             onGestureEnd={appearance.end}
-            onChange={(v) => appearance.change((tx) => nodes.forEach((n) => setOpacity(tx, n, v)))}
+            onChange={keyframes('opacity', (v) => appearance.change((tx) => nodes.forEach((n) => setOpacity(tx, n, v))), (v) => v / 100)}
           />
+          </MotionField>
           {radiusNodes.length === nodes.length ? (
             <VariableNumberField
               nodes={radiusNodes}

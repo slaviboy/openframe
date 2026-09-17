@@ -158,7 +158,7 @@ const DRAW_GROUPS: readonly ToolGroup[] = [
   },
 ];
 
-/** The toolbar's mode switcher. Motion and Dev Mode arrive with M12 and M13. */
+/** The toolbar's mode switcher. Dev Mode arrives with M13. */
 const MODES: readonly {
   readonly mode: EditorMode;
   readonly label: string;
@@ -167,7 +167,7 @@ const MODES: readonly {
 }[] = [
   { mode: 'draw', label: 'Draw', icon: 'modeDraw', available: true },
   { mode: 'design', label: 'Design', icon: 'modeDesign', available: true },
-  { mode: 'motion', label: 'Motion', icon: 'modeMotion', available: false },
+  { mode: 'motion', label: 'Motion', icon: 'modeMotion', available: true },
   { mode: 'dev', label: 'Dev Mode', icon: 'modeDev', available: false },
 ];
 

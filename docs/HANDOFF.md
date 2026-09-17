@@ -273,15 +273,17 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 - Transforms (row 255, finishing M11's planned rows): `repeat` on a group says how its contents repeat — `repeatMatrices` (`src/core/geometry/repeat.ts`) gives the copies' matrices, radial turning about the middle of the group over an angle (the full circle shared between the copies), linear stepping along x or y. The renderer draws the children once per matrix, so no layers are made until `applyTransforms` duplicates them into place. Draw mode's Transform section holds the modifier menu, the settings and Apply transforms to selection. Two things to know: a group's `children` array is live, so `applyTransforms` snapshots it before duplicating (otherwise each pass repeats the previous pass's copies), and the editor now opens in the mode it was left in (`mode` in view prefs; `EditorShell` restores it before it starts saving it, or the first render would overwrite the stored value).
 
+- **M12 began here.** The timeline and keyframes (rows 262–264): an animation lives on the page — `duration`, `playback` and tracks of keyframes per layer property — with `src/core/motion/animation.ts` holding the reading (`valueAt`, `valuesAt`, `playheadAt`) and the editing (`setKeyframe`, `removeKeyframe`). `MotionPreview` (`src/editor/motion/preview.ts`) shows the animation at the playhead as an open preview transaction the file never takes; since only one transaction may be open, `History` gained a `beforeBegin` hook and the editor clears the preview through `editor.motionPreview` before any edit starts, with `EditorShell` re-applying it after. `TimelinePanel` is the panel; the properties panel's diamonds come from `MotionField` / `KeyframeButton`, and typing in an animated field records a keyframe at the playhead instead of moving the layer (opacity converts between the panel's percentage and the file's share of one). Space plays in Motion mode, handled in the keyboard controller before it holds the Hand tool.
+
 ## In progress (uncommitted)
 
 Nothing. The working tree is clean apart from anything noted above.
 
-## Next (M10, in order)
+## Next (M12, in order)
 
-1. The pending sub-items left in the M10 rows of `docs/FEATURE_MATRIX.md`:
+M10 and M11 are finished: every row of theirs in `docs/FEATURE_MATRIX.md` is Implemented, bar the parts recorded as not possible offline. M12 is Motion mode — its ten rows in the matrix, in the order they are listed there, starting with the Timeline panel and the mode switcher's Motion option (Draw and Design already switch; Motion and Dev Mode still show without being choosable).
 
-**Stop after M10.** When every M10 row is finished and committed, stop and report to the user. Don't start M11 until the user says to continue. After that, M11–M15 follow `docs/FEATURE_MATRIX.md` (the rows marked Planned or In progress) in milestone order.
+The user asked for the milestones to be built one after another without stopping in between, so carry on into M13 when M12's rows are done.
 
 ## What's left, by milestone
 
