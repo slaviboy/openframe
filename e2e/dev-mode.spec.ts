@@ -357,3 +357,45 @@ test('Dev Mode lists what the page has to hand over, icons found by their shape 
   await assets.getByRole('button', { name: 'Select Ellipse 1' }).click();
   await expect(page.getByTestId('inspect-panel')).toContainText('Ellipse 1');
 });
+
+test('the playground turns a component property another way without touching the file', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 300, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 380, box.y + 380, { steps: 4 });
+  await page.mouse.up();
+  await page.keyboard.press('ControlOrMeta+Alt+K');
+
+  // A boolean property driving the rectangle's visibility.
+  await page.getByRole('button', { name: 'Create component property' }).click();
+  await page.getByRole('menuitem', { name: 'Boolean' }).click();
+  await page.getByRole('textbox', { name: 'New property name' }).fill('Show shape');
+  await page.getByRole('button', { name: 'Create property' }).click();
+  const component = page.getByRole('treeitem', { name: /Component 1/ });
+  await component.getByRole('button', { name: 'Expand', exact: true }).click();
+  await page.getByRole('treeitem', { name: /Rectangle/ }).click();
+  await page.getByRole('combobox', { name: 'Visibility property' }).selectOption('Show shape');
+
+  // An instance of it, inspected in Dev Mode.
+  await component.click({ position: { x: 60, y: 8 } });
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+  await page.keyboard.press('ControlOrMeta+D');
+  await expect(page.getByTestId('type-label')).toHaveText('Instance');
+  await page.keyboard.press('Shift+D');
+
+  const playground = page.getByRole('region', { name: 'Playground' });
+  await expect(playground).toBeVisible();
+  const toggle = playground.getByRole('checkbox', { name: 'Show shape in the playground' });
+  await expect(toggle).toBeChecked();
+  await toggle.uncheck();
+  await expect(toggle).not.toBeChecked();
+  await expect(page.getByRole('button', { name: 'Reset playground' })).toBeEnabled();
+
+  // None of it reaches the file: back in Design the instance still has the property on.
+  await page.getByRole('button', { name: 'Reset playground' }).click();
+  await page.keyboard.press('Shift+D');
+  await expect(page.getByRole('checkbox', { name: 'Show shape', exact: true })).toBeChecked();
+});

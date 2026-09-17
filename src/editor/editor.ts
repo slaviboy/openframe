@@ -118,6 +118,9 @@ export class Editor {
   /** Motion's preview of the animation at the playhead; it stands down whenever the document is edited. */
   motionPreview: { clear(): void } | null = null;
 
+  /** Dev Mode's playground shows a component's properties turned other ways; an edit takes the file back first. */
+  devPreview: { clear(): void } | null = null;
+
   setThumbnails(thumbnails: ThumbnailService | null): void {
     this.thumbnails = thumbnails;
   }
@@ -176,7 +179,10 @@ export class Editor {
       store: this.doc,
       isReadOnly: () => readOnly,
       // Motion shows the animation at the playhead as a preview; an edit takes the document back first.
-      beforeBegin: () => this.motionPreview?.clear(),
+      beforeBegin: () => {
+        this.motionPreview?.clear();
+        this.devPreview?.clear();
+      },
       captureMeta: () => ({ pageId: this.state.activePageId, selection: this.state.selection }),
       restoreMeta: (meta) => {
         if (this.doc.has(meta.pageId) && meta.pageId !== this.state.activePageId) this.state.setActivePage(meta.pageId);

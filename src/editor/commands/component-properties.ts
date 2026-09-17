@@ -40,7 +40,7 @@ import { selectedSceneNodes } from './selection-helpers';
 import { wrapNodes } from './structure';
 
 type Definitions = Readonly<Record<string, ComponentPropertyDefinition>>;
-type PropertyValue = boolean | string;
+export type PropertyValue = boolean | string;
 
 const sceneNode = (editor: Editor, id: Id): SceneNode | undefined => editor.doc.get(id) as SceneNode | undefined;
 
@@ -193,6 +193,26 @@ export function setInstanceProperty(editor: Editor, instanceId: Id, name: string
   if (definition.type === 'INSTANCE_SWAP' && !isMainComponent(sceneNode(editor, value as Id))) return false;
   editor.history.run('Change instance property', (tx) => bound.forEach(({ id, field }) => setBoundValue(tx, editor, id, field, value)));
   return true;
+}
+
+/**
+ * Dev Mode's playground: sets an instance's component properties inside a transaction of the caller's own, so they can
+ * be shown and then taken back. Nothing is committed here — the caller cancels the transaction to put the file back.
+ */
+export function previewInstanceProperties(editor: Editor, tx: Transaction, instanceId: Id, values: Readonly<Record<string, PropertyValue>>): boolean {
+  const instance = sceneNode(editor, instanceId);
+  if (!instance || !isInstance(instance)) return false;
+  const definitions = propertyDefinitions(propertyOwner(editor.doc, instanceId));
+  let applied = false;
+  for (const [name, value] of Object.entries(values)) {
+    const definition = definitions[name];
+    if (!definition || definition.type === 'SLOT' || typeof value !== typeof definition.defaultValue) continue;
+    for (const { id, field } of boundLayers(editor.doc, instanceId, name)) {
+      setBoundValue(tx, editor, id, field, value);
+      applied = true;
+    }
+  }
+  return applied;
 }
 
 /** Sets the preferred components of an instance swap property, offered first when swapping; an empty list removes them. One undo step. */

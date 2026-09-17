@@ -31,6 +31,7 @@ import { Icon } from '../../icons/Icon';
 import { layerIcon } from '../../icons/layer-icons';
 import { AnnotationsSection } from './AnnotationsSection';
 import { DevAssetsPanel } from './DevAssetsPanel';
+import { PlaygroundSection } from './PlaygroundSection';
 import styles from './InspectPanel.module.css';
 
 /** A measurement as Dev Mode reads it: whole pixels where it can, two decimals where it cannot. */
@@ -178,6 +179,7 @@ export function InspectPanel() {
         <Row label="Opacity" value={`${formatNumber(node.opacity * 100, 0)}%`} />
         <Row label="Blend mode" value={node.blendMode.toLowerCase().replace(/_/g, ' ')} />
       </Group>
+      <PlaygroundSection node={node} />
       <MotionSection node={node} />
       <VariablesSection node={node} />
       <DevResourcesSection node={node} />
