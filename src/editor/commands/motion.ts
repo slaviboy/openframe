@@ -16,7 +16,7 @@
  */
 
 import type { KeyframeRef } from '@/core/motion/animation';
-import { DEFAULT_ANIMATION, keyframeAt, moveKeyframe, pathSegmentAt, removeKeyframe, setCurve, setKeyframe, setKeyframeEasing, trackFor, valueAt } from '@/core/motion/animation';
+import { DEFAULT_ANIMATION, keyframeAt, layerExtent, retimeLayer, moveKeyframe, pathSegmentAt, removeKeyframe, setCurve, setKeyframe, setKeyframeEasing, trackFor, valueAt } from '@/core/motion/animation';
 import { presetById, PRESET_DURATION, type PresetBase } from '@/core/motion/presets';
 import type { Id } from '@/core/ids/ids';
 import { isSceneNode, type AnimatedProperty, type KeyframeEasing, type PageAnimation, type PageNode, type SceneNode } from '@/core/schema/document';
@@ -150,6 +150,23 @@ export function curveMotionPath(editor: Editor, nodeId: Id, from: number, offset
     },
     `curve:${nodeId}:${segment.from}`,
   );
+}
+
+/**
+ * Puts a layer's whole animation between two moments, moving and stretching every keyframe (and the bends between
+ * them) to fit. Dragging a track along the timeline or pulling either of its ends both come through here, and because
+ * it says where the track is to end up rather than how far to shift it, a drag can call it over and over.
+ */
+export function setLayerExtent(editor: Editor, nodeId: Id, from: number, to: number): boolean {
+  const extent = layerExtent(pageAnimation(editor), nodeId);
+  if (!extent) return false;
+  const start = Math.max(0, Math.round(from));
+  const end = Math.max(start, Math.round(to));
+  const width = extent.to - extent.from;
+  if (start === extent.from && end === extent.to) return false;
+  const factor = width === 0 ? 1 : (end - start) / width;
+  // A whole drag merges into one undo step.
+  return writeAnimation(editor, 'Retime track', (animation) => retimeLayer(animation, nodeId, (time) => start + (time - extent.from) * factor), `track:${nodeId}`);
 }
 
 /** Removes keyframes, as one undo step. */

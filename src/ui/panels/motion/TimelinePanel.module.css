@@ -51,6 +51,26 @@
   width: 72px;
 }
 
+/* Zoom sits at the far end of the controls, pushed there so it lines up with the right of the timeline. */
+.zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-left: auto;
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+}
+
+.zoom input {
+  width: 96px;
+}
+
+.zoom span {
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .body {
   flex: 1;
   min-height: 0;
@@ -111,6 +131,55 @@
 
 .layer[data-selected] {
   background: var(--bg-selected-child);
+}
+
+/* A layer's whole animation as one bar: dragged to move the track, its ends pulled to stretch it. */
+.spanLane {
+  position: relative;
+  height: 10px;
+  margin: 2px 0;
+}
+
+.span {
+  position: absolute;
+  top: 0;
+  height: 10px;
+  min-width: 6px;
+  border-radius: 5px;
+  background: var(--track-color, var(--accent));
+  opacity: 0.35;
+  cursor: grab;
+}
+
+.span:active {
+  cursor: grabbing;
+}
+
+.spanHandle {
+  position: absolute;
+  top: -2px;
+  width: 8px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--track-color, var(--accent));
+  cursor: ew-resize;
+}
+
+.spanHandle[data-end='from'] {
+  left: -4px;
+}
+
+.spanHandle[data-end='to'] {
+  right: -4px;
+}
+
+/* A component or one of its instances keeps its own color on the timeline, as it does in the layers panel. */
+.layer[data-component] {
+  --track-color: var(--accent-component);
+}
+
+.layer[data-component] .layerName {
+  color: var(--accent-component);
 }
 
 .layerName {

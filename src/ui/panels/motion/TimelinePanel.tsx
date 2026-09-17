@@ -15,15 +15,16 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent } from 'react';
-import { ANIMATED_PROPERTY_LABELS, animatedLayers, playheadAt, valueAt } from '@/core/motion/animation';
+import { useCallback, useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
+import { ANIMATED_PROPERTY_LABELS, animatedLayers, layerExtent, playheadAt, valueAt } from '@/core/motion/animation';
 import type { Id } from '@/core/ids/ids';
 import type { AnimationTrack, PageAnimation, PageNode, SceneNode } from '@/core/schema/document';
-import { animationOf, deleteKeyframes, moveKeyframes, setAnimationDuration, setAnimationPlayback, setSegmentEasing, type KeyframeRef } from '@/editor/commands/motion';
+import { animationOf, deleteKeyframes, moveKeyframes, setAnimationDuration, setAnimationPlayback, setLayerExtent, setSegmentEasing, type KeyframeRef } from '@/editor/commands/motion';
 import { EASING_LABELS, makeEasing } from '@/core/prototype/reactions';
 import type { KeyframeEasing } from '@/core/schema/document';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import { Icon } from '../../icons/Icon';
+import { layerIcon } from '../../icons/layer-icons';
 import { IconButton } from '../../primitives/IconButton';
 import { NumberField } from '../../primitives/NumberField';
 import primitives from '../../primitives/primitives.module.css';
@@ -32,6 +33,9 @@ import styles from './TimelinePanel.module.css';
 /** How the playback button reads, in the order clicking it cycles through. */
 const PLAYBACK_LABELS: Readonly<Record<PageAnimation['playback'], string>> = { LOOP: 'Loop', ONCE: 'Once', PING_PONG: 'Ping-pong' };
 const PLAYBACK_ORDER: readonly PageAnimation['playback'][] = ['LOOP', 'ONCE', 'PING_PONG'];
+
+/** How far the timeline zooms in: at 50 a 2000 ms animation shows 40 ms across. */
+const MAX_TIMELINE_ZOOM = 50;
 
 /** A time in the timeline's own unit, for the fields and the ruler. */
 const formatTime = (ms: number, unit: 'MS' | 'S') => (unit === 'MS' ? `${Math.round(ms)}` : (ms / 1000).toFixed(2));
@@ -50,6 +54,20 @@ export function TimelinePanel() {
   const animation = animationOf(page);
   const layers = useMemo(() => animatedLayers(animation), [animation]);
   const rulerRef = useRef<HTMLDivElement>(null);
+  // The timeline shows a window of the animation: the whole of it at zoom 1, and less the further it is zoomed in.
+  const span = animation.duration / Math.max(1, motion.zoom);
+  const offset = Math.min(Math.max(0, motion.offset), Math.max(0, animation.duration - span));
+  const percent = (time: number) => `${((time - offset) / span) * 100}%`;
+  /** Zooms to a factor, keeping the moment under `hold` (a share across the timeline) where it is. */
+  const zoomTo = useCallback(
+    (factor: number, hold = 0.5) => {
+      const next = Math.min(MAX_TIMELINE_ZOOM, Math.max(1, factor));
+      const nextSpan = animation.duration / next;
+      const at = offset + hold * span;
+      editor.state.setMotion({ zoom: next, offset: Math.min(Math.max(0, at - hold * nextSpan), Math.max(0, animation.duration - nextSpan)) });
+    },
+    [animation.duration, editor, offset, span],
+  );
   /** The keyframes picked out on the timeline, which move and delete together, and share an easing. */
   const selected = motion.selectedKeyframes;
   const setSelected = useCallback((next: readonly KeyframeRef[] | ((current: readonly KeyframeRef[]) => readonly KeyframeRef[])) => {
@@ -71,7 +89,7 @@ export function TimelinePanel() {
       target.setPointerCapture(e.pointerId);
       let delta = 0;
       const move = (ev: PointerEvent) => {
-        const raw = ((ev.clientX - startX) / width) * animation.duration;
+        const raw = ((ev.clientX - startX) / width) * span;
         const snap = animation.duration / 10;
         delta = Math.round(ev.shiftKey ? Math.round((ref.time + raw) / snap) * snap - ref.time : raw);
       };
@@ -86,7 +104,7 @@ export function TimelinePanel() {
       target.addEventListener('pointermove', move);
       target.addEventListener('pointerup', up);
     },
-    [animation.duration, editor, isSelected, selected, setSelected],
+    [animation.duration, editor, isSelected, selected, setSelected, span],
   );
 
   // Playing moves the playhead until it is paused (or the animation ends, played once).
@@ -111,12 +129,20 @@ export function TimelinePanel() {
       if (!ruler) return;
       const rect = ruler.getBoundingClientRect();
       const share = Math.min(1, Math.max(0, (e.clientX - rect.left) / Math.max(1, rect.width)));
-      editor.state.setMotion({ time: Math.round(share * animation.duration), playing: false });
+      editor.state.setMotion({ time: Math.round(offset + share * span), playing: false });
     },
-    [animation.duration, editor],
+    [editor, offset, span],
   );
 
-  const percent = (time: number) => `${(time / Math.max(1, animation.duration)) * 100}%`;
+
+  /** ⌘ (or Ctrl) with the wheel zooms the timeline around the pointer, as it does on the canvas. */
+  const wheelZoom = (e: ReactWheelEvent<HTMLDivElement>) => {
+    if (!e.metaKey && !e.ctrlKey) return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const hold = Math.min(1, Math.max(0, (e.clientX - rect.left) / Math.max(1, rect.width)));
+    zoomTo(motion.zoom * Math.exp(-e.deltaY / 200), hold);
+  };
 
   return (
     <section
@@ -188,13 +214,27 @@ export function TimelinePanel() {
           pressed={motion.collapsed}
           onClick={() => editor.state.setMotion({ collapsed: !motion.collapsed })}
         />
+        {/* Zoom sits at the far end of the controls, as the slider down the right of the reference's timeline does. */}
+        <label className={styles.zoom}>
+          <input
+            type="range"
+            aria-label="Timeline zoom"
+            min={1}
+            max={MAX_TIMELINE_ZOOM}
+            step={0.1}
+            value={motion.zoom}
+            onChange={(e) => zoomTo(Number(e.target.value))}
+            onKeyDown={(e) => e.stopPropagation()}
+          />
+          <span>{motion.zoom.toFixed(1)}×</span>
+        </label>
       </header>
 
       <div className={styles.body}>
-        <div className={styles.ruler} ref={rulerRef} role="slider" aria-label="Playhead" aria-valuemin={0} aria-valuemax={animation.duration} aria-valuenow={Math.round(motion.time)} tabIndex={0} onPointerDown={seek}>
+        <div className={styles.ruler} ref={rulerRef} role="slider" aria-label="Playhead" aria-valuemin={0} aria-valuemax={animation.duration} aria-valuenow={Math.round(motion.time)} tabIndex={0} onPointerDown={seek} onWheel={wheelZoom}>
           {[0, 0.25, 0.5, 0.75, 1].map((share) => (
             <span key={share} className={styles.tick} style={{ left: `${share * 100}%` }}>
-              {formatTime(animation.duration * share, motion.unit)}
+              {formatTime(offset + span * share, motion.unit)}
             </span>
           ))}
           <span className={styles.playhead} style={{ left: percent(motion.time) }} data-testid="playhead" />
@@ -213,6 +253,7 @@ export function TimelinePanel() {
                 selected={selection.includes(id)}
                 time={motion.time}
                 percent={percent}
+                visibleMs={span}
                 isSelected={isSelected}
                 onSelect={(ref, add) => setSelected(add ? (current) => [...current.filter((k) => !(k.nodeId === ref.nodeId && k.property === ref.property && k.time === ref.time)), ref] : [ref])}
                 onDrag={dragKeyframes}
@@ -257,6 +298,7 @@ function LayerTrack({
   selected,
   time,
   percent,
+  visibleMs,
   isSelected,
   onSelect,
   onDrag,
@@ -267,6 +309,7 @@ function LayerTrack({
   selected: boolean;
   time: number;
   percent: (time: number) => string;
+  visibleMs: number;
   isSelected: (ref: KeyframeRef) => boolean;
   onSelect: (ref: KeyframeRef, add: boolean) => void;
   onDrag: (ref: KeyframeRef, e: ReactPointerEvent<HTMLButtonElement>) => void;
@@ -275,13 +318,16 @@ function LayerTrack({
   const node = editor.doc.get(nodeId) as SceneNode | undefined;
   const tracks = animation.tracks.filter((track) => track.nodeId === nodeId);
   if (!node) return null;
+  // The layer wears the icon and, for a component or an instance, the color it has in the layers panel.
+  const icon = layerIcon(node);
   return (
-    <li className={styles.layer} data-selected={selected || undefined}>
+    <li className={styles.layer} data-selected={selected || undefined} data-component={icon === 'component' || icon === 'instance' || undefined}>
       <button type="button" className={styles.layerName} onClick={() => editor.state.select([nodeId])}>
-        <Icon name="rectangle" size={16} />
+        <Icon name={icon} size={16} />
         {node.name}
       </button>
       <div className={styles.layerRows}>
+        <TrackSpan nodeId={nodeId} animation={animation} percent={percent} visibleMs={visibleMs} />
         {collapsed ? (
           <TrackRow label={node.name} nodeId={nodeId} tracks={tracks} percent={percent} time={time} isSelected={isSelected} onSelect={onSelect} onDrag={onDrag} />
         ) : (
@@ -291,6 +337,57 @@ function LayerTrack({
         )}
       </div>
     </li>
+  );
+}
+
+/**
+ * A layer's animation as one bar across the timeline: dragging the bar moves the whole track, and pulling either end
+ * stretches it, so everything the layer does runs later, earlier, longer or shorter together.
+ */
+function TrackSpan({ nodeId, animation, percent, visibleMs }: { nodeId: Id; animation: PageAnimation; percent: (time: number) => string; visibleMs: number }) {
+  const editor = useEditor();
+  const laneRef = useRef<HTMLDivElement>(null);
+  const extent = layerExtent(animation, nodeId);
+  if (!extent) return null;
+
+  const drag = (end: 'both' | 'from' | 'to') => (e: ReactPointerEvent<HTMLElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const width = laneRef.current?.getBoundingClientRect().width || 1;
+    const startX = e.clientX;
+    const origin = extent;
+    const target = e.currentTarget;
+    target.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      const delta = ((ev.clientX - startX) / width) * visibleMs;
+      const from = end === 'to' ? origin.from : Math.max(0, origin.from + delta);
+      const to = end === 'from' ? origin.to : origin.to + delta;
+      // Pulling one end past the other holds the track at nothing wide rather than turning it inside out.
+      setLayerExtent(editor, nodeId, Math.min(from, to), Math.max(from, to));
+    };
+    const up = (ev: PointerEvent) => {
+      target.releasePointerCapture(ev.pointerId);
+      target.removeEventListener('pointermove', move);
+      target.removeEventListener('pointerup', up);
+    };
+    target.addEventListener('pointermove', move);
+    target.addEventListener('pointerup', up);
+  };
+
+  return (
+    <div className={styles.spanLane} ref={laneRef}>
+      <div
+        className={styles.span}
+        role="button"
+        tabIndex={-1}
+        aria-label={`${editor.doc.get(nodeId)?.name ?? 'Layer'} track from ${Math.round(extent.from)} to ${Math.round(extent.to)} ms`}
+        style={{ left: percent(extent.from), width: `calc(${percent(extent.to)} - ${percent(extent.from)})` }}
+        onPointerDown={drag('both')}
+      >
+        <span className={styles.spanHandle} data-end="from" role="button" tabIndex={-1} aria-label="Track start" onPointerDown={drag('from')} />
+        <span className={styles.spanHandle} data-end="to" role="button" tabIndex={-1} aria-label="Track end" onPointerDown={drag('to')} />
+      </div>
+    </div>
   );
 }
 

@@ -46,9 +46,13 @@ export interface MotionState {
   readonly editingAnchor: boolean;
   /** The keyframes picked on the timeline; each carries the easing of the stretch that starts at it. */
   readonly selectedKeyframes: readonly KeyframeRef[];
+  /** How far the timeline is zoomed in: 1 shows the whole animation, 2 half of it, and so on. */
+  readonly zoom: number;
+  /** The moment at the timeline's left edge, in milliseconds; 0 while it is not zoomed in. */
+  readonly offset: number;
 }
 
-export const DEFAULT_MOTION: MotionState = { time: 0, playing: false, autoKeyframe: false, unit: 'MS', collapsed: false, editingAnchor: false, selectedKeyframes: [] };
+export const DEFAULT_MOTION: MotionState = { time: 0, playing: false, autoKeyframe: false, unit: 'MS', collapsed: false, editingAnchor: false, selectedKeyframes: [], zoom: 1, offset: 0 };
 
 /** A sketch's stroke: its color, how thick it is, whether it is dashed, and the Brush's hand-drawn bumps. */
 export interface SketchStroke {

@@ -148,6 +148,27 @@ export function moveKeyframe(animation: PageAnimation, nodeId: Id, property: Ani
   return prunedCurves(bend ? setCurve(setCurve(moved, nodeId, keyframe.time, undefined), nodeId, at, bend) : moved, nodeId);
 }
 
+/** Keyframes with only one at any moment, the last one written winning. */
+const deduped = (keyframes: readonly Keyframe[]): Keyframe[] => {
+  const byTime = new Map<number, Keyframe>();
+  for (const keyframe of keyframes) byTime.set(keyframe.time, keyframe);
+  return [...byTime.values()];
+};
+
+/** The stretch of the animation a layer's keyframes cover, if it has any. */
+export function layerExtent(animation: PageAnimation | undefined, nodeId: Id): { readonly from: number; readonly to: number } | undefined {
+  const times = (animation?.tracks ?? []).filter((track) => track.nodeId === nodeId).flatMap((track) => track.keyframes.map((keyframe) => keyframe.time));
+  return times.length === 0 ? undefined : { from: Math.min(...times), to: Math.max(...times) };
+}
+
+/** A layer's keyframes, and the bends between them, put at new moments: how a whole track is moved or stretched. */
+export function retimeLayer(animation: PageAnimation, nodeId: Id, at: (time: number) => number): PageAnimation {
+  const moment = (time: number) => Math.max(0, Math.min(600_000, Math.round(at(time))));
+  const tracks = animation.tracks.map((track) => (track.nodeId === nodeId ? { ...track, keyframes: ordered(deduped(track.keyframes.map((k) => ({ ...k, time: moment(k.time) })))) } : track));
+  const curves = animation.curves?.map((curve) => (curve.nodeId === nodeId ? { ...curve, time: moment(curve.time) } : curve));
+  return withCurves({ ...animation, tracks }, curves);
+}
+
 /** An animation without any track of the layers given (used when they are deleted). */
 export function withoutLayers(animation: PageAnimation, ids: ReadonlySet<Id>): PageAnimation {
   const tracks = animation.tracks.filter((track) => !ids.has(track.nodeId));

@@ -24,11 +24,13 @@ import {
   curveOffsetAt,
   ease,
   keyframeAt,
+  layerExtent,
   moveKeyframe,
   pathSegmentAt,
   pathTimes,
   playheadAt,
   removeKeyframe,
+  retimeLayer,
   setCurve,
   setKeyframe,
   setKeyframeEasing,
@@ -219,5 +221,36 @@ describe('a bent motion path', () => {
     expect(fewer.curves).toBeUndefined();
     // So does deleting the layer.
     expect(withoutLayers(bent, new Set(['a'])).curves).toBeUndefined();
+  });
+});
+
+describe('a whole layer track', () => {
+  test('covers the stretch between its first and last keyframes', () => {
+    expect(layerExtent(travel, 'a')).toEqual({ from: 0, to: 1000 });
+    expect(layerExtent(travel, 'zz')).toBeUndefined();
+    expect(layerExtent(undefined, 'a')).toBeUndefined();
+  });
+
+  test('moves along the timeline, taking every keyframe and bend with it', () => {
+    const bent = setCurve(travel, 'a', 0, { x: 0, y: 40 });
+    const later = retimeLayer(bent, 'a', (time) => time + 500);
+    expect(layerExtent(later, 'a')).toEqual({ from: 500, to: 1500 });
+    expect(trackFor(later, 'a', 'x')!.keyframes.map((k) => k.time)).toEqual([500, 1500]);
+    // The bend belongs to the stretch that starts at the first keyframe, wherever that lands.
+    expect(curveFor(later, 'a', 500)).toMatchObject({ y: 40 });
+  });
+
+  test('stretches about a moment, and keyframes pushed together share one', () => {
+    const longer = retimeLayer(travel, 'a', (time) => time * 2);
+    expect(layerExtent(longer, 'a')).toEqual({ from: 0, to: 2000 });
+
+    // Squashed to nothing, the two keyframes land on the same moment and the later one stands.
+    const squashed = retimeLayer(travel, 'a', () => 400);
+    expect(trackFor(squashed, 'a', 'x')!.keyframes).toEqual([{ time: 400, value: 100 }]);
+  });
+
+  test('never moves before the animation starts', () => {
+    const earlier = retimeLayer(travel, 'a', (time) => time - 5000);
+    expect(layerExtent(earlier, 'a')).toEqual({ from: 0, to: 0 });
   });
 });

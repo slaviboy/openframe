@@ -477,3 +477,48 @@ test('a keyframe picked on the timeline takes a custom bezier or spring from the
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
   await expect(page.getByRole('region', { name: 'Timeline' }).getByRole('combobox', { name: /X position easing from 0 ms/ })).toHaveValue('CUSTOM_SPRING');
 });
+
+test('the timeline zooms into part of the animation, and a layer track moves and stretches', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 460, box.y + 310, { steps: 5 });
+  await page.mouse.up();
+
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  const startX = Number(await page.getByTestId('field-x').inputValue());
+  await page.getByRole('button', { name: 'Add x position keyframe' }).click();
+  const current = timeline.getByRole('textbox', { name: 'Current time' });
+  await current.fill('1000');
+  await current.press('Enter');
+  await page.getByTestId('field-x').fill(String(startX + 100));
+  await page.getByTestId('field-x').press('Enter');
+
+  // Zoomed in, the ruler counts over a shorter stretch: the whole 2000 ms no longer fits across it.
+  const zoom = timeline.getByRole('slider', { name: 'Timeline zoom' });
+  await expect(timeline).toContainText('2000');
+  await zoom.fill('4');
+  await expect(timeline).toContainText('4.0×');
+  await expect(timeline).not.toContainText('2000');
+
+  await zoom.fill('1');
+  // The track bar spans the layer's keyframes; dragging it right moves the whole animation later.
+  const track = timeline.getByRole('button', { name: /track from 0 to 1000 ms/ });
+  const bar = (await track.boundingBox())!;
+  await page.mouse.move(bar.x + bar.width / 2, bar.y + bar.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bar.x + bar.width / 2 + bar.width / 4, bar.y + bar.height / 2, { steps: 10 });
+  await page.mouse.up();
+  await expect(timeline.getByRole('button', { name: /track from (?!0 to 1000)/ })).toBeVisible();
+
+  // The first keyframe is no longer at the start, so the layer waits before it moves.
+  await current.fill('0');
+  await current.press('Enter');
+  const moved = timeline.getByRole('button', { name: /track from (\d+) to/ });
+  const label = (await moved.getAttribute('aria-label'))!;
+  expect(Number(/from (\d+) to/.exec(label)![1])).toBeGreaterThan(0);
+});

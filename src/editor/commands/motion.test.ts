@@ -18,14 +18,14 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import { createEmptyDocument, keyOnTop, makeRectangle } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
-import { trackFor } from '@/core/motion/animation';
+import { layerExtent, trackFor } from '@/core/motion/animation';
 import type { RectangleNode, SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { curveOffsetFor, hitMotionPathCurve, hitMotionPathKeyframe, keyframePositionAt, motionPath } from '../chrome/motion-path';
 import { MotionPreview } from '../motion/preview';
 import { screenToWorld } from '../viewport/viewport';
 import { anchorPoint, rotationDegrees, setRotation } from './properties';
-import { addKeyframe, applyMotionPreset, deleteKeyframe, hasKeyframe, isAnimated, pageAnimation, removeAnimatedProperty, curveMotionPath, moveKeyframePosition, setAnimationDuration, setAnimationPlayback, setSegmentEasing } from './motion';
+import { addKeyframe, applyMotionPreset, deleteKeyframe, hasKeyframe, isAnimated, pageAnimation, removeAnimatedProperty, curveMotionPath, moveKeyframePosition, setLayerExtent, setAnimationDuration, setAnimationPlayback, setSegmentEasing } from './motion';
 
 let editor: Editor;
 let rect: string;
@@ -300,5 +300,32 @@ describe('animating a path trim', () => {
       { time: 0, value: 0, easing: { type: 'EASE_OUT' } },
       { time: 500, value: 1 },
     ]);
+  });
+});
+
+describe('retiming a whole track', () => {
+  test('moves a layer\u2019s animation along the timeline and stretches it to fit', () => {
+    addKeyframe(editor, [rect], 'x', 0, 10);
+    addKeyframe(editor, [rect], 'opacity', 1000, 0);
+
+    // Moved half a second later: both keyframes travel together.
+    expect(setLayerExtent(editor, rect, 500, 1500)).toBe(true);
+    expect(layerExtent(pageAnimation(editor), rect)).toEqual({ from: 500, to: 1500 });
+    expect(trackFor(pageAnimation(editor), rect, 'opacity')!.keyframes[0]!.time).toBe(1500);
+
+    // Stretched to twice as long from where it now starts.
+    expect(setLayerExtent(editor, rect, 500, 2500)).toBe(true);
+    expect(trackFor(pageAnimation(editor), rect, 'x')!.keyframes[0]!.time).toBe(500);
+    expect(trackFor(pageAnimation(editor), rect, 'opacity')!.keyframes[0]!.time).toBe(2500);
+  });
+
+  test('a track that is already where it is asked to be, or a layer with no keyframes, changes nothing', () => {
+    expect(setLayerExtent(editor, rect, 0, 1000)).toBe(false);
+    addKeyframe(editor, [rect], 'x', 0, 10);
+    addKeyframe(editor, [rect], 'x', 1000, 20);
+    expect(setLayerExtent(editor, rect, 0, 1000)).toBe(false);
+    // Asked to end before it starts, the track is held at nothing wide instead of turning inside out.
+    expect(setLayerExtent(editor, rect, 800, 200)).toBe(true);
+    expect(layerExtent(pageAnimation(editor), rect)).toEqual({ from: 800, to: 800 });
   });
 });
