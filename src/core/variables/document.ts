@@ -22,7 +22,7 @@ import { componentSetProperties, isComponentSet, parseVariantName, variantFor } 
 import type { Transaction } from '../history/history';
 import { ROOT_ID, type Id } from '../ids/ids';
 import { hasGeometry, isSceneNode, type ComponentPropertyDefinition, type Node, type Paint, type SceneNode, type VariableCollectionNode, type VariableNode } from '../schema/document';
-import { defaultModeId, extensionChain, resolveVariable, type CollectionData, type ResolvedValue, type VariableData, type VariableLookup, type VariableType } from './resolve';
+import { defaultModeId, extensionChain, isVariableColor, resolveVariable, type CollectionData, type ResolvedValue, type VariableData, type VariableLookup, type VariableType } from './resolve';
 
 /** Layer properties a variable can be bound to (paint colors bind on the paint itself). */
 export type BindableField =
@@ -259,7 +259,7 @@ export function bindingWrites(store: DocumentStore, lookup: VariableLookup, node
         const id = paint.type === 'SOLID' ? paint.boundVariables?.color.id : undefined;
         if (id === undefined || lookup.variable(id)?.type !== 'COLOR') return paint;
         const value = resolveForLayer(store, lookup, node.id, id);
-        if (value === null || typeof value !== 'object') return paint;
+        if (!isVariableColor(value)) return paint;
         changed = true;
         return { ...paint, color: { r: value.r, g: value.g, b: value.b, a: value.a } };
       });
@@ -495,7 +495,7 @@ function variableFinalizer(tx: Transaction, nextId: () => Id): void {
       const next = (node[field] as Paint[]).map((paint) => {
         if (paint.type !== 'SOLID' || !paint.boundVariables) return paint;
         const value = resolveForLayer(store, lookup, id, paint.boundVariables.color.id);
-        if (value !== null && typeof value === 'object' && same({ r: value.r, g: value.g, b: value.b, a: value.a }, paint.color)) return paint;
+        if (isVariableColor(value) && same({ r: value.r, g: value.g, b: value.b, a: value.a }, paint.color)) return paint;
         changed = true;
         return unboundPaint(paint);
       });

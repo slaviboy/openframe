@@ -19,7 +19,8 @@ import { useState } from 'react';
 import type { Id } from '@/core/ids/ids';
 import { isSceneNode, type Paint, type SceneNode, type VariableNode } from '@/core/schema/document';
 import { isVariable, localCollections, resolveForLayer, variableLookup, VARIANT_BINDING_PREFIX, type BindableField, type VariablePaintField } from '@/core/variables/document';
-import type { ResolvedValue } from '@/core/variables/resolve';
+import { isVariableColor, type ResolvedValue } from '@/core/variables/resolve';
+import { EASING_LABELS } from '@/core/prototype/reactions';
 import { bindVariable, bindVariantVariable, setExplicitVariableMode, unbindPaintVariable, unbindVariable, unbindVariantVariable, variablesFor, variantVariablesFor } from '@/editor/commands/variables';
 import { bindPropertyDefaultVariable, propertyDefaultVariables, unbindPropertyDefaultVariable } from '@/editor/commands/component-properties';
 import type { Editor } from '@/editor/editor';
@@ -41,7 +42,9 @@ const hex2 = (channel: number) =>
 /** A resolved variable value as shown in pickers. */
 function formatValue(value: ResolvedValue | null): string {
   if (value === null) return '';
-  if (typeof value === 'object') return `#${hex2(value.r)}${hex2(value.g)}${hex2(value.b)}${value.a < 1 ? ` ${Math.round(value.a * 100)}%` : ''}`;
+  if (isVariableColor(value)) return `#${hex2(value.r)}${hex2(value.g)}${hex2(value.b)}${value.a < 1 ? ` ${Math.round(value.a * 100)}%` : ''}`;
+  // An easing variable reads as the name of its curve or spring.
+  if (typeof value === 'object') return EASING_LABELS[value.type] ?? 'Easing';
   if (typeof value === 'number') return String(Math.round(value * 100) / 100);
   return String(value);
 }

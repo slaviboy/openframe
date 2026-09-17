@@ -19,14 +19,38 @@ import type { KeyframeRef } from '@/core/motion/animation';
 import { DEFAULT_ANIMATION, keyframeAt, layerExtent, retimeLayer, moveKeyframe, pathSegmentAt, removeKeyframe, setCurve, setKeyframe, setKeyframeEasing, trackFor, valueAt } from '@/core/motion/animation';
 import { presetById, PRESET_DURATION, type PresetBase } from '@/core/motion/presets';
 import type { Id } from '@/core/ids/ids';
-import { isSceneNode, type AnimatedProperty, type KeyframeEasing, type PageAnimation, type PageNode, type SceneNode } from '@/core/schema/document';
+import { isSceneNode, type AnimatedProperty, type KeyframeEasing, type PageAnimation, type PageNode, type PrototypeEasing, type SceneNode, type VariableNode } from '@/core/schema/document';
 import { rotationDegrees } from './properties';
+import { collectionVariables, localCollections, resolveForLayer, variableLookup } from '@/core/variables/document';
+import { isVariableEasing } from '@/core/variables/resolve';
+import { createVariable, setVariableValue } from './variables';
 import type { Editor } from '../editor';
 
 /** The animation of the page being edited, if it has one. */
 export function pageAnimation(editor: Editor, pageId: Id = editor.pageId): PageAnimation | undefined {
   const page = editor.doc.get(pageId);
   return page?.type === 'PAGE' ? page.animation : undefined;
+}
+
+/**
+ * The page's animation with any easing that stands as a variable looked up, which is what is evaluated. Editing works
+ * on the stored animation, so the variable stays bound; only the reading of it needs the value behind the name.
+ */
+export function resolvedAnimation(editor: Editor, pageId: Id = editor.pageId): PageAnimation | undefined {
+  const animation = pageAnimation(editor, pageId);
+  if (!animation?.tracks.some((track) => track.keyframes.some((keyframe) => keyframe.easing?.type === 'VARIABLE_ALIAS'))) return animation;
+  const lookup = variableLookup(editor.doc);
+  const tracks = animation.tracks.map((track) => ({
+    ...track,
+    keyframes: track.keyframes.map((keyframe) => {
+      if (keyframe.easing?.type !== 'VARIABLE_ALIAS') return keyframe;
+      const value = resolveForLayer(editor.doc, lookup, track.nodeId, keyframe.easing.id);
+      // A variable that is gone, or holds something else, leaves the stretch running straight.
+      const { easing: _bound, ...rest } = keyframe;
+      return isVariableEasing(value) ? { ...rest, easing: value } : rest;
+    }),
+  }));
+  return { ...animation, tracks };
 }
 
 /** What a layer's animated property is in the file itself, which is what a new keyframe records. */
@@ -182,6 +206,27 @@ export function removeAnimatedProperty(editor: Editor, ids: readonly Id[], prope
     ...animation,
     tracks: animation.tracks.filter((track) => !(ids.includes(track.nodeId) && track.property === property)),
   }));
+}
+
+/** The easing variables a keyframe can be bound to: every local one of the easing type. */
+export function easingVariables(editor: Editor): VariableNode[] {
+  return localCollections(editor.doc)
+    .flatMap((collection) => collectionVariables(editor.doc, collection.id))
+    .filter((variable) => variable.resolvedType === 'EASING');
+}
+
+/**
+ * Saves a stretch's easing as a variable of its own, in the first collection there is, and binds the keyframes to it.
+ * Without a collection there is nowhere to keep it, so nothing is saved.
+ */
+export function saveEasingAsVariable(editor: Editor, refs: readonly KeyframeRef[], easing: PrototypeEasing, name?: string): Id | null {
+  const collection = localCollections(editor.doc)[0];
+  if (!collection || refs.length === 0) return null;
+  const id = createVariable(editor, collection.id, 'EASING', name);
+  if (!id) return null;
+  for (const mode of collection.modes) setVariableValue(editor, id, mode.modeId, easing);
+  refs.forEach((ref) => setSegmentEasing(editor, ref, { type: 'VARIABLE_ALIAS', id }));
+  return id;
 }
 
 /** The easing of the stretch that starts at a keyframe; without one the move runs straight. */

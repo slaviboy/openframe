@@ -44,6 +44,7 @@ import {
   ungroupStyleFolder,
 } from '@/editor/commands/styles';
 import { resolveForLayer, variableLookup } from '@/core/variables/document';
+import { isVariableColor } from '@/core/variables/resolve';
 import { applyPaintVariable, variablesFor } from '@/editor/commands/variables';
 import { Icon } from '../../icons/Icon';
 import { useDocumentRevision, useEditor } from '../../hooks/useEditor';
@@ -477,7 +478,7 @@ function StylePicker({ slot, ids, onClose }: { slot: StyleSlot; ids: readonly Id
           <ul className={findStyles.results} aria-label="Color variables">
             {colorVariables.map((variable) => {
               const value = ids[0] === undefined ? null : resolveForLayer(editor.doc, lookup, ids[0], variable.id);
-              const color = value !== null && typeof value === 'object' ? value : undefined;
+              const color = isVariableColor(value) ? value : undefined;
               return (
                 <li key={variable.id}>
                   <button

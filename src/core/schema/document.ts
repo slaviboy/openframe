@@ -626,7 +626,7 @@ const GuidesField = z.array(GuideSchema).max(10_000).optional();
 export const AnimatedPropertySchema = z.enum(['x', 'y', 'width', 'height', 'rotation', 'opacity', 'trimStart', 'trimEnd']);
 
 /** How an animation moves from one keyframe to the next: a prototype easing, or Hold, which waits and then jumps. */
-export const KeyframeEasingSchema = z.union([PrototypeEasingSchema, z.object({ type: z.literal('HOLD') })]);
+export const KeyframeEasingSchema = z.union([PrototypeEasingSchema, z.object({ type: z.literal('HOLD') }), VariableAliasSchema]);
 
 /** A value a layer's property takes at a moment in the animation. */
 export const KeyframeSchema = z.object({
@@ -1144,7 +1144,7 @@ export const StyleNodeSchema = z.object({
 });
 
 /** A variable's value in a mode: a value of its type, or an alias to another variable of that type. */
-export const VariableValueSchema = z.union([VariableAliasSchema, ColorSchema, z.number().finite(), z.string().max(100_000), z.boolean()]);
+export const VariableValueSchema = z.union([VariableAliasSchema, ColorSchema, z.number().finite(), z.string().max(100_000), z.boolean(), PrototypeEasingSchema]);
 
 /**
  * A variable collection: a set of variables and modes (the first mode is the default). A child of the document. An
@@ -1167,7 +1167,7 @@ export const VariableCollectionNodeSchema = z.object({
 export const VariableNodeSchema = z.object({
   ...BaseNodeFields,
   type: z.literal('VARIABLE'),
-  resolvedType: z.enum(['COLOR', 'FLOAT', 'STRING', 'BOOLEAN']),
+  resolvedType: z.enum(['COLOR', 'FLOAT', 'STRING', 'BOOLEAN', 'EASING']),
   valuesByMode: z.record(z.string().min(1).max(64), VariableValueSchema),
   description: z.string().max(10_000).optional(),
   /** The properties the variable is offered for; absent means all supported properties. */

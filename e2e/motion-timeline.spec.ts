@@ -579,3 +579,51 @@ test('keyframes are picked by row, swept with a box, and a double-click moves th
   await expect(timeline.getByRole('button', { name: /X position keyframe at 0 ms/ })).toHaveAttribute('aria-pressed', 'true');
   await expect(timeline.getByRole('button', { name: /X position keyframe at 1000 ms/ })).toHaveAttribute('aria-pressed', 'true');
 });
+
+test('an easing is saved as a variable, which the stretch then follows', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+
+  // An easing variable needs a collection to live in.
+  await page.getByRole('button', { name: 'Variables', exact: true }).click();
+  const variables = page.getByRole('region', { name: 'Variables' });
+  await variables.getByRole('button', { name: 'Create collection' }).last().click();
+  await page.keyboard.press('Escape');
+
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 460, box.y + 310, { steps: 5 });
+  await page.mouse.up();
+
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  const current = timeline.getByRole('textbox', { name: 'Current time' });
+  const startX = Number(await page.getByTestId('field-x').inputValue());
+  await page.getByRole('button', { name: 'Add x position keyframe' }).click();
+  await current.fill('1000');
+  await current.press('Enter');
+  await page.getByTestId('field-x').fill(String(startX + 100));
+  await page.getByTestId('field-x').press('Enter');
+
+  // Pick the first keyframe, give its stretch an easing, and keep that easing as a variable.
+  await timeline.getByRole('button', { name: /X position keyframe at 0 ms/ }).click();
+  const easing = page.getByRole('region', { name: 'Easing' });
+  await easing.getByRole('combobox', { name: 'Keyframe easing' }).selectOption('EASE_IN');
+  await easing.getByRole('button', { name: 'Save as variable' }).click();
+
+  // The stretch now carries the variable by name, and still eases: halfway along it is short of the middle.
+  await expect(easing.getByRole('button', { name: 'Detach easing variable' })).toBeVisible();
+  await current.fill('500');
+  await current.press('Enter');
+  await expect.poll(async () => Number(await page.getByTestId('field-x').inputValue())).toBeLessThan(startX + 50);
+
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+  await page.reload();
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await page.getByRole('treeitem', { name: /Rectangle 1/ }).click();
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  await page.getByRole('region', { name: 'Timeline' }).getByRole('button', { name: /X position keyframe at 0 ms/ }).click();
+  await expect(page.getByRole('region', { name: 'Easing' }).getByRole('button', { name: 'Detach easing variable' })).toBeVisible();
+});

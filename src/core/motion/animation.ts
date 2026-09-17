@@ -96,9 +96,12 @@ export function valuesAt(animation: PageAnimation | undefined, time: number): Ma
   return out;
 }
 
-/** How far along the move is at `t`, given the easing that starts the segment; without one it runs straight. */
+/**
+ * How far along the move is at `t`, given the easing that starts the segment; without one it runs straight. An easing
+ * still standing as a variable runs straight too: it is looked up before the animation is evaluated.
+ */
 export function ease(easing: KeyframeEasing | undefined, t: number): number {
-  if (!easing) return t;
+  if (!easing || easing.type === 'VARIABLE_ALIAS') return t;
   return evaluateEasing(easing.type === 'HOLD' ? { type: 'hold' } : toEasing(easing), t);
 }
 

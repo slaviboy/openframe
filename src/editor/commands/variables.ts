@@ -20,7 +20,7 @@ import type { DocumentStore } from '@/core/document/store';
 import type { Transaction } from '@/core/history/history';
 import { keyBetween, keysBetween } from '@/core/ids/fractional-index';
 import { ROOT_ID, type Id } from '@/core/ids/ids';
-import { hasGeometry, isSceneNode, type Paint, type SceneNode, type VariableCollectionNode, type VariableNode } from '@/core/schema/document';
+import { hasGeometry, isSceneNode, PrototypeEasingSchema, type Paint, type SceneNode, type VariableCollectionNode, type VariableNode } from '@/core/schema/document';
 import {
   BINDABLE_FIELDS,
   collectionVariables,
@@ -38,16 +38,16 @@ import {
   type VariablePaintField,
 } from '@/core/variables/document';
 import { componentSetProperties } from '@/core/document/variants';
-import { exportMode, extensionChain, importTokens, isAlias, resolveVariable, wouldCreateAliasCycle, type ResolvedValue, type TokenGroup, type VariableAlias, type VariableType, type VariableValue } from '@/core/variables/resolve';
+import { exportMode, extensionChain, importTokens, isAlias, isVariableColor, resolveVariable, wouldCreateAliasCycle, type ResolvedValue, type TokenGroup, type VariableAlias, type VariableType, type VariableValue } from '@/core/variables/resolve';
 import type { Editor } from '../editor';
 import { keyOf, nextKeyAbove } from './selection-helpers';
 import { styleFolder, styleLeafName } from './styles';
 import { instanceVariant } from './variants';
 
 /** The value a new variable has in every mode. */
-const DEFAULT_VALUES: Readonly<Record<VariableType, ResolvedValue>> = { COLOR: { r: 1, g: 1, b: 1, a: 1 }, FLOAT: 0, STRING: '', BOOLEAN: false };
+const DEFAULT_VALUES: Readonly<Record<VariableType, ResolvedValue>> = { COLOR: { r: 1, g: 1, b: 1, a: 1 }, FLOAT: 0, STRING: '', BOOLEAN: false, EASING: { type: 'EASE_OUT' } };
 /** The name a new variable starts with. */
-const TYPE_NAMES: Readonly<Record<VariableType, string>> = { COLOR: 'Color', FLOAT: 'Number', STRING: 'String', BOOLEAN: 'Boolean' };
+const TYPE_NAMES: Readonly<Record<VariableType, string>> = { COLOR: 'Color', FLOAT: 'Number', STRING: 'String', BOOLEAN: 'Boolean', EASING: 'Easing' };
 const MAX_MODES = 40;
 const MAX_VARIABLES = 5000;
 
@@ -79,6 +79,9 @@ function validValue(type: VariableType, value: unknown): value is ResolvedValue 
   switch (type) {
     case 'COLOR':
       return typeof value === 'object' && value !== null && !isAlias(value) && ['r', 'g', 'b', 'a'].every((k) => typeof rec(value)[k] === 'number' && (rec(value)[k] as number) >= 0 && (rec(value)[k] as number) <= 1);
+    case 'EASING':
+      // An easing is valid when it is one the schema knows: a preset, a custom curve, or a custom spring.
+      return PrototypeEasingSchema.safeParse(value).success;
     case 'FLOAT':
       return typeof value === 'number' && Number.isFinite(value);
     case 'STRING':
@@ -475,7 +478,7 @@ export function bindPaintVariable(editor: Editor, ids: readonly Id[], field: Var
     layers.forEach((id) => {
       const node = tx.store.get(id) as SceneNode & Record<VariablePaintField, Paint[]>;
       const value = resolveForLayer(tx.store, lookup, id, variableId);
-      if (value === null || typeof value !== 'object') return;
+      if (!isVariableColor(value)) return;
       const color = { r: value.r, g: value.g, b: value.b, a: value.a };
       const current = node[field][index];
       const paint: Paint = {
@@ -532,7 +535,7 @@ export function applyPaintVariable(editor: Editor, ids: readonly Id[], field: Va
   editor.history.run('Apply variable', (tx) =>
     layers.forEach((id) => {
       const value = resolveForLayer(tx.store, lookup, id, variableId);
-      if (value === null || typeof value !== 'object') return;
+      if (!isVariableColor(value)) return;
       const node = tx.store.get(id) as SceneNode & Record<VariablePaintField, Paint[]>;
       const solid = node[field].find((paint) => paint.type === 'SOLID');
       tx.set(id, field, [

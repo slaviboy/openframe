@@ -16,7 +16,9 @@
  */
 
 /** Variable types: colors (with opacity), numbers, strings and booleans. */
-export type VariableType = 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN';
+import type { PrototypeEasing } from '../schema/document';
+
+export type VariableType = 'COLOR' | 'FLOAT' | 'STRING' | 'BOOLEAN' | 'EASING';
 
 export interface VariableColor {
   readonly r: number;
@@ -31,7 +33,7 @@ export interface VariableAlias {
   readonly id: string;
 }
 
-export type ResolvedValue = VariableColor | number | string | boolean;
+export type ResolvedValue = VariableColor | number | string | boolean | PrototypeEasing;
 export type VariableValue = ResolvedValue | VariableAlias;
 
 export interface VariableMode {
@@ -62,6 +64,12 @@ export interface VariableLookup {
   variable(id: string): VariableData | undefined;
   collection(id: string): CollectionData | undefined;
 }
+
+/** Whether a resolved value is a color; an easing is an object too, so the shape is what tells them apart. */
+export const isVariableColor = (value: ResolvedValue | null | undefined): value is VariableColor => value !== null && value !== undefined && typeof value === 'object' && 'r' in value;
+
+/** Whether a resolved value is an easing curve or spring. */
+export const isVariableEasing = (value: ResolvedValue | null | undefined): value is PrototypeEasing => value !== null && value !== undefined && typeof value === 'object' && 'type' in value;
 
 export const isAlias = (value: unknown): value is VariableAlias =>
   typeof value === 'object' && value !== null && (value as { type?: unknown }).type === 'VARIABLE_ALIAS' && typeof (value as { id?: unknown }).id === 'string';
@@ -229,7 +237,7 @@ function exportToken(lookup: VariableLookup, variable: VariableData, value: Vari
 }
 
 function plainValue(type: VariableType, value: ResolvedValue): unknown {
-  if (type === 'COLOR' && typeof value === 'object') {
+  if (type === 'COLOR' && isVariableColor(value)) {
     return { colorSpace: 'srgb', components: [value.r, value.g, value.b], alpha: value.a, hex: `#${hex2(value.r)}${hex2(value.g)}${hex2(value.b)}` };
   }
   if (type === 'BOOLEAN') return value === true ? 1 : 0;

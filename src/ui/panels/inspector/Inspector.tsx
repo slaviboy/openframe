@@ -42,9 +42,10 @@ import { moveItem } from '@/core/collections/move-item';
 import { DEFAULT_DYNAMIC_STROKE } from '@/core/vector/dynamic-stroke';
 import { applyBrush, localBrushes } from '@/editor/commands/brushes';
 import { addRepeatTransform, applyTransforms, removeRepeatTransform, setRepeatTransform } from '@/editor/commands/transforms';
-import { addKeyframe, animationOf, applyMotionPreset, deleteKeyframe, hasKeyframe, isAnimated, removeAnimatedProperty, setSegmentEasing } from '@/editor/commands/motion';
+import { addKeyframe, animationOf, applyMotionPreset, deleteKeyframe, easingVariables, hasKeyframe, isAnimated, removeAnimatedProperty, resolvedAnimation, saveEasingAsVariable, setSegmentEasing } from '@/editor/commands/motion';
 import { ANIMATED_PROPERTIES, ANIMATED_PROPERTY_LABELS, keyframeAt, trackFor } from '@/core/motion/animation';
 import { EASING_LABELS, EASING_TYPES, makeEasing, type EasingType } from '@/core/prototype/reactions';
+import { localCollections } from '@/core/variables/document';
 import { EasingGraph } from '../prototype/EasingGraph';
 import { MOTION_PRESETS } from '@/core/motion/presets';
 import type { AnimatedProperty, KeyframeEasing, PageNode } from '@/core/schema/document';
@@ -619,14 +620,29 @@ function EasingSection() {
   const animation = animationOf(editor.doc.get(editor.pageId) as PageNode | undefined);
   const first = picked[0]!;
   const track = trackFor(animation, first.nodeId, first.property);
-  const current: KeyframeEasing = keyframeAt(track, first.time)?.easing ?? { type: 'LINEAR' };
+  const stored: KeyframeEasing = keyframeAt(track, first.time)?.easing ?? { type: 'LINEAR' };
+  // An easing bound to a variable is shown by name; the menu below works on the easing itself.
+  const bound = stored.type === 'VARIABLE_ALIAS' ? stored : null;
+  const current: Exclude<KeyframeEasing, { type: 'VARIABLE_ALIAS' }> = bound ? { type: 'LINEAR' } : (stored as Exclude<KeyframeEasing, { type: 'VARIABLE_ALIAS' }>);
   // The graph plays over the stretch the easing shapes, so it runs at the pace the animation will.
   const after = track?.keyframes.find((k) => k.time > first.time);
   const durationMs = Math.max(1, (after?.time ?? animation.duration) - first.time);
   const apply = (easing: KeyframeEasing | undefined) => picked.forEach((ref) => setSegmentEasing(editor, ref, easing));
+  const saved = easingVariables(editor);
+  // What the bound variable holds, so detaching leaves the stretch easing exactly as it was reading.
+  const resolvedEasing = bound ? (trackFor(resolvedAnimation(editor), first.nodeId, first.property)?.keyframes.find((k) => k.time === first.time)?.easing ?? null) : null;
 
   return (
     <Section title="Easing">
+      {/* An easing saved as a variable is shown by name, so the stretch follows the variable wherever it is used. */}
+      {bound && (
+        <span className={styles.appliedStyle}>
+          <button type="button" className={primitives.button} onClick={() => apply({ type: 'LINEAR' })}>
+            {editor.doc.get(bound.id)?.name ?? 'Missing easing'}
+          </button>
+          <IconButton icon="detach" label="Detach easing variable" onClick={() => apply(resolvedEasing ?? undefined)} />
+        </span>
+      )}
       <select
         className={primitives.select}
         aria-label="Keyframe easing"
@@ -669,7 +685,31 @@ function EasingSection() {
           <NumberField label="Mass" ariaLabel="Spring mass" testId="field-spring-mass" min={0.1} max={100} step={0.1} value={current.mass} onChange={(mass) => apply({ ...current, mass })} />
         </div>
       )}
-      {current.type !== 'HOLD' && <EasingGraph easing={current} durationMs={durationMs} suffix="" onChange={(easing) => apply(easing)} />}
+      {current.type !== 'HOLD' && !bound && <EasingGraph easing={current} durationMs={durationMs} suffix="" onChange={(easing) => apply(easing)} />}
+      {/* An easing is kept as a variable so the same motion can be used everywhere, and changed in one place. */}
+      {!bound && current.type !== 'HOLD' && (
+        <div className={styles.grid2}>
+          <button type="button" className={primitives.button} disabled={saved.length === 0 && localCollections(editor.doc).length === 0} onClick={() => saveEasingAsVariable(editor, picked, current)}>
+            Save as variable
+          </button>
+          <select
+            className={primitives.select}
+            aria-label="Easing variable"
+            value=""
+            onChange={(e) => {
+              if (e.target.value) apply({ type: 'VARIABLE_ALIAS', id: e.target.value });
+              e.target.value = '';
+            }}
+          >
+            <option value="">Apply variable</option>
+            {saved.map((variable) => (
+              <option key={variable.id} value={variable.id}>
+                {variable.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
     </Section>
   );
 }

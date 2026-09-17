@@ -59,14 +59,16 @@ import { IconButton } from '../../primitives/IconButton';
 import { Menu, type MenuEntry } from '../../primitives/Menu';
 import { NumberField } from '../../primitives/NumberField';
 import primitives from '../../primitives/primitives.module.css';
+import { EASING_LABELS, EASING_TYPES, makeEasing, type EasingType } from '@/core/prototype/reactions';
+import type { PrototypeEasing } from '@/core/schema/document';
 import findStyles from '../find/FindPanel.module.css';
 import { ColorControl } from '../inspector/ColorControl';
 import { Dialog, NameDialog } from '../inspector/StylesPanel';
 import css from './VariablesView.module.css';
 
-const TYPES: readonly VariableType[] = ['COLOR', 'FLOAT', 'STRING', 'BOOLEAN'];
-const TYPE_LABELS: Readonly<Record<VariableType, string>> = { COLOR: 'Color', FLOAT: 'Number', STRING: 'String', BOOLEAN: 'Boolean' };
-const TYPE_MARKS: Readonly<Record<VariableType, string>> = { COLOR: '◼', FLOAT: '#', STRING: 'T', BOOLEAN: '◐' };
+const TYPES: readonly VariableType[] = ['COLOR', 'FLOAT', 'STRING', 'BOOLEAN', 'EASING'];
+const TYPE_LABELS: Readonly<Record<VariableType, string>> = { COLOR: 'Color', FLOAT: 'Number', STRING: 'String', BOOLEAN: 'Boolean', EASING: 'Easing' };
+const TYPE_MARKS: Readonly<Record<VariableType, string>> = { COLOR: '◼', FLOAT: '#', STRING: 'T', BOOLEAN: '◐', EASING: '∿' };
 const PLATFORMS: ReadonlyArray<readonly [CodeSyntaxPlatform, string]> = [
   ['WEB', 'Web'],
   ['ANDROID', 'Android'],
@@ -202,6 +204,19 @@ function ValueCell({ variable, modeName, value, overridden, onValue, onDetach, o
       case 'STRING':
         control = <StringValue label={label} value={typeof value === 'string' ? value : ''} onCommit={onValue} />;
         break;
+      case 'EASING': {
+        const easing = (typeof value === 'object' && value !== null && 'type' in value ? value : { type: 'EASE_OUT' }) as PrototypeEasing;
+        control = (
+          <select className={primitives.select} aria-label={label} value={easing.type} onChange={(e) => onValue(makeEasing(e.target.value as EasingType, easing))}>
+            {EASING_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {EASING_LABELS[type]}
+              </option>
+            ))}
+          </select>
+        );
+        break;
+      }
       case 'BOOLEAN':
         control = (
           <label className={css.boolean}>
@@ -272,7 +287,8 @@ function EditVariableDialog({ variable, onClose }: { variable: VariableNode; onC
   const editor = useEditor();
   const [name, setName] = useState(variable.name);
   const [description, setDescription] = useState(variable.description ?? '');
-  const scopeOptions = variable.resolvedType === 'BOOLEAN' ? [] : VARIABLE_SCOPES[variable.resolvedType];
+  // Booleans and easings are not offered per property: an easing belongs to an animation, not to a field.
+  const scopeOptions: readonly string[] = variable.resolvedType === 'BOOLEAN' || variable.resolvedType === 'EASING' ? [] : VARIABLE_SCOPES[variable.resolvedType];
   const [allScopes, setAllScopes] = useState(variable.scopes === undefined);
   const [scopes, setScopes] = useState<readonly string[]>(variable.scopes ?? scopeOptions);
   const [codeSyntax, setCodeSyntax] = useState<Record<CodeSyntaxPlatform, string>>({ WEB: variable.codeSyntax?.WEB ?? '', ANDROID: variable.codeSyntax?.ANDROID ?? '', iOS: variable.codeSyntax?.iOS ?? '' });

@@ -20,12 +20,13 @@ import { createEmptyDocument, keyOnTop, makeRectangle } from '@/core/document/fa
 import { IdGenerator } from '@/core/ids/ids';
 import { layerExtent, trackFor } from '@/core/motion/animation';
 import type { RectangleNode, SceneNode } from '@/core/schema/document';
+import { createCollection } from './variables';
 import { Editor } from '../editor';
 import { curveOffsetFor, hitMotionPathCurve, hitMotionPathKeyframe, keyframePositionAt, motionPath } from '../chrome/motion-path';
 import { MotionPreview } from '../motion/preview';
 import { screenToWorld } from '../viewport/viewport';
 import { anchorPoint, rotationDegrees, setRotation } from './properties';
-import { addKeyframe, applyMotionPreset, deleteKeyframe, hasKeyframe, isAnimated, pageAnimation, removeAnimatedProperty, curveMotionPath, moveKeyframePosition, setLayerExtent, setAnimationDuration, setAnimationPlayback, setSegmentEasing } from './motion';
+import { addKeyframe, applyMotionPreset, deleteKeyframe, hasKeyframe, isAnimated, pageAnimation, removeAnimatedProperty, curveMotionPath, easingVariables, moveKeyframePosition, resolvedAnimation, saveEasingAsVariable, setLayerExtent, setAnimationDuration, setAnimationPlayback, setSegmentEasing } from './motion';
 
 let editor: Editor;
 let rect: string;
@@ -327,5 +328,44 @@ describe('retiming a whole track', () => {
     // Asked to end before it starts, the track is held at nothing wide instead of turning inside out.
     expect(setLayerExtent(editor, rect, 800, 200)).toBe(true);
     expect(layerExtent(pageAnimation(editor), rect)).toEqual({ from: 800, to: 800 });
+  });
+});
+
+describe('an easing kept as a variable', () => {
+  test('is saved from a stretch, binds it, and is looked up when the animation is read', () => {
+    addKeyframe(editor, [rect], 'x', 0, 0);
+    addKeyframe(editor, [rect], 'x', 1000, 100);
+    const ref = { nodeId: rect, property: 'x' as const, time: 0 };
+
+    // Without a collection there is nowhere to keep it.
+    expect(saveEasingAsVariable(editor, [ref], { type: 'EASE_IN' })).toBeNull();
+
+    createCollection(editor, 'Motion');
+    const id = saveEasingAsVariable(editor, [ref], { type: 'EASE_IN' }, 'Snappy');
+    expect(id).not.toBeNull();
+    expect(easingVariables(editor).map((v) => v.name)).toEqual(['Snappy']);
+
+    // The keyframe holds the variable, not the curve.
+    expect(trackFor(pageAnimation(editor), rect, 'x')!.keyframes[0]!.easing).toEqual({ type: 'VARIABLE_ALIAS', id });
+    // Read for evaluation, the variable gives up its curve.
+    expect(trackFor(resolvedAnimation(editor), rect, 'x')!.keyframes[0]!.easing).toEqual({ type: 'EASE_IN' });
+
+    // And the animation eases: halfway along, an ease in is behind a straight line.
+    const preview = new MotionPreview(editor);
+    preview.show(500);
+    expect(node().transform[4]).toBeLessThan(50);
+    preview.clear();
+  });
+
+  test('a stretch bound to a variable that is gone runs straight', () => {
+    addKeyframe(editor, [rect], 'x', 0, 0);
+    addKeyframe(editor, [rect], 'x', 1000, 100);
+    setSegmentEasing(editor, { nodeId: rect, property: 'x', time: 0 }, { type: 'VARIABLE_ALIAS', id: 'nowhere' });
+    expect(trackFor(resolvedAnimation(editor), rect, 'x')!.keyframes[0]!.easing).toBeUndefined();
+
+    const preview = new MotionPreview(editor);
+    preview.show(500);
+    expect(node().transform[4]).toBe(50);
+    preview.clear();
   });
 });

@@ -19,6 +19,7 @@ import type { Transaction } from '@/core/history/history';
 import { valuesAt } from '@/core/motion/animation';
 import type { Id } from '@/core/ids/ids';
 import { isSceneNode, type AnimatedProperty, type SceneNode, type Transform } from '@/core/schema/document';
+import { resolvedAnimation } from '../commands/motion';
 import { rotationDegrees, setRotation } from '../commands/properties';
 import type { Editor } from '../editor';
 
@@ -43,8 +44,8 @@ export class MotionPreview {
 
   /** Shows the animation at `time`. Nothing is shown at a moment where no track has anything to say. */
   show(time: number): void {
-    const page = this.editor.doc.get(this.editor.pageId);
-    const animation = page?.type === 'PAGE' ? page.animation : undefined;
+    // Easings bound to variables are looked up before the animation is read.
+    const animation = resolvedAnimation(this.editor);
     const values = valuesAt(animation, time);
     const key = `${time}:${animation?.tracks.length ?? 0}`;
     if (values.size === 0) {
