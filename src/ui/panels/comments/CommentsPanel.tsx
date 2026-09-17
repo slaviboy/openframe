@@ -15,10 +15,13 @@
  * limitations under the License.
  */
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type { Comment } from '@/core/schema/document';
 import { addComment, commentRect, commentsOf, deleteComment, deleteCommentMessage, editCommentMessage, replyToComment, setCommentResolved } from '@/editor/commands/comments';
+import { pickImageFiles } from '../../images/image-actions';
+import { IMAGE_ACCEPT, readImageFile } from '../../images/import-image';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
+import { CommentText, plainComment } from './CommentText';
 import primitives from '../../primitives/primitives.module.css';
 import styles from './CommentsPanel.module.css';
 
@@ -50,6 +53,7 @@ export function CommentsPanel() {
   const hidden = useEditorState((s) => s.commentsHidden);
   useDocumentRevision();
   const [draft, setDraft] = useState('');
+  const [image, setImage] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<Sort>('newest');
   const [showResolved, setShowResolved] = useState(false);
@@ -60,10 +64,26 @@ export function CommentsPanel() {
     (comment) => (showResolved || comment.resolved !== true) && (needle === '' || comment.messages.some((message) => message.text.toLowerCase().includes(needle))),
   );
 
+  /** Picks an image and puts it in the file's image store, handing back the hash it is kept under. */
+  const attach = async (): Promise<string | null> => {
+    const [file] = await pickImageFiles(IMAGE_ACCEPT);
+    if (!file) return null;
+    try {
+      const asset = await readImageFile(file);
+      await editor.images.add(asset);
+      return asset.hash;
+    } catch {
+      return null;
+    }
+  };
+
   const say = () => {
     if (!pending) return;
     const size = pending.width !== undefined && pending.height !== undefined ? { width: pending.width, height: pending.height } : undefined;
-    if (addComment(editor, { x: pending.x, y: pending.y }, draft, size) !== null) setDraft('');
+    if (addComment(editor, { x: pending.x, y: pending.y }, draft, size, image ?? undefined) !== null) {
+      setDraft('');
+      setImage(null);
+    }
     editor.state.setPendingComment(null);
   };
 
@@ -95,9 +115,13 @@ export function CommentsPanel() {
               }
             }}
           />
+          {image !== null && <p className={styles.meta}>Image attached</p>}
           <div className={styles.actions}>
-            <button type="button" className={primitives.button} disabled={draft.trim() === ''} onClick={say}>
+            <button type="button" className={primitives.button} disabled={draft.trim() === '' && image === null} onClick={say}>
               Comment
+            </button>
+            <button type="button" className={primitives.button} onClick={() => void attach().then(setImage)}>
+              Add image
             </button>
             <button
               type="button"
@@ -135,14 +159,14 @@ export function CommentsPanel() {
               <button
                 type="button"
                 className={styles.threadHead}
-                aria-label={`Open comment ${comment.messages[0]?.text ?? ''}`}
+                aria-label={`Open comment ${plainComment(comment.messages[0]?.text ?? '')}`}
                 onClick={() => {
                   editor.state.setOpenComment(openId === comment.id ? null : comment.id);
                   const rect = commentRect(editor, comment);
                   editor.zoomToRect({ x: rect.x, y: rect.y, width: Math.max(rect.width, 1), height: Math.max(rect.height, 1) }, 1);
                 }}
               >
-                <span className={styles.excerpt}>{comment.messages[0]?.text}</span>
+                <span className={styles.excerpt}>{plainComment(comment.messages[0]?.text ?? '')}</span>
                 <span className={styles.meta}>
                   {comment.messages.length > 1 ? `${comment.messages.length} messages` : ''} {comment.resolved ? '· Resolved' : ''}
                 </span>
@@ -175,7 +199,8 @@ export function CommentsPanel() {
                         />
                       ) : (
                         <>
-                          <p className={styles.text}>{message.text}</p>
+                          <CommentText text={message.text} />
+                          {message.imageHash !== undefined && <CommentImage hash={message.imageHash} />}
                           <p className={styles.meta}>
                             {when(message.at)}
                             {message.edited ? ' · edited' : ''}
@@ -216,8 +241,12 @@ export function CommentsPanel() {
 function Reply({ commentId }: { commentId: string }) {
   const editor = useEditor();
   const [text, setText] = useState('');
+  const [image, setImage] = useState<string | null>(null);
   const send = () => {
-    if (replyToComment(editor, commentId, text)) setText('');
+    if (replyToComment(editor, commentId, text, image ?? undefined)) {
+      setText('');
+      setImage(null);
+    }
   };
   return (
     <div className={styles.composer}>
@@ -235,11 +264,59 @@ function Reply({ commentId }: { commentId: string }) {
           }
         }}
       />
+      {image !== null && <p className={styles.meta}>Image attached</p>}
       <div className={styles.actions}>
-        <button type="button" className={primitives.button} disabled={text.trim() === ''} onClick={send}>
+        <button type="button" className={primitives.button} disabled={text.trim() === '' && image === null} onClick={send}>
           Reply
+        </button>
+        <button
+          type="button"
+          className={primitives.button}
+          onClick={() => {
+            void (async () => {
+              const [file] = await pickImageFiles(IMAGE_ACCEPT);
+              if (!file) return;
+              try {
+                const asset = await readImageFile(file);
+                await editor.images.add(asset);
+                setImage(asset.hash);
+              } catch {
+                setImage(null);
+              }
+            })();
+          }}
+        >
+          Add image
         </button>
       </div>
     </div>
   );
+}
+
+/** An image posted with a message, read out of the file's image store. */
+function CommentImage({ hash }: { hash: string }) {
+  const editor = useEditor();
+  // The registry tells the panel when an image it asked for has arrived.
+  const ready = useSyncExternalStore(
+    (listener) => editor.images.subscribe(listener),
+    () => editor.images.get(hash) !== undefined,
+  );
+
+  const url = useMemo(() => {
+    const asset = editor.images.get(hash);
+    if (!asset) {
+      editor.images.request(hash);
+      return null;
+    }
+    return URL.createObjectURL(new Blob([asset.bytes as BlobPart], { type: asset.mime }));
+    // `ready` is what says the image has arrived, so the URL is made then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editor, hash, ready]);
+
+  useEffect(() => () => {
+    if (url !== null) URL.revokeObjectURL(url);
+  }, [url]);
+
+  if (url === null) return <p className={styles.meta}>Image</p>;
+  return <img className={styles.image} src={url} alt="Posted with the comment" />;
 }

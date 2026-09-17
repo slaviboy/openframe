@@ -636,6 +636,8 @@ export const CommentMessageSchema = z.object({
   /** When it was written, as an ISO date. */
   at: z.string().max(64),
   edited: z.literal(true).optional(),
+  /** An image posted with the message, by the hash it is stored under. */
+  imageHash: z.string().min(1).max(128).optional(),
 });
 
 /**

@@ -17,6 +17,7 @@
 
 import type { Vec2 } from '@/core/math/vec';
 import { commentAt } from '../chrome/comment-pins';
+import { moveComment } from '../commands/comments';
 import type { CursorKind, PointerInfo, Tool, ToolEnvironment } from './types';
 
 /** How far the pointer travels before a comment is a region rather than a pin, in world units. */
@@ -30,6 +31,8 @@ export class CommentTool implements Tool {
   readonly id = 'comment' as const;
   private start: Vec2 | null = null;
   private moved = false;
+  /** The comment being dragged to another place, while one is. */
+  private dragging: string | null = null;
 
   constructor(private readonly env: ToolEnvironment) {}
 
@@ -44,10 +47,13 @@ export class CommentTool implements Tool {
   pointerDown(p: PointerInfo): void {
     if (p.button !== 0) return;
     const { editor } = this.env;
-    // A comment already there is opened rather than written over.
+    // A comment already there is opened, and dragging it takes it somewhere else.
     const existing = commentAt(editor, p.screen);
     if (existing !== null) {
       editor.state.setOpenComment(existing);
+      this.dragging = existing;
+      this.start = p.world;
+      this.moved = false;
       return;
     }
     this.start = p.world;
@@ -57,13 +63,21 @@ export class CommentTool implements Tool {
   pointerMove(p: PointerInfo): void {
     if (this.start === null) return;
     if (Math.abs(p.world.x - this.start.x) > REGION_THRESHOLD || Math.abs(p.world.y - this.start.y) > REGION_THRESHOLD) this.moved = true;
+    if (this.dragging !== null && this.moved) {
+      moveComment(this.env.editor, this.dragging, p.world);
+      this.env.editor.requestRender();
+    }
   }
 
   pointerUp(p: PointerInfo): void {
     const start = this.start;
+    const dragged = this.dragging;
     this.start = null;
+    this.dragging = null;
     if (start === null) return;
     const { editor } = this.env;
+    // A comment that was taken hold of has already been moved; there is nothing new to write.
+    if (dragged !== null) return;
     if (!this.moved) {
       editor.state.setPendingComment({ x: start.x, y: start.y });
       return;
@@ -77,6 +91,7 @@ export class CommentTool implements Tool {
   cancel(): boolean {
     const writing = this.start !== null || this.env.editor.state.getSnapshot().pendingComment !== null;
     this.start = null;
+    this.dragging = null;
     this.env.editor.state.setPendingComment(null);
     return writing;
   }

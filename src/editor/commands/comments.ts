@@ -71,9 +71,9 @@ function place(editor: Editor, world: Vec2, anchorId: Id | null): Vec2 {
 }
 
 /** Leaves a comment on the page: a pin, or a region when a size is given. Empty text writes nothing. */
-export function addComment(editor: Editor, world: Vec2, text: string, size?: { readonly width: number; readonly height: number }): string | null {
+export function addComment(editor: Editor, world: Vec2, text: string, size?: { readonly width: number; readonly height: number }, imageHash?: string): string | null {
   const said = text.trim();
-  if (said === '') return null;
+  if (said === '' && imageHash === undefined) return null;
   const anchorId = commentAnchorAt(editor, world);
   const at = place(editor, world, anchorId);
   const id = editor.ids.next();
@@ -83,7 +83,7 @@ export function addComment(editor: Editor, world: Vec2, text: string, size?: { r
     y: at.y,
     ...(size && size.width > 0 && size.height > 0 ? { width: size.width, height: size.height } : {}),
     ...(anchorId === null ? {} : { anchorId }),
-    messages: [{ id: editor.ids.next(), text: said, at: new Date().toISOString() }],
+    messages: [{ id: editor.ids.next(), text: said, at: new Date().toISOString(), ...(imageHash === undefined ? {} : { imageHash }) }],
   };
   return write(editor, 'Add comment', [...commentsOf(editor), comment]) ? id : null;
 }
@@ -105,10 +105,13 @@ function edit(editor: Editor, label: string, id: string, change: (comment: Comme
 }
 
 /** Adds a reply to a thread. */
-export function replyToComment(editor: Editor, id: string, text: string): boolean {
+export function replyToComment(editor: Editor, id: string, text: string, imageHash?: string): boolean {
   const said = text.trim();
-  if (said === '') return false;
-  return edit(editor, 'Reply to comment', id, (comment) => ({ ...comment, messages: [...comment.messages, { id: editor.ids.next(), text: said, at: new Date().toISOString() }] }));
+  if (said === '' && imageHash === undefined) return false;
+  return edit(editor, 'Reply to comment', id, (comment) => ({
+    ...comment,
+    messages: [...comment.messages, { id: editor.ids.next(), text: said, at: new Date().toISOString(), ...(imageHash === undefined ? {} : { imageHash }) }],
+  }));
 }
 
 /** Rewrites a message, which is then marked as edited. Emptying it is not a way to delete it. */

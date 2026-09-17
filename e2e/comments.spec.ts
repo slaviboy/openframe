@@ -108,3 +108,36 @@ test('a comment is drawn over a region, is searched for, and hides from the canv
   await page.keyboard.press('Shift+C');
   await expect(panel.getByRole('button', { name: 'Hide on canvas' })).toBeVisible();
 });
+
+test('a comment carries formatting, and is dragged clear of the design', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  await page.keyboard.press('c');
+  const panel = page.getByRole('region', { name: 'Comments' });
+  await page.mouse.click(box.x + 400, box.y + 300);
+  await panel.getByRole('textbox', { name: 'Write a comment' }).fill('Use **bold** and `code` and https://example.com/spec');
+  await panel.getByRole('button', { name: 'Comment', exact: true }).click();
+  await panel.getByRole('button', { name: /^Open comment/ }).click();
+
+  // The marks become elements rather than being left as characters.
+  const thread = panel.getByRole('list', { name: 'Comment threads' });
+  await expect(thread.locator('strong')).toHaveText('bold');
+  await expect(thread.locator('code')).toHaveText('code');
+  await expect(thread.getByRole('link', { name: 'https://example.com/spec' })).toHaveAttribute('href', 'https://example.com/spec');
+  await expect(thread).not.toContainText('**bold**');
+
+  // Dragging the pin takes the comment somewhere else; it is still the same thread.
+  await page.mouse.move(box.x + 410, box.y + 290);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 600, box.y + 420, { steps: 8 });
+  await page.mouse.up();
+  await expect(thread.getByRole('listitem')).toHaveCount(1);
+
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+  await page.reload();
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await page.keyboard.press('c');
+  await expect(page.getByRole('region', { name: 'Comments' })).toContainText('Use bold and code');
+});

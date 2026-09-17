@@ -143,3 +143,24 @@
   flex-wrap: wrap;
   gap: var(--space-1);
 }
+
+/* An image posted with a message. */
+.image {
+  display: block;
+  max-width: 100%;
+  margin: var(--space-1) 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.text code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--bg-hover);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.95em;
+}
+
+.text a {
+  color: var(--accent);
+}
