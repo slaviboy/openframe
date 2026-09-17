@@ -164,11 +164,13 @@ export function CommentsPanel() {
                   editor.state.setOpenComment(openId === comment.id ? null : comment.id);
                   const rect = commentRect(editor, comment);
                   editor.zoomToRect({ x: rect.x, y: rect.y, width: Math.max(rect.width, 1), height: Math.max(rect.height, 1) }, 1);
+                  // A comment about a moment takes the playhead back to it.
+                  if (comment.time !== undefined) editor.state.setMotion({ time: comment.time, playing: false });
                 }}
               >
                 <span className={styles.excerpt}>{plainComment(comment.messages[0]?.text ?? '')}</span>
                 <span className={styles.meta}>
-                  {comment.messages.length > 1 ? `${comment.messages.length} messages` : ''} {comment.resolved ? '· Resolved' : ''}
+                  {comment.time !== undefined ? `At ${comment.time} ms` : ''} {comment.messages.length > 1 ? `· ${comment.messages.length} messages` : ''} {comment.resolved ? '· Resolved' : ''}
                 </span>
               </button>
 

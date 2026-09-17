@@ -72,6 +72,9 @@ function place(editor: Editor, world: Vec2, anchorId: Id | null): Vec2 {
 
 /** Leaves a comment on the page: a pin, or a region when a size is given. Empty text writes nothing. */
 export function addComment(editor: Editor, world: Vec2, text: string, size?: { readonly width: number; readonly height: number }, imageHash?: string): string | null {
+  // In Motion a comment is about a moment as well as a place, so the playhead is written down with it.
+  const state = editor.state.getSnapshot();
+  const time = state.mode === 'motion' ? Math.max(0, Math.round(state.motion.time)) : undefined;
   const said = text.trim();
   if (said === '' && imageHash === undefined) return null;
   const anchorId = commentAnchorAt(editor, world);
@@ -83,6 +86,7 @@ export function addComment(editor: Editor, world: Vec2, text: string, size?: { r
     y: at.y,
     ...(size && size.width > 0 && size.height > 0 ? { width: size.width, height: size.height } : {}),
     ...(anchorId === null ? {} : { anchorId }),
+    ...(time === undefined ? {} : { time }),
     messages: [{ id: editor.ids.next(), text: said, at: new Date().toISOString(), ...(imageHash === undefined ? {} : { imageHash }) }],
   };
   return write(editor, 'Add comment', [...commentsOf(editor), comment]) ? id : null;

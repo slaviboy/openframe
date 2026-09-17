@@ -653,6 +653,8 @@ export const CommentSchema = z.object({
   height: z.number().min(0).finite().optional(),
   /** The top-level frame it hangs from; without one it sits in the page's own space. */
   anchorId: IdSchema.optional(),
+  /** Motion: the moment on the timeline it was left at, in milliseconds. Absent when it is not about a moment. */
+  time: z.number().int().min(0).max(600_000).optional(),
   resolved: z.literal(true).optional(),
   messages: z.array(CommentMessageSchema).min(1).max(500),
 });

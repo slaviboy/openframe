@@ -141,3 +141,37 @@ test('a comment carries formatting, and is dragged clear of the design', async (
   await page.keyboard.press('c');
   await expect(page.getByRole('region', { name: 'Comments' })).toContainText('Use bold and code');
 });
+
+test('a comment left in Motion remembers the moment, and going back to it moves the playhead', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 460, box.y + 310, { steps: 5 });
+  await page.mouse.up();
+
+  // In Motion, with the playhead part way along.
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  const current = timeline.getByRole('textbox', { name: 'Current time' });
+  await current.fill('750');
+  await current.press('Enter');
+  // The timing field keeps the keyboard until it is given up, so the shortcut would be typed into it.
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+  await page.keyboard.press('c');
+  const panel = page.getByRole('region', { name: 'Comments' });
+  await page.mouse.click(box.x + 500, box.y + 350);
+  await panel.getByRole('textbox', { name: 'Write a comment' }).fill('Too fast here');
+  await panel.getByRole('button', { name: 'Comment', exact: true }).click();
+  await expect(panel).toContainText('At 750 ms');
+
+  // Moving the playhead and then opening the comment takes it back to the moment.
+  await current.fill('0');
+  await current.press('Enter');
+  await expect(current).toHaveValue('0');
+  await panel.getByRole('button', { name: /^Open comment Too fast here/ }).click();
+  await expect(current).toHaveValue('750');
+});
