@@ -298,6 +298,14 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
         run: () => editor.state.setMode(editor.state.getSnapshot().mode === 'draw' ? 'design' : 'draw'),
       },
       {
+        id: 'view.comments',
+        label: 'Show comments',
+        category: 'View',
+        shortcuts: ['Shift+C'],
+        checked: () => !editor.state.getSnapshot().commentsHidden,
+        run: () => editor.state.setCommentsHidden(!editor.state.getSnapshot().commentsHidden),
+      },
+      {
         id: 'dev.annotate',
         label: 'Annotate',
         category: 'View',

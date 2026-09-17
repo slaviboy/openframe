@@ -44,6 +44,7 @@ import styles from './EditorShell.module.css';
 import { RailButton } from './RailButton';
 import { Toolbar } from './Toolbar';
 import { InspectPanel } from '../panels/dev/InspectPanel';
+import { CommentsPanel } from '../panels/comments/CommentsPanel';
 import { ReadyForDevPanel } from '../panels/dev/ReadyForDevPanel';
 import { FocusView } from '../panels/dev/FocusView';
 import { MissingFontsNotice } from '../dialogs/MissingFontsDialog';
@@ -80,6 +81,7 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
   const viewingVersion = useSyncExternalStore(session.session.subscribe, () => session.session.getSnapshot().viewing !== null);
   const mode = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().mode);
   const devTimeline = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().devTimeline);
+  const tool = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().tool);
   const focusId = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().focusId);
   // Draw mode has its own accent, from the mode on the root element (as the theme is), and is where the editor opens again.
   const modeRestored = useRef(false);
@@ -200,8 +202,10 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
             ) : (
               <>
                 <RightHeader />
-                {/* Dev Mode reads the design: the inspect panel stands in for the properties panel. */}
-                {mode === 'dev' ? (
+                {/* Comment mode takes the panel over, since nothing on the canvas is being edited while it is in hand. */}
+                {tool === 'comment' ? (
+                  <CommentsPanel />
+                ) : mode === 'dev' ? (
                   <InspectPanel />
                 ) : rightTab === 'prototype' ? (
                   <PrototypePanel />

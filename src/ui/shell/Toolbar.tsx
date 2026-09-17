@@ -141,7 +141,7 @@ const GROUPS: readonly ToolGroup[] = [
   },
   {
     label: 'Comment tools',
-    items: [{ tool: 'comment', label: 'Comment', icon: 'comment' }],
+    items: [{ tool: 'comment', label: 'Comment', icon: 'comment', command: 'tools.comment' }],
   },
 ];
 

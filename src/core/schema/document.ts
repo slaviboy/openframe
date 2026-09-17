@@ -629,6 +629,32 @@ const CornerFields = {
   individualStrokeWeights: IndividualStrokeWeightsSchema.optional(),
 };
 
+/** One message in a comment thread. */
+export const CommentMessageSchema = z.object({
+  id: z.string().min(1).max(64),
+  text: z.string().max(10_000),
+  /** When it was written, as an ISO date. */
+  at: z.string().max(64),
+  edited: z.literal(true).optional(),
+});
+
+/**
+ * A comment on a page: a pin, or a region when it has a size. It is kept where it was put — in the world, or in the
+ * frame it was put inside, so that moving the frame takes its comments along.
+ */
+export const CommentSchema = z.object({
+  id: z.string().min(1).max(64),
+  x: z.number().finite(),
+  y: z.number().finite(),
+  /** A region rather than a pin, in the same space as `x` and `y`. */
+  width: z.number().min(0).finite().optional(),
+  height: z.number().min(0).finite().optional(),
+  /** The top-level frame it hangs from; without one it sits in the page's own space. */
+  anchorId: IdSchema.optional(),
+  resolved: z.literal(true).optional(),
+  messages: z.array(CommentMessageSchema).min(1).max(500),
+});
+
 /** A category an annotation is filed under, so a developer can scan for the kind of note they want. */
 export const AnnotationCategorySchema = z.object({
   id: z.string().min(1).max(64),
@@ -735,6 +761,8 @@ export const PageNodeSchema = z.object({
   measurements: z.array(MeasurementSchema).max(1000).optional(),
   /** Dev Mode: the notes left on this page's layers. Absent until one is written. */
   annotations: z.array(AnnotationSchema).max(2000).optional(),
+  /** The comments left on this page. Absent until one is written. */
+  comments: z.array(CommentSchema).max(2000).optional(),
   /** Canvas guides. Absent when the page has none. */
   guides: GuidesField,
   /** Variable modes set on the page, by collection id. */
@@ -1317,6 +1345,8 @@ export type DevStatus = z.infer<typeof DevStatusSchema>;
 export type Measurement = z.infer<typeof MeasurementSchema>;
 export type Annotation = z.infer<typeof AnnotationSchema>;
 export type DevResource = z.infer<typeof DevResourceSchema>;
+export type Comment = z.infer<typeof CommentSchema>;
+export type CommentMessage = z.infer<typeof CommentMessageSchema>;
 export type AnnotationCategory = z.infer<typeof AnnotationCategorySchema>;
 export type MotionCurve = z.infer<typeof MotionCurveSchema>;
 export type PageAnimation = z.infer<typeof PageAnimationSchema>;

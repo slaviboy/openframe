@@ -62,6 +62,7 @@ import { CONNECT_HANDLE_SIZE, connectHandle, FLOW_TAG_ICON_WIDTH, overlayBadgeRe
 import { animatedGifHash } from '../images/animated-gif';
 import { TEXT_PATH_HANDLE_SIZE, textPathHandle } from './text-path-handle';
 import { drawnMeasurements } from '../commands/measurements';
+import { COMMENT_PIN_SIZE, drawnComments } from './comment-pins';
 import { ANCHOR_HANDLE_SIZE, anchorHandle } from './anchor-handle';
 import { MOTION_PATH_CURVE_SIZE, MOTION_PATH_KEYFRAME_SIZE, motionPath } from './motion-path';
 
@@ -433,6 +434,32 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
       }
     }
     ctx.strokeStyle = theme.guide;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
+  // Comments: a region outline where one covers an area, and a pin marking each one.
+  for (const comment of drawnComments(editor)) {
+    const r = COMMENT_PIN_SIZE / 2;
+    if (comment.region) {
+      ctx.strokeStyle = theme.selection;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(comment.region.x, comment.region.y, comment.region.width, comment.region.height);
+      ctx.setLineDash([]);
+    }
+    const cx = comment.pin.x + r;
+    const cy = comment.pin.y - r;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    // The tail points down to the spot the comment marks.
+    ctx.moveTo(cx - r * 0.5, cy + r * 0.8);
+    ctx.lineTo(comment.pin.x, comment.pin.y);
+    ctx.lineTo(cx + r * 0.2, cy + r * 0.95);
+    ctx.closePath();
+    ctx.fillStyle = comment.resolved ? theme.handleFill : theme.selection;
+    ctx.fill();
+    ctx.strokeStyle = theme.selection;
     ctx.lineWidth = 1;
     ctx.stroke();
   }

@@ -25,7 +25,7 @@ import type { SegmentEnd } from '@/core/vector/vector-bend';
 import { DEFAULT_VIEWPORT, type Viewport } from '../viewport/viewport';
 import { Observable } from './observable';
 
-export type ToolId = 'move' | 'hand' | 'scale' | 'frame' | 'section' | 'slice' | 'rectangle' | 'line' | 'arrow' | 'ellipse' | 'polygon' | 'star' | 'text' | 'image' | 'eyedropper' | 'pickLayer' | 'pen' | 'pencil' | 'brush' | 'textOnPath' | 'measure';
+export type ToolId = 'move' | 'hand' | 'scale' | 'frame' | 'section' | 'slice' | 'rectangle' | 'line' | 'arrow' | 'ellipse' | 'polygon' | 'star' | 'text' | 'image' | 'eyedropper' | 'pickLayer' | 'pen' | 'pencil' | 'brush' | 'textOnPath' | 'measure' | 'comment';
 
 /** Fixed point for the Scale panel: one of nine positions on the selection bounds. */
 export type ScaleAnchor = 'nw' | 'n' | 'ne' | 'w' | 'c' | 'e' | 'sw' | 's' | 'se';
@@ -105,6 +105,12 @@ export interface EditorState {
   readonly devTimeline: boolean;
   /** Dev Mode's focus view: the one design being looked at on its own, or null for the whole page. */
   readonly focusId: Id | null;
+  /** The place a comment is being written at, before it has been said; null when none is being written. */
+  readonly pendingComment: { readonly x: number; readonly y: number; readonly width?: number; readonly height?: number } | null;
+  /** The comment thread open on the canvas. */
+  readonly openCommentId: string | null;
+  /** Comments are kept off the canvas (⇧C). */
+  readonly commentsHidden: boolean;
   readonly rightTab: RightPanelTab;
   readonly viewports: Readonly<Record<Id, Viewport>>;
   /** Layer rows expanded in the layers panel. */
@@ -222,6 +228,9 @@ export class EditorStore extends Observable<EditorState> {
       annotationFilter: null,
       devTimeline: false,
       focusId: null,
+      pendingComment: null,
+      openCommentId: null,
+      commentsHidden: false,
       rightTab: 'design',
       viewports: {},
       expanded: new Set(),
@@ -392,6 +401,18 @@ export class EditorStore extends Observable<EditorState> {
 
   releaseSpring(): void {
     if (this.state.spring) this.setState({ tool: this.state.spring, spring: null });
+  }
+
+  setPendingComment(pendingComment: EditorState['pendingComment']): void {
+    this.setState({ pendingComment, openCommentId: null });
+  }
+
+  setOpenComment(openCommentId: string | null): void {
+    this.setState({ openCommentId, pendingComment: null });
+  }
+
+  setCommentsHidden(commentsHidden: boolean): void {
+    this.setState({ commentsHidden });
   }
 
   setFocus(focusId: Id | null): void {

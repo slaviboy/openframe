@@ -31,6 +31,7 @@ import { BlurEditController } from '../interactions/blur-edit';
 import { EyedropperTool, type EyedropperSample } from './eyedropper-tool';
 import { LayerPickTool } from './layer-pick-tool';
 import { MeasureTool } from './measure-tool';
+import { CommentTool } from './comment-tool';
 import { ImagePlaceTool } from './image-tool';
 import { LineTool } from './line-tool';
 import { VectorEditController } from '../interactions/vector-edit';
@@ -155,6 +156,7 @@ export class ToolManager {
       brush: new PencilTool(this.env, 'brush'),
       textOnPath: new TextPathTool(this.env),
       measure: new MeasureTool(this.env),
+      comment: new CommentTool(this.env),
     };
     let previous = editor.state.getSnapshot().tool;
     editor.state.subscribe(() => {
