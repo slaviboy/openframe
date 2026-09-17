@@ -30,6 +30,7 @@ import primitives from '../../primitives/primitives.module.css';
 import { Icon } from '../../icons/Icon';
 import { layerIcon } from '../../icons/layer-icons';
 import { AnnotationsSection } from './AnnotationsSection';
+import { CompareSection } from './CompareSection';
 import { DevAssetsPanel } from './DevAssetsPanel';
 import { PlaygroundSection } from './PlaygroundSection';
 import styles from './InspectPanel.module.css';
@@ -121,6 +122,7 @@ export function InspectPanel() {
       <div className={styles.panel} data-testid="inspect-panel">
         <p className={styles.empty}>{nodes.length === 0 ? 'Select a layer to inspect it.' : 'Select a single layer to inspect it.'}</p>
         <DevAssetsPanel />
+        <CompareSection />
         <MeasurementsSection />
       </div>
     );
@@ -186,6 +188,7 @@ export function InspectPanel() {
       <AnnotationsSection node={node} />
       <MeasurementsSection />
       <DevAssetsPanel />
+      <CompareSection />
         </>
       )}
     </div>

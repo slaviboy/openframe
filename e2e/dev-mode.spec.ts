@@ -399,3 +399,43 @@ test('the playground turns a component property another way without touching the
   await page.keyboard.press('Shift+D');
   await expect(page.getByRole('checkbox', { name: 'Show shape', exact: true })).toBeChecked();
 });
+
+test('Dev Mode compares the file with a saved version, by property and by code', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 300, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 400, box.y + 380, { steps: 4 });
+  await page.mouse.up();
+  const startWidth = await page.getByTestId('field-w').inputValue();
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+
+  // Save the file as it stands, then widen the rectangle.
+  await page.getByRole('button', { name: 'File actions' }).click();
+  await page.getByRole('menuitem', { name: 'Show version history' }).click();
+  const history = page.getByRole('region', { name: 'Version history' });
+  await history.getByRole('button', { name: 'Save to version history' }).click();
+  await history.getByLabel('Version title').fill('Before widening');
+  await history.getByRole('button', { name: 'Save', exact: true }).click();
+  await expect(history.getByRole('list', { name: 'Versions' })).toContainText('Before widening');
+  await page.getByRole('toolbar', { name: 'Tools' }).getByRole('button', { name: 'Done' }).click();
+
+  await page.getByRole('treeitem', { name: /Rectangle 1/ }).click();
+  await page.getByTestId('field-w').fill('260');
+  await page.getByTestId('field-w').press('Enter');
+
+  // Dev Mode reads the difference between then and now.
+  await page.keyboard.press('Shift+D');
+  const compare = page.getByRole('region', { name: 'Compare changes' });
+  await expect(compare).toBeVisible();
+  await compare.getByRole('combobox', { name: 'Compare with version' }).selectOption({ label: 'Before widening' });
+  await expect(compare).toContainText('Changed');
+  await expect(compare).toContainText(`${startWidth} → 260`);
+
+  // And shows the code either side of the change.
+  await compare.getByRole('tab', { name: 'Code' }).click();
+  await expect(page.getByTestId('compare-code-before')).toContainText(`width: ${startWidth}px;`);
+  await expect(page.getByTestId('compare-code-after')).toContainText('width: 260px;');
+});

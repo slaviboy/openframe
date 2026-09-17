@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import type { DocumentStore } from '@/core/document/store';
 import { createThumbnailUpdater } from './file-thumbnails';
 import { checkpointDue, VIEW_VERSION_KEY, type VersionView } from './version-history';
 import { createEmptyDocument } from '@/core/document/factory';
@@ -63,6 +64,8 @@ export interface AppSession {
   updateVersion(id: string, patch: { name: string; description: string }): Promise<void>;
   /** Reloads the app showing a version read-only (or, with null, the file as it is now). */
   viewVersion(id: string | null): Promise<void>;
+  /** A version's document, for Dev Mode to compare the file against without leaving it. */
+  readVersion(id: string): Promise<DocumentStore>;
   /** Restores a version (adding two autosave checkpoints) and reloads the app into the file. */
   restoreVersion(id: string): Promise<void>;
   /** Duplicates a version as a new local file. */
@@ -214,6 +217,10 @@ export async function bootstrap(): Promise<AppSession> {
     },
     updateVersion(id: string, patch: { name: string; description: string }) {
       return persistence.updateVersion(id, patch);
+    },
+    async readVersion(id: string) {
+      const { store } = await persistence.openVersion(id);
+      return store;
     },
     async viewVersion(id: string | null) {
       await autosaver.flush();
