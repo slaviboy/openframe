@@ -18,7 +18,7 @@
 import type { Id } from '../ids/ids';
 import { evaluateEasing } from '../anim/easing';
 import { toEasing } from '../prototype/reactions';
-import type { AnimatedProperty, AnimationTrack, Keyframe, KeyframeEasing, PageAnimation } from '../schema/document';
+import type { AnimatedProperty, AnimationTrack, Keyframe, KeyframeEasing, MotionCurve, PageAnimation } from '../schema/document';
 
 /** A new animation: two seconds, played over and over, with nothing animated yet. */
 export const DEFAULT_ANIMATION: PageAnimation = { duration: 2000, playback: 'LOOP', tracks: [] };
@@ -75,6 +75,15 @@ export function valuesAt(animation: PageAnimation | undefined, time: number): Ma
     values[track.property] = valueAt(track, time);
     out.set(track.nodeId, values);
   }
+  // A bent motion path moves the layer off the straight line between its position keyframes.
+  if (animation?.curves?.length) {
+    for (const [nodeId, values] of out) {
+      if (values.x === undefined || values.y === undefined) continue;
+      const offset = curveOffsetAt(animation, nodeId, time);
+      values.x += offset.x;
+      values.y += offset.y;
+    }
+  }
   return out;
 }
 
@@ -113,8 +122,8 @@ export function removeKeyframe(animation: PageAnimation, nodeId: Id, property: A
   const existing = trackFor(animation, nodeId, property);
   if (!existing) return animation;
   const keyframes = existing.keyframes.filter((keyframe) => keyframe.time !== Math.round(time));
-  if (keyframes.length === 0) return { ...animation, tracks: animation.tracks.filter((track) => track !== existing) };
-  return { ...animation, tracks: animation.tracks.map((track) => (track === existing ? { ...track, keyframes } : track)) };
+  const tracks = keyframes.length === 0 ? animation.tracks.filter((track) => track !== existing) : animation.tracks.map((track) => (track === existing ? { ...track, keyframes } : track));
+  return prunedCurves({ ...animation, tracks }, nodeId);
 }
 
 /** An animation with a keyframe moved to another moment, keeping its value; a keyframe already there gives way. */
@@ -124,12 +133,87 @@ export function moveKeyframe(animation: PageAnimation, nodeId: Id, property: Ani
   if (!track || !keyframe) return animation;
   const at = Math.max(0, Math.round(to));
   const keyframes = ordered([...track.keyframes.filter((k) => k.time !== keyframe.time && k.time !== at), { time: at, value: keyframe.value }]);
-  return { ...animation, tracks: animation.tracks.map((t) => (t === track ? { ...t, keyframes } : t)) };
+  const moved = { ...animation, tracks: animation.tracks.map((t) => (t === track ? { ...t, keyframes } : t)) };
+  // A bend belongs to the stretch that starts at the keyframe, so it travels with it.
+  const bend = curveFor(animation, nodeId, keyframe.time);
+  return prunedCurves(bend ? setCurve(setCurve(moved, nodeId, keyframe.time, undefined), nodeId, at, bend) : moved, nodeId);
 }
 
 /** An animation without any track of the layers given (used when they are deleted). */
 export function withoutLayers(animation: PageAnimation, ids: ReadonlySet<Id>): PageAnimation {
-  return { ...animation, tracks: animation.tracks.filter((track) => !ids.has(track.nodeId)) };
+  const tracks = animation.tracks.filter((track) => !ids.has(track.nodeId));
+  const curves = animation.curves?.filter((curve) => !ids.has(curve.nodeId));
+  return withCurves({ ...animation, tracks }, curves);
+}
+
+/** An animation carrying the curves given, the field dropped once every path runs straight again. */
+function withCurves(animation: PageAnimation, curves: readonly MotionCurve[] | undefined): PageAnimation {
+  const { curves: _previous, ...rest } = animation;
+  return curves && curves.length > 0 ? { ...rest, curves: [...curves] } : rest;
+}
+
+/** The moments a layer's position is keyframed at: the stretches of its motion path run between them. */
+export function pathTimes(animation: PageAnimation | undefined, nodeId: Id): number[] {
+  const x = trackFor(animation, nodeId, 'x');
+  const y = trackFor(animation, nodeId, 'y');
+  return [...new Set([...(x?.keyframes ?? []), ...(y?.keyframes ?? [])].map((keyframe) => keyframe.time))].sort((a, b) => a - b);
+}
+
+/** The stretch of a layer's motion path a moment falls in, given by the keyframed moments either side of it. */
+export function pathSegmentAt(animation: PageAnimation | undefined, nodeId: Id, time: number): { readonly from: number; readonly to: number } | undefined {
+  const times = pathTimes(animation, nodeId);
+  for (let i = 0; i + 1 < times.length; i += 1) if (time >= times[i]! && time <= times[i + 1]!) return { from: times[i]!, to: times[i + 1]! };
+  return undefined;
+}
+
+/** The bend set on the stretch that starts at a moment, if it has one. */
+export function curveFor(animation: PageAnimation | undefined, nodeId: Id, time: number): MotionCurve | undefined {
+  return animation?.curves?.find((curve) => curve.nodeId === nodeId && curve.time === Math.round(time));
+}
+
+/** An animation with the stretch starting at a moment bent off its straight line; no offset makes it straight again. */
+export function setCurve(animation: PageAnimation, nodeId: Id, time: number, offset: { readonly x: number; readonly y: number } | undefined): PageAnimation {
+  const at = Math.max(0, Math.round(time));
+  const others = (animation.curves ?? []).filter((curve) => !(curve.nodeId === nodeId && curve.time === at));
+  return withCurves(animation, offset ? [...others, { nodeId, time: at, x: offset.x, y: offset.y }] : others);
+}
+
+/** Drops the bends of a layer that no longer start at one of its position keyframes. */
+function prunedCurves(animation: PageAnimation, nodeId: Id): PageAnimation {
+  if (!animation.curves) return animation;
+  const times = new Set(pathTimes(animation, nodeId));
+  // A bend needs a stretch to bend: the last keyframed moment starts none.
+  const last = Math.max(...times, -1);
+  return withCurves(animation, animation.curves.filter((curve) => curve.nodeId !== nodeId || (times.has(curve.time) && curve.time !== last)));
+}
+
+/**
+ * How far a bend pulls a layer off its straight path at a moment. A bent stretch is a quadratic bezier, which works
+ * out to the straight run plus a bump peaking in its middle — so the bend is added to the eased values rather than
+ * replacing them, and the easing goes on shaping how fast the layer travels the curve.
+ */
+export function curveOffsetAt(animation: PageAnimation | undefined, nodeId: Id, time: number): { x: number; y: number } {
+  const none = { x: 0, y: 0 };
+  if (!animation?.curves?.length) return none;
+  const segment = pathSegmentAt(animation, nodeId, time);
+  const curve = segment ? curveFor(animation, nodeId, segment.from) : undefined;
+  if (!segment || !curve) return none;
+
+  const x = trackFor(animation, nodeId, 'x');
+  const y = trackFor(animation, nodeId, 'y');
+  const at = (track: AnimationTrack | undefined, moment: number) => (track ? valueAt(track, moment) : 0);
+  const dx = at(x, segment.to) - at(x, segment.from);
+  const dy = at(y, segment.to) - at(y, segment.from);
+  // How far along the stretch the layer already is, taken from the value itself so easing slides it along one fixed
+  // curve rather than reshaping the curve. A layer that does not move over the stretch falls back to the clock.
+  const u =
+    Math.abs(dx) >= Math.abs(dy) && dx !== 0
+      ? (at(x, time) - at(x, segment.from)) / dx
+      : dy !== 0
+        ? (at(y, time) - at(y, segment.from)) / dy
+        : (time - segment.from) / Math.max(1, segment.to - segment.from);
+  const bump = 2 * u * (1 - u);
+  return { x: curve.x * bump, y: curve.y * bump };
 }
 
 /** The layers the animation touches, in the order their tracks were added. */

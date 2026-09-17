@@ -17,7 +17,26 @@
 
 import { describe, expect, test } from 'vitest';
 import type { PageAnimation } from '../schema/document';
-import { DEFAULT_ANIMATION, animatedLayers, ease, keyframeAt, moveKeyframe, playheadAt, removeKeyframe, setKeyframe, setKeyframeEasing, trackFor, valueAt, valuesAt, withoutLayers } from './animation';
+import {
+  DEFAULT_ANIMATION,
+  animatedLayers,
+  curveFor,
+  curveOffsetAt,
+  ease,
+  keyframeAt,
+  moveKeyframe,
+  pathSegmentAt,
+  pathTimes,
+  playheadAt,
+  removeKeyframe,
+  setCurve,
+  setKeyframe,
+  setKeyframeEasing,
+  trackFor,
+  valueAt,
+  valuesAt,
+  withoutLayers,
+} from './animation';
 
 /** A square that slides from x 0 to x 100 over the first second, and fades in over half of it. */
 const slide: PageAnimation = {
@@ -130,5 +149,75 @@ describe('an animation', () => {
     expect(playheadAt(pingPong, 500).time).toBe(500);
     expect(playheadAt(pingPong, 2500).time).toBe(1500);
     expect(playheadAt(pingPong, 4000).time).toBe(0);
+  });
+});
+
+/** A square travelling straight from (0, 0) to (100, 0) over the first second: a motion path to bend. */
+const travel: PageAnimation = {
+  duration: 2000,
+  playback: 'LOOP',
+  tracks: [
+    {
+      nodeId: 'a',
+      property: 'x',
+      keyframes: [
+        { time: 0, value: 0 },
+        { time: 1000, value: 100 },
+      ],
+    },
+    {
+      nodeId: 'a',
+      property: 'y',
+      keyframes: [
+        { time: 0, value: 0 },
+        { time: 1000, value: 0 },
+      ],
+    },
+  ],
+};
+
+describe('a bent motion path', () => {
+  test('runs between the moments the layer\u2019s position is keyframed at', () => {
+    expect(pathTimes(travel, 'a')).toEqual([0, 1000]);
+    expect(pathSegmentAt(travel, 'a', 400)).toEqual({ from: 0, to: 1000 });
+    // Past the last keyframe there is no stretch left to bend.
+    expect(pathSegmentAt(travel, 'a', 1500)).toBeUndefined();
+    expect(pathTimes(travel, 'zz')).toEqual([]);
+  });
+
+  test('pulls the layer off the straight line, furthest in the middle of the stretch', () => {
+    const bent = setCurve(travel, 'a', 0, { x: 0, y: 40 });
+    expect(curveFor(bent, 'a', 0)).toEqual({ nodeId: 'a', time: 0, x: 0, y: 40 });
+    // The middle of the curve is half as far off as the offset; the keyframes themselves do not move.
+    expect(curveOffsetAt(bent, 'a', 500)).toEqual({ x: 0, y: 20 });
+    expect(curveOffsetAt(bent, 'a', 0)).toEqual({ x: 0, y: 0 });
+    expect(curveOffsetAt(bent, 'a', 1000)).toEqual({ x: 0, y: 0 });
+    expect(valuesAt(bent, 500).get('a')).toEqual({ x: 50, y: 20 });
+    // A straight path has nothing to add, and taking the bend off makes it straight again.
+    expect(curveOffsetAt(travel, 'a', 500)).toEqual({ x: 0, y: 0 });
+    expect(setCurve(bent, 'a', 0, undefined).curves).toBeUndefined();
+  });
+
+  test('keeps its shape under easing: the layer travels the same curve, at another pace', () => {
+    const bent = setKeyframeEasing(setCurve(travel, 'a', 0, { x: 0, y: 40 }), 'a', 'x', 0, { type: 'EASE_IN' });
+    const values = valuesAt(bent, 500).get('a')!;
+    // Easing in holds the layer back, and the bend it has reached is the one belonging to that point of the curve.
+    expect(values.x!).toBeLessThan(50);
+    expect(values.y!).toBeLessThan(20);
+    const u = values.x! / 100;
+    expect(values.y!).toBeCloseTo(40 * 2 * u * (1 - u), 6);
+  });
+
+  test('travels with the keyframe it starts at, and goes when that keyframe does', () => {
+    const bent = setCurve(travel, 'a', 0, { x: 0, y: 40 });
+    const moved = moveKeyframe(moveKeyframe(bent, 'a', 'x', 0, 200), 'a', 'y', 0, 200);
+    expect(curveFor(moved, 'a', 200)).toMatchObject({ time: 200, y: 40 });
+    expect(curveFor(moved, 'a', 0)).toBeUndefined();
+
+    // Removing the keyframe the bend starts at leaves nothing for it to bend.
+    const fewer = removeKeyframe(removeKeyframe(bent, 'a', 'x', 0), 'a', 'y', 0);
+    expect(fewer.curves).toBeUndefined();
+    // So does deleting the layer.
+    expect(withoutLayers(bent, new Set(['a'])).curves).toBeUndefined();
   });
 });

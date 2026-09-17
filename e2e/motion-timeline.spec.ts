@@ -312,3 +312,48 @@ test('the motion path on the canvas drags a position keyframe somewhere else', a
   await expect.poll(async () => Number(await page.getByTestId('field-y').inputValue())).toBe(startY + 100);
   await expect(page.getByTestId('field-x')).toHaveValue(String(startX + 200));
 });
+
+test('a stretch of the motion path bends by the handle in its middle', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 460, box.y + 310, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByRole('treeitem', { name: /Rectangle 1/ })).toBeVisible();
+
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  const startY = Number(await page.getByTestId('field-y').inputValue());
+  const startX = Number(await page.getByTestId('field-x').inputValue());
+  const zoom = 60 / Number(await page.getByTestId('field-w').inputValue());
+
+  await page.getByRole('button', { name: 'Add x position keyframe' }).click();
+  const current = timeline.getByRole('textbox', { name: 'Current time' });
+  await current.fill('1000');
+  await current.press('Enter');
+  await page.getByTestId('field-x').fill(String(startX + 200));
+  await page.getByTestId('field-x').press('Enter');
+  await expect(timeline.getByRole('button', { name: /X position keyframe at 1000 ms/ })).toBeVisible();
+  await current.fill('0');
+  await current.press('Enter');
+
+  // The handle sits halfway along the straight path; pulling it 50 down bends the stretch that far.
+  const handle = { x: box.x + 430 + 100 * zoom, y: box.y + 280 };
+  await page.mouse.move(handle.x, handle.y);
+  await page.mouse.down();
+  await page.mouse.move(handle.x, handle.y + 50 * zoom, { steps: 10 });
+  await page.mouse.up();
+  await expect(timeline.getByRole('group', { name: 'Y position track' })).toBeVisible();
+
+  // Halfway through, the layer is off the straight line by as much as the handle was pulled.
+  await current.fill('500');
+  await current.press('Enter');
+  await expect.poll(async () => Number(await page.getByTestId('field-y').inputValue())).toBe(startY + 50);
+  // At the keyframes themselves the bend has no pull, so the layer is where the path starts and ends.
+  await current.fill('1000');
+  await current.press('Enter');
+  await expect(page.getByTestId('field-y')).toHaveValue(String(startY));
+});

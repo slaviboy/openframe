@@ -638,12 +638,25 @@ export const AnimationTrackSchema = z.object({
   keyframes: z.array(KeyframeSchema).min(1).max(1000),
 });
 
+/**
+ * A bend in a layer's motion path: how far the middle of the stretch starting at `time` is pulled off the straight
+ * line between the two position keyframes, in the layer's own parent units.
+ */
+export const MotionCurveSchema = z.object({
+  nodeId: IdSchema,
+  time: z.number().int().min(0).max(600_000),
+  x: z.number().finite(),
+  y: z.number().finite(),
+});
+
 /** A page's animation: how long it runs, how it plays, and the tracks it holds. */
 export const PageAnimationSchema = z.object({
   /** Milliseconds; a new animation is 2000 ms long. */
   duration: z.number().int().min(1).max(600_000),
   playback: z.enum(['LOOP', 'ONCE', 'PING_PONG']),
   tracks: z.array(AnimationTrackSchema).max(2000),
+  /** The bends in the layers' motion paths. Absent while every path runs straight. */
+  curves: z.array(MotionCurveSchema).max(2000).optional(),
 });
 
 export const PageNodeSchema = z.object({
@@ -1227,6 +1240,7 @@ export type AnimatedProperty = z.infer<typeof AnimatedPropertySchema>;
 export type Keyframe = z.infer<typeof KeyframeSchema>;
 export type KeyframeEasing = z.infer<typeof KeyframeEasingSchema>;
 export type AnimationTrack = z.infer<typeof AnimationTrackSchema>;
+export type MotionCurve = z.infer<typeof MotionCurveSchema>;
 export type PageAnimation = z.infer<typeof PageAnimationSchema>;
 export type StyleNode = z.infer<typeof StyleNodeSchema>;
 export type BrushNode = z.infer<typeof BrushNodeSchema>;

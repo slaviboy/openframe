@@ -35,7 +35,7 @@ import { hitTestDeepest, isArtboardWithChildren, isInteractive, marqueeSelect, s
 import { connectDestinationAt, connectHandle, connectionAt, connectionsInScreenRect, flowTagAt, hitConnectHandle, overlayBadgeAt, variantDestinationAt } from '../chrome/prototype-geometry';
 import { hitTextPathHandle, textPathHandle, textPathPositionAt } from '../chrome/text-path-handle';
 import { anchorShareAt, anchorTarget, hitAnchorHandle } from '../chrome/anchor-handle';
-import { hitMotionPathKeyframe, keyframePositionAt } from '../chrome/motion-path';
+import { curveOffsetFor, hitMotionPathCurve, hitMotionPathKeyframe, keyframePositionAt } from '../chrome/motion-path';
 import { variantSetOf } from '@/core/prototype/reactions';
 import { addInteraction, moveFlowStartingPoint, removeConnections, removeFlowStartingPoint, setConnectionsDestination, type ConnectionRef } from '../commands/prototype';
 import { snapEqualGaps, type GapIndicator } from '@/core/scene/equal-gaps';
@@ -50,7 +50,7 @@ import { beginCrop } from '../interactions/crop';
 import { beginVectorEdit } from '../interactions/vector-edit';
 import { beginTextEditAt } from '../interactions/text-edit';
 import { resizedTextMode } from '../commands/text';
-import { moveKeyframePosition } from '../commands/motion';
+import { curveMotionPath, moveKeyframePosition } from '../commands/motion';
 import { resolveCornerRadii } from '@/core/geometry/corners';
 import type { CornerRadii } from '@/core/schema/document';
 import { applyDraggedRadius, draggedRadius, hitRadiusHandle, radiusHandles, radiusHandleScreen, radiusTarget, type RadiusHandle } from '../interactions/radius-handles';
@@ -194,6 +194,7 @@ type Gesture =
   | { kind: 'text-path-start'; nodeId: Id; tx: Transaction }
   | { kind: 'anchor'; nodeId: Id; tx: Transaction }
   | { kind: 'motion-path'; nodeId: Id; time: number; grab: Vec2 }
+  | { kind: 'motion-curve'; nodeId: Id; time: number; grab: Vec2 }
   /** Prototype tab: pressing a connection's noodle selects it; dragging the selected connections moves their destination. */
   | { kind: 'connection'; refs: readonly ConnectionRef[]; down: PointerInfo; current: PointerInfo; dragged: boolean; destination: Id | null; overEmpty: boolean }
   | { kind: 'flow-tag'; nodeId: Id; down: PointerInfo; current: PointerInfo; dragged: boolean; destination: Id | null; overEmpty: boolean };
@@ -361,6 +362,13 @@ export class MoveTool implements Tool {
     if (onPath) {
       const world = screenToWorld(editor.state.viewport, onPath.center);
       this.gesture = { kind: 'motion-path', nodeId: onPath.nodeId, time: onPath.time, grab: { x: world.x - p.world.x, y: world.y - p.world.y } };
+      return;
+    }
+    // Motion: the round handle in the middle of a stretch of the motion path bends it.
+    const onCurve = this.id === 'move' ? hitMotionPathCurve(editor, p.screen) : null;
+    if (onCurve) {
+      const world = screenToWorld(editor.state.viewport, onCurve.center);
+      this.gesture = { kind: 'motion-curve', nodeId: onCurve.nodeId, time: onCurve.time, grab: { x: world.x - p.world.x, y: world.y - p.world.y } };
       return;
     }
     // Motion: the target a layer turns and scales around.
@@ -664,6 +672,14 @@ export class MoveTool implements Tool {
         g.last = p;
         this.applyLayoutHandle(p);
         return;
+      case 'motion-curve': {
+        const offset = curveOffsetFor(this.env.editor, g.nodeId, g.time, { x: p.world.x + g.grab.x, y: p.world.y + g.grab.y });
+        if (offset) {
+          curveMotionPath(this.env.editor, g.nodeId, g.time, offset);
+          this.env.editor.requestRender();
+        }
+        return;
+      }
       case 'motion-path': {
         const position = keyframePositionAt(this.env.editor, g.nodeId, { x: p.world.x + g.grab.x, y: p.world.y + g.grab.y });
         if (position) {
@@ -787,7 +803,8 @@ export class MoveTool implements Tool {
       case 'text-path-start':
         this.env.editor.history.commit(g.tx);
         return;
-      // The path keyframe was written as it moved, each drag merging into one step.
+      // The path was written as it moved, each drag merging into one step.
+      case 'motion-curve':
       case 'motion-path':
         editor.requestRender();
         return;
@@ -1212,7 +1229,7 @@ export class MoveTool implements Tool {
       this.hoverCursor = smart.selection.axis === 'x' ? 'ew-resize' : 'ns-resize';
     }
     // Motion: a box on the motion path is dragged, and it covers whatever is under it.
-    if (this.id === 'move' && hitMotionPathKeyframe(editor, p.screen)) this.hoverCursor = 'move';
+    if (this.id === 'move' && (hitMotionPathKeyframe(editor, p.screen) || hitMotionPathCurve(editor, p.screen))) this.hoverCursor = 'move';
     this.lastHover = p;
     const titled = handle || corner ? null : hitSectionTitle(editor, p.screen);
     if (titled) {

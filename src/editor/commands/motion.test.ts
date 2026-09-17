@@ -21,11 +21,11 @@ import { IdGenerator } from '@/core/ids/ids';
 import { trackFor } from '@/core/motion/animation';
 import type { SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
-import { hitMotionPathKeyframe, keyframePositionAt, motionPath } from '../chrome/motion-path';
+import { curveOffsetFor, hitMotionPathCurve, hitMotionPathKeyframe, keyframePositionAt, motionPath } from '../chrome/motion-path';
 import { MotionPreview } from '../motion/preview';
 import { screenToWorld } from '../viewport/viewport';
 import { anchorPoint, rotationDegrees, setRotation } from './properties';
-import { addKeyframe, applyMotionPreset, deleteKeyframe, hasKeyframe, isAnimated, pageAnimation, removeAnimatedProperty, moveKeyframePosition, setAnimationDuration, setAnimationPlayback, setSegmentEasing } from './motion';
+import { addKeyframe, applyMotionPreset, deleteKeyframe, hasKeyframe, isAnimated, pageAnimation, removeAnimatedProperty, curveMotionPath, moveKeyframePosition, setAnimationDuration, setAnimationPlayback, setSegmentEasing } from './motion';
 
 let editor: Editor;
 let rect: string;
@@ -228,5 +228,46 @@ describe('the motion path', () => {
     expect(trackFor(pageAnimation(editor), rect, 'x')!.keyframes).toEqual([{ time: 500, value: 50 }]);
     // The layer had no y keyframes at all; dragging the box across the canvas gives it one.
     expect(trackFor(pageAnimation(editor), rect, 'y')!.keyframes).toEqual([{ time: 500, value: 45 }]);
+  });
+});
+
+describe('bending a motion path', () => {
+  const show = () => {
+    editor.state.setMode('motion');
+    editor.state.select([rect]);
+  };
+
+  test('the handle in the middle of a stretch bends it, and the layer travels the curve', () => {
+    show();
+    addKeyframe(editor, [rect], 'x', 0, 10);
+    addKeyframe(editor, [rect], 'x', 1000, 210);
+
+    const handle = motionPath(editor)!.curves[0]!;
+    expect(handle.time).toBe(0);
+    expect(hitMotionPathCurve(editor, handle.screen)!.time).toBe(0);
+
+    // Pulling the handle 30 down bends the stretch; the middle of a curve moves half as far as its offset.
+    const world = screenToWorld(editor.state.viewport, { x: handle.screen.x, y: handle.screen.y + 30 });
+    expect(curveMotionPath(editor, rect, 0, curveOffsetFor(editor, rect, 0, world)!)).toBe(true);
+    expect(pageAnimation(editor)!.curves).toEqual([{ nodeId: rect, time: 0, x: 0, y: 60 }]);
+    // A bend needs both axes, so the layer gains the y keyframes it was missing at the ends of the stretch.
+    expect(trackFor(pageAnimation(editor), rect, 'y')!.keyframes.map((k) => k.time)).toEqual([0, 1000]);
+
+    const preview = new MotionPreview(editor);
+    preview.show(500);
+    expect(node().transform[5]).toBe(50);
+    preview.clear();
+  });
+
+  test('a stretch runs straight again once its bend is taken off, and a layer without a path cannot bend', () => {
+    show();
+    addKeyframe(editor, [rect], 'x', 0, 10);
+    addKeyframe(editor, [rect], 'x', 1000, 210);
+    curveMotionPath(editor, rect, 0, { x: 0, y: 60 });
+
+    expect(curveMotionPath(editor, rect, 0, undefined)).toBe(true);
+    expect(pageAnimation(editor)!.curves).toBeUndefined();
+    // Nothing to bend: the last keyframe starts no stretch, and one keyframe alone is not a path.
+    expect(curveMotionPath(editor, rect, 1000, { x: 0, y: 60 })).toBe(false);
   });
 });

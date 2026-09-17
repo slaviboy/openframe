@@ -62,7 +62,7 @@ import { CONNECT_HANDLE_SIZE, connectHandle, FLOW_TAG_ICON_WIDTH, overlayBadgeRe
 import { animatedGifHash } from '../images/animated-gif';
 import { TEXT_PATH_HANDLE_SIZE, textPathHandle } from './text-path-handle';
 import { ANCHOR_HANDLE_SIZE, anchorHandle } from './anchor-handle';
-import { MOTION_PATH_KEYFRAME_SIZE, motionPath } from './motion-path';
+import { MOTION_PATH_CURVE_SIZE, MOTION_PATH_KEYFRAME_SIZE, motionPath } from './motion-path';
 
 /** The label an animated GIF gets next to its size. */
 const GIF_TAG = 'GIF';
@@ -359,9 +359,17 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
         ctx.arc(dot.x, dot.y, 1.5, 0, Math.PI * 2);
         ctx.fill();
       }
-      const side = MOTION_PATH_KEYFRAME_SIZE;
       ctx.lineWidth = 1.5;
       ctx.strokeStyle = theme.selection;
+      // The round handle in the middle of a stretch bends it.
+      for (const handle of path.curves) {
+        ctx.beginPath();
+        ctx.arc(handle.screen.x, handle.screen.y, MOTION_PATH_CURVE_SIZE / 2, 0, Math.PI * 2);
+        ctx.fillStyle = theme.handleFill;
+        ctx.fill();
+        ctx.stroke();
+      }
+      const side = MOTION_PATH_KEYFRAME_SIZE;
       for (const point of path.points) {
         ctx.beginPath();
         ctx.rect(point.screen.x - side / 2, point.screen.y - side / 2, side, side);

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { DEFAULT_ANIMATION, keyframeAt, moveKeyframe, removeKeyframe, setKeyframe, setKeyframeEasing, trackFor } from '@/core/motion/animation';
+import { DEFAULT_ANIMATION, keyframeAt, moveKeyframe, pathSegmentAt, removeKeyframe, setCurve, setKeyframe, setKeyframeEasing, trackFor, valueAt } from '@/core/motion/animation';
 import { presetById, PRESET_DURATION, type PresetBase } from '@/core/motion/presets';
 import type { Id } from '@/core/ids/ids';
 import { isSceneNode, type AnimatedProperty, type KeyframeEasing, type PageAnimation, type PageNode, type SceneNode } from '@/core/schema/document';
@@ -118,6 +118,36 @@ export function moveKeyframePosition(editor: Editor, nodeId: Id, time: number, p
     'Move keyframe',
     (animation) => setKeyframe(setKeyframe(animation, nodeId, 'x', at, point.x), nodeId, 'y', at, point.y),
     `motion-path:${nodeId}:${at}`,
+  );
+}
+
+/**
+ * Bends the stretch of a layer's motion path that starts at a moment: the offset says how far the middle of it is
+ * pulled off the straight line, and no offset makes it straight again. Both ends gain x and y keyframes if they are
+ * missing, since a path needs both to bend away from a straight line.
+ */
+export function curveMotionPath(editor: Editor, nodeId: Id, from: number, offset: { readonly x: number; readonly y: number } | undefined): boolean {
+  const node = editor.doc.get(nodeId);
+  const at = Math.round(from);
+  const segment = pathSegmentAt(pageAnimation(editor), nodeId, at);
+  // Only a stretch that starts at the moment given can bend: the last keyframe starts none.
+  if (!node || !isSceneNode(node) || segment?.from !== at) return false;
+  const bend = offset && (Math.abs(offset.x) >= 1 || Math.abs(offset.y) >= 1) ? offset : undefined;
+  return writeAnimation(
+    editor,
+    'Curve motion path',
+    (animation) => {
+      let next = animation;
+      for (const time of [segment.from, segment.to]) {
+        for (const property of ['x', 'y'] as const) {
+          const track = trackFor(next, nodeId, property);
+          if (!track) next = setKeyframe(next, nodeId, property, time, baseValue(node, property));
+          else if (!keyframeAt(track, time)) next = setKeyframe(next, nodeId, property, time, valueAt(track, time));
+        }
+      }
+      return setCurve(next, nodeId, segment.from, bend);
+    },
+    `curve:${nodeId}:${segment.from}`,
   );
 }
 
