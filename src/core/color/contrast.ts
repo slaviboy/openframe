@@ -16,6 +16,7 @@
  */
 
 import type { DocumentStore } from '../document/store';
+import type { Vec2 } from '../math/vec';
 import type { Id } from '../ids/ids';
 import { nodeContainsLocal, type SceneIndex } from '../scene/scene-index';
 import { hasGeometry, isSceneNode } from '../schema/document';
@@ -90,15 +91,28 @@ export function nearestCompliantColor(fg: RGBA, bg: RGBA, target: number): RGBA 
  * visible solid fill and its opacity. Image and gradient fills are skipped.
  */
 export function backgroundColorBehind(store: DocumentStore, index: SceneIndex, pageId: Id, nodeId: Id): RGBA {
-  const page = store.get(pageId);
-  let result: RGBA = page?.type === 'PAGE' ? { ...page.backgroundColor, a: 1 } : { r: 1, g: 1, b: 1, a: 1 };
   index.ensure(pageId);
   const bounds = index.worldBounds(nodeId);
-  if (!bounds) return result;
-  const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+  if (!bounds) return pageColor(store, pageId);
+  return backgroundColorAt(store, index, pageId, { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 }, nodeId);
+}
+
+/** The page's own canvas color, which everything else is painted on. */
+const pageColor = (store: DocumentStore, pageId: Id): RGBA => {
+  const page = store.get(pageId);
+  return page?.type === 'PAGE' ? { ...page.backgroundColor, a: 1 } : { r: 1, g: 1, b: 1, a: 1 };
+};
+
+/**
+ * The opaque color behind a point on the canvas: the page background with every visible layer covering the point
+ * painted on top, in order, up to `before` when one is given. Image and gradient fills are skipped.
+ */
+export function backgroundColorAt(store: DocumentStore, index: SceneIndex, pageId: Id, point: Vec2, before?: Id): RGBA {
+  let result: RGBA = pageColor(store, pageId);
+  index.ensure(pageId);
   const hidden = new Set<Id>();
   for (const id of store.descendants(pageId, false)) {
-    if (id === nodeId) break;
+    if (id === before) break;
     const node = store.get(id);
     if (!node || !isSceneNode(node)) continue;
     const parent = store.parentOf(id);

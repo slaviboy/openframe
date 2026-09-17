@@ -50,6 +50,7 @@ import { canvasMenuEntries, connectionMenuEntries, guideMenuEntries, objectMenuE
 import { BatchRenameDialog } from './dialogs/BatchRenameDialog';
 import { NudgeDialog } from './dialogs/NudgeDialog';
 import { OffsetPathDialog } from './dialogs/OffsetPathDialog';
+import { SimplifyPathDialog } from './dialogs/SimplifyPathDialog';
 import { CommandPalette } from './palette/CommandPalette';
 import { Menu, type MenuEntry } from './primitives/Menu';
 import { EditorShell, type UiMode } from './shell/EditorShell';
@@ -496,6 +497,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
       {editorState.dialog === 'nudgeAmount' && <NudgeDialog onClose={closeDialog} />}
       {editorState.dialog === 'export' && <ExportDialog editor={editor} onClose={closeDialog} />}
       {editorState.dialog === 'offsetPath' && <OffsetPathDialog editor={editor} onClose={closeDialog} />}
+      {editorState.dialog === 'simplifyPath' && <SimplifyPathDialog editor={editor} onClose={closeDialog} />}
       <input
         ref={openInput}
         type="file"

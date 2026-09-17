@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { colorEquals, relativeLuminance, type RGBA } from '@/core/color/color';
+import { backgroundColorAt } from '@/core/color/contrast';
 import { keyOnTop, makeVector, solid } from '@/core/document/factory';
 import { hitTestDeepest } from '@/core/scene/hit-test';
 import { isSceneNode } from '@/core/schema/document';
@@ -24,6 +26,7 @@ import type { Id } from '@/core/ids/ids';
 import type { Vec2 } from '@/core/math/vec';
 import { EMPTY_NETWORK } from '@/core/vector/pen';
 import { pencilNetwork } from '@/core/vector/pencil';
+import { DEFAULT_SKETCH_STROKE } from '../stores/editor-store';
 import { containerAt, nextLayerName, parentToLocal } from './draw-helpers';
 import type { CursorKind, ModifierState, PointerInfo, Tool, ToolEnvironment } from './types';
 import { placeNetwork } from './vector-draw';
@@ -48,8 +51,26 @@ function sampleStroke(editor: Editor, world: Vec2): boolean {
   if (!node || !isSceneNode(node) || !('strokes' in node)) return false;
   const paint = node.strokes.find((s) => s.visible && s.type === 'SOLID');
   if (paint?.type !== 'SOLID') return false;
-  editor.state.setSketchStroke({ color: { ...paint.color, a: paint.opacity }, weight: node.strokeWeight, dashed: node.strokeDashes !== undefined, ...(node.dynamicStroke ? { dynamic: node.dynamicStroke } : {}) });
+  editor.state.setSketchStroke({
+    color: { ...paint.color, a: paint.opacity },
+    weight: node.strokeWeight,
+    dashed: node.strokeDashes !== undefined,
+    ...(node.dynamicStroke ? { dynamic: node.dynamicStroke } : {}),
+  });
   return true;
+}
+
+/** Below this the canvas counts as dark, and the sketch that would be lost on it is drawn in white instead. */
+const DARK_BACKGROUND = 0.18;
+
+/**
+ * The colour a sketch is drawn in. A stroke the designer picked is used as it is; the black a sketch starts out
+ * with turns white where the canvas or the frame under it is dark, so the line can be seen.
+ */
+function sketchColor(editor: Editor, color: RGBA, world: Vec2): RGBA {
+  if (!colorEquals(color, DEFAULT_SKETCH_STROKE.color)) return color;
+  const behind = backgroundColorAt(editor.doc, editor.scene, editor.pageId, world);
+  return relativeLuminance(behind) < DARK_BACKGROUND ? { r: 1, g: 1, b: 1, a: 1 } : color;
 }
 
 /**
@@ -88,7 +109,7 @@ export class PencilTool implements Tool {
     const stroke = editor.state.getSnapshot().sketchStroke;
     tx.create({
       ...makeVector({ id, parent: { id: parent, key: keyOnTop(editor.doc, parent) }, name: nextLayerName(editor, 'Vector'), x: start.x, y: start.y, width: 0, height: 0 }, EMPTY_NETWORK),
-      strokes: [solid(stroke.color)],
+      strokes: [solid(sketchColor(editor, stroke.color, p.world))],
       strokeWeight: stroke.weight,
       ...(stroke.dashed ? { strokeDashes: [10, 10] } : {}),
       ...(this.id === 'brush' ? { dynamicStroke: stroke.dynamic } : {}),

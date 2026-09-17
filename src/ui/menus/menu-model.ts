@@ -89,6 +89,7 @@ const MAIN_MENU: readonly (readonly [string, readonly (readonly string[])[]])[] 
         'object.flatten',
         'object.outlineStroke',
         'object.offsetPath',
+        'object.simplifyPath',
         'object.outlineText',
       ],
       [
@@ -201,6 +202,7 @@ function objectCommandEntries(editor: Editor): MenuEntry[] {
       'object.flatten',
       'object.outlineStroke',
       'object.offsetPath',
+      'object.simplifyPath',
       'object.outlineText',
     ],
     [

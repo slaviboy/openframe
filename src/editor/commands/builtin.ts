@@ -49,6 +49,7 @@ import { canResetOverrides, resetSelectedOverrides } from './reset-overrides';
 import { canGoToMainComponent, canPushChangesToMain, canRestoreMainComponent, goToMainComponent, pushChangesToMain, restoreMainComponent } from './main-component';
 import { canOutlineStroke, outlineStrokeSelection } from './outline-stroke';
 import { canOffsetPath } from './offset-path';
+import { canSimplifyPath } from './simplify-path';
 import type { FontLoader } from '@/core/text/glyph-paths';
 import { canOutlineText, outlineTextSelection } from './outline-text';
 import { canWrapInSection, duplicateSelection, flipSelection, hasLayerSelection, ungroupSelection, wrapInSection, wrapSelection } from './structure';
@@ -418,6 +419,13 @@ const STRUCTURE_COMMANDS: CommandDefinition[] = [
     run: (e) => {
       void withOutlineFonts(e, (load) => outlineStrokeSelection(e, load));
     },
+  },
+  {
+    id: 'object.simplifyPath',
+    label: 'Simplify vector',
+    category: 'Object',
+    enabled: canSimplifyPath,
+    run: (e) => e.state.openDialog('simplifyPath'),
   },
   {
     id: 'object.outlineText',

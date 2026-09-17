@@ -16,11 +16,12 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { createEmptyDocument } from '@/core/document/factory';
+import { createEmptyDocument, keyOnTop, makeFrame, solid } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
 import type { VectorNode } from '@/core/schema/document';
 import { BUILTIN_COMMANDS } from '../commands/builtin';
 import { Editor } from '../editor';
+import { DEFAULT_SKETCH_STROKE } from '../stores/editor-store';
 import { ToolManager } from './tool-manager';
 import type { PointerInfo } from './types';
 
@@ -123,5 +124,40 @@ describe('pencil tool', () => {
     expect(straight.vectorNetwork.vertices).toHaveLength(2);
     expect(straight.size).toEqual({ width: 100, height: 50 });
     expect(editor.state.getSnapshot().tool).toBe('pencil');
+  });
+
+  test('a sketch on a dark canvas is drawn in white, and on a dark frame too', () => {
+    editor.state.setTool('pencil');
+    editor.history.run('dark page', (tx) => tx.set(editor.pageId, 'backgroundColor', { r: 0.05, g: 0.05, b: 0.06, a: 1 }));
+    tools.pointerDown(sample(100, 100));
+    tools.pointerMove(sample(140, 130));
+    tools.pointerUp(sample(180, 100));
+    expect(vectors()[0]!.strokes[0]).toMatchObject({ color: { r: 1, g: 1, b: 1, a: 1 } });
+
+    // A light frame over the dark page takes the sketch back to black. The sketch lands inside the frame.
+    const frame = editor.history.run('frame', (tx) => {
+      const frameId = editor.ids.next();
+      tx.create({
+        ...makeFrame({ id: frameId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'F', x: 300, y: 300, width: 200, height: 200 }),
+        fills: [solid({ r: 1, g: 1, b: 1, a: 1 })],
+      });
+      return frameId;
+    });
+    tools.pointerDown(sample(340, 340));
+    tools.pointerMove(sample(360, 360));
+    tools.pointerUp(sample(380, 380));
+    const inside = editor.doc.children(frame).map((id) => editor.doc.getOrThrow(id)) as VectorNode[];
+    expect(inside).toHaveLength(1);
+    expect(inside[0]!.strokes[0]).toMatchObject({ color: { r: 0, g: 0, b: 0, a: 1 } });
+  });
+
+  test('a stroke the designer picked is drawn as it is, dark canvas or not', () => {
+    editor.state.setTool('pencil');
+    editor.history.run('dark page', (tx) => tx.set(editor.pageId, 'backgroundColor', { r: 0, g: 0, b: 0, a: 1 }));
+    editor.state.setSketchStroke({ ...DEFAULT_SKETCH_STROKE, color: { r: 1, g: 0, b: 0, a: 1 } });
+    tools.pointerDown(sample(100, 100));
+    tools.pointerMove(sample(140, 130));
+    tools.pointerUp(sample(180, 100));
+    expect(vectors()[0]!.strokes[0]).toMatchObject({ color: { r: 1, g: 0, b: 0, a: 1 } });
   });
 });
