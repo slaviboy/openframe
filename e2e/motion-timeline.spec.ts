@@ -188,3 +188,41 @@ test('the stretch between keyframes takes an easing, which shapes the animation'
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
   await expect(page.getByRole('region', { name: 'Timeline' }).getByRole('combobox', { name: /X position easing from 0 ms/ })).toHaveValue('EASE_OUT');
 });
+
+test('a preset animation keyframes a layer from the properties panel', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 460, box.y + 310, { steps: 5 });
+  await page.mouse.up();
+
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  const animations = page.getByRole('region', { name: 'Animations' });
+  await expect(animations).toContainText('Add an animation');
+
+  // Fade in writes its keyframes from the playhead.
+  await animations.getByRole('combobox', { name: 'Add animation' }).selectOption('FADE_IN');
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  await expect(timeline.getByRole('button', { name: /Opacity keyframe at 0 ms/ })).toBeVisible();
+  await expect(timeline.getByRole('button', { name: /Opacity keyframe at 500 ms/ })).toBeVisible();
+  await expect(animations.getByRole('list', { name: 'Animated properties' })).toContainText('Opacity');
+
+  // It starts invisible and is fully there when it lands.
+  const current = timeline.getByRole('textbox', { name: 'Current time' });
+  await expect(page.getByTestId('field-opacity')).toHaveValue('0%');
+  await current.fill('500');
+  await current.press('Enter');
+  await expect(page.getByTestId('field-opacity')).toHaveValue('100%');
+
+  // A composite style animates several properties at once.
+  await animations.getByRole('combobox', { name: 'Add animation' }).selectOption('POP_IN');
+  await expect(animations.getByRole('list', { name: 'Animated properties' })).toContainText('Width');
+  await expect(animations.getByRole('list', { name: 'Animated properties' })).toContainText('Height');
+
+  // An animation is taken off again from the same list.
+  await animations.getByRole('button', { name: 'Remove width animation' }).click();
+  await expect(animations.getByRole('list', { name: 'Animated properties' })).not.toContainText('Width');
+});

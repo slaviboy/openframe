@@ -42,8 +42,9 @@ import { moveItem } from '@/core/collections/move-item';
 import { DEFAULT_DYNAMIC_STROKE } from '@/core/vector/dynamic-stroke';
 import { applyBrush, localBrushes } from '@/editor/commands/brushes';
 import { addRepeatTransform, applyTransforms, removeRepeatTransform, setRepeatTransform } from '@/editor/commands/transforms';
-import { addKeyframe, deleteKeyframe, hasKeyframe, isAnimated } from '@/editor/commands/motion';
-import { ANIMATED_PROPERTY_LABELS } from '@/core/motion/animation';
+import { addKeyframe, applyMotionPreset, deleteKeyframe, hasKeyframe, isAnimated, removeAnimatedProperty } from '@/editor/commands/motion';
+import { ANIMATED_PROPERTIES, ANIMATED_PROPERTY_LABELS } from '@/core/motion/animation';
+import { MOTION_PRESETS } from '@/core/motion/presets';
 import type { AnimatedProperty } from '@/core/schema/document';
 import { IOS_CORNER_SMOOTHING } from '@/core/geometry/corners';
 import { backgroundColorBehind } from '@/core/color/contrast';
@@ -591,6 +592,61 @@ function TransformSection({ nodes }: { nodes: SceneNode[] }) {
   );
 }
 
+/**
+ * Animations (Motion): the preset animations a layer can take, and the properties it is animated on. A preset writes its
+ * keyframes from the playhead, worked out from what the layer is now; a composite style writes several at once.
+ */
+function AnimationsSection({ nodes }: { nodes: SceneNode[] }) {
+  const editor = useEditor();
+  const time = useEditorState((s) => s.motion.time);
+  useDocumentRevision();
+  const ids = nodes.map((n) => n.id);
+  const animated = ANIMATED_PROPERTIES.filter((property) => ids.length > 0 && ids.every((id) => isAnimated(editor, id, property)));
+  return (
+    <Section title="Animations">
+      <select
+        className={primitives.select}
+        aria-label="Add animation"
+        value=""
+        onChange={(e) => {
+          if (e.target.value) applyMotionPreset(editor, ids, e.target.value, time);
+          e.target.value = '';
+        }}
+      >
+        <option value="">Add animation</option>
+        {MOTION_PRESETS.filter((preset) => !preset.composite).map((preset) => (
+          <option key={preset.id} value={preset.id}>
+            {preset.label}
+          </option>
+        ))}
+        <optgroup label="Composite styles">
+          {MOTION_PRESETS.filter((preset) => preset.composite).map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {preset.label}
+            </option>
+          ))}
+        </optgroup>
+      </select>
+      {animated.length === 0 ? (
+        <p className={styles.hint}>Add an animation, or keyframe a property with its diamond.</p>
+      ) : (
+        <ul className={styles.paintList} aria-label="Animated properties">
+          {animated.map((property) => (
+            <li key={property} className={styles.smoothingRow}>
+              <span>{ANIMATED_PROPERTY_LABELS[property]}</span>
+              <IconButton
+                icon="minus"
+                label={`Remove ${ANIMATED_PROPERTY_LABELS[property].toLowerCase()} animation`}
+                onClick={() => removeAnimatedProperty(editor, ids, property)}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </Section>
+  );
+}
+
 /** Mask section: shown when every selected layer is a mask. */
 function MaskSection({ nodes }: { nodes: SceneNode[] }) {
   const editor = useEditor();
@@ -1105,6 +1161,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         )}
       </Section>
       {draw && <TransformSection nodes={nodes} />}
+      {motion && <AnimationsSection nodes={nodes} />}
       {!allSlices && (
       <Section
         title="Appearance"

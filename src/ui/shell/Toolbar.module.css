@@ -266,3 +266,8 @@
   width: 72px;
   accent-color: var(--accent);
 }
+
+/* Motion: the timeline takes the bottom of the canvas, so the toolbar rides above it. */
+.toolbar[data-above-timeline] {
+  bottom: calc(var(--timeline-h) + var(--space-3));
+}

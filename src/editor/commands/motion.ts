@@ -16,6 +16,7 @@
  */
 
 import { DEFAULT_ANIMATION, keyframeAt, moveKeyframe, removeKeyframe, setKeyframe, setKeyframeEasing, trackFor } from '@/core/motion/animation';
+import { presetById, PRESET_DURATION, type PresetBase } from '@/core/motion/presets';
 import type { Id } from '@/core/ids/ids';
 import { isSceneNode, type AnimatedProperty, type KeyframeEasing, type PageAnimation, type PageNode, type SceneNode } from '@/core/schema/document';
 import { rotationDegrees } from './properties';
@@ -109,9 +110,51 @@ export function deleteKeyframes(editor: Editor, refs: readonly KeyframeRef[]): b
   return writeAnimation(editor, 'Delete keyframe', (animation) => refs.reduce((next, ref) => removeKeyframe(next, ref.nodeId, ref.property, ref.time), animation));
 }
 
+/** Takes a property's animation off the layers: its track and every keyframe on it. */
+export function removeAnimatedProperty(editor: Editor, ids: readonly Id[], property: AnimatedProperty): boolean {
+  if (ids.length === 0) return false;
+  return writeAnimation(editor, 'Remove animation', (animation) => ({
+    ...animation,
+    tracks: animation.tracks.filter((track) => !(ids.includes(track.nodeId) && track.property === property)),
+  }));
+}
+
 /** The easing of the stretch that starts at a keyframe; without one the move runs straight. */
 export function setSegmentEasing(editor: Editor, ref: KeyframeRef, easing: KeyframeEasing | undefined): boolean {
   return writeAnimation(editor, 'Change easing', (animation) => setKeyframeEasing(animation, ref.nodeId, ref.property, ref.time, easing));
+}
+
+/** What a layer is now, which a preset animation works its keyframes out from. */
+const presetBase = (node: SceneNode): PresetBase => ({
+  x: baseValue(node, 'x'),
+  y: baseValue(node, 'y'),
+  width: baseValue(node, 'width'),
+  height: baseValue(node, 'height'),
+  rotation: baseValue(node, 'rotation'),
+  opacity: baseValue(node, 'opacity'),
+});
+
+/**
+ * Applies a preset animation to the layers, starting at the playhead and running for its own length (a composite style
+ * writes several at once). The keyframes it writes are worked out from what each layer is now.
+ */
+export function applyMotionPreset(editor: Editor, ids: readonly Id[], presetId: string, time: number, duration = PRESET_DURATION): boolean {
+  const preset = presetById(presetId);
+  const layers = ids.map((id) => editor.doc.get(id)).filter((node): node is SceneNode => node !== undefined && isSceneNode(node));
+  if (!preset || layers.length === 0) return false;
+  const start = Math.max(0, Math.round(time));
+  const end = start + Math.max(1, Math.round(duration));
+  return writeAnimation(editor, `Add ${preset.label.toLowerCase()}`, (animation) =>
+    layers.reduce(
+      (next, node) =>
+        preset.steps(presetBase(node)).reduce((withStep, step) => {
+          const started = setKeyframe(withStep, node.id, step.property, start, step.from);
+          const eased = step.easing ? setKeyframeEasing(started, node.id, step.property, start, step.easing) : started;
+          return setKeyframe(eased, node.id, step.property, end, step.to);
+        }, next),
+      animation,
+    ),
+  );
 }
 
 /** How long the animation runs, in milliseconds. */

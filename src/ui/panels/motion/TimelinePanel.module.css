@@ -15,11 +15,11 @@
  * limitations under the License.
  */
 
-/* Across the bottom, over the canvas, between the sidebars. */
+/* Across the bottom of the canvas, between the sidebars rather than over them. */
 .timeline {
   position: absolute;
-  left: 0;
-  right: 0;
+  left: calc(var(--nav-rail-w) + var(--left-w, var(--sidebar-left-w)));
+  right: var(--right-w, var(--sidebar-right-w));
   bottom: 0;
   z-index: var(--z-panels);
   display: flex;

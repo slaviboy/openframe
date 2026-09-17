@@ -22,7 +22,7 @@ import { trackFor } from '@/core/motion/animation';
 import type { SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { MotionPreview } from '../motion/preview';
-import { addKeyframe, deleteKeyframe, hasKeyframe, isAnimated, pageAnimation, setAnimationDuration, setAnimationPlayback } from './motion';
+import { addKeyframe, applyMotionPreset, deleteKeyframe, hasKeyframe, isAnimated, pageAnimation, removeAnimatedProperty, setAnimationDuration, setAnimationPlayback } from './motion';
 
 let editor: Editor;
 let rect: string;
@@ -69,6 +69,37 @@ describe('keyframes', () => {
     // Out-of-range durations are brought back in.
     setAnimationDuration(editor, 0);
     expect(pageAnimation(editor)!.duration).toBe(1);
+  });
+});
+
+describe('preset animations', () => {
+  test('a preset writes its keyframes from the playhead, worked out from what the layer is now', () => {
+    expect(applyMotionPreset(editor, [rect], 'FADE_IN', 200)).toBe(true);
+    const track = trackFor(pageAnimation(editor), rect, 'opacity')!;
+    // Fades from nothing at the playhead to the layer's own opacity 500 ms later, easing out of the move.
+    expect(track.keyframes).toEqual([
+      { time: 200, value: 0, easing: { type: 'EASE_OUT' } },
+      { time: 700, value: 1 },
+    ]);
+  });
+
+  test('a spin turns the layer a full circle, and a composite style animates several properties at once', () => {
+    applyMotionPreset(editor, [rect], 'SPIN', 0);
+    expect(trackFor(pageAnimation(editor), rect, 'rotation')!.keyframes.map((k) => k.value)).toEqual([0, -360]);
+
+    applyMotionPreset(editor, [rect], 'POP_IN', 0);
+    expect(isAnimated(editor, rect, 'opacity')).toBe(true);
+    expect(isAnimated(editor, rect, 'width')).toBe(true);
+    expect(isAnimated(editor, rect, 'height')).toBe(true);
+    // The scale part springs into place.
+    expect(trackFor(pageAnimation(editor), rect, 'width')!.keyframes[0]!.easing).toEqual({ type: 'BOUNCY' });
+  });
+
+  test('an unknown preset changes nothing, and a property\u2019s animation can be taken off again', () => {
+    expect(applyMotionPreset(editor, [rect], 'NOPE', 0)).toBe(false);
+    applyMotionPreset(editor, [rect], 'FADE_IN', 0);
+    expect(removeAnimatedProperty(editor, [rect], 'opacity')).toBe(true);
+    expect(isAnimated(editor, rect, 'opacity')).toBe(false);
   });
 });
 

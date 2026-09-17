@@ -244,6 +244,8 @@ export function Toolbar() {
       className={styles.toolbar}
       role="toolbar"
       aria-label="Tools"
+      // In Motion the timeline runs along the bottom, so the toolbar sits above it.
+      data-above-timeline={mode === 'motion' || undefined}
       onKeyDown={(e) => {
         // ←/→ move focus between tool buttons (F6 focuses the toolbar).
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
