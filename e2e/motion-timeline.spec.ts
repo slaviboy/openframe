@@ -522,3 +522,60 @@ test('the timeline zooms into part of the animation, and a layer track moves and
   const label = (await moved.getAttribute('aria-label'))!;
   expect(Number(/from (\d+) to/.exec(label)![1])).toBeGreaterThan(0);
 });
+
+test('keyframes are picked by row, swept with a box, and a double-click moves the playhead to one', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 460, box.y + 310, { steps: 5 });
+  await page.mouse.up();
+
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  const current = timeline.getByRole('textbox', { name: 'Current time' });
+  const startX = Number(await page.getByTestId('field-x').inputValue());
+
+  // Two x keyframes, at the start and at 1000 ms.
+  await page.getByRole('button', { name: 'Add x position keyframe' }).click();
+  await current.fill('1000');
+  await current.press('Enter');
+  await page.getByTestId('field-x').fill(String(startX + 100));
+  await page.getByTestId('field-x').press('Enter');
+
+  // Auto-keyframe shows that it is recording.
+  await expect(timeline).not.toHaveAttribute('data-recording', 'true');
+  await timeline.getByRole('button', { name: 'Auto-keyframe' }).click();
+  await expect(timeline).toHaveAttribute('data-recording', 'true');
+  await timeline.getByRole('button', { name: 'Auto-keyframe' }).click();
+
+  // A double-click on a keyframe takes the playhead to it; a single click only picks it out.
+  await current.fill('500');
+  await current.press('Enter');
+  const first = timeline.getByRole('button', { name: /X position keyframe at 0 ms/ });
+  await first.click();
+  await expect(first).toHaveAttribute('aria-pressed', 'true');
+  await expect(current).toHaveValue('500');
+  await first.dblclick();
+  await expect(current).toHaveValue('0');
+
+  // The row's name picks out every keyframe on it, and Delete clears them together.
+  await timeline.getByRole('button', { name: 'Select X position keyframes' }).click();
+  await expect(timeline.getByRole('button', { name: /X position keyframe at 1000 ms/ })).toHaveAttribute('aria-pressed', 'true');
+  await timeline.getByRole('button', { name: /X position keyframe at 0 ms/ }).press('Delete');
+  await expect(timeline.getByRole('button', { name: /X position keyframe at/ })).toHaveCount(0);
+
+  // Sweeping a box over the tracks picks out what it covers.
+  await page.keyboard.press('ControlOrMeta+Z');
+  await expect(timeline.getByRole('button', { name: /X position keyframe at/ })).toHaveCount(2);
+  const tracks = (await timeline.getByRole('list', { name: 'Layer tracks' }).boundingBox())!;
+  // The sweep starts in the empty room at the right of the lanes, past the keyframes, and is dragged back over them.
+  await page.mouse.move(tracks.x + tracks.width - 4, tracks.y + tracks.height - 2);
+  await page.mouse.down();
+  await page.mouse.move(tracks.x + 182, tracks.y + 2, { steps: 10 });
+  await page.mouse.up();
+  await expect(timeline.getByRole('button', { name: /X position keyframe at 0 ms/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(timeline.getByRole('button', { name: /X position keyframe at 1000 ms/ })).toHaveAttribute('aria-pressed', 'true');
+});

@@ -100,6 +100,29 @@
   transform: none;
 }
 
+/* The box swept over the tracks to pick out keyframes; it is placed in screen coordinates, so it sits fixed. */
+.marquee {
+  position: fixed;
+  z-index: var(--z-panels);
+  border: 1px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  pointer-events: none;
+}
+
+/* Auto-keyframe: a red bar across the top of the timeline, and a red playhead, so recording is never a surprise. */
+.timeline[data-recording]::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: var(--accent-danger);
+  z-index: 1;
+}
+
+.timeline[data-recording] .playhead {
+  background: var(--accent-danger);
+}
+
 .playhead {
   position: absolute;
   top: 0;
@@ -211,11 +234,21 @@
 }
 
 .trackName {
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--fg-secondary);
+  font: inherit;
   font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.trackName:hover {
+  color: var(--fg-primary);
 }
 
 /* The lane a property's keyframes sit in, across the animation's length. */

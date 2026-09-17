@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { useCallback, useEffect, useMemo, useRef, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { ANIMATED_PROPERTY_LABELS, animatedLayers, layerExtent, playheadAt, valueAt } from '@/core/motion/animation';
 import type { Id } from '@/core/ids/ids';
 import type { AnimationTrack, PageAnimation, PageNode, SceneNode } from '@/core/schema/document';
@@ -33,6 +33,9 @@ import styles from './TimelinePanel.module.css';
 /** How the playback button reads, in the order clicking it cycles through. */
 const PLAYBACK_LABELS: Readonly<Record<PageAnimation['playback'], string>> = { LOOP: 'Loop', ONCE: 'Once', PING_PONG: 'Ping-pong' };
 const PLAYBACK_ORDER: readonly PageAnimation['playback'][] = ['LOOP', 'ONCE', 'PING_PONG'];
+
+/** How near a keyframe has to be dragged, on screen, for ⇧ to snap it to the playhead or another keyframe. */
+const SNAP_REACH_PX = 8;
 
 /** How far the timeline zooms in: at 50 a 2000 ms animation shows 40 ms across. */
 const MAX_TIMELINE_ZOOM = 50;
@@ -54,6 +57,9 @@ export function TimelinePanel() {
   const animation = animationOf(page);
   const layers = useMemo(() => animatedLayers(animation), [animation]);
   const rulerRef = useRef<HTMLDivElement>(null);
+  const tracksRef = useRef<HTMLUListElement>(null);
+  /** The box being swept over the tracks, in screen coordinates, while one is being dragged. */
+  const [marquee, setMarquee] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   // The timeline shows a window of the animation: the whole of it at zoom 1, and less the further it is zoomed in.
   const span = animation.duration / Math.max(1, motion.zoom);
   const offset = Math.min(Math.max(0, motion.offset), Math.max(0, animation.duration - span));
@@ -88,10 +94,14 @@ export function TimelinePanel() {
       const target = e.currentTarget;
       target.setPointerCapture(e.pointerId);
       let delta = 0;
+      // ⇧ snaps the keyframe to the playhead, or to another keyframe it is dragged over.
+      const snapTo = [motion.time, ...animation.tracks.flatMap((track) => track.keyframes.map((k) => k.time))];
       const move = (ev: PointerEvent) => {
         const raw = ((ev.clientX - startX) / width) * span;
-        const snap = animation.duration / 10;
-        delta = Math.round(ev.shiftKey ? Math.round((ref.time + raw) / snap) * snap - ref.time : raw);
+        const at = ref.time + raw;
+        const reach = (span / width) * SNAP_REACH_PX;
+        const near = ev.shiftKey ? snapTo.filter((t) => Math.abs(t - at) <= reach).sort((a, b) => Math.abs(a - at) - Math.abs(b - at))[0] : undefined;
+        delta = Math.round((near ?? at) - ref.time);
       };
       const up = (ev: PointerEvent) => {
         target.releasePointerCapture(ev.pointerId);
@@ -104,7 +114,7 @@ export function TimelinePanel() {
       target.addEventListener('pointermove', move);
       target.addEventListener('pointerup', up);
     },
-    [animation.duration, editor, isSelected, selected, setSelected, span],
+    [animation, editor, isSelected, motion.time, selected, setSelected, span],
   );
 
   // Playing moves the playhead until it is paused (or the animation ends, played once).
@@ -135,6 +145,45 @@ export function TimelinePanel() {
   );
 
 
+  /**
+   * Dragging across the tracks, starting on empty room rather than a keyframe, sweeps a box around the keyframes it
+   * covers and picks them out. What each one is comes from the button itself, so no geometry has to be worked twice.
+   */
+  const sweep = (e: ReactPointerEvent<HTMLUListElement>) => {
+    if (e.button !== 0 || (e.target as HTMLElement).closest('button, select, input')) return;
+    const container = tracksRef.current;
+    if (!container) return;
+    const from = { x: e.clientX, y: e.clientY };
+    setMarquee({ left: from.x, top: from.y, width: 0, height: 0 });
+    const move = (ev: PointerEvent) => {
+      setMarquee({ left: Math.min(from.x, ev.clientX), top: Math.min(from.y, ev.clientY), width: Math.abs(ev.clientX - from.x), height: Math.abs(ev.clientY - from.y) });
+    };
+    const up = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setMarquee(null);
+      const box = { left: Math.min(from.x, ev.clientX), right: Math.max(from.x, ev.clientX), top: Math.min(from.y, ev.clientY), bottom: Math.max(from.y, ev.clientY) };
+      // A click with no drag in it clears the selection instead of sweeping nothing.
+      if (box.right - box.left < 3 && box.bottom - box.top < 3) {
+        setSelected([]);
+        return;
+      }
+      const swept: KeyframeRef[] = [];
+      for (const element of container.querySelectorAll<HTMLElement>('[data-keyframe]')) {
+        const rect = element.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        const [nodeId, property, time] = (element.dataset.keyframe ?? '').split('|');
+        if (x >= box.left && x <= box.right && y >= box.top && y <= box.bottom && nodeId && property) {
+          swept.push({ nodeId, property: property as KeyframeRef['property'], time: Number(time) });
+        }
+      }
+      setSelected(swept);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
   /** ⌘ (or Ctrl) with the wheel zooms the timeline around the pointer, as it does on the canvas. */
   const wheelZoom = (e: ReactWheelEvent<HTMLDivElement>) => {
     if (!e.metaKey && !e.ctrlKey) return;
@@ -148,6 +197,7 @@ export function TimelinePanel() {
     <section
       className={styles.timeline}
       aria-label="Timeline"
+      data-recording={motion.autoKeyframe || undefined}
       data-testid="timeline"
       tabIndex={-1}
       onKeyDown={(e) => {
@@ -243,7 +293,7 @@ export function TimelinePanel() {
         {layers.length === 0 ? (
           <p className={styles.empty}>Select a layer and add a keyframe from the properties panel to animate it.</p>
         ) : (
-          <ul className={styles.tracks} aria-label="Layer tracks">
+          <ul className={styles.tracks} aria-label="Layer tracks" onPointerDown={sweep} ref={tracksRef}>
             {layers.map((id) => (
               <LayerTrack
                 key={id}
@@ -256,12 +306,14 @@ export function TimelinePanel() {
                 visibleMs={span}
                 isSelected={isSelected}
                 onSelect={(ref, add) => setSelected(add ? (current) => [...current.filter((k) => !(k.nodeId === ref.nodeId && k.property === ref.property && k.time === ref.time)), ref] : [ref])}
+                onSelectAll={setSelected}
                 onDrag={dragKeyframes}
               />
             ))}
           </ul>
         )}
       </div>
+      {marquee && <div className={styles.marquee} style={{ left: marquee.left, top: marquee.top, width: marquee.width, height: marquee.height }} />}
     </section>
   );
 }
@@ -301,6 +353,7 @@ function LayerTrack({
   visibleMs,
   isSelected,
   onSelect,
+  onSelectAll,
   onDrag,
 }: {
   nodeId: Id;
@@ -312,6 +365,7 @@ function LayerTrack({
   visibleMs: number;
   isSelected: (ref: KeyframeRef) => boolean;
   onSelect: (ref: KeyframeRef, add: boolean) => void;
+  onSelectAll: (refs: readonly KeyframeRef[]) => void;
   onDrag: (ref: KeyframeRef, e: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
   const editor = useEditor();
@@ -322,17 +376,25 @@ function LayerTrack({
   const icon = layerIcon(node);
   return (
     <li className={styles.layer} data-selected={selected || undefined} data-component={icon === 'component' || icon === 'instance' || undefined}>
-      <button type="button" className={styles.layerName} onClick={() => editor.state.select([nodeId])}>
+      {/* Picking a layer here selects it on the canvas and all of its keyframes, which Delete then clears together. */}
+      <button
+        type="button"
+        className={styles.layerName}
+        onClick={() => {
+          editor.state.select([nodeId]);
+          onSelectAll(tracks.flatMap((track) => track.keyframes.map((k) => ({ nodeId, property: track.property, time: k.time }))));
+        }}
+      >
         <Icon name={icon} size={16} />
         {node.name}
       </button>
       <div className={styles.layerRows}>
         <TrackSpan nodeId={nodeId} animation={animation} percent={percent} visibleMs={visibleMs} />
         {collapsed ? (
-          <TrackRow label={node.name} nodeId={nodeId} tracks={tracks} percent={percent} time={time} isSelected={isSelected} onSelect={onSelect} onDrag={onDrag} />
+          <TrackRow label={node.name} nodeId={nodeId} tracks={tracks} percent={percent} time={time} isSelected={isSelected} onSelect={onSelect} onSelectAll={onSelectAll} onDrag={onDrag} />
         ) : (
           tracks.map((track) => (
-            <TrackRow key={track.property} label={ANIMATED_PROPERTY_LABELS[track.property]} nodeId={nodeId} tracks={[track]} percent={percent} time={time} isSelected={isSelected} onSelect={onSelect} onDrag={onDrag} />
+            <TrackRow key={track.property} label={ANIMATED_PROPERTY_LABELS[track.property]} nodeId={nodeId} tracks={[track]} percent={percent} time={time} isSelected={isSelected} onSelect={onSelect} onSelectAll={onSelectAll} onDrag={onDrag} />
           ))
         )}
       </div>
@@ -400,6 +462,7 @@ function TrackRow({
   time,
   isSelected,
   onSelect,
+  onSelectAll,
   onDrag,
 }: {
   label: string;
@@ -409,12 +472,15 @@ function TrackRow({
   time: number;
   isSelected: (ref: KeyframeRef) => boolean;
   onSelect: (ref: KeyframeRef, add: boolean) => void;
+  onSelectAll: (refs: readonly KeyframeRef[]) => void;
   onDrag: (ref: KeyframeRef, e: ReactPointerEvent<HTMLButtonElement>) => void;
 }) {
   const editor = useEditor();
   return (
     <div className={styles.track} role="group" aria-label={`${label} track`}>
-      <span className={styles.trackName}>{label}</span>
+      <button type="button" className={styles.trackName} aria-label={`Select ${label} keyframes`} onClick={() => onSelectAll(tracks.flatMap((track) => track.keyframes.map((k) => ({ nodeId, property: track.property, time: k.time }))))}>
+        {label}
+      </button>
       <div className={styles.trackLane}>
         {tracks.flatMap((track) =>
           track.keyframes.slice(0, -1).map((keyframe, i) => {
@@ -452,6 +518,7 @@ function TrackRow({
                 key={`${track.property}-${keyframe.time}`}
                 type="button"
                 className={styles.keyframe}
+                data-keyframe={`${nodeId}|${track.property}|${keyframe.time}`}
                 style={{ left: percent(keyframe.time) }}
                 aria-label={`${ANIMATED_PROPERTY_LABELS[track.property]} keyframe at ${Math.round(keyframe.time)} ms`}
                 aria-pressed={isSelected(ref)}
@@ -462,7 +529,7 @@ function TrackRow({
                   onSelect(ref, e.shiftKey);
                   onDrag(ref, e);
                 }}
-                onClick={() => editor.state.setMotion({ time: keyframe.time, playing: false })}
+                onDoubleClick={() => editor.state.setMotion({ time: keyframe.time, playing: false })}
               />
             );
           }),
