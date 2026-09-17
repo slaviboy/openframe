@@ -26,6 +26,7 @@ import { formatNumber } from '../../primitives/math';
 import primitives from '../../primitives/primitives.module.css';
 import { Icon } from '../../icons/Icon';
 import { layerIcon } from '../../icons/layer-icons';
+import { AnnotationsSection } from './AnnotationsSection';
 import styles from './InspectPanel.module.css';
 
 /** A measurement as Dev Mode reads it: whole pixels where it can, two decimals where it cannot. */
@@ -172,6 +173,7 @@ export function InspectPanel() {
         <Row label="Opacity" value={`${formatNumber(node.opacity * 100, 0)}%`} />
         <Row label="Blend mode" value={node.blendMode.toLowerCase().replace(/_/g, ' ')} />
       </Group>
+      <AnnotationsSection node={node} />
       <MeasurementsSection />
         </>
       )}

@@ -22,6 +22,7 @@ import { presentFile } from '@/app/present';
 import { PackageError } from '@/platform/package';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { bootstrap, type AppSession } from '@/app/bootstrap';
+import { addAnnotation } from '@/editor/commands/annotations';
 import type { Vec2 } from '@/core/math/vec';
 import { placeImages } from '@/editor/commands/images';
 import { screenToWorld } from '@/editor/viewport/viewport';
@@ -295,6 +296,18 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
         checked: () => editor.state.getSnapshot().mode === 'draw',
         // Draw and Design share the editor; the toolbar and the panels change with the mode.
         run: () => editor.state.setMode(editor.state.getSnapshot().mode === 'draw' ? 'design' : 'draw'),
+      },
+      {
+        id: 'dev.annotate',
+        label: 'Annotate',
+        category: 'View',
+        enabled: () => editor.state.getSnapshot().selection.length === 1,
+        // A note is left on one layer at a time, and is written in the Annotations section.
+        run: () => {
+          const [id] = editor.state.getSnapshot().selection;
+          if (id !== undefined) addAnnotation(editor, id);
+        },
+        shortcuts: ['Shift+T'],
       },
       {
         id: 'view.devMode',

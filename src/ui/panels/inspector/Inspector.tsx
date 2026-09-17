@@ -48,6 +48,7 @@ import { EASING_LABELS, EASING_TYPES, makeEasing, type EasingType } from '@/core
 import { localCollections } from '@/core/variables/document';
 import { canHaveDevStatus } from '@/editor/commands/dev-status';
 import { DevStatusControl } from '../dev/InspectPanel';
+import { AnnotationsSection } from '../dev/AnnotationsSection';
 import { EasingGraph } from '../prototype/EasingGraph';
 import { MOTION_PRESETS } from '@/core/motion/presets';
 import type { AnimatedProperty, KeyframeEasing, PageNode } from '@/core/schema/document';
@@ -1136,6 +1137,8 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       {single && <ComponentSection node={single} />}
       {/* Handoff statuses are set while designing as well as in Dev Mode. */}
       {single && canHaveDevStatus(single) && <DevStatusControl node={single} />}
+      {/* Notes for whoever builds the design are written while designing as well as in Dev Mode. */}
+      {single && <AnnotationsSection node={single} />}
       {tool === 'scale' && <ScaleSection nodes={nodes} />}
       <Section title="Position">
         <AlignRow />

@@ -620,6 +620,14 @@ const CornerFields = {
   individualStrokeWeights: IndividualStrokeWeightsSchema.optional(),
 };
 
+/** A category an annotation is filed under, so a developer can scan for the kind of note they want. */
+export const AnnotationCategorySchema = z.object({
+  id: z.string().min(1).max(64),
+  label: z.string().min(1).max(100),
+  /** A colour for the label, as `#rrggbb`. */
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+});
+
 export const DocumentNodeSchema = z.object({
   id: z.literal('0:0'),
   type: z.literal('DOCUMENT'),
@@ -628,6 +636,8 @@ export const DocumentNodeSchema = z.object({
   colorProfile: z.enum(['SRGB', 'DISPLAY_P3']).optional(),
   /** The frame set as the file's thumbnail (Set as thumbnail); absent means the thumbnail shows the first page. */
   thumbnailNodeId: IdSchema.optional(),
+  /** Dev Mode: the categories annotations in this file are filed under. Absent means the ones a file starts with. */
+  annotationCategories: z.array(AnnotationCategorySchema).max(64).optional(),
 });
 
 /**
@@ -671,6 +681,20 @@ export const MotionCurveSchema = z.object({
 });
 
 /**
+ * A note a designer attaches to a layer for whoever builds it: free text, and the layer's own properties called out
+ * so they stay right as the design changes.
+ */
+export const AnnotationSchema = z.object({
+  id: z.string().min(1).max(64),
+  nodeId: IdSchema,
+  text: z.string().max(10_000).optional(),
+  /** The properties of the layer this note points at, named as the inspect panel names them. */
+  properties: z.array(z.string().min(1).max(64)).max(32).optional(),
+  /** The category it is filed under, by id. */
+  categoryId: z.string().min(1).max(64).optional(),
+});
+
+/**
  * A measurement saved on a page: the distance between two layers, drawn for everyone who opens the file. This is the
  * one that is kept, as against the measuring that ⌥ shows while the pointer is held over a layer.
  */
@@ -700,6 +724,8 @@ export const PageNodeSchema = z.object({
   animation: PageAnimationSchema.optional(),
   /** Dev Mode: the measurements saved on this page. Absent until one is drawn. */
   measurements: z.array(MeasurementSchema).max(1000).optional(),
+  /** Dev Mode: the notes left on this page's layers. Absent until one is written. */
+  annotations: z.array(AnnotationSchema).max(2000).optional(),
   /** Canvas guides. Absent when the page has none. */
   guides: GuidesField,
   /** Variable modes set on the page, by collection id. */
@@ -1280,6 +1306,8 @@ export type KeyframeEasing = z.infer<typeof KeyframeEasingSchema>;
 export type AnimationTrack = z.infer<typeof AnimationTrackSchema>;
 export type DevStatus = z.infer<typeof DevStatusSchema>;
 export type Measurement = z.infer<typeof MeasurementSchema>;
+export type Annotation = z.infer<typeof AnnotationSchema>;
+export type AnnotationCategory = z.infer<typeof AnnotationCategorySchema>;
 export type MotionCurve = z.infer<typeof MotionCurveSchema>;
 export type PageAnimation = z.infer<typeof PageAnimationSchema>;
 export type StyleNode = z.infer<typeof StyleNodeSchema>;

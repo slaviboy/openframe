@@ -191,3 +191,49 @@ test('⇧M saves a measurement between two layers, which is labelled, kept and r
   await page.getByRole('button', { name: 'Delete measurement 1' }).click();
   await expect(page.getByRole('region', { name: 'Measurements' })).toHaveCount(0);
 });
+
+test('⇧T annotates a layer with a note, a category and the properties it calls out', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 520, box.y + 380, { steps: 5 });
+  await page.mouse.up();
+  const width = await page.getByTestId('field-w').inputValue();
+
+  // A note is written while designing, as the reference allows.
+  await page.keyboard.press('Shift+T');
+  const annotations = page.getByRole('region', { name: 'Annotations' });
+  const note = annotations.getByRole('textbox', { name: 'Annotation 1 note' });
+  await note.fill('Use the brand blue');
+  await note.blur();
+  await annotations.getByRole('combobox', { name: 'Annotation 1 category' }).selectOption('accessibility');
+
+  // A called-out property reads from the design itself.
+  await annotations.getByRole('combobox', { name: 'Annotation 1 add property' }).selectOption('width');
+  await expect(annotations).toContainText(width);
+  await page.getByTestId('field-w').fill('300');
+  await page.getByTestId('field-w').press('Enter');
+  await expect(annotations).toContainText('300');
+
+  // Dev Mode shows it too, and filters by category.
+  await page.keyboard.press('Shift+D');
+  const devAnnotations = page.getByRole('region', { name: 'Annotations' });
+  await expect(devAnnotations.getByRole('textbox', { name: 'Annotation 1 note' })).toHaveValue('Use the brand blue');
+  await devAnnotations.getByRole('combobox', { name: 'Filter annotations' }).selectOption('development');
+  await expect(devAnnotations.getByRole('textbox', { name: 'Annotation 1 note' })).toHaveCount(0);
+  await devAnnotations.getByRole('combobox', { name: 'Filter annotations' }).selectOption('');
+  await expect(devAnnotations.getByRole('textbox', { name: 'Annotation 1 note' })).toBeVisible();
+
+  // It belongs to the file.
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+  await page.reload();
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await page.getByRole('treeitem', { name: /Rectangle 1/ }).click();
+  await expect(page.getByRole('region', { name: 'Annotations' }).getByRole('textbox', { name: 'Annotation 1 note' })).toHaveValue('Use the brand blue');
+
+  await page.getByRole('button', { name: 'Delete annotation 1' }).click();
+  await expect(page.getByRole('textbox', { name: 'Annotation 1 note' })).toHaveCount(0);
+});

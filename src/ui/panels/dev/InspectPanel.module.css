@@ -170,3 +170,18 @@
   word-break: break-word;
   overflow-x: auto;
 }
+
+/* One note on a layer, with what it calls out under it. */
+.annotation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px dashed var(--border);
+}
+
+.annotation textarea {
+  width: 100%;
+  resize: vertical;
+}

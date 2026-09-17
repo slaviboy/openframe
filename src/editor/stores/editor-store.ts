@@ -99,6 +99,8 @@ export interface EditorState {
   readonly sketchStroke: SketchStroke;
   /** Motion: where the timeline's playhead is and how it is playing (the animation itself is on the page). */
   readonly motion: MotionState;
+  /** Dev Mode: the annotation category being filtered to, or null for all of them. */
+  readonly annotationFilter: string | null;
   readonly rightTab: RightPanelTab;
   readonly viewports: Readonly<Record<Id, Viewport>>;
   /** Layer rows expanded in the layers panel. */
@@ -213,6 +215,7 @@ export class EditorStore extends Observable<EditorState> {
       mode: 'design',
       sketchStroke: DEFAULT_SKETCH_STROKE,
       motion: DEFAULT_MOTION,
+      annotationFilter: null,
       rightTab: 'design',
       viewports: {},
       expanded: new Set(),
@@ -383,6 +386,10 @@ export class EditorStore extends Observable<EditorState> {
 
   releaseSpring(): void {
     if (this.state.spring) this.setState({ tool: this.state.spring, spring: null });
+  }
+
+  setAnnotationFilter(annotationFilter: string | null): void {
+    this.setState({ annotationFilter });
   }
 
   setMotion(patch: Partial<MotionState>): void {
