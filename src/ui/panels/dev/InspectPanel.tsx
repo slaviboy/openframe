@@ -30,6 +30,7 @@ import primitives from '../../primitives/primitives.module.css';
 import { Icon } from '../../icons/Icon';
 import { layerIcon } from '../../icons/layer-icons';
 import { AnnotationsSection } from './AnnotationsSection';
+import { DevAssetsPanel } from './DevAssetsPanel';
 import styles from './InspectPanel.module.css';
 
 /** A measurement as Dev Mode reads it: whole pixels where it can, two decimals where it cannot. */
@@ -118,6 +119,7 @@ export function InspectPanel() {
     return (
       <div className={styles.panel} data-testid="inspect-panel">
         <p className={styles.empty}>{nodes.length === 0 ? 'Select a layer to inspect it.' : 'Select a single layer to inspect it.'}</p>
+        <DevAssetsPanel />
         <MeasurementsSection />
       </div>
     );
@@ -181,6 +183,7 @@ export function InspectPanel() {
       <DevResourcesSection node={node} />
       <AnnotationsSection node={node} />
       <MeasurementsSection />
+      <DevAssetsPanel />
         </>
       )}
     </div>

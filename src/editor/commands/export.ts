@@ -26,7 +26,11 @@ function layers(editor: Editor, ids: readonly Id[]): SceneNode[] {
   return ids.map((id) => editor.doc.get(id)).filter((node): node is SceneNode => node !== undefined && isSceneNode(node));
 }
 
-const settingsOf = (node: SceneNode | undefined): readonly ExportSetting[] => node?.exportSettings ?? [];
+const settingsOf = (node: SceneNode | undefined, fallback?: ExportSetting): readonly ExportSetting[] => {
+  const own = node?.exportSettings ?? [];
+  // Dev Mode downloads a layer that carries no export configuration of its own, with one supplied for the occasion.
+  return own.length > 0 || !fallback ? own : [fallback];
+};
 
 /** Adds an export configuration (1x PNG) to layers, the + in the Export section. One undo step. */
 export function addExportSetting(editor: Editor, ids: readonly Id[]): boolean {
@@ -77,10 +81,10 @@ export interface ExportedAsset {
  * fixed-width and fixed-height scales is its painted bounds, effects included; SVG exports at 1x. Null while the rendering
  * engine an image needs isn't ready; configurations with nothing to draw are skipped.
  */
-export function renderExports(editor: Editor, ids: readonly Id[], only?: ReadonlySet<string>): ExportedAsset[] | null {
+export function renderExports(editor: Editor, ids: readonly Id[], only?: ReadonlySet<string>, fallback?: ExportSetting): ExportedAsset[] | null {
   const engine = editor.thumbnails;
   const wanted = (node: SceneNode, index: number) => !only || only.has(`${node.id}:${index}`);
-  const needsEngine = layers(editor, ids).some((node) => settingsOf(node).some((setting, index) => setting.format !== 'SVG' && setting.format !== 'GIF' && wanted(node, index)));
+  const needsEngine = layers(editor, ids).some((node) => settingsOf(node, fallback).some((setting, index) => setting.format !== 'SVG' && setting.format !== 'GIF' && wanted(node, index)));
   if (needsEngine && !engine) return null;
   const assets: ExportedAsset[] = [];
   for (const node of layers(editor, ids)) {
@@ -89,7 +93,7 @@ export function renderExports(editor: Editor, ids: readonly Id[], only?: Readonl
     editor.scene.ensure(pageId);
     const bounds = editor.scene.paintBounds(node.id) ?? editor.scene.worldBounds(node.id);
     if (!bounds || bounds.width <= 0 || bounds.height <= 0) continue;
-    settingsOf(node).forEach((setting, index) => {
+    settingsOf(node, fallback).forEach((setting, index) => {
       if (!wanted(node, index)) return;
       if (setting.format === 'SVG') {
         const geometry = editor.geometry;

@@ -326,3 +326,34 @@ test('an animated layer hands its animation over as code, with a read-only timel
   await motion.getByRole('button', { name: 'Hide timeline view' }).click();
   await expect(page.getByRole('region', { name: 'Timeline' })).toHaveCount(0);
 });
+
+test('Dev Mode lists what the page has to hand over, icons found by their shape included', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  // A small round drawing, which reads as an icon, and a banner too big to be one.
+  await page.keyboard.press('o');
+  await page.mouse.move(box.x + 300, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 324, box.y + 274, { steps: 4 });
+  await page.mouse.up();
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 700, box.y + 500, { steps: 6 });
+  await page.mouse.up();
+
+  await page.keyboard.press('Shift+D');
+  const assets = page.getByRole('region', { name: 'Assets' });
+  await expect(assets).toBeVisible();
+  // The ellipse is found by its shape and offered as SVG; the banner is not an icon, so it is not listed.
+  await expect(assets.getByRole('button', { name: 'Select Ellipse 1' })).toBeVisible();
+  await expect(assets).toContainText('SVG · icon');
+  await expect(assets.getByRole('button', { name: 'Select Rectangle 1' })).toHaveCount(0);
+  await expect(assets.getByRole('button', { name: 'Download Ellipse 1' })).toBeVisible();
+
+  // Selecting an asset selects the layer it stands for.
+  await assets.getByRole('button', { name: 'Select Ellipse 1' }).click();
+  await expect(page.getByTestId('inspect-panel')).toContainText('Ellipse 1');
+});
