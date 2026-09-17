@@ -223,7 +223,7 @@ export class ToolManager {
   cursor(): CursorKind {
     if (this.middlePan) return 'grabbing';
     if (!this.pointerTool && this.hoverCursor) return this.hoverCursor;
-    return (this.pointerTool ?? (this.canvasEditor ?? this.tool)).cursor();
+    return (this.pointerTool ?? this.canvasEditor ?? this.tool).cursor();
   }
 
   /** Guide under the pointer when guides can be grabbed: Move tool, rulers on, and not over a selection handle. */
@@ -298,12 +298,13 @@ export class ToolManager {
       }
       const axis = guide ? guidesOf(this.editor, guide.owner)[guide.index]?.axis : undefined;
       this.hoverCursor = overRuler ? 'default' : axis === 'X' ? 'ew-resize' : axis === 'Y' ? 'ns-resize' : null;
-      if (overRuler || guide) {
+      // ⌥ over a guide goes on to the tool as well, which measures the selection's distance to it.
+      if (overRuler || (guide && !p.alt)) {
         this.editor.state.setHover(null);
         return;
       }
     }
-    (this.pointerTool ?? (this.canvasEditor ?? this.tool)).pointerMove(p);
+    (this.pointerTool ?? this.canvasEditor ?? this.tool).pointerMove(p);
   }
 
   pointerUp(sample: Omit<PointerInfo, 'world'>): void {
@@ -384,7 +385,7 @@ export class ToolManager {
 
   /** Escape: cancel gesture first; otherwise let the caller handle deselect. */
   cancel(): boolean {
-    const tool = this.pointerTool ?? (this.canvasEditor ?? this.tool);
+    const tool = this.pointerTool ?? this.canvasEditor ?? this.tool;
     this.pointerTool = null;
     const handled = tool.cancel();
     this.endQuickCrop();

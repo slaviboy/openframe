@@ -24,7 +24,8 @@ import type { Padding } from '@/core/layout/flow-layout';
 import { hitLayoutHandle, isUprightHandle } from '../interactions/layout-handles';
 import { fromPoints, transformRect, unionAll, type Rect } from '@/core/math/rect';
 import { edgeValues, guidesFor, snapBounds, snapValue, type SnapGuide } from '@/core/scene/snapping';
-import { isLayoutGuideRect, SNAP_THRESHOLD_PX, snapCandidatesFor } from '../interactions/snap-candidates';
+import { isGuideRect, SNAP_THRESHOLD_PX, snapCandidatesFor } from '../interactions/snap-candidates';
+import { guideWorldLine, hitGuide } from '../interactions/guides';
 import { adoptCoveredLayers, duplicateNodes } from '../commands/structure';
 import { setIgnoreAutoLayout, setLayoutSizing } from '../commands/auto-layout';
 import { applySpacing, captureSpacingStarts, smartSelectionInfo, spacingHandleAt, type SmartSelectionInfo } from '../commands/smart-selection';
@@ -61,7 +62,9 @@ import {
   handleCursor,
   hitHandle,
   hitRotationCorner,
-  hitAddInstancesButton, hitAddVariantButton, hitSectionTitle,
+  hitAddInstancesButton,
+  hitAddVariantButton,
+  hitSectionTitle,
   isLineFrame,
   rotateCursor,
   selectionFrame,
@@ -564,8 +567,7 @@ export class MoveTool implements Tool {
     }
 
     const tolerance = this.env.hitTolerancePx / editor.state.viewport.zoom;
-    const deepest = hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, { tolerance: 0 }) ??
-      hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, { tolerance });
+    const deepest = hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, { tolerance: 0 }) ?? hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, { tolerance });
 
     // Clicking inside the current selection's bounds keeps it (so multi-selections can be dragged).
     if (frame && !p.shift && !p.mod && this.insideFrame(frame, p.world) && (deepest === null || this.isWithinSelection(deepest))) {
@@ -626,11 +628,14 @@ export class MoveTool implements Tool {
         g.current = p.world;
         const { editor } = this.env;
         // Prototype tab: a marquee across noodles selects their connections (⇧ adds to them), with their hotspots.
-        const crossed = connectionsInScreenRect(editor, fromPoints(g.down.screen, p.screen), g.base).map(
-          (connection): ConnectionRef => ({ sourceId: connection.sourceId, reactionIndex: connection.reactionIndex, actionIndex: connection.actionIndex }),
-        );
+        const crossed = connectionsInScreenRect(editor, fromPoints(g.down.screen, p.screen), g.base).map((connection): ConnectionRef => ({
+          sourceId: connection.sourceId,
+          reactionIndex: connection.reactionIndex,
+          actionIndex: connection.actionIndex,
+        }));
         if (crossed.length > 0) {
-          const isBase = (ref: ConnectionRef) => g.baseConnections.some((other) => other.sourceId === ref.sourceId && other.reactionIndex === ref.reactionIndex && other.actionIndex === ref.actionIndex);
+          const isBase = (ref: ConnectionRef) =>
+            g.baseConnections.some((other) => other.sourceId === ref.sourceId && other.reactionIndex === ref.reactionIndex && other.actionIndex === ref.actionIndex);
           const refs = p.shift ? [...g.baseConnections, ...crossed.filter((ref) => !isBase(ref))] : crossed;
           editor.state.select([...new Set([...(p.shift ? g.base : []), ...refs.map((ref) => ref.sourceId)])]);
           editor.state.selectConnections(refs);
@@ -718,7 +723,11 @@ export class MoveTool implements Tool {
         if (!g.dragged && Math.hypot(p.screen.x - g.down.screen.x, p.screen.y - g.down.screen.y) < this.env.dragThresholdPx) return;
         g.dragged = true;
         const { editor } = this.env;
-        g.destination = connectDestinationAt(editor, g.refs.map((ref) => ref.sourceId), p.world);
+        g.destination = connectDestinationAt(
+          editor,
+          g.refs.map((ref) => ref.sourceId),
+          p.world,
+        );
         g.overEmpty = hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, { tolerance: 0 }) === null;
         editor.requestRender();
         return;
@@ -880,7 +889,17 @@ export class MoveTool implements Tool {
     const g = this.gesture;
     const { editor } = this.env;
     this.gesture = { kind: 'idle' };
-    if (g.kind === 'move' || g.kind === 'resize' || g.kind === 'rotate' || g.kind === 'line-end' || g.kind === 'spacing' || g.kind === 'arc' || g.kind === 'radius' || g.kind === 'layout-handle' || g.kind === 'grid-track') {
+    if (
+      g.kind === 'move' ||
+      g.kind === 'resize' ||
+      g.kind === 'rotate' ||
+      g.kind === 'line-end' ||
+      g.kind === 'spacing' ||
+      g.kind === 'arc' ||
+      g.kind === 'radius' ||
+      g.kind === 'layout-handle' ||
+      g.kind === 'grid-track'
+    ) {
       editor.history.cancel(g.tx);
       return true;
     }
@@ -929,7 +948,7 @@ export class MoveTool implements Tool {
       dy += snap.dy;
       g.guides = snap.guides;
       // Axes that didn't snap to an edge may snap to equal spacing between neighbors.
-      const neighbors = g.candidates.filter((rect) => !isLayoutGuideRect(rect));
+      const neighbors = g.candidates.filter((rect) => !isGuideRect(rect));
       const equal = snapEqualGaps({ ...g.startBounds, x: g.startBounds.x + dx, y: g.startBounds.y + dy }, neighbors, threshold, {
         x: lockedAxis !== 'x' && !snap.guides.some((guide) => guide.axis === 'x'),
         y: lockedAxis !== 'y' && !snap.guides.some((guide) => guide.axis === 'y'),
@@ -1245,8 +1264,8 @@ export class MoveTool implements Tool {
   }
 
   /**
-   * ⌥ held with a selection: measure to the hovered layer, or to the selection's parent frame or
-   * section when hovering the selection itself, empty canvas or content inside the selection.
+   * ⌥ held with a selection: measure to the ruler guide under the pointer, or to the hovered layer, or to the
+   * selection's parent frame or section when hovering the selection itself, empty canvas or content inside it.
    */
   private updateMeasurement(p: PointerInfo): void {
     const { editor } = this.env;
@@ -1254,6 +1273,16 @@ export class MoveTool implements Tool {
     if (!p.alt || editor.selection.length === 0) return;
     const selection = editor.selectionBounds();
     if (!selection) return;
+
+    // A guide is a line, so it is measured as a rectangle of no thickness reaching across the selection.
+    const guideRef = hitGuide(editor, p.screen);
+    const line = guideRef ? guideWorldLine(editor, guideRef) : null;
+    if (line) {
+      const rect = line.axis === 'X' ? { x: line.position, y: selection.y, width: 0, height: selection.height } : { x: selection.x, y: line.position, width: selection.width, height: 0 };
+      this.measureLines = measureBetween(selection, rect);
+      return;
+    }
+
     const hover = editor.state.getSnapshot().hoverId;
     const hoverInSelection = hover !== null && editor.selection.some((id) => id === hover || editor.doc.isAncestor(id, hover));
     let target: Rect | null = null;
@@ -1270,10 +1299,13 @@ export class MoveTool implements Tool {
   private constrained(frame: SelectionFrame): boolean {
     const { editor } = this.env;
     const ids = frame.nodeId ? [frame.nodeId] : editor.selection;
-    return ids.length > 0 && ids.every((id) => {
-      const node = editor.doc.get(id);
-      return node !== undefined && isSceneNode(node) && node.constrainProportions === true;
-    });
+    return (
+      ids.length > 0 &&
+      ids.every((id) => {
+        const node = editor.doc.get(id);
+        return node !== undefined && isSceneNode(node) && node.constrainProportions === true;
+      })
+    );
   }
 
   private insideFrame(frame: SelectionFrame, world: Vec2): boolean {
@@ -1308,9 +1340,6 @@ export function normalizeDegrees(degrees: number): number {
 }
 
 /** Converts a DOM-agnostic pointer sample into PointerInfo using the editor viewport. */
-export function pointerInfo(
-  editorViewport: { x: number; y: number; zoom: number },
-  sample: Omit<PointerInfo, 'world'>,
-): PointerInfo {
+export function pointerInfo(editorViewport: { x: number; y: number; zoom: number }, sample: Omit<PointerInfo, 'world'>): PointerInfo {
   return { ...sample, world: screenToWorld(editorViewport, sample.screen) };
 }

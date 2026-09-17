@@ -274,6 +274,7 @@ This file is how work continues after a pause (for example, a usage limit). Read
 - Transforms (row 255, finishing M11's planned rows): `repeat` on a group says how its contents repeat — `repeatMatrices` (`src/core/geometry/repeat.ts`) gives the copies' matrices, radial turning about the middle of the group over an angle (the full circle shared between the copies), linear stepping along x or y. The renderer draws the children once per matrix, so no layers are made until `applyTransforms` duplicates them into place. Draw mode's Transform section holds the modifier menu, the settings and Apply transforms to selection. Two things to know: a group's `children` array is live, so `applyTransforms` snapshots it before duplicating (otherwise each pass repeats the previous pass's copies), and the editor now opens in the mode it was left in (`mode` in view prefs; `EditorShell` restores it before it starts saving it, or the first render would overwrite the stored value).
 
 - **M12 began here.** The timeline and keyframes (rows 262–264): an animation lives on the page — `duration`, `playback` and tracks of keyframes per layer property — with `src/core/motion/animation.ts` holding the reading (`valueAt`, `valuesAt`, `playheadAt`) and the editing (`setKeyframe`, `removeKeyframe`). `MotionPreview` (`src/editor/motion/preview.ts`) shows the animation at the playhead as an open preview transaction the file never takes; since only one transaction may be open, `History` gained a `beforeBegin` hook and the editor clears the preview through `editor.motionPreview` before any edit starts, with `EditorShell` re-applying it after. `TimelinePanel` is the panel; the properties panel's diamonds come from `MotionField` / `KeyframeButton`, and typing in an animated field records a keyframe at the playhead instead of moving the layer (opacity converts between the panel's percentage and the file's share of one). Space plays in Motion mode, handled in the keyboard controller before it holds the Hand tool. Keyframes are selected, dragged (⇧ snaps to tenths) and deleted on the timeline, and Auto-keyframe records one for a property that is not animated yet. In Motion the property fields pass no gesture handlers: a gesture holds the document open, and a keyframe write could not start while one was running; repeated writes from a scrub merge through a `mergeKey`. A keyframe's `easing` shapes the stretch that starts at it — the prototype easings plus `HOLD` — evaluated with M10's solvers through `ease` in the motion core, and chosen from the segment's own control on the timeline. `src/core/motion/presets.ts` holds the preset animations (and the composite styles, which are several presets at once); `applyMotionPreset` writes their keyframes from the playhead, worked out from what the layer is now, and the Animations section in the properties panel offers them. The timeline sits between the sidebars rather than over them, and the toolbar rides above it in Motion. A layer's `anchor` (a share of its own box) is the point `setRotation` turns it around and the Motion preview scales it around; `src/editor/chrome/anchor-handle.ts` draws and drags the target, revealed by ⌥R or Edit anchor point in Motion's Transform section. `src/editor/chrome/motion-path.ts` derives the selected layer's path from its x and y tracks — a box per keyframe, evenly-timed dots between — and the move tool drags a box through `moveKeyframePosition`. A bend lives in `PageAnimation.curves` as `{nodeId, time, x, y}`, how far the middle of the stretch starting at `time` is pulled off its straight line; because a quadratic bezier is the straight run plus a bump peaking in the middle, `curveOffsetAt` simply adds to the eased track values, and it takes its progress from the value itself so easing slides the layer along one fixed curve. Path trim lives on `GeometryFields` as `strokeTrimStart`/`strokeTrimEnd` (shares of the path); `SceneRenderer.trimStroke` cuts the centerline with CanvasKit's `ContourMeasureIter.getSegment` before `drawStrokes` paints it, and wraps around when the start is past the end. `trimStart`/`trimEnd` are animated properties like any other, so the timeline, the diamonds and the preview carry them; the Path preset is flagged `needsTrim` and the Animations list disables it without a centered stroke. Keyframe selection now lives in the store as `motion.selectedKeyframes`, which is what the Inspector's Easing section reads; it reuses the prototype panel's `EasingGraph`, and `KeyframeRef` moved to `@/core/motion/animation` so the store need not depend on commands. The timeline shows a window of the animation (`motion.zoom`/`motion.offset`), so `percent()` maps a moment into that window rather than into the whole duration; `setLayerExtent` says where a track is to end up rather than how far to shift it, which is what lets a drag call it over and over. Keyframe buttons carry a `data-keyframe` of `nodeId|property|time`, which is how the marquee reads back what it swept over. Variables gained an `EASING` type: a keyframe's easing may be a `VARIABLE_ALIAS`, `resolvedAnimation(editor)` looks those up and is what the preview evaluates, while editing keeps working on the stored animation so the binding survives. `src/core/motion/instances.ts` derives an instance's tracks from its main component's, mapped through each layer's `source` and shifted by the instance's own `animationOffset`; `shownAnimation(editor)` is what the canvas is drawn from. The Motion preview begins its transaction with `syncInstances: false`, because the component finalizer would otherwise pull an instance's layers straight back to the component's values.
+- **Guides became something to design against, not just to look at** (rows 47 and 93). `rulerGuideCandidates` in `src/editor/interactions/snap-candidates.ts` turns the page's ruler guides and those of the frame being worked inside into rects of no thickness, which join the layers and layout guides every move and resize snaps against; Control still holds a layer off them. The guides themselves are dragged with `rulerGuides` off, since a guide would otherwise be held in place by its own line. `isLayoutGuideRect` is now `isGuideRect`, covering both kinds, and still marks what equal-gap measuring leaves out. For measuring, `guideWorldLine` gives a guide's line in world coordinates and the move tool measures the selection against it as a rect of no thickness reaching across the selection — which reads as the distance to the guide, or as the distance to both edges when the guide crosses the selection. `ToolManager.pointerMove` used to swallow every move over a guide; with ⌥ held it now passes it on so the tool can measure.
 
 ## In progress (uncommitted)
 
@@ -283,44 +284,12 @@ Nothing. The working tree is clean apart from anything noted above.
 
 Every named milestone, M0 through M14, is finished: their rows in `docs/FEATURE_MATRIX.md` are Implemented, bar the ones recorded as a browser limitation (animated export needs WebCodecs for MP4 and WebM) or as a local equivalent for something that is a cloud service (publishing a library; branches are kept as local files).
 
-What is left is the backfill the user asked for on 2026-09-17: the rows still In progress or Planned in the earlier milestones, 60 of them. Work them largest block first, since that is where the most is missing:
+What is left is the backfill the user asked for on 2026-09-17: the rows still In progress or Planned in the earlier milestones. 157 of the 229 rows are Implemented; 49 are still open once the ones recorded as a browser limitation or a local equivalent are set aside. Work them largest block first, since that is where the most is missing:
 
-- **M2 — 18 rows.** The biggest gap.
-- **M6 — 14 rows.**
+- **M6 — 14 rows.** The biggest gap now.
 - **M1 — 11 rows.**
+- **M2 — 6 rows:** 37 (pixel preview), 45 (a UI for configurable bindings), 48 (selecting hidden layers in outline mode, stroke placement detail, "Include object bounds"), 73 (sections), 77 (smart selection: marking, reordering and swapping, reflow on duplicate or delete), 92 (snapping for rotated resizes, matching gaps elsewhere on the canvas).
 - **M5 — 7 rows.**
 - M9 (3), M4 (2), M8 (1), and four rows spanning two milestones each.
 
 Read each row's current status before starting: most are partly built, and the status says what is missing rather than describing the whole feature.
-
-## What's left, by milestone
-
-To continue in a new session, tell the assistant: *Read `docs/HANDOFF.md`, check `git status` and `git log --oneline -15`, then continue with "In progress (uncommitted)" and the M10 list below. Stop after M10.* The rows are in `docs/FEATURE_MATRIX.md` (Milestone and Status columns).
-
-**M10 (prototyping): rows still In progress**
-
-**M11 (Draw mode): all Planned**
-
-**M12 (Motion mode)**
-- Timeline panel: play (Space), auto-keyframe, current time, duration (2000 ms by default), ms/s, loop, once or ping-pong
-- Ruler, playhead and zoom; layer tracks (selected and component colors); scaling and moving tracks
-- Keyframes: add, select, move (⇧ snaps), delete, and the diamond buttons in the inspector
-- Easing presets, hold, custom bezier, springs, saving as variables (In progress: the easing and spring solvers from M10 are shared)
-- Variable types for Motion: timing and easing (the M8 / M12 row, In progress)
-- Preset animation styles (e.g. spin) and composite styles
-- Motion path editing; path trim animation; anchor point (⌥R)
-- Animated components
-- Animated export: MP4, WebM, GIF, SVG (fps, size, quality, loop), marked Browser limitation in the matrix
-
-**M13 (Dev Mode): Planned, except copy as code**
-- Dev Mode toggle (⇧D), the left sidebar (ready for dev, pages with badges, layers), frame pager
-- Inspect panel: header, status, box model, List / Code, layout and style code blocks, colors, typography, styles
-- Code generation: CSS (px / rem), SwiftUI, UIKit (px / pt), Compose, Android XML (px / dp / sp); unit scale
-- Copy as code (Copy as PNG and SVG are done, in M9)
-- Redlines on hover and ⌥-hover; saved measurements (⇧M)
-- Annotations (⇧T): categories, live properties, filter
-- Statuses: ready for dev, completed, changed (automatic); the ready-for-dev view and focus view
-- Compare changes: side by side, overlay, property and code diff
-- Variables in Dev Mode (details, suggested variables, variables table)
-- Assets section (automatic icon detection, downloads) and export; dev resources (links on layers)
-- Component playground; animation handoff code (CSS / React / JSON)

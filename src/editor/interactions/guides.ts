@@ -105,6 +105,23 @@ export function guideSegment(editor: Editor, ref: GuideRef): [Vec2, Vec2] | null
   return [worldToScreen(v, apply(world, a)), worldToScreen(v, apply(world, b))];
 }
 
+/**
+ * Where a guide's line falls in the world: the x of a vertical guide, the y of a horizontal one. A guide on a
+ * rotated or flipped frame has no such line, and is left out.
+ */
+export function guideWorldLine(editor: Editor, ref: GuideRef): { readonly axis: Guide['axis']; readonly position: number } | null {
+  const guide = guidesOf(editor, ref.owner)[ref.index];
+  if (!guide) return null;
+  if (ref.owner === editor.pageId) return { axis: guide.axis, position: guide.offset };
+  const node = editor.doc.get(ref.owner);
+  if (node?.type !== 'FRAME') return null;
+  editor.scene.ensure(editor.pageId);
+  const m = editor.scene.worldTransform(ref.owner);
+  if (Math.abs(m.b) > 1e-9 || Math.abs(m.c) > 1e-9) return null;
+  const origin = apply(m, { x: 0, y: 0 });
+  return guide.axis === 'X' ? { axis: 'X', position: origin.x + guide.offset * m.a } : { axis: 'Y', position: origin.y + guide.offset * m.d };
+}
+
 /** The guide nearest a screen point within `tolerancePx` (frame guides win ties). */
 export function hitGuide(editor: Editor, screen: Vec2, tolerancePx = GUIDE_HIT_PX): GuideRef | null {
   let best: GuideRef | null = null;
@@ -214,7 +231,7 @@ export class GuideController implements Tool {
   private start(tx: Transaction, ref: GuideRef, axis: Guide['axis'], created: boolean, p: PointerInfo): void {
     const { editor } = this;
     editor.scene.ensure(editor.pageId);
-    this.drag = { tx, ref, axis, created, dragged: created, down: p, last: p, candidates: snapCandidatesIn(editor, [editor.pageId]) };
+    this.drag = { tx, ref, axis, created, dragged: created, down: p, last: p, candidates: snapCandidatesIn(editor, [editor.pageId], undefined, false) };
     editor.state.selectGuide(ref);
     tx.flushPreview();
     editor.requestRender();

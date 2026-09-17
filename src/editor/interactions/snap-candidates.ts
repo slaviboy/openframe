@@ -26,11 +26,11 @@ import { visibleWorldRect } from '../viewport/viewport';
 /** Snap distance in screen pixels (a snap happens when strictly closer than this). */
 export const SNAP_THRESHOLD_PX = 5;
 
-/** Candidates that are layout guide columns, rows or grid lines rather than layers. */
-const layoutGuideRects = new WeakSet<Rect>();
+/** Candidates that are guide lines — layout columns, rows and grid lines, or ruler guides — rather than layers. */
+const guideRects = new WeakSet<Rect>();
 
-/** Whether a snap candidate is a layout guide (these are snapped to, but never measured for equal gaps). */
-export const isLayoutGuideRect = (rect: Rect): boolean => layoutGuideRects.has(rect);
+/** Whether a snap candidate is a guide line (these are snapped to, but never measured for equal gaps). */
+export const isGuideRect = (rect: Rect): boolean => guideRects.has(rect);
 
 /**
  * World rects of a frame's layout guides: each column or row, and each uniform grid line as a
@@ -57,19 +57,51 @@ function layoutGuideCandidates(editor: Editor, frame: FrameNode): Rect[] {
       }
     }
   }
-  for (const rect of rects) layoutGuideRects.add(rect);
+  for (const rect of rects) guideRects.add(rect);
   return rects;
 }
 
 /**
- * World bounds to snap against: visible children of the given parents that are in view,
- * plus each parent itself when it is a frame, and the frame's layout guides. `skip` excludes
- * layers (e.g. those being moved). Requires the scene index to be up to date for the active page.
+ * World rects of the ruler guides a layer can snap to, each a zero-thickness line: the page's guides, which run
+ * across the view, and the guides of any frame being snapped inside, which run across that frame. Rotated or
+ * flipped frames have none, their guides having no axis-aligned line in the world.
  */
-export function snapCandidatesIn(editor: Editor, parents: Iterable<Id>, skip: (id: Id) => boolean = () => false): Rect[] {
-  const store = editor.doc;
+function rulerGuideCandidates(editor: Editor, parents: Iterable<Id>): Rect[] {
   const view = visibleWorldRect(editor.state.viewport, editor.canvasSize.width, editor.canvasSize.height);
   const rects: Rect[] = [];
+  // Read straight off the page rather than through the guide tool, which snaps against this module in its turn.
+  const page = editor.doc.get(editor.pageId);
+  for (const guide of (page?.type === 'PAGE' ? page.guides : undefined) ?? []) {
+    rects.push(guide.axis === 'X' ? { x: guide.offset, y: view.y, width: 0, height: view.height } : { x: view.x, y: guide.offset, width: view.width, height: 0 });
+  }
+  for (const parent of parents) {
+    const node = editor.doc.get(parent);
+    if (node?.type !== 'FRAME' || !node.guides) continue;
+    const m = editor.scene.worldTransform(parent);
+    if (Math.abs(m.b) > 1e-9 || Math.abs(m.c) > 1e-9 || m.a <= 0 || m.d <= 0) continue;
+    const origin = apply(m, { x: 0, y: 0 });
+    const width = node.size.width * m.a;
+    const height = node.size.height * m.d;
+    for (const guide of node.guides) {
+      rects.push(guide.axis === 'X' ? { x: origin.x + guide.offset * m.a, y: origin.y, width: 0, height } : { x: origin.x, y: origin.y + guide.offset * m.d, width, height: 0 });
+    }
+  }
+  for (const rect of rects) guideRects.add(rect);
+  return rects;
+}
+
+/**
+ * World bounds to snap against: visible children of the given parents that are in view, plus each parent itself
+ * when it is a frame, the frame's layout guides, and the ruler guides on the page and on those frames. `skip`
+ * excludes layers (e.g. those being moved). Requires the scene index to be up to date for the active page.
+ *
+ * `rulerGuides` is off for the guides themselves, which are dragged against the layers and would otherwise
+ * be held in place by their own line.
+ */
+export function snapCandidatesIn(editor: Editor, parents: Iterable<Id>, skip: (id: Id) => boolean = () => false, rulerGuides = true): Rect[] {
+  const store = editor.doc;
+  const view = visibleWorldRect(editor.state.viewport, editor.canvasSize.width, editor.canvasSize.height);
+  const rects: Rect[] = rulerGuides ? rulerGuideCandidates(editor, parents) : [];
   for (const parent of parents) {
     const parentNode = store.get(parent);
     if (parentNode?.type === 'FRAME' || parentNode?.type === 'SECTION') {

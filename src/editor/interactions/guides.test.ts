@@ -49,7 +49,13 @@ function drag(x0: number, y0: number, x1: number, y1: number, over: Partial<Poin
 
 const pageGuides = () => (editor.doc.getOrThrow(editor.pageId) as PageNode).guides;
 
-function add(make: (init: { id: string; parent: { id: string; key: string }; name: string; x: number; y: number; width: number; height: number }) => Node, x: number, y: number, w: number, h: number): string {
+function add(
+  make: (init: { id: string; parent: { id: string; key: string }; name: string; x: number; y: number; width: number; height: number }) => Node,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): string {
   return editor.history.run('seed', (tx) => {
     const id = editor.ids.next();
     tx.create(make({ id, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'L', x, y, width: w, height: h }));
@@ -141,5 +147,55 @@ describe('ruler guides', () => {
     tools.setRulersVisible(false);
     drag(500, 10, 500, 200);
     expect(pageGuides()).toBeUndefined();
+  });
+});
+
+describe('guides as something to design against', () => {
+  test('a layer being moved snaps to a page guide', () => {
+    drag(310, 300, 500, 300);
+    const rect = add(makeRectangle, 200, 300, 100, 100);
+    editor.state.select([rect]);
+    // Left edge lands on 497, three short of the guide, so it takes the guide.
+    drag(250, 350, 547, 350);
+    expect(editor.scene.worldBounds(rect)!.x).toBe(500);
+  });
+
+  test('Control while moving keeps the layer off the guide', () => {
+    drag(310, 300, 500, 300);
+    const rect = add(makeRectangle, 200, 300, 100, 100);
+    editor.state.select([rect]);
+    drag(250, 350, 547, 350, { ctrl: true });
+    expect(editor.scene.worldBounds(rect)!.x).toBe(497);
+  });
+
+  test('a layer inside a frame snaps to that frame’s own guide', () => {
+    const frame = add(makeFrame, 400, 100, 400, 400);
+    drag(600, 10, 600, 150);
+    expect((editor.doc.getOrThrow(frame) as FrameNode).guides).toEqual([{ axis: 'Y', offset: 50 }]);
+    const rect = editor.history.run('seed', (tx) => {
+      const id = editor.ids.next();
+      tx.create(makeRectangle({ id, parent: { id: frame, key: keyOnTop(editor.doc, frame) }, name: 'R', x: 0, y: 100, width: 50, height: 50 }));
+      return id;
+    });
+    editor.state.select([rect]);
+    // The frame guide runs across the world at y = 150; the layer's top edge is dragged to within three of it.
+    drag(425, 225, 425, 178);
+    expect(editor.scene.worldBounds(rect)!.y).toBe(150);
+  });
+
+  test('⌥ over a guide measures the selection’s distance to it', () => {
+    drag(310, 300, 700, 300);
+    const rect = add(makeRectangle, 200, 300, 100, 100);
+    editor.state.select([rect]);
+    tools.pointerMove(sample(700, 350, { alt: true }));
+    expect(tools.moveTool.measurements).toEqual([{ from: { x: 300, y: 350 }, to: { x: 700, y: 350 }, distance: 400, axis: 'x' }]);
+  });
+
+  test('⌥ over a guide crossing the selection measures to both its edges', () => {
+    drag(310, 300, 250, 300);
+    const rect = add(makeRectangle, 200, 300, 100, 100);
+    editor.state.select([rect]);
+    tools.pointerMove(sample(250, 350, { alt: true }));
+    expect(tools.moveTool.measurements.map((line) => line.distance)).toEqual([50, 50]);
   });
 });
