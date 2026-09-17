@@ -43,6 +43,10 @@ export interface FileRecord {
   thumbnail?: ArrayBuffer;
   /** When the file was moved to the trash; absent for files that aren't in the trash. */
   trashedAt?: string;
+  /** A branch: the file it was branched from. Absent for a file that is not a branch. */
+  branchOf?: string;
+  /** The version of that file the branch grew from, which a merge reads as the common ground. */
+  branchBase?: string;
 }
 
 interface SnapshotRecord {
@@ -361,6 +365,25 @@ export class LocalPersistence {
     const { store } = await this.openVersion(versionId);
     store.meta = { ...store.meta, name: `${name} (Copy)` };
     return this.createFile(newId, store, now);
+  }
+
+  /**
+   * Branches a file: the file as it stands is kept as a version, which becomes the common ground, and a copy of it
+   * is made as a new file marked as a branch of this one.
+   */
+  async createBranch(fileId: string, store: DocumentStore, name: string, now: string, ids: { readonly version: string; readonly file: string }): Promise<FileRecord> {
+    await this.saveVersion(fileId, store, now, { id: ids.version, name: `Branched: ${name}` });
+    const copy = await this.openVersion(ids.version);
+    copy.store.meta = { ...copy.store.meta, name };
+    const record = await this.createFile(ids.file, copy.store, now);
+    await this.updateFileRecord(ids.file, { name, branchOf: fileId, branchBase: ids.version });
+    return { ...record, name, branchOf: fileId, branchBase: ids.version };
+  }
+
+  /** The branches of a file, newest first. */
+  async listBranches(fileId: string): Promise<FileRecord[]> {
+    const files = await this.listFiles();
+    return files.filter((file) => file.branchOf === fileId && file.trashedAt === undefined).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   /** Stores an image blob (idempotent: the key is the content hash). */

@@ -70,6 +70,18 @@ export interface AppSession {
   restoreVersion(id: string): Promise<void>;
   /** Duplicates a version as a new local file. */
   duplicateVersion(id: string): Promise<FileRecord>;
+  /** Branches the file as it stands, and opens the branch. */
+  createBranch(name: string): Promise<void>;
+  /** The branches of this file, and of the file this one branches from. */
+  listBranches(): Promise<FileRecord[]>;
+  /** The file this one branches from, when it is a branch. */
+  branchParent(): Promise<FileRecord | undefined>;
+  /** Opens another file, reloading the app into it. */
+  openFileById(id: string): Promise<void>;
+  /** The three documents a merge reads: where the branch started, this file, and the other one. */
+  mergeSources(otherFileId: string): Promise<{ base: DocumentStore; theirs: DocumentStore } | null>;
+  /** Writes a merged document over another file, which is how a branch is merged back. */
+  writeMerged(fileId: string, store: DocumentStore): Promise<void>;
   dispose(): void;
 }
 
@@ -217,6 +229,39 @@ export async function bootstrap(): Promise<AppSession> {
     },
     updateVersion(id: string, patch: { name: string; description: string }) {
       return persistence.updateVersion(id, patch);
+    },
+    async createBranch(name: string) {
+      await autosaver.flush();
+      const branch = await persistence.createBranch(file.id, editor.doc, name, nowIso(), { version: crypto.randomUUID(), file: crypto.randomUUID() });
+      await persistence.setSetting(LAST_FILE_KEY, branch.id);
+      window.location.reload();
+    },
+    async listBranches() {
+      // A branch shows the branches of the file it came from, so its siblings are to hand as well.
+      const record = await persistence.getFile(file.id);
+      return persistence.listBranches(record?.branchOf ?? file.id);
+    },
+    async branchParent() {
+      const record = await persistence.getFile(file.id);
+      return record?.branchOf === undefined ? undefined : persistence.getFile(record.branchOf);
+    },
+    async openFileById(id: string) {
+      await autosaver.flush();
+      await persistence.setSetting(LAST_FILE_KEY, id);
+      window.location.reload();
+    },
+    async mergeSources(otherFileId: string) {
+      const record = await persistence.getFile(file.id);
+      const other = await persistence.getFile(otherFileId);
+      // The common ground is the version the branch grew from, whichever of the two is the branch.
+      const baseId = record?.branchBase ?? other?.branchBase;
+      if (baseId === undefined) return null;
+      const { store: base } = await persistence.openVersion(baseId);
+      const { store: theirs } = await persistence.openFile(otherFileId);
+      return { base, theirs };
+    },
+    async writeMerged(fileId: string, store: DocumentStore) {
+      await persistence.compact(fileId, store, nowIso());
     },
     async readVersion(id: string) {
       const { store } = await persistence.openVersion(id);

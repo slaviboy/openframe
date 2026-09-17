@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { bootstrap, type AppSession } from '@/app/bootstrap';
 import { addAnnotation } from '@/editor/commands/annotations';
 import { CheckDesignsDialog } from './dialogs/CheckDesignsDialog';
+import { BranchesPanel } from './panels/branches/BranchesPanel';
 import type { Vec2 } from '@/core/math/vec';
 import { placeImages } from '@/editor/commands/images';
 import { screenToWorld } from '@/editor/viewport/viewport';
@@ -116,6 +117,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
   const uiModeRef = useRef(uiMode);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [checkDesigns, setCheckDesigns] = useState(false);
+  const [branches, setBranches] = useState(false);
   const shortcutsOpenRef = useRef(shortcutsOpen);
   const clipboardRef = useRef<ClipboardController | null>(null);
   // "Paste here" is built when the menu opens (an event), so render never touches the clipboard controller.
@@ -300,6 +302,13 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
         run: () => editor.state.setMode(editor.state.getSnapshot().mode === 'draw' ? 'design' : 'draw'),
       },
       {
+        id: 'file.branches',
+        label: 'Branches',
+        category: 'File',
+        // A branch is a copy of the file worked on apart from it, and merged back against where it started.
+        run: () => setBranches(true),
+      },
+      {
         id: 'edit.checkDesigns',
         label: 'Check designs',
         category: 'Edit',
@@ -470,6 +479,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
       {shortcutsOpen && uiMode !== 'hidden' && <ShortcutsPanel editor={editor} onClose={closeShortcuts} />}
       {palette && <CommandPalette editor={editor} mode={palette} onClose={closePalette} />}
       {checkDesigns && <CheckDesignsDialog editor={editor} onClose={() => setCheckDesigns(false)} />}
+      {branches && <BranchesPanel app={session} editor={editor} onClose={() => setBranches(false)} />}
       {editorState.addInstancesSlotId && <AddInstancesDialog editor={editor} slotId={editorState.addInstancesSlotId} onClose={() => editor.state.openAddInstances(null)} />}
       {editorState.dialog === 'batchRename' && <BatchRenameDialog editor={editor} onClose={closeDialog} />}
       {editorState.dialog === 'nudgeAmount' && <NudgeDialog onClose={closeDialog} />}
