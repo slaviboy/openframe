@@ -268,3 +268,47 @@ test('the anchor point is revealed with ⌥R, dragged, and turns the layer aroun
   await transform.getByRole('button', { name: 'Reset anchor point' }).click();
   await expect(transform.getByRole('button', { name: 'Reset anchor point' })).toHaveCount(0);
 });
+
+test('the motion path on the canvas drags a position keyframe somewhere else', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 460, box.y + 310, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByRole('treeitem', { name: /Rectangle 1/ })).toBeVisible();
+
+  await page.getByRole('radio', { name: 'Motion' }).check();
+  const timeline = page.getByRole('region', { name: 'Timeline' });
+  const startX = Number(await page.getByTestId('field-x').inputValue());
+  const startY = Number(await page.getByTestId('field-y').inputValue());
+  // The 60 px the layer was drawn across say how much of the canvas one of its own units covers.
+  const zoom = 60 / Number(await page.getByTestId('field-w').inputValue());
+
+  await page.getByRole('button', { name: 'Add x position keyframe' }).click();
+  const current = timeline.getByRole('textbox', { name: 'Current time' });
+  await current.fill('1000');
+  await current.press('Enter');
+  await page.getByTestId('field-x').fill(String(startX + 200));
+  await page.getByTestId('field-x').press('Enter');
+  await expect(timeline.getByRole('button', { name: /X position keyframe at 1000 ms/ })).toBeVisible();
+
+  // The path runs from the layer to a box 200 to its right, marking where it is at 1000 ms.
+  await current.fill('0');
+  await current.press('Enter');
+  const target = { x: box.x + 430 + 200 * zoom, y: box.y + 280 };
+
+  // Dragging that box 100 down bends the path, and the layer gains the Y keyframes to travel it.
+  await page.mouse.move(target.x, target.y);
+  await page.mouse.down();
+  await page.mouse.move(target.x, target.y + 100 * zoom, { steps: 10 });
+  await page.mouse.up();
+  await expect(timeline.getByRole('group', { name: 'Y position track' })).toBeVisible();
+
+  await current.fill('1000');
+  await current.press('Enter');
+  await expect.poll(async () => Number(await page.getByTestId('field-y').inputValue())).toBe(startY + 100);
+  await expect(page.getByTestId('field-x')).toHaveValue(String(startX + 200));
+});

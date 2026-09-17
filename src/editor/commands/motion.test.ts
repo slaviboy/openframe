@@ -21,9 +21,11 @@ import { IdGenerator } from '@/core/ids/ids';
 import { trackFor } from '@/core/motion/animation';
 import type { SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
+import { hitMotionPathKeyframe, keyframePositionAt, motionPath } from '../chrome/motion-path';
 import { MotionPreview } from '../motion/preview';
+import { screenToWorld } from '../viewport/viewport';
 import { anchorPoint, rotationDegrees, setRotation } from './properties';
-import { addKeyframe, applyMotionPreset, deleteKeyframe, hasKeyframe, isAnimated, pageAnimation, removeAnimatedProperty, setAnimationDuration, setAnimationPlayback } from './motion';
+import { addKeyframe, applyMotionPreset, deleteKeyframe, hasKeyframe, isAnimated, pageAnimation, removeAnimatedProperty, moveKeyframePosition, setAnimationDuration, setAnimationPlayback, setSegmentEasing } from './motion';
 
 let editor: Editor;
 let rect: string;
@@ -167,5 +169,64 @@ describe('the anchor point', () => {
     expect(node().size.width).toBe(20);
     expect(node().transform[4]).toBe(10);
     preview.clear();
+  });
+});
+
+describe('the motion path', () => {
+  const show = () => {
+    editor.state.setMode('motion');
+    editor.state.select([rect]);
+  };
+
+  test('appears once a layer has position keyframes, with a box at each one and dots between', () => {
+    show();
+    expect(motionPath(editor)).toBeNull();
+    addKeyframe(editor, [rect], 'x', 0, 10);
+    addKeyframe(editor, [rect], 'x', 1000, 210);
+
+    const path = motionPath(editor)!;
+    expect(path.points.map((p) => p.time)).toEqual([0, 1000]);
+    // The boxes trace the layer's anchor point, so at zoom 1 they stand the 200 apart that the keyframes are.
+    expect(path.points[1]!.screen.x - path.points[0]!.screen.x).toBe(200);
+    expect(path.points[1]!.screen.y).toBe(path.points[0]!.screen.y);
+    expect(path.dots).toHaveLength(11);
+    expect(hitMotionPathKeyframe(editor, path.points[1]!.screen)!.time).toBe(1000);
+  });
+
+  test('is only shown in Motion, and only for one layer at a time', () => {
+    show();
+    addKeyframe(editor, [rect], 'x', 0, 10);
+    expect(motionPath(editor)).not.toBeNull();
+
+    editor.state.setMode('design');
+    expect(motionPath(editor)).toBeNull();
+    show();
+    editor.state.select([]);
+    expect(motionPath(editor)).toBeNull();
+  });
+
+  test('easing shows in the path: the dots bunch up where the layer moves slowly', () => {
+    show();
+    addKeyframe(editor, [rect], 'x', 0, 10);
+    addKeyframe(editor, [rect], 'x', 1000, 110);
+    const straight = motionPath(editor)!.dots.map((dot) => dot.x);
+
+    setSegmentEasing(editor, { nodeId: rect, property: 'x', time: 0 }, { type: 'EASE_IN' });
+    const eased = motionPath(editor)!.dots.map((dot) => dot.x);
+    // Easing in starts slowly, so every dot is behind where an even run would put it.
+    expect(eased[0]!).toBeLessThan(straight[0]!);
+    expect(eased.at(-1)!).toBeLessThan(straight.at(-1)!);
+  });
+
+  test('a box drags to another place, writing the layer’s x and y at that moment', () => {
+    show();
+    addKeyframe(editor, [rect], 'x', 500);
+    const box = motionPath(editor)!.points[0]!.screen;
+    const world = screenToWorld(editor.state.viewport, { x: box.x + 40, y: box.y + 25 });
+
+    expect(moveKeyframePosition(editor, rect, 500, keyframePositionAt(editor, rect, world)!)).toBe(true);
+    expect(trackFor(pageAnimation(editor), rect, 'x')!.keyframes).toEqual([{ time: 500, value: 50 }]);
+    // The layer had no y keyframes at all; dragging the box across the canvas gives it one.
+    expect(trackFor(pageAnimation(editor), rect, 'y')!.keyframes).toEqual([{ time: 500, value: 45 }]);
   });
 });

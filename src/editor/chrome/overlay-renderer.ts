@@ -62,6 +62,7 @@ import { CONNECT_HANDLE_SIZE, connectHandle, FLOW_TAG_ICON_WIDTH, overlayBadgeRe
 import { animatedGifHash } from '../images/animated-gif';
 import { TEXT_PATH_HANDLE_SIZE, textPathHandle } from './text-path-handle';
 import { ANCHOR_HANDLE_SIZE, anchorHandle } from './anchor-handle';
+import { MOTION_PATH_KEYFRAME_SIZE, motionPath } from './motion-path';
 
 /** The label an animated GIF gets next to its size. */
 const GIF_TAG = 'GIF';
@@ -349,6 +350,26 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
     drawSizeLabel(ctx, quad, frame, theme, isLineFrame(editor, frame), animatedGifHash(editor, frame.nodeId) !== undefined);
     const addVariant = addVariantButtonRect(editor);
     if (addVariant) drawAddVariantButton(ctx, addVariant, theme);
+    // Motion: the path a layer travels, dotted between the boxes marking its position keyframes.
+    const path = motionPath(editor);
+    if (path) {
+      ctx.fillStyle = theme.selection;
+      for (const dot of path.dots) {
+        ctx.beginPath();
+        ctx.arc(dot.x, dot.y, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      const side = MOTION_PATH_KEYFRAME_SIZE;
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = theme.selection;
+      for (const point of path.points) {
+        ctx.beginPath();
+        ctx.rect(point.screen.x - side / 2, point.screen.y - side / 2, side, side);
+        ctx.fillStyle = theme.handleFill;
+        ctx.fill();
+        ctx.stroke();
+      }
+    }
     // Motion: the target a layer turns and scales around.
     const anchor = anchorHandle(editor);
     if (anchor) {

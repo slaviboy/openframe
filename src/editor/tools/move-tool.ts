@@ -35,6 +35,7 @@ import { hitTestDeepest, isArtboardWithChildren, isInteractive, marqueeSelect, s
 import { connectDestinationAt, connectHandle, connectionAt, connectionsInScreenRect, flowTagAt, hitConnectHandle, overlayBadgeAt, variantDestinationAt } from '../chrome/prototype-geometry';
 import { hitTextPathHandle, textPathHandle, textPathPositionAt } from '../chrome/text-path-handle';
 import { anchorShareAt, anchorTarget, hitAnchorHandle } from '../chrome/anchor-handle';
+import { hitMotionPathKeyframe, keyframePositionAt } from '../chrome/motion-path';
 import { variantSetOf } from '@/core/prototype/reactions';
 import { addInteraction, moveFlowStartingPoint, removeConnections, removeFlowStartingPoint, setConnectionsDestination, type ConnectionRef } from '../commands/prototype';
 import { snapEqualGaps, type GapIndicator } from '@/core/scene/equal-gaps';
@@ -49,6 +50,7 @@ import { beginCrop } from '../interactions/crop';
 import { beginVectorEdit } from '../interactions/vector-edit';
 import { beginTextEditAt } from '../interactions/text-edit';
 import { resizedTextMode } from '../commands/text';
+import { moveKeyframePosition } from '../commands/motion';
 import { resolveCornerRadii } from '@/core/geometry/corners';
 import type { CornerRadii } from '@/core/schema/document';
 import { applyDraggedRadius, draggedRadius, hitRadiusHandle, radiusHandles, radiusHandleScreen, radiusTarget, type RadiusHandle } from '../interactions/radius-handles';
@@ -191,6 +193,7 @@ type Gesture =
   | { kind: 'connect'; sourceIds: readonly Id[]; start: Vec2; current: PointerInfo; destination: Id | null }
   | { kind: 'text-path-start'; nodeId: Id; tx: Transaction }
   | { kind: 'anchor'; nodeId: Id; tx: Transaction }
+  | { kind: 'motion-path'; nodeId: Id; time: number; grab: Vec2 }
   /** Prototype tab: pressing a connection's noodle selects it; dragging the selected connections moves their destination. */
   | { kind: 'connection'; refs: readonly ConnectionRef[]; down: PointerInfo; current: PointerInfo; dragged: boolean; destination: Id | null; overEmpty: boolean }
   | { kind: 'flow-tag'; nodeId: Id; down: PointerInfo; current: PointerInfo; dragged: boolean; destination: Id | null; overEmpty: boolean };
@@ -351,6 +354,13 @@ export class MoveTool implements Tool {
     if (connect && hitConnectHandle(editor, p.screen)) {
       editor.scene.ensure(editor.pageId);
       this.gesture = { kind: 'connect', sourceIds: connect.sourceIds, start: connect.center, current: p, destination: null };
+      return;
+    }
+    // Motion: a box on the motion path drags the layer's position keyframe to somewhere else on the canvas.
+    const onPath = this.id === 'move' ? hitMotionPathKeyframe(editor, p.screen) : null;
+    if (onPath) {
+      const world = screenToWorld(editor.state.viewport, onPath.center);
+      this.gesture = { kind: 'motion-path', nodeId: onPath.nodeId, time: onPath.time, grab: { x: world.x - p.world.x, y: world.y - p.world.y } };
       return;
     }
     // Motion: the target a layer turns and scales around.
@@ -654,6 +664,14 @@ export class MoveTool implements Tool {
         g.last = p;
         this.applyLayoutHandle(p);
         return;
+      case 'motion-path': {
+        const position = keyframePositionAt(this.env.editor, g.nodeId, { x: p.world.x + g.grab.x, y: p.world.y + g.grab.y });
+        if (position) {
+          moveKeyframePosition(this.env.editor, g.nodeId, g.time, position);
+          this.env.editor.requestRender();
+        }
+        return;
+      }
       case 'anchor': {
         const share = anchorShareAt(this.env.editor, g.nodeId, p.world);
         if (share) {
@@ -768,6 +786,10 @@ export class MoveTool implements Tool {
       case 'anchor':
       case 'text-path-start':
         this.env.editor.history.commit(g.tx);
+        return;
+      // The path keyframe was written as it moved, each drag merging into one step.
+      case 'motion-path':
+        editor.requestRender();
         return;
       case 'connect':
         // Dropped on a frame: each source gets an interaction navigating to it.
@@ -1189,6 +1211,8 @@ export class MoveTool implements Tool {
     if (smart && spacingHandleAt(editor, smart, p.screen, this.env.hitTolerancePx)) {
       this.hoverCursor = smart.selection.axis === 'x' ? 'ew-resize' : 'ns-resize';
     }
+    // Motion: a box on the motion path is dragged, and it covers whatever is under it.
+    if (this.id === 'move' && hitMotionPathKeyframe(editor, p.screen)) this.hoverCursor = 'move';
     this.lastHover = p;
     const titled = handle || corner ? null : hitSectionTitle(editor, p.screen);
     if (titled) {

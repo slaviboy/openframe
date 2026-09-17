@@ -104,6 +104,23 @@ export function moveKeyframes(editor: Editor, refs: readonly KeyframeRef[], delt
   );
 }
 
+/**
+ * Moves a position keyframe on the canvas: the layer's x and y at that moment both become the point given, so dragging
+ * a box on the motion path reshapes the path. A layer animated in only one of the two gains the other's keyframe here.
+ */
+export function moveKeyframePosition(editor: Editor, nodeId: Id, time: number, point: { readonly x: number; readonly y: number }): boolean {
+  const node = editor.doc.get(nodeId);
+  if (!node || !isSceneNode(node)) return false;
+  const at = Math.round(time);
+  // A whole drag is one undo step.
+  return writeAnimation(
+    editor,
+    'Move keyframe',
+    (animation) => setKeyframe(setKeyframe(animation, nodeId, 'x', at, point.x), nodeId, 'y', at, point.y),
+    `motion-path:${nodeId}:${at}`,
+  );
+}
+
 /** Removes keyframes, as one undo step. */
 export function deleteKeyframes(editor: Editor, refs: readonly KeyframeRef[]): boolean {
   if (refs.length === 0) return false;
