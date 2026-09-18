@@ -17,6 +17,7 @@
 
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { rowAt } from './pixel';
 
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
 
@@ -88,7 +89,10 @@ test('theme preference applies immediately and persists across reloads', async (
 
   await page.getByRole('button', { name: 'Main menu' }).click();
   await page.getByRole('menu', { name: 'Main menu' }).getByRole('menuitem', { name: /^View/ }).click();
-  await page.getByRole('menu', { name: 'View' }).getByRole('menuitemcheckbox', { name: /Dark theme/ }).click();
+  await page
+    .getByRole('menu', { name: 'View' })
+    .getByRole('menuitemcheckbox', { name: /Dark theme/ })
+    .click();
   await expect(html).toHaveAttribute('data-theme', 'dark');
 
   await page.reload();
@@ -99,4 +103,72 @@ test('theme preference applies immediately and persists across reloads', async (
   await page.getByRole('combobox', { name: 'Search commands' }).fill('system theme');
   await page.keyboard.press('Enter');
   await expect(html).toHaveAttribute('data-theme', 'light');
+});
+
+test('pixel preview is picked from its submenu, toggles with ⌃P, and is kept per device', async ({ page }) => {
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const zoomButton = page.getByRole('button', { name: 'Zoom and view options' });
+  const stored = () => page.evaluate(() => JSON.parse(localStorage.getItem('openframe.view') ?? '{}').pixelPreview);
+
+  /** Opens the zoom menu and its Pixel preview submenu. */
+  const openPixelPreview = async () => {
+    await zoomButton.click();
+    await page.getByRole('menuitem', { name: 'Pixel preview' }).click();
+    await expect(page.getByRole('menuitemcheckbox', { name: '2x' })).toBeVisible();
+  };
+  /** Closes the submenu and the menu behind it. */
+  const closeMenus = async () => {
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('menuitem', { name: 'Pixel preview' })).toHaveCount(0);
+  };
+
+  await openPixelPreview();
+  // It starts disabled, so that is the setting with the check beside it.
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Disabled' })).toHaveAttribute('aria-checked', 'true');
+  await page.getByRole('menuitemcheckbox', { name: '2x' }).click();
+
+  await openPixelPreview();
+  await expect(page.getByRole('menuitemcheckbox', { name: '2x' })).toHaveAttribute('aria-checked', 'true');
+  await closeMenus();
+  // The setting is kept per device, beside the other view preferences.
+  expect(await stored()).toBe(2);
+
+  // ⌃P turns it off, and again brings back the resolution it was last set to.
+  await page.keyboard.press('Control+p');
+  await openPixelPreview();
+  await expect(page.getByRole('menuitemcheckbox', { name: 'Disabled' })).toHaveAttribute('aria-checked', 'true');
+  await closeMenus();
+  expect(await stored()).toBe(0);
+  await page.keyboard.press('Control+p');
+  await expect.poll(stored).toBe(2);
+});
+
+test('pixel preview draws the canvas as the pixels it rasterizes to', async ({ page }) => {
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('o');
+  await page.mouse.move(box.x + 400, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 460, box.y + 360, { steps: 8 });
+  await page.mouse.up();
+  // The pixel grid and the selection are drawn over the scene rather than in it, so they are taken out of the way.
+  await page.keyboard.press(`${mod}+'`);
+  await page.keyboard.press('Shift+2');
+  await page.keyboard.press('Escape');
+
+  /** One row of canvas pixels across the ellipse, as red values. */
+  const row = async () => (await rowAt(page, Math.round(box.x + 200), Math.round(box.y + 300), 400)).map((p) => p.r).join(',');
+  const toggle = async () => {
+    await page.keyboard.press('Control+p');
+    await page.waitForTimeout(400);
+  };
+
+  // Zoomed well in, the curve is drawn as the pixels it lands on rather than as a smooth edge; off again it is
+  // drawn exactly as it was.
+  const smooth = await row();
+  await toggle();
+  expect(await row()).not.toBe(smooth);
+  await toggle();
+  expect(await row()).toBe(smooth);
 });

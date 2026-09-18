@@ -23,6 +23,7 @@ import type { Vec2 } from '@/core/math/vec';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { DARK_CHROME, LIGHT_CHROME } from '@/editor/chrome/chrome-theme';
 import { drawOverlay } from '@/editor/chrome/overlay-renderer';
+import type { PixelPreview } from '../view/view-prefs';
 import type { Editor } from '@/editor/editor';
 import type { ToolManager } from '@/editor/tools/tool-manager';
 import type { PointerInfo } from '@/editor/tools/types';
@@ -30,7 +31,7 @@ import { loadCanvasKit } from '@/engine/ck/canvaskit';
 import { screenToWorld } from '@/editor/viewport/viewport';
 import type { ColorProfile } from '@/core/color/color';
 import { documentColorProfile } from '@/core/color/color-profile';
-import { SceneRenderer, type RenderOptions } from '@/engine/render/scene-renderer';
+import { SceneRenderer, type RenderOptions, type RenderView } from '@/engine/render/scene-renderer';
 import { loadBundledFonts } from '@/engine/text/bundled-fonts';
 import { TextShaper } from '@/engine/text/text-shaper';
 import { apply } from '@/core/math/matrix';
@@ -99,6 +100,8 @@ interface CanvasHostProps {
   maskOutlines?: boolean;
   /** Outline mode and whether it includes hidden layers. */
   outlines: RenderOptions;
+  /** Pixel preview: the scene rasterized at this many pixels to the design pixel, then magnified. 0 is off. */
+  pixelPreview?: PixelPreview;
   /** Right-click on the canvas (after selecting the layer under the pointer), in client coordinates. */
   onContextMenu?: (point: CanvasContextMenu) => void;
   /** Image files dropped on the canvas, with the drop point in world coordinates. */
@@ -112,11 +115,12 @@ type Status = { kind: 'loading' } | { kind: 'ready' } | { kind: 'error'; message
  * editor render requests and draws at most once per animation frame; React never
  * re-renders on document changes.
  */
-export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuides = true, maskOutlines = false, outlines, onContextMenu, onDropFiles }: CanvasHostProps) {
+export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPreview = 0, layoutGuides = true, maskOutlines = false, outlines, onContextMenu, onDropFiles }: CanvasHostProps) {
   const maskOutlinesRef = useRef(maskOutlines);
   const dropRef = useRef(onDropFiles);
   const outlinesRef = useRef(outlines);
   const pixelGridRef = useRef(pixelGrid);
+  const pixelPreviewRef = useRef(pixelPreview);
   const layoutGuidesRef = useRef(layoutGuides);
   const containerRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<HTMLCanvasElement>(null);
@@ -180,12 +184,13 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
   useEffect(() => {
     outlinesRef.current = outlines;
     pixelGridRef.current = pixelGrid;
+    pixelPreviewRef.current = pixelPreview;
     layoutGuidesRef.current = layoutGuides;
     maskOutlinesRef.current = maskOutlines;
     // Hidden layers drawn in outline mode are clickable too, so hit testing is told what is on show.
     editor.state.setOutlinedHidden(outlines.outlines === true && outlines.includeHidden === true);
     editor.requestRender();
-  }, [outlines, pixelGrid, layoutGuides, maskOutlines, editor]);
+  }, [outlines, pixelGrid, pixelPreview, layoutGuides, maskOutlines, editor]);
 
   useEffect(() => {
     rulersRef.current = rulers;
@@ -214,8 +219,20 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
     let size = { width: 0, height: 0, dpr: 1 };
     let surfaceProfile: ColorProfile = 'SRGB';
 
+    /** Pixel preview's own surface, as wide as the visible canvas is in raster pixels; kept between frames. */
+    let rasterSurface: Surface | null = null;
+    let rasterSize = { width: 0, height: 0 };
+
+    const releaseRaster = () => {
+      rasterSurface?.delete();
+      rasterSurface = null;
+      rasterSize = { width: 0, height: 0 };
+    };
+
     const createSurface = () => {
       if (!ck) return;
+      // Pixel preview's surface belongs to this one, so it goes with it.
+      releaseRaster();
       surface?.delete();
       // The surface uses the file's color space, so Display P3 colors keep their wider gamut.
       surfaceProfile = documentColorProfile(editor.doc);
@@ -224,20 +241,56 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
       if (!surface) setStatus({ kind: 'error', message: 'Could not create a drawing surface.' });
     };
 
+    /**
+     * Pixel preview: the scene is drawn onto a surface with `scale` pixels to the design pixel — the resolution it
+     * would export at — and that picture is magnified to fill the canvas with no smoothing, so the paths show the
+     * pixels they land on. Below that zoom there is nothing to magnify, so the scene is drawn as it always is.
+     */
+    const renderRasterized = (scale: PixelPreview, view: RenderView): boolean => {
+      if (!ck || !surface || !renderer || scale === 0 || view.zoom * view.dpr <= scale) return false;
+      const wide = (view.width / view.zoom) * scale;
+      const high = (view.height / view.zoom) * scale;
+      const width = Math.max(1, Math.ceil(wide));
+      const height = Math.max(1, Math.ceil(high));
+      if (!rasterSurface || rasterSize.width !== width || rasterSize.height !== height) {
+        releaseRaster();
+        rasterSurface = surface.makeSurface({ width, height, colorType: ck.ColorType.RGBA_8888, alphaType: ck.AlphaType.Premul, colorSpace: ck.ColorSpace.SRGB });
+        rasterSize = { width, height };
+      }
+      if (!rasterSurface) return false;
+      renderer.render(
+        rasterSurface.getCanvas(),
+        editor.doc,
+        editor.scene,
+        editor.pageId,
+        { x: view.x, y: view.y, zoom: scale, width, height, dpr: 1 },
+        { ...outlinesRef.current, cropping: editor.state.getSnapshot().croppingId, colorProfile: surfaceProfile },
+      );
+      rasterSurface.flush();
+      const image = rasterSurface.makeImageSnapshot();
+      const canvas = surface.getCanvas();
+      canvas.save();
+      canvas.drawImageRectOptions(image, [0, 0, wide, high], [0, 0, view.width * view.dpr, view.height * view.dpr], ck.FilterMode.Nearest, ck.MipmapMode.None);
+      canvas.restore();
+      image.delete();
+      return true;
+    };
+
     const renderScene = () => {
       // Changing the file's color profile recreates the surface in the new color space.
       if (surface && documentColorProfile(editor.doc) !== surfaceProfile) createSurface();
       if (!surface || !renderer) return;
       const v = editor.state.viewport;
+      const view: RenderView = { ...v, ...size };
       try {
-        renderer.render(
-          surface.getCanvas(),
-          editor.doc,
-          editor.scene,
-          editor.pageId,
-          { ...v, ...size },
-          { ...outlinesRef.current, cropping: editor.state.getSnapshot().croppingId, colorProfile: surfaceProfile },
-        );
+        if (pixelPreviewRef.current === 0) releaseRaster();
+        if (!renderRasterized(pixelPreviewRef.current, view)) {
+          renderer.render(surface.getCanvas(), editor.doc, editor.scene, editor.pageId, view, {
+            ...outlinesRef.current,
+            cropping: editor.state.getSnapshot().croppingId,
+            colorProfile: surfaceProfile,
+          });
+        }
         surface.flush();
       } catch (error) {
         console.error('Openframe: scene render failed', error);
@@ -328,6 +381,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
 
     const onContextLost = (e: Event) => {
       e.preventDefault();
+      releaseRaster();
       surface?.delete();
       surface = null;
     };
@@ -765,6 +819,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
       editor.setSpellChecker(null);
       renderer?.dispose();
       shaper?.dispose();
+      releaseRaster();
       surface?.delete();
     };
   }, [editor, tools]);

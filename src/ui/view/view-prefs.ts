@@ -18,6 +18,9 @@
 import type { CommandDefinition } from '@/editor/commands/registry';
 import { Observable } from '@/editor/stores/observable';
 
+/** How finely pixel preview rasterizes the canvas: one or two raster pixels to the design pixel, or 0 for off. */
+export type PixelPreview = 0 | 1 | 2;
+
 /** Per-device view preferences (not part of the document), persisted in localStorage like the theme. */
 export interface ViewPrefs {
   /** Rulers along the top and left canvas edges; ruler guides are shown and editable only with rulers on. */
@@ -32,6 +35,8 @@ export interface ViewPrefs {
   readonly maskOutlines: boolean;
   /** One-pixel grid, drawn at 400% zoom and above. */
   readonly pixelGrid: boolean;
+  /** Pixel preview: the canvas drawn as it rasterizes at 1x or 2x, magnified without smoothing. 0 is off. */
+  readonly pixelPreview: PixelPreview;
   /** Layout guides on frames (they still apply to snapping and constraints when hidden). */
   readonly layoutGuides: boolean;
   /** Moving, resizing and drawing land on whole pixels. */
@@ -69,6 +74,7 @@ export const VIEW_PREF_DEFAULTS: ViewPrefs = {
   outlineBounds: false,
   maskOutlines: false,
   pixelGrid: true,
+  pixelPreview: 0,
   layoutGuides: true,
   snapToPixelGrid: true,
   propertyLabels: false,
@@ -104,6 +110,7 @@ function readStored(): ViewPrefs {
       outlineBounds: flag('outlineBounds'),
       maskOutlines: flag('maskOutlines'),
       pixelGrid: flag('pixelGrid'),
+      pixelPreview: record['pixelPreview'] === 1 || record['pixelPreview'] === 2 ? record['pixelPreview'] : VIEW_PREF_DEFAULTS.pixelPreview,
       layoutGuides: flag('layoutGuides'),
       snapToPixelGrid: flag('snapToPixelGrid'),
       propertyLabels: flag('propertyLabels'),
@@ -138,6 +145,13 @@ class ViewPrefsStore extends Observable<ViewPrefs> {
 }
 
 export const viewPrefs = new ViewPrefsStore(readStored());
+
+/** The resolution pixel preview goes back to when it is switched on again. */
+let lastPixelPreview: 1 | 2 = viewPrefs.getSnapshot().pixelPreview === 2 ? 2 : 1;
+viewPrefs.subscribe(() => {
+  const { pixelPreview } = viewPrefs.getSnapshot();
+  if (pixelPreview !== 0) lastPixelPreview = pixelPreview;
+});
 
 export const VIEW_PREF_COMMANDS: CommandDefinition[] = [
   {
@@ -184,6 +198,37 @@ export const VIEW_PREF_COMMANDS: CommandDefinition[] = [
     shortcuts: ["Mod+'"],
     checked: () => viewPrefs.getSnapshot().pixelGrid,
     run: () => viewPrefs.toggle('pixelGrid'),
+  },
+  {
+    id: 'view.pixelPreviewOff',
+    label: 'Pixel preview: Disabled',
+    category: 'View',
+    checked: () => viewPrefs.getSnapshot().pixelPreview === 0,
+    run: () => viewPrefs.set({ pixelPreview: 0 }),
+  },
+  {
+    id: 'view.pixelPreview1x',
+    label: 'Pixel preview: 1x',
+    category: 'View',
+    checked: () => viewPrefs.getSnapshot().pixelPreview === 1,
+    run: () => viewPrefs.set({ pixelPreview: 1 }),
+  },
+  {
+    id: 'view.pixelPreview2x',
+    label: 'Pixel preview: 2x',
+    category: 'View',
+    checked: () => viewPrefs.getSnapshot().pixelPreview === 2,
+    run: () => viewPrefs.set({ pixelPreview: 2 }),
+  },
+  {
+    id: 'view.togglePixelPreview',
+    label: 'Pixel preview',
+    category: 'View',
+    // Control P on a Mac, and Windows' own Ctrl Alt P, which the documentation gives.
+    shortcuts: ['Ctrl+P', 'Ctrl+Alt+P'],
+    checked: () => viewPrefs.getSnapshot().pixelPreview !== 0,
+    // Turning it back on brings back the resolution it was last set to, 1x being where it starts.
+    run: () => viewPrefs.set({ pixelPreview: viewPrefs.getSnapshot().pixelPreview === 0 ? lastPixelPreview : 0 }),
   },
   {
     id: 'view.toggleLayoutGuides',

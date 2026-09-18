@@ -456,6 +456,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
           theme={theme}
           rulers={prefs.rulers}
           pixelGrid={prefs.pixelGrid}
+          pixelPreview={prefs.pixelPreview}
           layoutGuides={prefs.layoutGuides}
           maskOutlines={prefs.maskOutlines}
           outlines={outlines}

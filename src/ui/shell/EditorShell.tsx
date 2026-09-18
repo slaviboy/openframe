@@ -23,7 +23,7 @@ import { Icon, type IconName } from '../icons/Icon';
 import { IS_MAC } from '../keyboard/keyboard-controller';
 import { useHoverTooltip } from '../primitives/HoverTooltip';
 import { SessionContext, useEditor, useEditorState, useSession } from '../hooks/useEditor';
-import { commandSections, mainMenuEntries } from '../menus/menu-model';
+import { commandSections, mainMenuEntries, pixelPreviewSubmenu } from '../menus/menu-model';
 import { FindPanel } from '../panels/find/FindPanel';
 import { Inspector } from '../panels/inspector/Inspector';
 import { AssetsPanel } from '../panels/assets/AssetsPanel';
@@ -462,13 +462,19 @@ function RightHeader() {
         {anchor && (
           <Menu
             label="Zoom and view options"
-            entries={commandSections(editor, [
-              ['view.zoomIn', 'view.zoomOut', 'view.zoomToFit', 'view.zoomToSelection'],
-              ['view.zoom50', 'view.zoom100', 'view.zoom200'],
-              ['view.togglePixelGrid', 'view.toggleSnapToPixelGrid', 'view.toggleLayoutGuides'],
-              ['view.toggleRulers', 'view.toggleOutlines', 'view.toggleOutlineHidden', 'view.toggleOutlineBounds', 'view.toggleMaskOutlines'],
-              ['view.togglePropertyLabels'],
-            ])}
+            entries={[
+              ...commandSections(editor, [
+                ['view.zoomIn', 'view.zoomOut', 'view.zoomToFit', 'view.zoomToSelection'],
+                ['view.zoom50', 'view.zoom100', 'view.zoom200'],
+              ]),
+              { kind: 'separator', id: 'separator-pixel-preview' },
+              ...pixelPreviewSubmenu(editor),
+              ...commandSections(editor, [
+                ['view.togglePixelGrid', 'view.toggleSnapToPixelGrid', 'view.toggleLayoutGuides'],
+                ['view.toggleRulers', 'view.toggleOutlines', 'view.toggleOutlineHidden', 'view.toggleOutlineBounds', 'view.toggleMaskOutlines'],
+                ['view.togglePropertyLabels'],
+              ]),
+            ]}
             anchor={anchor}
             placement="bottom-start"
             onClose={close}

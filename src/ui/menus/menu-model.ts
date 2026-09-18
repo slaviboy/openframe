@@ -39,6 +39,16 @@ export function commandItem(editor: Editor, id: string): MenuEntry | null {
   };
 }
 
+/** "Pixel preview" and the resolutions it can be set to, which is how the documentation lays it out. */
+export function pixelPreviewSubmenu(editor: Editor): MenuEntry[] {
+  const entries = ['view.pixelPreviewOff', 'view.pixelPreview1x', 'view.pixelPreview2x']
+    .map((id) => commandItem(editor, id))
+    .filter((entry): entry is MenuEntry => entry !== null)
+    // Inside the submenu the items say only what they set, the submenu itself carrying the name.
+    .map((entry) => (entry.kind === 'item' ? { ...entry, label: entry.label.replace('Pixel preview: ', '') } : entry));
+  return entries.length > 0 ? [{ kind: 'submenu', id: 'pixel-preview', label: 'Pixel preview', entries }] : [];
+}
+
 /** Command items grouped into sections separated by dividers (empty sections are dropped). */
 export function commandSections(editor: Editor, sections: readonly (readonly string[])[]): MenuEntry[] {
   const out: MenuEntry[] = [];
