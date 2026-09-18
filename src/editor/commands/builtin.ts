@@ -887,7 +887,7 @@ export const BUILTIN_COMMANDS: CommandDefinition[] = [
     category: 'Edit',
     shortcuts: ['Enter'],
     enabled: canBeginVectorEdit,
-    run: (e) => beginVectorEdit(e, e.selection[0]!),
+    run: (e) => beginVectorEdit(e, e.selection[0]!, e.selection.slice(1)),
   },
   {
     id: 'vector.done',

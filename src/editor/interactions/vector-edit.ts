@@ -44,32 +44,67 @@ import { paintsEqual } from '../commands/properties';
 import type { Editor } from '../editor';
 import { refitVector } from '../tools/vector-draw';
 import type { CursorKind, PointerInfo, Tool } from '../tools/types';
-import type { VectorEditTool } from '../stores/editor-store';
+import type { VectorEditLayer, VectorEditRef, VectorEditTool } from '../stores/editor-store';
 import { worldToScreen } from '../viewport/viewport';
 import { hitHandle as hitFrameHandle, hitRotationCorner } from '../chrome/selection-geometry';
 import { computeResize, type HandleId } from './transform';
 import { hitHandle } from './vector-handles';
 import { pointsFrame } from './vector-points-frame';
 
-/** Vector edit mode can start on a single selected, unlocked vector layer. */
+/** Vector edit mode can start on selected, unlocked vector layers — one of them, or several at once. */
 export function canBeginVectorEdit(editor: Editor): boolean {
-  if (editor.state.getSnapshot().vectorEdit || editor.selection.length !== 1) return false;
-  const node = editor.doc.get(editor.selection[0]!);
-  return node?.type === 'VECTOR' && !node.locked;
+  if (editor.state.getSnapshot().vectorEdit || editor.selection.length === 0) return false;
+  return editor.selection.every((id) => {
+    const node = editor.doc.get(id);
+    return node?.type === 'VECTOR' && !node.locked;
+  });
 }
 
-/** Enters vector edit mode on a vector layer (selecting it). */
-export function beginVectorEdit(editor: Editor, id: Id): boolean {
-  const node = editor.doc.get(id);
-  if (!node || !isSceneNode(node) || node.locked) return false;
-  // A shape drawn some other way — a rectangle, an ellipse, a star — becomes a vector layer so its points can be
-  // moved. Its own settings (corners, point counts, arcs) are the shape's, so they go with the shape. Layers that
-  // hold other layers are left alone: a frame is not a shape whose points can be pulled about.
-  const target = node.type === 'VECTOR' ? id : EDITABLE_SHAPES.has(node.type) ? toVectorLayer(editor, node) : null;
+/** Enters vector edit mode on a vector layer (selecting it), or on several at once. */
+export function beginVectorEdit(editor: Editor, id: Id, alsoIds: readonly Id[] = []): boolean {
+  const target = openable(editor, id);
   if (target === null) return false;
-  editor.state.select([target]);
-  editor.state.setVectorEdit({ nodeId: target, vertices: [] });
+  // Every layer opened alongside it keeps its own selected points; the tools act on whichever is worked in.
+  const others = alsoIds.filter((other) => other !== id).map((other) => openable(editor, other));
+  const opened = others.filter((other): other is Id => other !== null);
+  editor.state.select([target, ...opened]);
+  editor.state.setVectorEdit({ nodeId: target, vertices: [], ...(opened.length > 0 ? { others: opened.map((nodeId) => ({ nodeId, vertices: [] })) } : {}) });
   return true;
+}
+
+/**
+ * The layer whose points are opened for a layer: itself when it is already a vector, else the vector layer it
+ * becomes. A shape drawn some other way — a rectangle, an ellipse, a star — becomes a vector layer so its points
+ * can be moved. Its own settings (corners, point counts, arcs) are the shape's, so they go with the shape. Layers
+ * that hold other layers are left alone: a frame is not a shape whose points can be pulled about.
+ */
+function openable(editor: Editor, id: Id): Id | null {
+  const node = editor.doc.get(id);
+  if (!node || !isSceneNode(node) || node.locked) return null;
+  return node.type === 'VECTOR' ? id : EDITABLE_SHAPES.has(node.type) ? toVectorLayer(editor, node) : null;
+}
+
+/** Every layer open for point editing, the one the tools act on first. */
+export function openVectorLayers(state: VectorEditRef): VectorEditLayer[] {
+  return [{ nodeId: state.nodeId, vertices: state.vertices }, ...(state.others ?? [])];
+}
+
+/** Writes the open layers back, the first being the one the tools act on. */
+export function withOpenLayers(state: VectorEditRef, layers: readonly VectorEditLayer[]): VectorEditRef {
+  const [first, ...rest] = layers;
+  if (!first) return state;
+  const { others: _others, ...without } = state;
+  return { ...without, nodeId: first.nodeId, vertices: first.vertices, ...(rest.length > 0 ? { others: rest } : {}) };
+}
+
+/** The layers open for editing that are still vector layers, with the points each has selected. */
+export function openVectorNodes(editor: Editor, state: VectorEditRef): { readonly node: VectorNode; readonly vertices: readonly number[] }[] {
+  const out: { node: VectorNode; vertices: readonly number[] }[] = [];
+  for (const layer of openVectorLayers(state)) {
+    const node = editor.doc.get(layer.nodeId);
+    if (node?.type === 'VECTOR') out.push({ node, vertices: layer.vertices });
+  }
+  return out;
 }
 
 /** The shapes whose points can be edited: the ones that are only an outline, holding nothing inside them. */
@@ -145,21 +180,29 @@ export function vectorEditPaint(editor: Editor): Paint {
 
 /** Deletes the selected points of the vector being edited (with their segments), as one undo step. */
 export function deleteSelectedPoints(editor: Editor): boolean {
-  const state = editor.state.getSnapshot().vectorEdit;
-  const node = editedVector(editor);
-  if (!state || !node || state.vertices.length === 0) return false;
-  editor.history.run('Delete points', (tx) => refitVector(tx, node.id, deleteVertices(node.vectorNetwork, state.vertices)));
-  editor.state.setVectorEdit({ ...state, nodeId: node.id, vertices: [] });
-  return true;
+  return removeSelectedPoints(editor, 'Delete points', deleteVertices);
 }
 
 /** ⇧Delete: deletes the selected points and heals the path across them. */
 export function healSelectedPoints(editor: Editor): boolean {
+  return removeSelectedPoints(editor, 'Delete and heal points', healVertices);
+}
+
+/** Takes the selected points out of every open layer that has any, in one undo step. */
+function removeSelectedPoints(editor: Editor, label: string, remove: (network: VectorNetwork, vertices: readonly number[]) => VectorNetwork): boolean {
   const state = editor.state.getSnapshot().vectorEdit;
-  const node = editedVector(editor);
-  if (!state || !node || state.vertices.length === 0) return false;
-  editor.history.run('Delete and heal points', (tx) => refitVector(tx, node.id, healVertices(node.vectorNetwork, state.vertices)));
-  editor.state.setVectorEdit({ ...state, nodeId: node.id, vertices: [] });
+  if (!state) return false;
+  const layers = openVectorNodes(editor, state).filter((layer) => layer.vertices.length > 0);
+  if (layers.length === 0) return false;
+  editor.history.run(label, (tx) => {
+    for (const layer of layers) refitVector(tx, layer.node.id, remove(layer.node.vectorNetwork, layer.vertices));
+  });
+  editor.state.setVectorEdit(
+    withOpenLayers(
+      state,
+      openVectorLayers(state).map((layer) => ({ ...layer, vertices: [] })),
+    ),
+  );
   return true;
 }
 
@@ -266,12 +309,19 @@ type BoxDrag = {
   lastLocal: Vec2 | null;
 } & ({ readonly kind: 'resize'; readonly handle: HandleId } | { readonly kind: 'rotate' });
 
+/** One layer's part in a point drag: where its network and box stood when the drag began, and which points move. */
+interface DraggedLayer {
+  readonly nodeId: Id;
+  readonly start: VectorNetwork;
+  readonly startTransform: Transform;
+  readonly vertices: readonly number[];
+}
+
 interface PointDrag {
   tx: Transaction;
-  start: VectorNetwork;
-  startTransform: Transform;
+  /** Every open layer with points selected; a drag carries them all, however many layers they are spread over. */
+  layers: readonly DraggedLayer[];
   down: PointerInfo;
-  vertices: readonly number[];
   moved: boolean;
 }
 
@@ -370,8 +420,41 @@ export class VectorEditController implements Tool {
     return this.hover?.remove ? 'droplet-empty' : 'droplet';
   }
 
+  /**
+   * Brings whichever open layer the pointer is over to the front, so the tools act on it: a point of it under the
+   * pointer first, then the layer the pointer is inside. The layers left keep their own selected points, which is
+   * what lets points be picked in one layer and then another without losing the first.
+   */
+  private focusLayerUnder(p: PointerInfo): void {
+    const { editor } = this;
+    const state = editor.state.getSnapshot().vectorEdit;
+    if (!state?.others?.length) return;
+    editor.scene.ensure(editor.pageId);
+    const v = editor.state.viewport;
+    const onPoint = (node: VectorNode): boolean => {
+      const toWorld = editor.scene.worldTransform(node.id);
+      return node.vectorNetwork.vertices.some((vertex) => {
+        const screen = worldToScreen(v, apply(toWorld, vertex));
+        return Math.abs(screen.x - p.screen.x) <= this.tolerancePx && Math.abs(screen.y - p.screen.y) <= this.tolerancePx;
+      });
+    };
+    const inside = (node: VectorNode): boolean => {
+      const inverse = invert(editor.scene.worldTransform(node.id));
+      const pixelsPerUnit = Math.hypot(editor.scene.worldTransform(node.id).a, editor.scene.worldTransform(node.id).b) * v.zoom || 1;
+      return inverse !== null && nodeContainsLocal(node, apply(inverse, p.world), this.tolerancePx / pixelsPerUnit);
+    };
+    const open = openVectorNodes(editor, state);
+    const found = open.find((layer) => onPoint(layer.node)) ?? open.find((layer) => inside(layer.node));
+    if (!found || found.node.id === state.nodeId) return;
+    const layers = openVectorLayers(state);
+    const moved = layers.filter((layer) => layer.nodeId === found.node.id);
+    editor.state.setVectorEdit(withOpenLayers(state, [...moved, ...layers.filter((layer) => layer.nodeId !== found.node.id)]));
+  }
+
   pointerDown(p: PointerInfo): void {
     const { editor } = this;
+    // With several layers open, the one the pointer is working in comes to the front, and the tools act on it.
+    this.focusLayerUnder(p);
     const state = editor.state.getSnapshot().vectorEdit;
     const node = editedVector(editor);
     if (!state || !node) {
@@ -568,9 +651,15 @@ export class VectorEditController implements Tool {
     }
     if (hit !== -1) {
       const selected = p.shift ? (state.vertices.includes(hit) ? state.vertices.filter((i) => i !== hit) : [...state.vertices, hit]) : state.vertices.includes(hit) ? state.vertices : [hit];
-      editor.state.setVectorEdit({ ...state, nodeId: node.id, vertices: selected, ...(state.selectedHandles?.length ? { selectedHandles: [] } : {}) });
+      // A plain click picks that point alone, so the points held in the other open layers go; ⇧ keeps them.
+      const others = p.shift ? (state.others ?? []) : (state.others ?? []).map((layer) => ({ ...layer, vertices: [] }));
+      editor.state.setVectorEdit({ ...state, nodeId: node.id, vertices: selected, ...(others.length > 0 ? { others } : {}), ...(state.selectedHandles?.length ? { selectedHandles: [] } : {}) });
       if (selected.includes(hit)) {
-        this.drag = { tx: editor.history.begin('Move points'), start: node.vectorNetwork, startTransform: node.transform, down: p, vertices: selected, moved: false };
+        // The points of every open layer travel together, so a drag that starts in one carries the rest along.
+        const layers = openVectorNodes(editor, { ...state, nodeId: node.id, vertices: selected })
+          .filter((layer) => layer.vertices.length > 0)
+          .map((layer): DraggedLayer => ({ nodeId: layer.node.id, start: layer.node.vectorNetwork, startTransform: layer.node.transform, vertices: layer.vertices }));
+        this.drag = { tx: editor.history.begin('Move points'), layers, down: p, moved: false };
       }
       return;
     }
@@ -586,8 +675,14 @@ export class VectorEditController implements Tool {
         return;
       }
     }
-    if (local && nodeContainsLocal(node, local, this.tolerancePx / pixelsPerUnit)) editor.state.setVectorEdit({ ...state, nodeId: node.id, vertices: [] });
-    else endVectorEdit(editor);
+    if (local && nodeContainsLocal(node, local, this.tolerancePx / pixelsPerUnit)) {
+      editor.state.setVectorEdit(
+        withOpenLayers(
+          state,
+          openVectorLayers({ ...state, nodeId: node.id }).map((layer) => ({ ...layer, vertices: [] })),
+        ),
+      );
+    } else endVectorEdit(editor);
   }
 
   pointerMove(p: PointerInfo): void {
@@ -644,11 +739,13 @@ export class VectorEditController implements Tool {
     if (!d || !state) return;
     if (!d.moved && Math.hypot(p.screen.x - d.down.screen.x, p.screen.y - d.down.screen.y) < 3) return;
     d.moved = true;
-    // The drag distance in the layer's own space; its rotation and scale don't change while points move.
-    const inverse = invert(this.editor.scene.worldTransform(state.nodeId));
     const worldDelta = { x: p.world.x - d.down.world.x, y: p.world.y - d.down.world.y };
-    const delta = inverse ? applyLinear(inverse, worldDelta) : worldDelta;
-    refitVector(d.tx, state.nodeId, moveVertices(d.start, d.vertices, delta), d.startTransform);
+    for (const layer of d.layers) {
+      // The drag distance in each layer's own space; its rotation and scale don't change while points move.
+      const inverse = invert(this.editor.scene.worldTransform(layer.nodeId));
+      const delta = inverse ? applyLinear(inverse, worldDelta) : worldDelta;
+      refitVector(d.tx, layer.nodeId, moveVertices(layer.start, layer.vertices, delta), layer.startTransform);
+    }
     d.tx.flushPreview();
     this.editor.requestRender();
   }
@@ -969,14 +1066,17 @@ export class VectorEditController implements Tool {
   private finishLasso(lasso: LassoDrag): void {
     const { editor } = this;
     const state = editor.state.getSnapshot().vectorEdit;
-    const node = editedVector(editor);
-    if (!state || !node) return;
+    if (!state) return;
     editor.scene.ensure(editor.pageId);
-    const toWorld = editor.scene.worldTransform(node.id);
     const v = editor.state.viewport;
-    // A click without an outline selects nothing.
-    const inside = lasso.points.length < 3 ? [] : node.vectorNetwork.vertices.flatMap((vertex, i) => (insidePolygon(worldToScreen(v, apply(toWorld, vertex)), lasso.points) ? [i] : []));
-    editor.state.setVectorEdit({ ...state, vertices: lasso.shift ? [...new Set([...state.vertices, ...inside])] : inside });
+    // The outline gathers points from every open layer it crosses, not only the one being worked in.
+    const picked = openVectorNodes(editor, state).map((layer) => {
+      const toWorld = editor.scene.worldTransform(layer.node.id);
+      // A click without an outline selects nothing.
+      const inside = lasso.points.length < 3 ? [] : layer.node.vectorNetwork.vertices.flatMap((vertex, i) => (insidePolygon(worldToScreen(v, apply(toWorld, vertex)), lasso.points) ? [i] : []));
+      return { nodeId: layer.node.id, vertices: lasso.shift ? [...new Set([...layer.vertices, ...inside])] : inside };
+    });
+    editor.state.setVectorEdit(withOpenLayers(state, picked));
     editor.requestRender();
   }
 

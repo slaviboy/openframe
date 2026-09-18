@@ -204,10 +204,22 @@ export interface EditorState {
 /** Tool of vector edit mode's secondary toolbar: Move (V) drags points; Lasso (Q) selects the points inside a drawn outline; Cut (X) breaks the path where it is clicked; Bend pulls Bézier handles out of a point; Paint (⇧B) fills closed regions; Eraser (⇧E) removes the area it is dragged over; Variable width sets the stroke's width at points along the path. */
 export type VectorEditTool = 'move' | 'lasso' | 'cut' | 'bend' | 'paint' | 'eraser' | 'width' | 'shapeBuilder';
 
-/** Vector edit mode on a vector layer: the indices of its selected points, and the secondary toolbar's tool (absent: Move). */
+/** One of the layers open for point editing, with the indices of its selected points. */
+export interface VectorEditLayer {
+  readonly nodeId: Id;
+  readonly vertices: readonly number[];
+}
+
+/**
+ * Vector edit mode: the layer the tools act on, the indices of its selected points, and the secondary toolbar's
+ * tool (absent: Move). Several layers can be open at once — `others` holds the rest, each with its own selected
+ * points — and whichever the pointer works in becomes `nodeId`, the others moving into `others` behind it.
+ */
 export interface VectorEditRef {
   readonly nodeId: Id;
   readonly vertices: readonly number[];
+  /** The other layers open for editing at the same time. Absent when only one layer is open. */
+  readonly others?: readonly VectorEditLayer[];
   readonly tool?: VectorEditTool;
   /** The Paint tool's paint; absent means the layer's first solid fill, or the default shape fill. */
   readonly paint?: Paint;
@@ -546,7 +558,11 @@ export class EditorStore extends Observable<EditorState> {
     if (valueEdit && !(normalized.length === 1 && normalized[0] === valueEdit.frameId)) this.setState({ layoutValueEdit: null });
     // Vector edit mode belongs to its layer's selection.
     const vectorEdit = this.state.vectorEdit;
-    if (vectorEdit && !(normalized.length === 1 && normalized[0] === vectorEdit.nodeId)) this.setState({ vectorEdit: null });
+    // Editing ends when the selection is no longer exactly the layers that were opened for it.
+    if (vectorEdit) {
+      const open = [vectorEdit.nodeId, ...(vectorEdit.others ?? []).map((layer) => layer.nodeId)];
+      if (normalized.length !== open.length || !normalized.every((id) => open.includes(id))) this.setState({ vectorEdit: null });
+    }
     const unchanged = normalized.length === this.state.selection.length && normalized.every((id, i) => id === this.state.selection[i]);
     if (unchanged && this.state.selectedGuide === null && this.state.selectedOverlay === null) return;
     // Selecting anything other than the layer being cropped leaves crop mode.

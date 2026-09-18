@@ -44,7 +44,7 @@ import { gradientEditChrome, type GradientChrome } from '../interactions/gradien
 import { blurEditChrome } from '../interactions/blur-edit';
 import { toCss, toHex6, type ColorProfile } from '@/core/color/color';
 import { documentColorProfile } from '@/core/color/color-profile';
-import type { Color } from '@/core/schema/document';
+import type { Color, VectorNode } from '@/core/schema/document';
 import { isMaskLayer } from '@/core/scene/masks';
 import { gridLines, layoutGuideBands } from '@/core/layout/layout-guides';
 
@@ -936,6 +936,42 @@ function drawSmartSelection(ctx: CanvasRenderingContext2D, input: OverlayInput):
   ctx.restore();
 }
 
+/** One layer open for point editing: its segments as a thin line, and its points as squares, the selected filled. */
+function drawVectorLayerPoints(ctx: CanvasRenderingContext2D, input: OverlayInput, node: VectorNode, vertices: readonly number[]): void {
+  const { editor, theme } = input;
+  const v = editor.state.viewport;
+  const m = editor.scene.worldTransform(node.id);
+  const toScreen = (p: Vec2) => worldToScreen(v, apply(m, p));
+  ctx.save();
+  ctx.beginPath();
+  for (const command of networkStrokePath(node.vectorNetwork)) {
+    if (command.op === 'Z') ctx.closePath();
+    else if (command.op === 'C') {
+      const [c1, c2, to] = [toScreen({ x: command.x1, y: command.y1 }), toScreen({ x: command.x2, y: command.y2 }), toScreen(command)];
+      ctx.bezierCurveTo(c1.x, c1.y, c2.x, c2.y, to.x, to.y);
+    } else {
+      const to = toScreen(command);
+      if (command.op === 'M') ctx.moveTo(to.x, to.y);
+      else ctx.lineTo(to.x, to.y);
+    }
+  }
+  ctx.strokeStyle = theme.selection;
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  const selected = new Set(vertices);
+  const size = 7;
+  node.vectorNetwork.vertices.forEach((vertex, i) => {
+    const p = toScreen(vertex);
+    ctx.beginPath();
+    ctx.rect(Math.round(p.x - size / 2) + 0.5, Math.round(p.y - size / 2) + 0.5, size, size);
+    ctx.fillStyle = selected.has(i) ? theme.selection : theme.handleFill;
+    ctx.fill();
+    ctx.strokeStyle = theme.selection;
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
 /** Vector edit mode: the edited layer's segments and its points, selected points filled. */
 function drawVectorEdit(ctx: CanvasRenderingContext2D, input: OverlayInput): void {
   const { editor, theme } = input;
@@ -945,6 +981,13 @@ function drawVectorEdit(ctx: CanvasRenderingContext2D, input: OverlayInput): voi
   const v = editor.state.viewport;
   const m = editor.scene.worldTransform(node.id);
   const toScreen = (p: Vec2) => worldToScreen(v, apply(m, p));
+  ctx.save();
+  // Every other layer open at the same time shows its own path and points; the tools' own chrome — the handles,
+  // the points' box, what the Paint tool or the Eraser is over — belongs to the layer being worked in.
+  for (const other of state.others ?? []) {
+    const layer = editor.doc.get(other.nodeId);
+    if (layer?.type === 'VECTOR') drawVectorLayerPoints(ctx, input, layer, other.vertices);
+  }
   ctx.save();
   ctx.beginPath();
   for (const command of networkStrokePath(node.vectorNetwork)) {
@@ -1074,17 +1117,8 @@ function drawVectorEdit(ctx: CanvasRenderingContext2D, input: OverlayInput): voi
     strokeQuad(ctx, screenQuad(editor, pointsBox.frame), theme.selection, 1);
     drawHandles(ctx, editor, pointsBox.frame, theme);
   }
-  const selected = new Set(state.vertices);
-  const size = 7;
-  node.vectorNetwork.vertices.forEach((vertex, i) => {
-    const p = toScreen(vertex);
-    ctx.beginPath();
-    ctx.rect(Math.round(p.x - size / 2) + 0.5, Math.round(p.y - size / 2) + 0.5, size, size);
-    ctx.fillStyle = selected.has(i) ? theme.selection : theme.handleFill;
-    ctx.fill();
-    ctx.strokeStyle = theme.selection;
-    ctx.stroke();
-  });
+  ctx.restore();
+  drawVectorLayerPoints(ctx, input, node, state.vertices);
   const eraser = input.vectorEraser;
   if (eraser && eraser.points.length > 0) {
     // The eraser's path, as wide as the eraser.

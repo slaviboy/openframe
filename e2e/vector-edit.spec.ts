@@ -62,3 +62,43 @@ test('vector edit mode moves points with Return or a double-click; Escape leaves
   await page.getByRole('treeitem', { name: /Vector 1/ }).click();
   await expect(page.getByTestId('field-w')).toHaveValue('160');
 });
+
+test('vector edit mode opens several layers at once, and a drag carries the points picked in each', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  // Two triangles drawn with the Pen, side by side.
+  for (const offset of [0, 200]) {
+    await page.keyboard.press('p');
+    for (const [x, y] of [
+      [400, 300],
+      [500, 300],
+      [450, 400],
+      [400, 300],
+    ] as const) {
+      await page.mouse.click(box.x + x + offset, box.y + y);
+    }
+    await page.keyboard.press('Escape');
+  }
+  await expect(page.getByRole('treeitem', { name: /Vector 2/ })).toBeVisible();
+
+  // Both selected, Return opens both for point editing.
+  await page.keyboard.press('v');
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('button', { name: /^Lasso/ })).toBeVisible();
+
+  // A point in each layer, then one drag: both widen, so the points travelled together.
+  await page.mouse.click(box.x + 500, box.y + 300);
+  await page.keyboard.down('Shift');
+  await page.mouse.click(box.x + 700, box.y + 300);
+  await page.keyboard.up('Shift');
+  await drag(page, [700, 300], [740, 300]);
+  await page.keyboard.press('Escape');
+
+  await page.getByRole('treeitem', { name: /Vector 1/ }).click();
+  await expect(page.getByTestId('field-w')).toHaveValue('140');
+  await page.getByRole('treeitem', { name: /Vector 2/ }).click();
+  await expect(page.getByTestId('field-w')).toHaveValue('140');
+});

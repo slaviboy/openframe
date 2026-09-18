@@ -159,3 +159,88 @@ describe('editing the points of a shape that is not a vector layer', () => {
     expect(editor.state.getSnapshot().vectorEdit).toBeNull();
   });
 });
+
+describe('editing several layers at once', () => {
+  let second: string;
+
+  /** A second square vector layer, 300–400 across and 100–200 down, beside the first. */
+  beforeEach(() => {
+    second = editor.history.run('create', (tx) => {
+      const vectorId = editor.ids.next();
+      tx.create(
+        makeVector(
+          { id: vectorId, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'Vector 2', x: 300, y: 100, width: 100, height: 100 },
+          {
+            vertices: [
+              { x: 0, y: 0 },
+              { x: 100, y: 0 },
+              { x: 100, y: 100 },
+              { x: 0, y: 100 },
+            ],
+            segments: [straightSegment(0, 1), straightSegment(1, 2), straightSegment(2, 3), straightSegment(3, 0)],
+            regions: [{ loops: [[0, 1, 2, 3]], windingRule: 'NONZERO' }],
+          },
+        ),
+      );
+      return vectorId;
+    });
+    editor.state.select([id, second]);
+  });
+
+  const other = () => editor.doc.getOrThrow(second) as VectorNode;
+
+  test('Return opens every selected vector layer, each keeping its own points', () => {
+    expect(editor.commands.isEnabled('vector.edit')).toBe(true);
+    editor.commands.run('vector.edit');
+    expect(editState()).toMatchObject({ nodeId: id, vertices: [], others: [{ nodeId: second, vertices: [] }] });
+  });
+
+  test('clicking a point in the other layer brings it forward, and ⇧ keeps the first layer points', () => {
+    editor.commands.run('vector.edit');
+    click(100, 100);
+    expect(editState()).toMatchObject({ nodeId: id, vertices: [0] });
+    // The second layer's top-left point is at 300, 100 in the world.
+    click(300, 100, { shift: true });
+    expect(editState()?.nodeId).toBe(second);
+    expect(editState()?.vertices).toEqual([0]);
+    expect(editState()?.others).toEqual([{ nodeId: id, vertices: [0] }]);
+    // A plain click on it drops what the other layer held.
+    click(400, 100);
+    expect(editState()?.others).toEqual([{ nodeId: id, vertices: [] }]);
+  });
+
+  test('dragging carries the selected points of both layers at once', () => {
+    editor.commands.run('vector.edit');
+    click(100, 100);
+    click(300, 100, { shift: true });
+    tools.pointerDown(sample(300, 100));
+    tools.pointerMove(sample(310, 120));
+    tools.pointerUp(sample(310, 120));
+    // The point picked in each layer travels the same distance; the rest of each layer stays where it was.
+    expect(node().vectorNetwork.vertices[0]).toEqual({ x: 10, y: 20 });
+    expect(node().vectorNetwork.vertices[1]).toEqual({ x: 100, y: 0 });
+    expect(other().vectorNetwork.vertices[0]).toEqual({ x: 10, y: 20 });
+    expect(other().vectorNetwork.vertices[1]).toEqual({ x: 100, y: 0 });
+    editor.history.undo();
+    expect(node().vectorNetwork.vertices[0]).toEqual({ x: 0, y: 0 });
+    expect(other().vectorNetwork.vertices[0]).toEqual({ x: 0, y: 0 });
+  });
+
+  test('Delete takes the selected points out of both layers in one step', () => {
+    editor.commands.run('vector.edit');
+    click(100, 100);
+    click(300, 100, { shift: true });
+    expect(deleteSelectedPoints(editor)).toBe(true);
+    expect(node().vectorNetwork.vertices).toHaveLength(3);
+    expect(other().vectorNetwork.vertices).toHaveLength(3);
+    editor.history.undo();
+    expect(node().vectorNetwork.vertices).toHaveLength(4);
+    expect(other().vectorNetwork.vertices).toHaveLength(4);
+  });
+
+  test('changing the selection to one of the layers leaves editing', () => {
+    editor.commands.run('vector.edit');
+    editor.state.select([id]);
+    expect(editState()).toBeNull();
+  });
+});
