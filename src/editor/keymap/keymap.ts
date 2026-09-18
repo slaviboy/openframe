@@ -85,6 +85,22 @@ export function eventKey(e: KeyEventLike): string {
   return e.key.length === 1 ? e.key.toUpperCase() : e.key;
 }
 
+/**
+ * The shortcut a key press spells, in the syntax shortcuts are written in — what a designer setting one for
+ * themselves has just pressed. Null when only modifiers are down, which is no shortcut at all.
+ */
+export function shortcutFromEvent(e: KeyEventLike, isMac: boolean): string | null {
+  const key = eventKey(e);
+  if (['Shift', 'Control', 'Alt', 'Meta'].includes(key)) return null;
+  const parts: string[] = [];
+  if (isMac ? e.metaKey : e.ctrlKey) parts.push('Mod');
+  if (isMac && e.ctrlKey) parts.push('Ctrl');
+  if (e.shiftKey) parts.push('Shift');
+  if (e.altKey) parts.push('Alt');
+  parts.push(key);
+  return parts.join('+');
+}
+
 export function matches(chord: KeyChord, e: KeyEventLike, isMac: boolean): boolean {
   if (isMac) {
     if (chord.mod !== e.metaKey || chord.ctrl !== e.ctrlKey) return false;

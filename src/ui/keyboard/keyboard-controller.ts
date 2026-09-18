@@ -17,6 +17,7 @@
 
 import type { Editor } from '@/editor/editor';
 import { Keymap } from '@/editor/keymap/keymap';
+import { overridesMap, shortcutOverrides } from '../shortcuts/shortcut-overrides';
 import type { ToolManager } from '@/editor/tools/tool-manager';
 
 export const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
@@ -49,6 +50,8 @@ const isActivatableTarget = (target: EventTarget | null): boolean =>
  */
 export class KeyboardController {
   private readonly keymap = new Keymap(IS_MAC);
+  private readonly defaults: ReadonlyMap<string, readonly string[]>;
+  private readonly unsubscribeOverrides: () => void;
   private readonly shortcutListeners = new Set<(commandId: string) => void>();
   private spaceDown = false;
 
@@ -63,10 +66,17 @@ export class KeyboardController {
         .filter((c) => c.shortcuts?.length)
         .map((c) => [c.id, c.shortcuts!]),
     );
-    this.keymap.setBindings(defaults);
+    this.defaults = defaults;
+    this.applyBindings();
+    // A shortcut the designer has set for themselves replaces the command's own, and takes effect at once.
+    this.unsubscribeOverrides = shortcutOverrides.subscribe(() => this.applyBindings());
     target.addEventListener('keydown', this.onKeyDown);
     target.addEventListener('keyup', this.onKeyUp);
     target.addEventListener('blur', this.onBlur);
+  }
+
+  private applyBindings(): void {
+    this.keymap.setBindings(this.defaults, overridesMap(shortcutOverrides.getSnapshot().overrides));
   }
 
   /** Notified after a keyboard shortcut runs a command (e.g. to highlight used shortcuts). */
@@ -76,6 +86,7 @@ export class KeyboardController {
   }
 
   dispose(): void {
+    this.unsubscribeOverrides();
     this.shortcutListeners.clear();
     this.target.removeEventListener('keydown', this.onKeyDown);
     this.target.removeEventListener('keyup', this.onKeyUp);

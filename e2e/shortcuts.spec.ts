@@ -50,3 +50,38 @@ test('⌃⇧? opens the keyboard shortcuts panel; pressed shortcuts are highligh
   await page.keyboard.press('Control+Shift+Slash');
   await expect(panel).toHaveCount(0);
 });
+
+test('a shortcut can be changed, works at once, is kept per device, and can be given back', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await page.keyboard.press('Control+Shift+Slash');
+  const panel = page.getByRole('region', { name: 'Keyboard shortcuts' });
+  await expect(panel).toBeVisible();
+
+  // Give the Ellipse tool J instead of O.
+  await panel.getByRole('button', { name: /^Change the shortcut for Ellipse/ }).click();
+  await expect(panel.getByRole('button', { name: /^Press the new shortcut for Ellipse/ })).toBeVisible();
+  await page.keyboard.press('j');
+  await expect(panel.getByRole('button', { name: /^Change the shortcut for Ellipse/ })).toContainText('J');
+
+  // It works at once, and the old one no longer does.
+  await page.keyboard.press('j');
+  await expect(page.getByRole('button', { name: /^Ellipse/ })).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('v');
+  await page.keyboard.press('o');
+  // O no longer reaches the Ellipse tool, so the Move tool is still the one in hand.
+  await expect(page.getByRole('button', { name: 'Move (V)' })).toHaveAttribute('aria-pressed', 'true');
+
+  // It survives a reload.
+  await page.reload();
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await page.keyboard.press('j');
+  await expect(page.getByRole('button', { name: /^Ellipse/ })).toHaveAttribute('aria-pressed', 'true');
+
+  // Reset all gives every command its own back.
+  await page.keyboard.press('Control+Shift+Slash');
+  await panel.getByRole('button', { name: 'Reset all' }).click();
+  await page.keyboard.press('v');
+  await page.keyboard.press('o');
+  await expect(page.getByRole('button', { name: /^Ellipse/ })).toHaveAttribute('aria-pressed', 'true');
+});

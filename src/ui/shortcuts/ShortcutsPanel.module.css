@@ -125,3 +125,21 @@
   font-size: var(--text-sm);
   text-align: center;
 }
+
+/* The keys are a button: clicking them listens for the shortcut to set. */
+.keys {
+  background: none;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+}
+
+.keys[data-listening] .kbd {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* A shortcut the designer set for themselves, as against the one the command came with. */
+.kbd[data-custom] {
+  border-color: var(--accent);
+}
