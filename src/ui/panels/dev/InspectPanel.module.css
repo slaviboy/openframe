@@ -53,6 +53,11 @@
   font-size: var(--text-sm);
 }
 
+/* The body of a section: the title row is the shared InspectSection's, this is what sits under it. */
+.groupBody {
+  padding: 0 var(--space-2) 0 var(--space-4);
+}
+
 .group {
   padding: var(--space-2) var(--space-3);
   border-bottom: 1px solid var(--border);

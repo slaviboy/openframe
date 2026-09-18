@@ -1,0 +1,81 @@
+/*
+ * Copyright (C) 2026 Stanislav Georgiev
+ * https://github.com/slaviboy
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Measured from the reference's inspection_panel; see docs/UI_REFERENCE.md. */
+.section {
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+}
+
+.sub {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  padding: 0 var(--space-2) 0 var(--space-4);
+}
+
+/* A sub-section's title row is shorter, which is what the reference calls snug. */
+.snug {
+  min-height: 32px;
+}
+
+.titleText {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg-primary);
+  font: inherit;
+  text-align: left;
+}
+
+.foldable {
+  cursor: default;
+}
+
+/* Holds the caret's width so a sub-section's heading lines up with the section holding it. */
+.caretSpace {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+
+.title {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+  letter-spacing: 0.01em;
+}
+
+.sub .title {
+  font-weight: var(--weight-regular);
+}
+
+.actions {
+  display: flex;
+  flex: 0;
+  gap: var(--space-1);
+}

@@ -34,6 +34,7 @@ import { AnnotationsSection } from './AnnotationsSection';
 import { CompareSection } from './CompareSection';
 import { DevAssetsPanel } from './DevAssetsPanel';
 import { PlaygroundSection } from './PlaygroundSection';
+import { InspectSection } from './InspectSection';
 import styles from './InspectPanel.module.css';
 
 /** A measurement as Dev Mode reads it: whole pixels where it can, two decimals where it cannot. */
@@ -74,10 +75,9 @@ function SizeRow({ width, height }: { width: string; height: string }) {
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className={styles.group} aria-label={title}>
-      <h3 className={styles.groupTitle}>{title}</h3>
-      {children}
-    </section>
+    <InspectSection id={title} title={title}>
+      <div className={styles.groupBody}>{children}</div>
+    </InspectSection>
   );
 }
 
@@ -98,27 +98,28 @@ export function DevStatusControl({ node }: { node: DevStatusNode }) {
   const editor = useEditor();
   const status = node.devStatus;
   return (
-    <section className={styles.group} aria-label="Status">
-      <h3 className={styles.groupTitle}>Status</h3>
-      {status && (
-        <p className={styles.status} data-changed={status.changed || undefined}>
-          {devStatusLabel(status)}
-        </p>
-      )}
-      <div className={styles.actions}>
-        <button type="button" className={primitives.button} onClick={() => setDevStatus(editor, [node.id], 'READY_FOR_DEV')}>
-          {status?.state === 'READY_FOR_DEV' && status.changed ? 'Mark as ready again' : 'Mark as ready for dev'}
-        </button>
-        <button type="button" className={primitives.button} onClick={() => setDevStatus(editor, [node.id], 'COMPLETED')}>
-          Mark as completed
-        </button>
+    <InspectSection id="Status" title="Status">
+      <div className={styles.groupBody}>
         {status && (
-          <button type="button" className={primitives.button} onClick={() => setDevStatus(editor, [node.id], null)}>
-            Remove status
-          </button>
+          <p className={styles.status} data-changed={status.changed || undefined}>
+            {devStatusLabel(status)}
+          </p>
         )}
+        <div className={styles.actions}>
+          <button type="button" className={primitives.button} onClick={() => setDevStatus(editor, [node.id], 'READY_FOR_DEV')}>
+            {status?.state === 'READY_FOR_DEV' && status.changed ? 'Mark as ready again' : 'Mark as ready for dev'}
+          </button>
+          <button type="button" className={primitives.button} onClick={() => setDevStatus(editor, [node.id], 'COMPLETED')}>
+            Mark as completed
+          </button>
+          {status && (
+            <button type="button" className={primitives.button} onClick={() => setDevStatus(editor, [node.id], null)}>
+              Remove status
+            </button>
+          )}
+        </div>
       </div>
-    </section>
+    </InspectSection>
   );
 }
 
@@ -218,27 +219,28 @@ function MotionSection({ node }: { node: SceneNode }) {
   if (code === null) return null;
 
   return (
-    <section className={styles.group} aria-label="Motion">
-      <h3 className={styles.groupTitle}>Motion</h3>
-      <div className={styles.codeControls}>
-        <select className={primitives.select} aria-label="Animation code format" value={format} onChange={(e) => setFormat(e.target.value as AnimationCodeFormat)}>
-          {(Object.keys(ANIMATION_CODE_LABELS) as AnimationCodeFormat[]).map((value) => (
-            <option key={value} value={value}>
-              {ANIMATION_CODE_LABELS[value]}
-            </option>
-          ))}
-        </select>
-        <button type="button" className={primitives.button} aria-pressed={inTimeline} onClick={() => editor.state.setDevTimeline(!inTimeline)}>
-          {inTimeline ? 'Hide timeline view' : 'Show in timeline view'}
+    <InspectSection id="Motion" title="Motion">
+      <div className={styles.groupBody}>
+        <div className={styles.codeControls}>
+          <select className={primitives.select} aria-label="Animation code format" value={format} onChange={(e) => setFormat(e.target.value as AnimationCodeFormat)}>
+            {(Object.keys(ANIMATION_CODE_LABELS) as AnimationCodeFormat[]).map((value) => (
+              <option key={value} value={value}>
+                {ANIMATION_CODE_LABELS[value]}
+              </option>
+            ))}
+          </select>
+          <button type="button" className={primitives.button} aria-pressed={inTimeline} onClick={() => editor.state.setDevTimeline(!inTimeline)}>
+            {inTimeline ? 'Hide timeline view' : 'Show in timeline view'}
+          </button>
+        </div>
+        <pre className={styles.code} data-testid="animation-code">
+          {code}
+        </pre>
+        <button type="button" className={primitives.button} onClick={() => void navigator.clipboard?.writeText(code).catch(() => undefined)}>
+          Copy animation code
         </button>
       </div>
-      <pre className={styles.code} data-testid="animation-code">
-        {code}
-      </pre>
-      <button type="button" className={primitives.button} onClick={() => void navigator.clipboard?.writeText(code).catch(() => undefined)}>
-        Copy animation code
-      </button>
-    </section>
+    </InspectSection>
   );
 }
 
@@ -250,20 +252,21 @@ function VariablesSection({ node }: { node: SceneNode }) {
   const suggested = suggestedVariables(editor, node);
   if (bound.length === 0 && suggested.length === 0) return null;
   return (
-    <section className={styles.group} aria-label="Variables">
-      <h3 className={styles.groupTitle}>Variables</h3>
-      {bound.map(({ field, variableId }) => {
-        const variable = editor.doc.get(variableId);
-        const name = variable?.name ?? 'Missing variable';
-        const code = variable?.type === 'VARIABLE' ? (variable.codeSyntax?.WEB ?? null) : null;
-        return <Row key={`${field}:${variableId}`} label={field} value={code ?? name} />;
-      })}
-      {/* A value the layer holds outright that a variable already carries: worth naming rather than repeating. */}
-      {suggested.length > 0 && <p className={styles.label}>Suggested</p>}
-      {suggested.map((suggestion) => (
-        <Row key={`suggested:${suggestion.field}:${suggestion.variableId}`} label={suggestion.field} value={suggestion.name} />
-      ))}
-    </section>
+    <InspectSection id="Variables" title="Variables">
+      <div className={styles.groupBody}>
+        {bound.map(({ field, variableId }) => {
+          const variable = editor.doc.get(variableId);
+          const name = variable?.name ?? 'Missing variable';
+          const code = variable?.type === 'VARIABLE' ? (variable.codeSyntax?.WEB ?? null) : null;
+          return <Row key={`${field}:${variableId}`} label={field} value={code ?? name} />;
+        })}
+        {/* A value the layer holds outright that a variable already carries: worth naming rather than repeating. */}
+        {suggested.length > 0 && <p className={styles.label}>Suggested</p>}
+        {suggested.map((suggestion) => (
+          <Row key={`suggested:${suggestion.field}:${suggestion.variableId}`} label={suggestion.field} value={suggestion.name} />
+        ))}
+      </div>
+    </InspectSection>
   );
 }
 
@@ -274,37 +277,38 @@ function DevResourcesSection({ node }: { node: SceneNode }) {
   const [draft, setDraft] = useState('');
   const links = devResources(editor, node.id);
   return (
-    <section className={styles.group} aria-label="Dev resources">
-      <h3 className={styles.groupTitle}>Dev resources</h3>
-      {links.map((resource) => (
-        <div key={resource.id} className={styles.row}>
-          <a className={styles.link} href={resource.url} target="_blank" rel="noreferrer noopener">
-            {resource.name ?? resource.url}
-          </a>
-          {resource.inherited ? (
-            <span className={styles.label}>From component</span>
-          ) : (
-            <button type="button" className={primitives.button} aria-label={`Delete link ${resource.name ?? resource.url}`} onClick={() => deleteDevResource(editor, node.id, resource.id)}>
-              Delete link
-            </button>
-          )}
+    <InspectSection id="Dev resources" title="Dev resources">
+      <div className={styles.groupBody}>
+        {links.map((resource) => (
+          <div key={resource.id} className={styles.row}>
+            <a className={styles.link} href={resource.url} target="_blank" rel="noreferrer noopener">
+              {resource.name ?? resource.url}
+            </a>
+            {resource.inherited ? (
+              <span className={styles.label}>From component</span>
+            ) : (
+              <button type="button" className={primitives.button} aria-label={`Delete link ${resource.name ?? resource.url}`} onClick={() => deleteDevResource(editor, node.id, resource.id)}>
+                Delete link
+              </button>
+            )}
+          </div>
+        ))}
+        <div className={styles.codeControls}>
+          <input
+            className={primitives.textInput}
+            aria-label="Add a dev resource link"
+            placeholder="Paste a link"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              e.stopPropagation();
+              if (e.key !== 'Enter') return;
+              if (addDevResource(editor, node.id, draft) !== null) setDraft('');
+            }}
+          />
         </div>
-      ))}
-      <div className={styles.codeControls}>
-        <input
-          className={primitives.textInput}
-          aria-label="Add a dev resource link"
-          placeholder="Paste a link"
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            e.stopPropagation();
-            if (e.key !== 'Enter') return;
-            if (addDevResource(editor, node.id, draft) !== null) setDraft('');
-          }}
-        />
       </div>
-    </section>
+    </InspectSection>
   );
 }
 
@@ -315,27 +319,28 @@ function MeasurementsSection() {
   const saved = measurementsOf(editor);
   if (saved.length === 0) return null;
   return (
-    <section className={styles.group} aria-label="Measurements">
-      <h3 className={styles.groupTitle}>Measurements</h3>
-      {saved.map((measurement, index) => (
-        <div key={measurement.id} className={styles.row}>
-          <input
-            className={primitives.textInput}
-            aria-label={`Measurement ${index + 1} label`}
-            defaultValue={measurement.label ?? ''}
-            placeholder="Distance"
-            onBlur={(e) => setMeasurementLabel(editor, measurement.id, e.currentTarget.value)}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === 'Enter') e.currentTarget.blur();
-            }}
-          />
-          <button type="button" className={primitives.button} aria-label={`Delete measurement ${index + 1}`} onClick={() => deleteMeasurement(editor, measurement.id)}>
-            Delete
-          </button>
-        </div>
-      ))}
-    </section>
+    <InspectSection id="Measurements" title="Measurements">
+      <div className={styles.groupBody}>
+        {saved.map((measurement, index) => (
+          <div key={measurement.id} className={styles.row}>
+            <input
+              className={primitives.textInput}
+              aria-label={`Measurement ${index + 1} label`}
+              defaultValue={measurement.label ?? ''}
+              placeholder="Distance"
+              onBlur={(e) => setMeasurementLabel(editor, measurement.id, e.currentTarget.value)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === 'Enter') e.currentTarget.blur();
+              }}
+            />
+            <button type="button" className={primitives.button} aria-label={`Delete measurement ${index + 1}`} onClick={() => deleteMeasurement(editor, measurement.id)}>
+              Delete
+            </button>
+          </div>
+        ))}
+      </div>
+    </InspectSection>
   );
 }
 
@@ -354,55 +359,57 @@ function CodeSection({ node }: { node: SceneNode }) {
   const code = generateCode(node, { language, unit: chosen, ...(scale === null ? {} : { scale }) });
 
   return (
-    <section className={styles.group} aria-label="Code">
-      <div className={styles.codeControls}>
-        <select
-          className={primitives.select}
-          aria-label="Code language"
-          value={language}
-          onChange={(e) => {
-            const next = e.target.value as CodeLanguage;
-            setLanguage(next);
-            setUnit(CODE_UNITS[next][0]!);
-            setScale(null);
-          }}
-        >
-          {(Object.keys(CODE_LANGUAGE_LABELS) as CodeLanguage[]).map((value) => (
-            <option key={value} value={value}>
-              {CODE_LANGUAGE_LABELS[value]}
-            </option>
-          ))}
-        </select>
-        <select className={primitives.select} aria-label="Code unit" value={chosen} onChange={(e) => setUnit(e.target.value as CodeUnit)}>
-          {units.map((value) => (
-            <option key={value} value={value}>
-              {value}
-            </option>
-          ))}
-        </select>
+    <InspectSection id="Code" title="Code">
+      <div className={styles.groupBody}>
+        <div className={styles.codeControls}>
+          <select
+            className={primitives.select}
+            aria-label="Code language"
+            value={language}
+            onChange={(e) => {
+              const next = e.target.value as CodeLanguage;
+              setLanguage(next);
+              setUnit(CODE_UNITS[next][0]!);
+              setScale(null);
+            }}
+          >
+            {(Object.keys(CODE_LANGUAGE_LABELS) as CodeLanguage[]).map((value) => (
+              <option key={value} value={value}>
+                {CODE_LANGUAGE_LABELS[value]}
+              </option>
+            ))}
+          </select>
+          <select className={primitives.select} aria-label="Code unit" value={chosen} onChange={(e) => setUnit(e.target.value as CodeUnit)}>
+            {units.map((value) => (
+              <option key={value} value={value}>
+                {value}
+              </option>
+            ))}
+          </select>
+        </div>
+        {/* The unit scale: a root font size for rems, a scale factor for points and density-independent pixels. */}
+        <label className={styles.scale}>
+          <span>Unit scale</span>
+          <input
+            type="number"
+            className={primitives.textInput}
+            aria-label="Unit scale"
+            min={0.01}
+            step={0.5}
+            value={scale ?? DEFAULT_UNIT_SCALE[chosen]}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              setScale(Number.isFinite(next) && next > 0 ? next : null);
+            }}
+          />
+        </label>
+        <pre className={styles.code} data-testid="inspect-code">
+          {code}
+        </pre>
+        <button type="button" className={primitives.button} onClick={() => void navigator.clipboard?.writeText(code).catch(() => undefined)}>
+          Copy code
+        </button>
       </div>
-      {/* The unit scale: a root font size for rems, a scale factor for points and density-independent pixels. */}
-      <label className={styles.scale}>
-        <span>Unit scale</span>
-        <input
-          type="number"
-          className={primitives.textInput}
-          aria-label="Unit scale"
-          min={0.01}
-          step={0.5}
-          value={scale ?? DEFAULT_UNIT_SCALE[chosen]}
-          onChange={(e) => {
-            const next = Number(e.target.value);
-            setScale(Number.isFinite(next) && next > 0 ? next : null);
-          }}
-        />
-      </label>
-      <pre className={styles.code} data-testid="inspect-code">
-        {code}
-      </pre>
-      <button type="button" className={primitives.button} onClick={() => void navigator.clipboard?.writeText(code).catch(() => undefined)}>
-        Copy code
-      </button>
-    </section>
+    </InspectSection>
   );
 }

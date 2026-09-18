@@ -25,6 +25,7 @@ import { isSceneNode, type SceneNode } from '@/core/schema/document';
 import type { VersionInfo } from '@/platform/idb/persistence';
 import { useDocumentRevision, useEditor, useSession } from '../../hooks/useEditor';
 import primitives from '../../primitives/primitives.module.css';
+import { InspectSection } from './InspectSection';
 import styles from './InspectPanel.module.css';
 
 /** How large each drawing is in the comparison, in CSS pixels. */
@@ -76,8 +77,8 @@ export function CompareSection() {
   const after = layer ? generateCode(layer, { language: 'CSS', unit: 'px' }) : null;
 
   return (
-    <section className={styles.group} aria-label="Compare changes">
-      <h3 className={styles.groupTitle}>Compare changes</h3>
+    <InspectSection id="Compare changes" title="Compare changes">
+      <div className={styles.groupBody}>
       <select className={primitives.select} aria-label="Compare with version" value={chosen} onChange={(e) => open(e.target.value)}>
         <option value="">Choose a version</option>
         {versions.map((version) => (
@@ -139,7 +140,8 @@ export function CompareSection() {
           )}
         </>
       )}
-    </section>
+      </div>
+    </InspectSection>
   );
 }
 

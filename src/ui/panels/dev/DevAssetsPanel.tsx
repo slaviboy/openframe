@@ -20,6 +20,7 @@ import { renderExportsWithText } from '@/editor/commands/export';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import primitives from '../../primitives/primitives.module.css';
 import { saveExports } from '../inspector/ExportSection';
+import { InspectSection } from './InspectSection';
 import styles from './InspectPanel.module.css';
 
 /**
@@ -38,8 +39,8 @@ export function DevAssetsPanel() {
   };
 
   return (
-    <section className={styles.group} aria-label="Assets">
-      <h3 className={styles.groupTitle}>Assets</h3>
+    <InspectSection id="Assets" title="Assets">
+      <div className={styles.groupBody}>
       {assets.length === 0 ? (
         <p className={styles.empty}>Nothing on this page is set up for export, and no icons were found.</p>
       ) : (
@@ -60,6 +61,7 @@ export function DevAssetsPanel() {
           </button>
         </>
       )}
-    </section>
+      </div>
+    </InspectSection>
   );
 }

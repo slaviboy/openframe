@@ -27,6 +27,7 @@ import {
 } from '@/editor/commands/annotations';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import primitives from '../../primitives/primitives.module.css';
+import { InspectSection } from './InspectSection';
 import styles from './InspectPanel.module.css';
 
 /** How a property reads in the list of ones an annotation can call out. */
@@ -59,8 +60,8 @@ export function AnnotationsSection({ node }: { node: SceneNode }) {
   const shown = filter === null ? all : all.filter((annotation) => annotation.categoryId === filter);
 
   return (
-    <section className={styles.group} aria-label="Annotations">
-      <h3 className={styles.groupTitle}>Annotations</h3>
+    <InspectSection id="Annotations" title="Annotations">
+      <div className={styles.groupBody}>
 
       {all.length > 0 && (
         <label className={styles.scale}>
@@ -146,6 +147,7 @@ export function AnnotationsSection({ node }: { node: SceneNode }) {
       <button type="button" className={primitives.button} onClick={() => addAnnotation(editor, node.id)}>
         Add annotation
       </button>
-    </section>
+      </div>
+    </InspectSection>
   );
 }

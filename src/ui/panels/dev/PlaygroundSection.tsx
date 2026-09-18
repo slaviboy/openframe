@@ -23,6 +23,7 @@ import { PlaygroundPreview } from '@/editor/dev/playground';
 import { localComponents } from '@/editor/commands/insert-instance';
 import { useDocumentRevision, useEditor } from '../../hooks/useEditor';
 import primitives from '../../primitives/primitives.module.css';
+import { InspectSection } from './InspectSection';
 import styles from './InspectPanel.module.css';
 
 /** The playground with nothing turned, kept as one object so the panel does not show it over and over. */
@@ -63,8 +64,8 @@ export function PlaygroundSection({ node }: { node: SceneNode }) {
   const set = (name: string, value: PropertyValue) => setTurned({ forId: instanceId, values: { ...values, [name]: value } });
 
   return (
-    <section className={styles.group} aria-label="Playground">
-      <h3 className={styles.groupTitle}>Playground</h3>
+    <InspectSection id="Playground" title="Playground">
+      <div className={styles.groupBody}>
       {definitions.map(([name, definition]) => {
         const shown = values[name] ?? definition.defaultValue;
         if (definition.type === 'BOOLEAN') {
@@ -113,6 +114,7 @@ export function PlaygroundSection({ node }: { node: SceneNode }) {
       >
         Reset playground
       </button>
-    </section>
+      </div>
+    </InspectSection>
   );
 }
