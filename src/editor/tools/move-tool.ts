@@ -60,7 +60,7 @@ import { isSceneNode, type FrameNode, type GridTrack, type SceneNode } from '@/c
 import { hitGridTrackEdge, hitGridTrackPill, selectedGridTracks } from '../interactions/grid-tracks';
 import { moveGridTrack } from '../commands/grid-tracks';
 import { resizedTrack } from '@/core/layout/grid-track-handles';
-import { isAutoLayoutFrame } from '@/core/layout/auto-layout';
+import { gridCellAt, isAutoLayoutFrame } from '@/core/layout/auto-layout';
 import { flowInsertionIndex, flowInsertionLine, moveToFlowIndex } from '@/core/layout/flow-order';
 import { beginCrop } from '../interactions/crop';
 import { beginVectorEdit } from '../interactions/vector-edit';
@@ -1091,7 +1091,20 @@ export class MoveTool implements Tool {
     const ignoring = p.ctrl && g.starts.some((s) => this.enteredParent(g.tx, s.id));
     if (!ignoring && parents.size === 1 && parent && isAutoLayoutFrame(store.get(parent)) && g.starts.every((s) => (store.get(s.id) as SceneNode | undefined)?.layoutPositioning !== 'ABSOLUTE')) {
       const local = editor.scene.toLocal(parent, p.world);
-      if (local) g.insertion = { frameId: parent, index: flowInsertionIndex(store, parent, local, new Set(g.starts.map((s) => s.id))) };
+      const frame = store.get(parent);
+      // A grid placing its children by hand: the layers dropped take the cell under the pointer, empty or not.
+      const manual = frame?.type === 'FRAME' && frame.layoutMode === 'GRID' && frame.gridAutoPositioning === false;
+      if (local && manual) {
+        const cell = gridCellAt(store, parent, local);
+        if (cell) {
+          for (const s of g.starts) {
+            g.tx.set(s.id, 'gridColumn', cell.column);
+            g.tx.set(s.id, 'gridRow', cell.row);
+          }
+        }
+      } else if (local) {
+        g.insertion = { frameId: parent, index: flowInsertionIndex(store, parent, local, new Set(g.starts.map((s) => s.id))) };
+      }
     }
     g.tx.flushPreview();
     editor.requestRender();

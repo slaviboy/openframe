@@ -16,6 +16,7 @@
  */
 
 import type { DocumentStore } from '../document/store';
+import type { Vec2 } from '../math/vec';
 import type { Finalizer, Transaction } from '../history/history';
 import { keysBetween } from '../ids/fractional-index';
 import type { Id } from '../ids/ids';
@@ -111,6 +112,32 @@ const gridItem = (child: SceneNode, item: FlowItem): GridItem => ({
 });
 
 /** The column and row tracks of a grid auto layout frame as currently laid out, in the frame's space; null for other layers. */
+/**
+ * The cell of a grid a point falls in, in the frame's own space: the track it is inside, or the nearest one when
+ * it falls in a gap or the padding. Null when the frame is not a grid.
+ */
+export function gridCellAt(store: DocumentStore, frameId: Id, local: Vec2): { readonly column: number; readonly row: number } | null {
+  const tracks = gridTracks(store, frameId);
+  if (!tracks) return null;
+  const nearest = (bands: readonly { start: number; length: number }[], at: number): number => {
+    if (bands.length === 0) return 0;
+    const inside = bands.findIndex((band) => at >= band.start && at <= band.start + band.length);
+    if (inside !== -1) return inside;
+    // In a gap or outside the tracks: the one whose middle is closest.
+    let best = 0;
+    let bestDistance = Infinity;
+    bands.forEach((band, i) => {
+      const distance = Math.abs(at - (band.start + band.length / 2));
+      if (distance < bestDistance) {
+        best = i;
+        bestDistance = distance;
+      }
+    });
+    return best;
+  };
+  return { column: nearest(tracks.columns, local.x), row: nearest(tracks.rows, local.y) };
+}
+
 export function gridTracks(store: DocumentStore, frameId: Id): { readonly columns: readonly { start: number; length: number }[]; readonly rows: readonly { start: number; length: number }[] } | null {
   const frame = store.get(frameId);
   if (!isAutoLayoutFrame(frame) || frame.layoutMode !== 'GRID') return null;
@@ -143,7 +170,10 @@ export function gridCells(tx: Transaction, frameId: Id): Map<Id, { column: numbe
   const frame = tx.store.get(frameId);
   if (!isAutoLayoutFrame(frame) || frame.layoutMode !== 'GRID') return cells;
   const children = flowChildren(tx, frameId);
-  const result = layoutGrid(gridContainer(frame), children.map((child) => gridItem(child, { width: 0, height: 0, horizontalSizing: 'FIXED', verticalSizing: 'FIXED' })));
+  const result = layoutGrid(
+    gridContainer(frame),
+    children.map((child) => gridItem(child, { width: 0, height: 0, horizontalSizing: 'FIXED', verticalSizing: 'FIXED' })),
+  );
   children.forEach((child, i) => cells.set(child.id, result.cells[i]!));
   return cells;
 }
@@ -192,27 +222,30 @@ function layoutFrame(tx: Transaction, frameId: Id, layout: TextLayoutService | n
     });
     const result =
       frame.layoutMode === 'GRID'
-        ? layoutGrid(gridContainer(frame), children.map((child, i) => gridItem(child, items[i]!)))
+        ? layoutGrid(
+            gridContainer(frame),
+            children.map((child, i) => gridItem(child, items[i]!)),
+          )
         : layoutFlow(
-      {
-        direction: frame.layoutMode,
-        wrap: frame.layoutWrap === true,
-        padding: layoutPadding(frame),
-        gap: frame.itemSpacing ?? 0,
-        counterGap: frame.counterAxisSpacing ?? 0,
-        primaryAlign: frame.primaryAxisAlignItems ?? 'MIN',
-        counterAlign: frame.counterAxisAlignItems ?? 'MIN',
-        width: frame.size.width,
-        height: frame.size.height,
-        horizontalSizing: frame.layoutSizingHorizontal === 'HUG' ? 'HUG' : 'FIXED',
-        verticalSizing: frame.layoutSizingVertical === 'HUG' ? 'HUG' : 'FIXED',
-        minWidth: frame.minWidth,
-        maxWidth: frame.maxWidth,
-        minHeight: frame.minHeight,
-        maxHeight: frame.maxHeight,
-      },
-      items,
-    );
+            {
+              direction: frame.layoutMode,
+              wrap: frame.layoutWrap === true,
+              padding: layoutPadding(frame),
+              gap: frame.itemSpacing ?? 0,
+              counterGap: frame.counterAxisSpacing ?? 0,
+              primaryAlign: frame.primaryAxisAlignItems ?? 'MIN',
+              counterAlign: frame.counterAxisAlignItems ?? 'MIN',
+              width: frame.size.width,
+              height: frame.size.height,
+              horizontalSizing: frame.layoutSizingHorizontal === 'HUG' ? 'HUG' : 'FIXED',
+              verticalSizing: frame.layoutSizingVertical === 'HUG' ? 'HUG' : 'FIXED',
+              minWidth: frame.minWidth,
+              maxWidth: frame.maxWidth,
+              minHeight: frame.minHeight,
+              maxHeight: frame.maxHeight,
+            },
+            items,
+          );
     const size = { width: round(result.width), height: round(result.height) };
     if (!valuesEqual(size, frame.size)) {
       tx.set(frameId, 'size', size);
@@ -285,7 +318,21 @@ const FRAME_FIELDS: ReadonlySet<string> = new Set([
 ]);
 
 /** Child fields that change its parent's layout. */
-const CHILD_FIELDS: ReadonlySet<string> = new Set(['leadingTrim', 'size', 'transform', 'visible', 'layoutSizingHorizontal', 'layoutSizingVertical', 'textAutoResize', 'layoutPositioning', 'minWidth', 'maxWidth', 'minHeight', 'maxHeight', ...GRID_CHILD_FIELDS]);
+const CHILD_FIELDS: ReadonlySet<string> = new Set([
+  'leadingTrim',
+  'size',
+  'transform',
+  'visible',
+  'layoutSizingHorizontal',
+  'layoutSizingVertical',
+  'textAutoResize',
+  'layoutPositioning',
+  'minWidth',
+  'maxWidth',
+  'minHeight',
+  'maxHeight',
+  ...GRID_CHILD_FIELDS,
+]);
 
 /**
  * Auto layout finalizer: lays out every auto layout frame affected by the transaction — its own
@@ -367,7 +414,15 @@ export function applyAutoLayout(tx: Transaction, frameId: Id, options: { readonl
   const children = flowChildren(tx, frameId);
   const boxes = children.map(boundsInParent);
   const union = boxes.reduce<Rect | null>(
-    (acc, b) => (acc ? { x: Math.min(acc.x, b.x), y: Math.min(acc.y, b.y), width: Math.max(acc.x + acc.width, b.x + b.width) - Math.min(acc.x, b.x), height: Math.max(acc.y + acc.height, b.y + b.height) - Math.min(acc.y, b.y) } : b),
+    (acc, b) =>
+      acc
+        ? {
+            x: Math.min(acc.x, b.x),
+            y: Math.min(acc.y, b.y),
+            width: Math.max(acc.x + acc.width, b.x + b.width) - Math.min(acc.x, b.x),
+            height: Math.max(acc.y + acc.height, b.y + b.height) - Math.min(acc.y, b.y),
+          }
+        : b,
     null,
   );
   const across = sequentialPairs(boxes, 'x');
@@ -402,7 +457,8 @@ export function applyAutoLayout(tx: Transaction, frameId: Id, options: { readonl
     const crossAxis = direction === 'HORIZONTAL' ? 'y' : 'x';
     const crossLength = direction === 'HORIZONTAL' ? 'height' : 'width';
     const same = (value: (b: Rect) => number) => boxes.every((b) => Math.abs(value(b) - value(boxes[0]!)) < 1);
-    const counter = boxes.length > 1 && !same((b) => b[crossAxis]) ? (same((b) => b[crossAxis] + b[crossLength] / 2) ? 'CENTER' : same((b) => b[crossAxis] + b[crossLength]) ? 'MAX' : undefined) : undefined;
+    const counter =
+      boxes.length > 1 && !same((b) => b[crossAxis]) ? (same((b) => b[crossAxis] + b[crossLength] / 2) ? 'CENTER' : same((b) => b[crossAxis] + b[crossLength]) ? 'MAX' : undefined) : undefined;
     tx.set(frameId, 'counterAxisAlignItems', counter);
     tx.set(frameId, 'layoutSizingHorizontal', 'HUG');
     tx.set(frameId, 'layoutSizingVertical', 'HUG');
@@ -413,7 +469,21 @@ export function applyAutoLayout(tx: Transaction, frameId: Id, options: { readonl
 export function clearAutoLayout(tx: Transaction, frameId: Id): void {
   const frame = tx.store.get(frameId);
   if (!isAutoLayoutFrame(frame)) return;
-  for (const field of ['layoutMode', 'layoutWrap', 'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft', 'itemSpacing', 'counterAxisSpacing', 'primaryAxisAlignItems', 'counterAxisAlignItems', 'itemReverseZIndex', 'strokesIncludedInLayout', ...GRID_FRAME_FIELDS]) {
+  for (const field of [
+    'layoutMode',
+    'layoutWrap',
+    'paddingTop',
+    'paddingRight',
+    'paddingBottom',
+    'paddingLeft',
+    'itemSpacing',
+    'counterAxisSpacing',
+    'primaryAxisAlignItems',
+    'counterAxisAlignItems',
+    'itemReverseZIndex',
+    'strokesIncludedInLayout',
+    ...GRID_FRAME_FIELDS,
+  ]) {
     tx.set(frameId, field, undefined);
   }
   if (frame.layoutSizingHorizontal === 'HUG') tx.set(frameId, 'layoutSizingHorizontal', undefined);
@@ -461,7 +531,11 @@ export function applyGridLayout(tx: Transaction, frameId: Id): void {
     [...reading, ...others].forEach((id, i) => tx.set(id, 'parent', { id: frameId, key: keys[i]! }));
   }
   tx.set(frameId, 'layoutMode', 'GRID');
-  tx.set(frameId, 'gridColumnSizes', Array.from({ length: columns }, () => FLEX_TRACK));
+  tx.set(
+    frameId,
+    'gridColumnSizes',
+    Array.from({ length: columns }, () => FLEX_TRACK),
+  );
   tx.set(frameId, 'gridColumnGap', gap > 0 ? gap : undefined);
   tx.set(frameId, 'gridRowGap', rowGap > 0 ? rowGap : undefined);
   for (const field of ['layoutWrap', 'itemSpacing', 'counterAxisSpacing', 'primaryAxisAlignItems', 'counterAxisAlignItems']) tx.set(frameId, field, undefined);

@@ -92,3 +92,48 @@ describe('grid layout', () => {
     expect(r.rows).toHaveLength(2);
   });
 });
+
+describe('the smallest and largest a track may be', () => {
+  test('an fr track is held back by its largest, and the rest of the space is simply left over', () => {
+    const r = layoutGrid(
+      container({
+        width: 400,
+        columns: [
+          { type: 'FLEX', value: 1, max: 120 },
+          { type: 'FIXED', value: 100 },
+        ],
+        columnGap: 0,
+      }),
+      [item(), item()],
+    );
+    expect(r.columns[0]!.length).toBeCloseTo(120, 6);
+    expect(r.columns[1]!.length).toBeCloseTo(100, 6);
+  });
+
+  test('a fixed track is pushed up to its smallest', () => {
+    const r = layoutGrid(
+      container({
+        width: 400,
+        columns: [
+          { type: 'FIXED', value: 20, min: 60 },
+          { type: 'FIXED', value: 100 },
+        ],
+        columnGap: 0,
+      }),
+      [item(), item()],
+    );
+    expect(r.columns[0]!.length).toBeCloseTo(60, 6);
+  });
+
+  test('a hugging track is held between its two limits', () => {
+    const wide = layoutGrid(container({ horizontalSizing: 'HUG', columns: [{ type: 'HUG', max: 40 }], columnGap: 0 }), [item({ width: 200 })]);
+    expect(wide.columns[0]!.length).toBeCloseTo(40, 6);
+    const narrow = layoutGrid(container({ horizontalSizing: 'HUG', columns: [{ type: 'HUG', min: 80 }], columnGap: 0 }), [item({ width: 10 })]);
+    expect(narrow.columns[0]!.length).toBeCloseTo(80, 6);
+  });
+
+  test('a track with no limits is sized as it always was', () => {
+    const r = layoutGrid(container({ width: 300, columns: [fr(), fr()], columnGap: 0 }), [item(), item()]);
+    expect(r.columns.map((band) => band.length)).toEqual([150, 150]);
+  });
+});

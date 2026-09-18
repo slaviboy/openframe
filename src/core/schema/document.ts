@@ -810,10 +810,13 @@ export const LayoutGuideSchema = z.object({
 });
 
 /** A grid track size: fixed pixels, a fraction (fr) of the free space, or hugging its cells. */
+/** The smallest and largest a track may be sized to, whatever its type asks for. */
+const TrackLimits = { min: z.number().min(0).max(100_000).optional(), max: z.number().min(0).max(100_000).optional() };
+
 export const GridTrackSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('FIXED'), value: z.number().min(0).max(100_000) }),
-  z.object({ type: z.literal('FLEX'), value: z.number().min(0.01).max(1000) }),
-  z.object({ type: z.literal('HUG') }),
+  z.object({ type: z.literal('FIXED'), value: z.number().min(0).max(100_000), ...TrackLimits }),
+  z.object({ type: z.literal('FLEX'), value: z.number().min(0.01).max(1000), ...TrackLimits }),
+  z.object({ type: z.literal('HUG'), ...TrackLimits }),
 ]);
 
 /**

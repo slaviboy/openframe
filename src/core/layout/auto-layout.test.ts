@@ -22,7 +22,7 @@ import type { TextLayoutService } from '../text/text-layout';
 import { History } from '../history/history';
 import { IdGenerator } from '../ids/ids';
 import type { FrameNode, SceneNode } from '../schema/document';
-import { applyAutoLayout, applyGridLayout, clearAutoLayout, clearGridLayout, createAutoLayoutFinalizer, gridTracks, setGridAutoPositioning, stackingOrder } from './auto-layout';
+import { applyAutoLayout, applyGridLayout, clearAutoLayout, clearGridLayout, createAutoLayoutFinalizer, gridCellAt, gridTracks, setGridAutoPositioning, stackingOrder } from './auto-layout';
 
 function setup() {
   const ids = new IdGenerator('a');
@@ -104,8 +104,21 @@ describe('auto layout', () => {
     const { ids, store, history, page, box } = setup();
     const [outer, inner, leaf, sibling] = [ids.next(), ids.next(), ids.next(), ids.next()];
     history.run('create', (tx) => {
-      tx.create({ ...makeFrame({ id: outer, parent: { id: page, key: keyOnTop(store, page) }, name: 'Outer', x: 0, y: 0, width: 10, height: 10 }), layoutMode: 'HORIZONTAL', layoutSizingHorizontal: 'HUG', layoutSizingVertical: 'HUG', itemSpacing: 5 });
-      tx.create({ ...makeFrame({ id: inner, parent: { id: outer, key: keyOnTop(store, outer) }, name: 'Inner', x: 0, y: 0, width: 10, height: 10 }), layoutMode: 'VERTICAL', layoutSizingHorizontal: 'HUG', layoutSizingVertical: 'HUG', paddingLeft: 4, paddingRight: 4 });
+      tx.create({
+        ...makeFrame({ id: outer, parent: { id: page, key: keyOnTop(store, page) }, name: 'Outer', x: 0, y: 0, width: 10, height: 10 }),
+        layoutMode: 'HORIZONTAL',
+        layoutSizingHorizontal: 'HUG',
+        layoutSizingVertical: 'HUG',
+        itemSpacing: 5,
+      });
+      tx.create({
+        ...makeFrame({ id: inner, parent: { id: outer, key: keyOnTop(store, outer) }, name: 'Inner', x: 0, y: 0, width: 10, height: 10 }),
+        layoutMode: 'VERTICAL',
+        layoutSizingHorizontal: 'HUG',
+        layoutSizingVertical: 'HUG',
+        paddingLeft: 4,
+        paddingRight: 4,
+      });
       tx.create(makeRectangle({ id: leaf, parent: { id: inner, key: keyOnTop(store, inner) }, name: 'Leaf', x: 0, y: 0, width: 20, height: 20 }));
       tx.create(makeRectangle({ id: sibling, parent: { id: outer, key: keyOnTop(store, outer) }, name: 'Sibling', x: 0, y: 0, width: 10, height: 10 }));
     });
@@ -138,7 +151,11 @@ describe('auto layout', () => {
       });
       tx.create({ ...makeRectangle({ id: a, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'A', x: 0, y: 0, width: 50, height: 20 }), maxWidth: 30 });
       tx.create(makeRectangle({ id: b, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'B', x: 0, y: 0, width: 20, height: 20 }));
-      tx.create({ ...makeRectangle({ id: abs, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'Abs', x: 70, y: 5, width: 10, height: 10 }), layoutPositioning: 'ABSOLUTE', constraints: { horizontal: 'MAX', vertical: 'MIN' } });
+      tx.create({
+        ...makeRectangle({ id: abs, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'Abs', x: 70, y: 5, width: 10, height: 10 }),
+        layoutPositioning: 'ABSOLUTE',
+        constraints: { horizontal: 'MAX', vertical: 'MIN' },
+      });
     });
     // A is limited to 30; the inside stroke pads the flow; the frame's minimum width wins over hugging.
     expect(box(a)).toEqual({ x: 4, y: 4, width: 30, height: 20 });
@@ -209,8 +226,18 @@ describe('auto layout', () => {
     const page = store.pages()[0]!;
     const [frame, small, big, rect] = [ids.next(), ids.next(), ids.next(), ids.next()];
     history.run('create', (tx) => {
-      tx.create({ ...makeFrame({ id: frame, parent: { id: page, key: keyOnTop(store, page) }, name: 'F', x: 0, y: 0, width: 10, height: 10 }), layoutMode: 'HORIZONTAL', layoutSizingHorizontal: 'HUG', layoutSizingVertical: 'HUG', counterAxisAlignItems: 'BASELINE' });
-      const text = (id: string, fontSize: number) => ({ ...makeText({ id, parent: { id: frame, key: keyOnTop(store, frame) }, name: id, x: 0, y: 0, width: 40, height: fontSize * 1.2 }), fontSize, textAutoResize: 'NONE' as const });
+      tx.create({
+        ...makeFrame({ id: frame, parent: { id: page, key: keyOnTop(store, page) }, name: 'F', x: 0, y: 0, width: 10, height: 10 }),
+        layoutMode: 'HORIZONTAL',
+        layoutSizingHorizontal: 'HUG',
+        layoutSizingVertical: 'HUG',
+        counterAxisAlignItems: 'BASELINE',
+      });
+      const text = (id: string, fontSize: number) => ({
+        ...makeText({ id, parent: { id: frame, key: keyOnTop(store, frame) }, name: id, x: 0, y: 0, width: 40, height: fontSize * 1.2 }),
+        fontSize,
+        textAutoResize: 'NONE' as const,
+      });
       tx.create(text(small, 10));
       tx.create(text(big, 30));
       tx.create(makeRectangle({ id: rect, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'R', x: 0, y: 0, width: 10, height: 10 }));
@@ -229,8 +256,17 @@ describe('auto layout', () => {
     const page = store.pages()[0]!;
     const [frame, text, rect] = [ids.next(), ids.next(), ids.next()];
     history.run('create', (tx) => {
-      tx.create({ ...makeFrame({ id: frame, parent: { id: page, key: keyOnTop(store, page) }, name: 'F', x: 0, y: 0, width: 10, height: 10 }), layoutMode: 'VERTICAL', layoutSizingHorizontal: 'HUG', layoutSizingVertical: 'HUG' });
-      tx.create({ ...makeText({ id: text, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'T', x: 0, y: 0, width: 40, height: 20 }), textAutoResize: 'NONE' as const, leadingTrim: 'CAP_HEIGHT' as const });
+      tx.create({
+        ...makeFrame({ id: frame, parent: { id: page, key: keyOnTop(store, page) }, name: 'F', x: 0, y: 0, width: 10, height: 10 }),
+        layoutMode: 'VERTICAL',
+        layoutSizingHorizontal: 'HUG',
+        layoutSizingVertical: 'HUG',
+      });
+      tx.create({
+        ...makeText({ id: text, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'T', x: 0, y: 0, width: 40, height: 20 }),
+        textAutoResize: 'NONE' as const,
+        leadingTrim: 'CAP_HEIGHT' as const,
+      });
       tx.create(makeRectangle({ id: rect, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'R', x: 0, y: 0, width: 10, height: 10 }));
     });
     const node = (id: string) => store.getOrThrow(id) as SceneNode;
@@ -252,10 +288,7 @@ describe('auto layout', () => {
         paddingLeft: 5,
         paddingTop: 5,
         gridColumnGap: 10,
-        gridColumnSizes: [
-          { type: 'FIXED', value: 100 },
-          { type: 'HUG' },
-        ],
+        gridColumnSizes: [{ type: 'FIXED', value: 100 }, { type: 'HUG' }],
       });
       tx.create(makeRectangle({ id: a, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'a', x: 0, y: 0, width: 40, height: 30 }));
       tx.create(makeRectangle({ id: b, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'b', x: 0, y: 0, width: 50, height: 20 }));
@@ -268,5 +301,34 @@ describe('auto layout', () => {
       rows: [{ start: 5, length: 30 }],
     });
     expect(gridTracks(store, a)).toBeNull();
+  });
+
+  test('a point falls into the cell it is in, or into the nearest one', () => {
+    const { ids, store, history, page } = setup();
+    const [frame, a, b] = [ids.next(), ids.next(), ids.next()];
+    history.run('create', (tx) => {
+      tx.create({
+        ...makeFrame({ id: frame, parent: { id: page, key: keyOnTop(store, page) }, name: 'G', x: 0, y: 0, width: 10, height: 10 }),
+        layoutMode: 'GRID',
+        layoutSizingHorizontal: 'HUG',
+        layoutSizingVertical: 'HUG',
+        gridColumnGap: 20,
+        gridColumnSizes: [
+          { type: 'FIXED', value: 100 },
+          { type: 'FIXED', value: 100 },
+        ],
+      });
+      tx.create(makeRectangle({ id: a, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'a', x: 0, y: 0, width: 40, height: 30 }));
+      tx.create(makeRectangle({ id: b, parent: { id: frame, key: keyOnTop(store, frame) }, name: 'b', x: 0, y: 0, width: 50, height: 20 }));
+    });
+    // Columns run 0–100 and 120–220.
+    expect(gridCellAt(store, frame, { x: 50, y: 10 })).toEqual({ column: 0, row: 0 });
+    expect(gridCellAt(store, frame, { x: 200, y: 10 })).toEqual({ column: 1, row: 0 });
+    // In the gap between them, the nearer middle wins; outside them, the nearest track does.
+    expect(gridCellAt(store, frame, { x: 105, y: 10 })).toEqual({ column: 0, row: 0 });
+    expect(gridCellAt(store, frame, { x: 118, y: 10 })).toEqual({ column: 1, row: 0 });
+    expect(gridCellAt(store, frame, { x: -500, y: 10 })).toEqual({ column: 0, row: 0 });
+    expect(gridCellAt(store, frame, { x: 5000, y: 10 })).toEqual({ column: 1, row: 0 });
+    expect(gridCellAt(store, a, { x: 0, y: 0 })).toBeNull();
   });
 });

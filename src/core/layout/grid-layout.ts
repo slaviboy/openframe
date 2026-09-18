@@ -20,7 +20,12 @@
 import { clampSize, type FlowBox, type Padding, type SizeLimits, type Sizing } from './flow-layout';
 
 /** A column or row size: fixed pixels, a fraction of the free space (fr), or hugging its cells' content. */
-export type TrackSize = { readonly type: 'FIXED'; readonly value: number } | { readonly type: 'FLEX'; readonly value: number } | { readonly type: 'HUG' };
+/** The smallest and largest a track may be, whatever its type works out to. */
+interface TrackLimits {
+  readonly min?: number | undefined;
+  readonly max?: number | undefined;
+}
+export type TrackSize = ({ readonly type: 'FIXED'; readonly value: number } | { readonly type: 'FLEX'; readonly value: number } | { readonly type: 'HUG' }) & TrackLimits;
 export type CellAlign = 'MIN' | 'CENTER' | 'MAX';
 
 export interface GridContainer extends SizeLimits {
@@ -101,14 +106,16 @@ function place(container: GridContainer, items: readonly GridItem[]): { column: 
 
 /** Sizes tracks: fixed values, hug to their single-track cells' content, and fr shares of the rest (hugging when the container hugs). */
 function sizeTracks(tracks: readonly TrackSize[], inner: number | null, gap: number, content: (index: number) => number): number[] {
-  const sizes = tracks.map((track, i) => (track.type === 'FIXED' ? track.value : track.type === 'HUG' || inner === null ? content(i) : 0));
+  // A track never goes outside its own smallest and largest, whatever its type works out to.
+  const clamp = (size: number, track: TrackSize) => Math.max(track.min ?? 0, Math.min(track.max ?? Infinity, size));
+  const sizes = tracks.map((track, i) => clamp(track.type === 'FIXED' ? track.value : track.type === 'HUG' || inner === null ? content(i) : 0, track));
   if (inner === null) return sizes;
   const fr = tracks.reduce((total, track) => total + (track.type === 'FLEX' ? Math.max(0, track.value) : 0), 0);
   if (fr > 0) {
     const used = tracks.reduce((total, track, i) => total + (track.type === 'FLEX' ? 0 : sizes[i]!), 0) + gap * Math.max(0, tracks.length - 1);
     const unit = Math.max(0, inner - used) / fr;
     tracks.forEach((track, i) => {
-      if (track.type === 'FLEX') sizes[i] = Math.max(0, track.value) * unit;
+      if (track.type === 'FLEX') sizes[i] = clamp(Math.max(0, track.value) * unit, track);
     });
   }
   return sizes;

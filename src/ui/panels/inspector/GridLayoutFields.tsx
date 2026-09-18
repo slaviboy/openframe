@@ -37,8 +37,7 @@ type PaddingField = 'paddingTop' | 'paddingRight' | 'paddingBottom' | 'paddingLe
 export function GridLayoutFields({ frames }: { frames: FrameNode[] }) {
   const editor = useEditor();
   const gesture = useGesture('Change grid');
-  const run = (label: string, apply: (tx: Transaction, frame: FrameNode) => void) =>
-    editor.history.run(label, (tx) => frames.forEach((f) => apply(tx, tx.store.getOrThrow(f.id) as FrameNode)));
+  const run = (label: string, apply: (tx: Transaction, frame: FrameNode) => void) => editor.history.run(label, (tx) => frames.forEach((f) => apply(tx, tx.store.getOrThrow(f.id) as FrameNode)));
   const first = frames[0]!;
   const columns = first.gridColumnSizes ?? [FLEX];
   const rows = first.gridRowSizes;
@@ -51,7 +50,11 @@ export function GridLayoutFields({ frames }: { frames: FrameNode[] }) {
       const apply = (tx: Transaction) =>
         frames.forEach((f) => {
           const current = (tx.store.getOrThrow(f.id) as FrameNode)[field] ?? (axis === 'column' ? [FLEX] : tracks);
-          tx.set(f.id, field, resized(current, Math.max(current.length, tracks.length)).map((t, i) => (i === index ? track : t)));
+          tx.set(
+            f.id,
+            field,
+            resized(current, Math.max(current.length, tracks.length)).map((t, i) => (i === index ? track : t)),
+          );
         });
       if (live) gesture.change(apply);
       else editor.history.run(`Change ${axis} size`, apply);
@@ -62,7 +65,10 @@ export function GridLayoutFields({ frames }: { frames: FrameNode[] }) {
           className={primitives.select}
           aria-label={`${Axis} ${i + 1} sizing`}
           value={track.type}
-          onChange={(e) => setTrack(i, e.target.value === 'FIXED' ? { type: 'FIXED', value: 100 } : e.target.value === 'HUG' ? { type: 'HUG' } : FLEX)}
+          // Changing the type keeps the limits the track was given.
+          onChange={(e) =>
+            setTrack(i, e.target.value === 'FIXED' ? { ...track, type: 'FIXED', value: 100 } : e.target.value === 'HUG' ? { min: track.min, max: track.max, type: 'HUG' } : { ...track, ...FLEX })
+          }
         >
           <option value="FIXED">Fixed</option>
           <option value="HUG">Hug contents</option>
@@ -77,17 +83,35 @@ export function GridLayoutFields({ frames }: { frames: FrameNode[] }) {
           onGestureStart={gesture.start}
           onGestureEnd={gesture.end}
           onChange={(v) => {
-            if (track.type === 'FIXED') setTrack(i, { type: 'FIXED', value: Math.max(0, v) }, true);
-            else if (track.type === 'FLEX') setTrack(i, { type: 'FLEX', value: Math.min(1000, Math.max(0.01, v)) }, true);
+            if (track.type === 'FIXED') setTrack(i, { ...track, type: 'FIXED', value: Math.max(0, v) }, true);
+            else if (track.type === 'FLEX') setTrack(i, { ...track, type: 'FLEX', value: Math.min(1000, Math.max(0.01, v)) }, true);
           }}
+        />
+        {/* How small and how large the track may go, whatever its type works out to; empty means no limit. */}
+        <NumberField
+          label="Min"
+          ariaLabel={`${Axis} ${i + 1} minimum`}
+          min={0}
+          value={track.min}
+          onGestureStart={gesture.start}
+          onGestureEnd={gesture.end}
+          onChange={(v) => setTrack(i, { ...track, min: v > 0 ? v : undefined }, true)}
+        />
+        <NumberField
+          label="Max"
+          ariaLabel={`${Axis} ${i + 1} maximum`}
+          min={0}
+          value={track.max}
+          onGestureStart={gesture.start}
+          onGestureEnd={gesture.end}
+          onChange={(v) => setTrack(i, { ...track, max: v > 0 ? v : undefined }, true)}
         />
       </div>
     ));
   };
 
   const padding = (field: PaddingField) => valueOf(shared(frames, (f) => f[field] ?? 0));
-  const setPadding = (fields: readonly PaddingField[], value: number) =>
-    gesture.change((tx) => frames.forEach((f) => fields.forEach((field) => tx.set(f.id, field, value > 0 ? value : undefined))));
+  const setPadding = (fields: readonly PaddingField[], value: number) => gesture.change((tx) => frames.forEach((f) => fields.forEach((field) => tx.set(f.id, field, value > 0 ? value : undefined))));
   const [top, right, bottom, left] = [padding('paddingTop'), padding('paddingRight'), padding('paddingBottom'), padding('paddingLeft')];
   const applyShorthand = (text: string) => {
     const values = parsePaddingShorthand(text);
@@ -127,7 +151,11 @@ export function GridLayoutFields({ frames }: { frames: FrameNode[] }) {
           <input
             type="checkbox"
             checked={rows === undefined}
-            onChange={(e) => run('Change rows', (tx, f) => tx.set(f.id, 'gridRowSizes', e.target.checked ? undefined : resized([], Math.max(1, Math.ceil(editor.doc.children(f.id).length / Math.max(1, (f.gridColumnSizes ?? [FLEX]).length))))))}
+            onChange={(e) =>
+              run('Change rows', (tx, f) =>
+                tx.set(f.id, 'gridRowSizes', e.target.checked ? undefined : resized([], Math.max(1, Math.ceil(editor.doc.children(f.id).length / Math.max(1, (f.gridColumnSizes ?? [FLEX]).length))))),
+              )
+            }
           />
           Auto rows
         </label>
@@ -157,8 +185,26 @@ export function GridLayoutFields({ frames }: { frames: FrameNode[] }) {
           onGestureEnd={gesture.end}
           onChange={(v) => gesture.change((tx) => frames.forEach((f) => tx.set(f.id, 'gridRowGap', v > 0 ? v : undefined)))}
         />
-        <NumberField label="⇹" ariaLabel="Horizontal padding" min={0} value={left === right ? left : undefined} onGestureStart={gesture.start} onGestureEnd={gesture.end} onText={applyShorthand} onChange={(v) => setPadding(['paddingLeft', 'paddingRight'], Math.max(0, v))} />
-        <NumberField label="⇕" ariaLabel="Vertical padding" min={0} value={top === bottom ? top : undefined} onGestureStart={gesture.start} onGestureEnd={gesture.end} onText={applyShorthand} onChange={(v) => setPadding(['paddingTop', 'paddingBottom'], Math.max(0, v))} />
+        <NumberField
+          label="⇹"
+          ariaLabel="Horizontal padding"
+          min={0}
+          value={left === right ? left : undefined}
+          onGestureStart={gesture.start}
+          onGestureEnd={gesture.end}
+          onText={applyShorthand}
+          onChange={(v) => setPadding(['paddingLeft', 'paddingRight'], Math.max(0, v))}
+        />
+        <NumberField
+          label="⇕"
+          ariaLabel="Vertical padding"
+          min={0}
+          value={top === bottom ? top : undefined}
+          onGestureStart={gesture.start}
+          onGestureEnd={gesture.end}
+          onText={applyShorthand}
+          onChange={(v) => setPadding(['paddingTop', 'paddingBottom'], Math.max(0, v))}
+        />
       </div>
       <div role="group" aria-label="Columns">
         {trackFields('column', columns)}
