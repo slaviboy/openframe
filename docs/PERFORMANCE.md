@@ -37,9 +37,26 @@ In the browser, rendering uses CanvasKit's WebGL surface. The CPU numbers above 
 | Issue | Impact at 10k nodes | Plan | Milestone |
 |---|---|---|---|
 | ~~The scene index rebuilds on every document revision, including each preview frame of a drag~~ | ~~About 15 ms per pointer frame~~. **Resolved in M2:** geometry changes reported through `ChangeSet` recompute only the edited subtrees (0.053 ms per preview), and the spatial tree rebuilds lazily on the next query | — | M2 (done) |
-| Full scene redraw each frame | 51 ms CPU when everything is visible | Per-node display lists (`SkPicture`), zoom-level tile cache, lift layer for dragged selections | M2 |
+| ~~Full scene redraw each frame~~ | ~~51 ms CPU when everything is visible~~ | **Measured in the browser and left alone.** Caching the drawn page was built twice — as an `SkPicture` replayed on pan, and as a pixel picture of an area half a viewport wider on each side, blitted while the pan stayed inside it — and neither changed the frame times below (median 14.8 ms either way, with 50 blits to 20 full draws). On a WebGL surface the cost is rasterizing the pixels, which a cache of the drawn page pays anyway. Both were taken out rather than carried as machinery that buys nothing | — (M2, measured) |
 | Layer rows are recomputed from the tree on every revision | Linear in expanded rows | Invalidate from `ChangeSet.structural` and name/visibility fields only | M2 |
-| Browser frame timing not yet measured | Unknown | Playwright plus Chrome DevTools Protocol tracing: pan, zoom and drag p95 frame time on generated 1k/5k/10k fixtures | M2 |
+| ~~Browser frame timing not yet measured~~ | — | **Resolved in M2:** [`e2e/large-document.spec.ts`](../e2e/large-document.spec.ts) builds 8,192 layers through the editor itself, fits them all on screen and pans, reading the gaps between animation frames | — (done) |
+
+## Current measurements in the browser (M2)
+
+**Setup**
+- Test: [`e2e/large-document.spec.ts`](../e2e/large-document.spec.ts), Chromium only (the frame-time reading is the same everywhere; running it three times over would only lengthen the suite)
+- Machine: Apple Silicon Mac, headless Chromium, CanvasKit WebGL surface, 1440 × 900 viewport
+- Document: one rectangle duplicated thirteen times over — 8,192 layers, all of them on the page and all in view
+
+| Operation | Time | Budget (test assertion) |
+|---|---:|---:|
+| Build 8,192 layers (thirteen Select all + Duplicate rounds) | 0.94 s | < 60 s |
+| Frame gap while panning with everything in view, median | 14.8 ms | < 34 ms |
+| Frame gap while panning with everything in view, p95 | 81 ms | < 120 ms |
+
+A median of 14.8 ms is the display's own 60 Hz cadence, so the canvas keeps up with the screen while a document of
+this size is panned in full. The p95 is where a frame is missed — a garbage collection or a long task elsewhere in
+the page, not the scene walk, which is why caching the drawn page made no difference to it.
 
 ## How to measure
 
