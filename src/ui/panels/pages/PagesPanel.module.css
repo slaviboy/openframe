@@ -45,6 +45,7 @@
 }
 
 .item {
+  position: relative;
   height: 32px;
   display: flex;
   align-items: center;
@@ -83,4 +84,14 @@
   flex: none;
   margin-left: auto;
   color: var(--accent);
+}
+
+/* Where a dragged page would land: a line above the row it is dropped in front of. */
+.item[data-drop='above']::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: -1px;
+  height: 2px;
+  background: var(--accent);
 }

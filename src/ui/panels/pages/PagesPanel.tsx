@@ -23,6 +23,7 @@ import { commandItem } from '../../menus/menu-model';
 import { Icon } from '../../icons/Icon';
 import { IconButton } from '../../primitives/IconButton';
 import { Menu, type MenuEntry } from '../../primitives/Menu';
+import { movePage } from '@/editor/commands/pages';
 import styles from './PagesPanel.module.css';
 
 export function PagesPanel() {
@@ -31,16 +32,35 @@ export function PagesPanel() {
   const activePageId = useEditorState((s) => s.activePageId);
   const [renaming, setRenaming] = useState<Id | null>(null);
   const [pageMenu, setPageMenu] = useState<{ id: Id; x: number; y: number } | null>(null);
+  // The page being dragged, and the one it would land in front of (null once it is past the last).
+  const drag = useRef<{ readonly id: Id; readonly startY: number; active: boolean; before: Id | null } | null>(null);
+  const [dropBefore, setDropBefore] = useState<Id | null | undefined>(undefined);
+  const listRef = useRef<HTMLUListElement>(null);
   const closePageMenu = useCallback(() => setPageMenu(null), []);
   const pages = editor.doc.pages();
 
   const pageMenuEntries = (id: Id): MenuEntry[] => {
-    const entries: MenuEntry[] = [{ kind: 'item', id: 'rename', label: 'Rename page', onSelect: () => setRenaming(id) }, { kind: 'separator', id: 'sep' }];
+    const entries: MenuEntry[] = [
+      { kind: 'item', id: 'rename', label: 'Rename page', onSelect: () => setRenaming(id) },
+      { kind: 'separator', id: 'sep' },
+    ];
     for (const commandId of ['page.duplicate', 'page.delete']) {
       const item = commandItem(editor, commandId);
       if (item) entries.push(item);
     }
     return entries;
+  };
+
+  /** The page a drop at this height lands in front of: the row the pointer is in its top half of, else the next. */
+  const dropTargetAt = (clientY: number): Id | null => {
+    const list = listRef.current;
+    if (!list) return null;
+    for (const child of [...list.children]) {
+      const row = child as HTMLElement;
+      const box = row.getBoundingClientRect();
+      if (clientY < box.top + box.height / 2) return row.dataset['pageId'] ?? null;
+    }
+    return null;
   };
 
   return (
@@ -49,7 +69,7 @@ export function PagesPanel() {
         <h2 className={styles.title}>Pages</h2>
         <IconButton icon="plus" label="Add page" onClick={() => editor.commands.run('page.add')} />
       </header>
-      <ul className={styles.list} role="listbox" aria-label="Pages">
+      <ul className={styles.list} role="listbox" aria-label="Pages" ref={listRef}>
         {pages.map((id) => {
           const page = editor.doc.get(id);
           if (!page || page.type !== 'PAGE') return null;
@@ -62,6 +82,27 @@ export function PagesPanel() {
               className={styles.item}
               data-active={active || undefined}
               tabIndex={active ? 0 : -1}
+              data-page-id={id}
+              data-drop={dropBefore === id ? 'above' : undefined}
+              onPointerDown={(e) => {
+                if (e.button !== 0 || (e.target as HTMLElement).closest('button,input')) return;
+                drag.current = { id, startY: e.clientY, active: false, before: null };
+                e.currentTarget.setPointerCapture(e.pointerId);
+              }}
+              onPointerMove={(e) => {
+                const d = drag.current;
+                if (!d) return;
+                if (!d.active && Math.abs(e.clientY - d.startY) < 4) return;
+                d.active = true;
+                d.before = dropTargetAt(e.clientY);
+                setDropBefore(d.before);
+              }}
+              onPointerUp={() => {
+                const d = drag.current;
+                drag.current = null;
+                setDropBefore(undefined);
+                if (d?.active) movePage(editor, d.id, d.before);
+              }}
               onClick={() => editor.state.setActivePage(id)}
               onDoubleClick={() => setRenaming(id)}
               onContextMenu={(e) => {
@@ -94,15 +135,7 @@ export function PagesPanel() {
           );
         })}
       </ul>
-      {pageMenu && (
-        <Menu
-          label="Page actions"
-          entries={pageMenuEntries(pageMenu.id)}
-          anchor={{ x: pageMenu.x, y: pageMenu.y, width: 0, height: 0 }}
-          placement="point"
-          onClose={closePageMenu}
-        />
-      )}
+      {pageMenu && <Menu label="Page actions" entries={pageMenuEntries(pageMenu.id)} anchor={{ x: pageMenu.x, y: pageMenu.y, width: 0, height: 0 }} placement="point" onClose={closePageMenu} />}
     </section>
   );
 }

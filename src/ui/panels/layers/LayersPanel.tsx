@@ -19,6 +19,7 @@ import { thumbnailFrameId } from '@/core/document/file-thumbnail';
 import { useCallback, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import type { Id } from '@/core/ids/ids';
 import { isSceneNode, type SceneNode } from '@/core/schema/document';
+import type { Transaction } from '@/core/history/history';
 import { moveLayers, type DropPosition } from '@/editor/commands/layers';
 import { Icon } from '../../icons/Icon';
 import { layerIcon } from '../../icons/layer-icons';
@@ -37,7 +38,6 @@ import { renameLayer } from '@/core/text/text-resize';
 import styles from './LayersPanel.module.css';
 
 const OVERSCAN = 8;
-
 
 interface DragState {
   ids: Id[];
@@ -59,6 +59,8 @@ export function LayersPanel() {
   const [scroll, setScroll] = useState({ top: 0, height: 400 });
   const anchorRef = useRef<Id | null>(null);
   const dragRef = useRef<DragState | null>(null);
+  /** Locking or hiding dragged across rows: what is being set, to what, and which rows have taken it. */
+  const toggleDragRef = useRef<{ readonly field: 'visible' | 'locked'; readonly value: boolean; readonly tx: Transaction; readonly touched: Set<Id> } | null>(null);
   const [dropTarget, setDropTarget] = useState<DragState['target']>(null);
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number } | null>(null);
   const closeRowMenu = useCallback(() => setRowMenu(null), []);
@@ -88,10 +90,36 @@ export function LayersPanel() {
     anchorRef.current = row.id;
   };
 
-  const toggleNode = (id: Id, field: 'visible' | 'locked') => {
+  /**
+   * Locking and hiding are dragged across rows: the press sets the row it began on, and every row the pointer
+   * travels over takes the same value, all in one undo step. A press without a drag is an ordinary toggle.
+   */
+  const beginToggleDrag = (id: Id, field: 'visible' | 'locked', e: PointerEvent<HTMLButtonElement>) => {
     const node = editor.doc.get(id);
+    if (e.button !== 0 || !node || !isSceneNode(node)) return;
+    const value = !node[field];
+    const tx = editor.history.begin(field === 'visible' ? 'Toggle visibility' : 'Toggle lock');
+    tx.set(id, field, value);
+    tx.flushPreview();
+    toggleDragRef.current = { field, value, tx, touched: new Set([id]) };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+
+  const continueToggleDrag = (e: PointerEvent<HTMLButtonElement>) => {
+    const drag = toggleDragRef.current;
+    const hit = drag ? rowFromClientY(e.clientY) : null;
+    if (!drag || !hit || drag.touched.has(hit.row.id)) return;
+    const node = editor.doc.get(hit.row.id);
     if (!node || !isSceneNode(node)) return;
-    editor.history.run(field === 'visible' ? 'Toggle visibility' : 'Toggle lock', (tx) => tx.set(id, field, !node[field]));
+    drag.touched.add(hit.row.id);
+    drag.tx.set(hit.row.id, drag.field, drag.value);
+    drag.tx.flushPreview();
+  };
+
+  const endToggleDrag = () => {
+    const drag = toggleDragRef.current;
+    toggleDragRef.current = null;
+    if (drag) editor.history.commit(drag.tx);
   };
 
   const setExpandedDeep = (id: Id, value: boolean) => {
@@ -123,15 +151,7 @@ export function LayersPanel() {
     if (!hit) return;
     const node = editor.doc.get(hit.row.id);
     const container = node?.type === 'FRAME' || node?.type === 'GROUP' || node?.type === 'BOOLEAN_OPERATION' || node?.type === 'SECTION';
-    const position: DropPosition = container
-      ? hit.offset < 0.25
-        ? 'above'
-        : hit.offset > 0.75 && !hit.row.expanded
-          ? 'below'
-          : 'inside'
-      : hit.offset < 0.5
-        ? 'above'
-        : 'below';
+    const position: DropPosition = container ? (hit.offset < 0.25 ? 'above' : hit.offset > 0.75 && !hit.row.expanded ? 'below' : 'inside') : hit.offset < 0.5 ? 'above' : 'below';
     const target = drag.ids.includes(hit.row.id) ? null : { id: hit.row.id, position };
     drag.target = target;
     setDropTarget(target);
@@ -323,7 +343,9 @@ export function LayersPanel() {
                     data-on={node.locked || undefined}
                     aria-label={node.locked ? `Unlock ${node.name}` : `Lock ${node.name}`}
                     title={node.locked ? 'Unlock' : 'Lock'}
-                    onClick={() => toggleNode(row.id, 'locked')}
+                    onPointerDown={(e) => beginToggleDrag(row.id, 'locked', e)}
+                    onPointerMove={continueToggleDrag}
+                    onPointerUp={endToggleDrag}
                   >
                     <Icon name={node.locked ? 'lock' : 'unlock'} size={16} />
                   </button>
@@ -333,7 +355,9 @@ export function LayersPanel() {
                     data-on={!node.visible || undefined}
                     aria-label={node.visible ? `Hide ${node.name}` : `Show ${node.name}`}
                     title={node.visible ? 'Hide' : 'Show'}
-                    onClick={() => toggleNode(row.id, 'visible')}
+                    onPointerDown={(e) => beginToggleDrag(row.id, 'visible', e)}
+                    onPointerMove={continueToggleDrag}
+                    onPointerUp={endToggleDrag}
                   >
                     <Icon name={node.visible ? 'eye' : 'eyeOff'} size={16} />
                   </button>
@@ -343,15 +367,7 @@ export function LayersPanel() {
           })}
         </div>
       </div>
-      {rowMenu && (
-        <Menu
-          label="Layer actions"
-          entries={objectMenuEntries(editor)}
-          anchor={{ x: rowMenu.x, y: rowMenu.y, width: 0, height: 0 }}
-          placement="point"
-          onClose={closeRowMenu}
-        />
-      )}
+      {rowMenu && <Menu label="Layer actions" entries={objectMenuEntries(editor)} anchor={{ x: rowMenu.x, y: rowMenu.y, width: 0, height: 0 }} placement="point" onClose={closeRowMenu} />}
     </section>
   );
 }
@@ -385,7 +401,16 @@ function RenameInput({ initial, onDone }: { initial: string; onDone: (value: str
 /** Draw mode's layer preview: the layer as it is drawn now. Double-clicking it zooms the canvas to that layer (handled by its row). */
 function LayerPreview({ pageId, id, name }: { pageId: Id; id: Id; name: string }) {
   const src = useLayerThumbnail(pageId, id, LAYER_PREVIEW_SIZE);
-  return <span className={styles.preview} role="img" aria-label={`${name} preview`} data-layer-preview="" data-loaded={src ? '' : undefined} style={src ? { backgroundImage: `url("${src}")` } : undefined} />;
+  return (
+    <span
+      className={styles.preview}
+      role="img"
+      aria-label={`${name} preview`}
+      data-layer-preview=""
+      data-loaded={src ? '' : undefined}
+      style={src ? { backgroundImage: `url("${src}")` } : undefined}
+    />
+  );
 }
 
 /** GIF: a layer whose image fill is an animated GIF (kept out of the row's accessible name). */
