@@ -16,7 +16,7 @@
  */
 
 /** Frame preset categories, in the order the Frame tool lists them. */
-export const FRAME_PRESET_CATEGORIES = ['Phone', 'Tablet', 'Desktop', 'Presentation', 'Watch', 'Paper', 'Social media'] as const;
+export const FRAME_PRESET_CATEGORIES = ['Phone', 'Tablet', 'Desktop', 'Presentation', 'Watch', 'Paper', 'Social media', 'Archive'] as const;
 export type FramePresetCategory = (typeof FRAME_PRESET_CATEGORIES)[number];
 
 /** A frame size for a device or an asset template (in CSS pixels, or points for paper), in portrait. */
@@ -77,6 +77,17 @@ export const FRAME_PRESETS: readonly FramePreset[] = [
   preset('Social media', 'Dribbble shot', 400, 300),
   preset('Social media', 'Dribbble shot HD', 800, 600),
   preset('Social media', 'LinkedIn cover', 1584, 396),
+  // Archive: devices that have been superseded, kept for designs that still target them.
+  preset('Archive', 'iPhone 8', 375, 667),
+  preset('Archive', 'iPhone 8 Plus', 414, 736),
+  preset('Archive', 'iPhone X', 375, 812),
+  preset('Archive', 'iPhone 11 Pro Max', 414, 896),
+  preset('Archive', 'iPhone 14', 390, 844),
+  preset('Archive', 'Google Pixel 2', 411, 731),
+  preset('Archive', 'Android 1080p', 360, 640),
+  preset('Archive', 'iPad Pro 10.5"', 834, 1112),
+  preset('Archive', 'Macbook', 1152, 700),
+  preset('Archive', 'Surface Book', 1500, 1000),
 ];
 
 /** Categories whose presets are devices a prototype can play in. */

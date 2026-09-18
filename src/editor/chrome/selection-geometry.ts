@@ -154,6 +154,41 @@ export function addVariantButtonRect(editor: Editor): Rect | null {
   return { x: Math.round(cx - ADD_VARIANT_BUTTON_SIZE / 2), y: Math.round(bottom + 28), width: ADD_VARIANT_BUTTON_SIZE, height: ADD_VARIANT_BUTTON_SIZE };
 }
 
+/**
+ * The + buttons for adding a frame beside one that is hovered, while the Frame tool is in hand: one on each side,
+ * just outside the frame, level with its middle. Null when the Frame tool isn't in hand or nothing is hovered.
+ */
+export function quickAddButtons(editor: Editor): { readonly frameId: Id; readonly left: Rect; readonly right: Rect } | null {
+  if (editor.state.getSnapshot().tool !== 'frame') return null;
+  const hover = editor.state.getSnapshot().hoverId;
+  const node = hover === null ? undefined : editor.doc.get(hover);
+  // Only a frame sitting straight on the page is quick-added beside; one inside another is laid out by its parent.
+  if (node?.type !== 'FRAME' || node.locked || node.parent.id !== editor.pageId) return null;
+  editor.scene.ensure(editor.pageId);
+  const world = editor.scene.worldTransform(node.id);
+  if (Math.abs(world.b) > 1e-9 || Math.abs(world.c) > 1e-9) return null;
+  const v = editor.state.viewport;
+  const topLeft = worldToScreen(v, apply(world, { x: 0, y: 0 }));
+  const bottomRight = worldToScreen(v, apply(world, { x: node.size.width, y: node.size.height }));
+  const y = Math.round((topLeft.y + bottomRight.y) / 2 - ADD_VARIANT_BUTTON_SIZE / 2);
+  const size = ADD_VARIANT_BUTTON_SIZE;
+  return {
+    frameId: node.id,
+    left: { x: Math.round(topLeft.x - size - 8), y, width: size, height: size },
+    right: { x: Math.round(bottomRight.x + 8), y, width: size, height: size },
+  };
+}
+
+/** The side of a hovered frame whose + button a screen point is on, if any. */
+export function hitQuickAddButton(editor: Editor, screen: Vec2): { readonly frameId: Id; readonly side: 'left' | 'right' } | null {
+  const buttons = quickAddButtons(editor);
+  if (!buttons) return null;
+  const inside = (rect: Rect) => screen.x >= rect.x && screen.x <= rect.x + rect.width && screen.y >= rect.y && screen.y <= rect.y + rect.height;
+  if (inside(buttons.left)) return { frameId: buttons.frameId, side: 'left' };
+  if (inside(buttons.right)) return { frameId: buttons.frameId, side: 'right' };
+  return null;
+}
+
 /** Whether a screen point is on the + button below a selected component set. */
 export function hitAddVariantButton(editor: Editor, screen: Vec2): boolean {
   const r = addVariantButtonRect(editor);
@@ -300,7 +335,7 @@ export function handleCursor(frame: SelectionFrame, handle: HandleId): 'ns-resiz
   const [ax, ay] = HANDLE_AXES[handle];
   const baseAngle = Math.atan2(ay, ax);
   const rotation = Math.atan2(frame.toWorld.b, frame.toWorld.a);
-  const deg = ((((baseAngle + rotation) * 180) / Math.PI) % 180 + 180) % 180;
+  const deg = (((((baseAngle + rotation) * 180) / Math.PI) % 180) + 180) % 180;
   if (deg < 22.5 || deg >= 157.5) return 'ew-resize';
   if (deg < 67.5) return 'nwse-resize';
   if (deg < 112.5) return 'ns-resize';

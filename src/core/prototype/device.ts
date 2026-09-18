@@ -81,6 +81,8 @@ const BODY: Readonly<Record<FramePresetCategory, { readonly bezel: number; reado
   Presentation: { bezel: 0, radius: 0 },
   Paper: { bezel: 0, radius: 0 },
   'Social media': { bezel: 0, radius: 0 },
+  // The archived devices are phones and tablets, so they wear a phone's body.
+  Archive: { bezel: 0.045, radius: 0.12 },
 };
 
 /** Where a device and its screen sit in a window (CSS pixels): the device body, its corner radius, the screen and the screen's corner radius. */

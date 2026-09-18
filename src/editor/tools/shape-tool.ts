@@ -24,6 +24,9 @@ import { guidesFor, type SnapGuide } from '@/core/scene/snapping';
 import type { SceneNode } from '@/core/schema/document';
 import { adoptCoveredLayers } from '../commands/structure';
 import { snapCandidatesIn } from '../interactions/snap-candidates';
+import { hitQuickAddButton } from '../chrome/selection-geometry';
+import { hitTestDeepest } from '@/core/scene/hit-test';
+import { quickAddFrame } from '../commands/quick-add-frame';
 import { containerAt, nextLayerName, parentToLocal, roundPoint, snapWorldPoint } from './draw-helpers';
 import type { CursorKind, ModifierState, PointerInfo, Tool, ToolEnvironment } from './types';
 
@@ -126,6 +129,12 @@ export class ShapeTool implements Tool {
     if (p.button !== 0) return;
     const { editor } = this.env;
     editor.scene.ensure(editor.pageId);
+    // Quick-add: the + beside a hovered frame copies it to that side rather than drawing a new one.
+    const quick = this.id === 'frame' ? hitQuickAddButton(editor, p.screen) : null;
+    if (quick) {
+      quickAddFrame(editor, quick.frameId, quick.side);
+      return;
+    }
     // Sections can only be created on the page or inside other sections.
     const parent = containerAt(editor, p.world, this.id === 'section' ? ['SECTION'] : undefined);
     const candidates = snapCandidatesIn(editor, [parent]);
@@ -151,6 +160,20 @@ export class ShapeTool implements Tool {
 
   pointerMove(p: PointerInfo): void {
     const d = this.drawing;
+    // With the Frame tool idle, the frame under the pointer is hovered so its quick-add + buttons show.
+    if (!d && this.id === 'frame') {
+      const { editor } = this.env;
+      editor.scene.ensure(editor.pageId);
+      const under = hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, { tolerance: 0 });
+      const frame = under === null ? null : (editor.doc.ancestors(under).find((id) => editor.doc.parentOf(id) === editor.pageId) ?? (editor.doc.parentOf(under) === editor.pageId ? under : null));
+      const found = frame !== null && frame !== undefined && editor.doc.get(frame)?.type === 'FRAME' ? frame : null;
+      // The + buttons sit just outside the frame, so hovering one keeps the frame hovered rather than losing it.
+      const target = found ?? (hitQuickAddButton(editor, p.screen) ? editor.state.getSnapshot().hoverId : null);
+      if (editor.state.getSnapshot().hoverId !== target) {
+        editor.state.setHover(target);
+        editor.requestRender();
+      }
+    }
     if (!d) return;
     d.last = p;
     if (!d.dragged && Math.hypot(p.screen.x - d.down.screen.x, p.screen.y - d.down.screen.y) < this.env.dragThresholdPx) return;

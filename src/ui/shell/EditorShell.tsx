@@ -103,7 +103,10 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
 
   // Motion: the canvas shows the animation where the playhead is, as a preview the file never takes.
   const motionTime = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().motion.time);
-  const revision = useSyncExternalStore((cb) => session.editor.history.subscribe(() => cb()), () => session.editor.doc.rev);
+  const revision = useSyncExternalStore(
+    (cb) => session.editor.history.subscribe(() => cb()),
+    () => session.editor.doc.rev,
+  );
   const preview = useRef<MotionPreview | null>(null);
   useEffect(() => {
     preview.current ??= new MotionPreview(session.editor);
@@ -146,9 +149,7 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
               >
                 <Icon name="logo" />
               </button>
-              {mainMenuAnchor && (
-                <Menu label="Main menu" entries={mainMenuEntries(session.editor)} anchor={mainMenuAnchor} placement="bottom-start" onClose={closeMainMenu} />
-              )}
+              {mainMenuAnchor && <Menu label="Main menu" entries={mainMenuEntries(session.editor)} anchor={mainMenuAnchor} placement="bottom-start" onClose={closeMainMenu} />}
               <div className={styles.railSeparator} role="separator" />
               <RailButton
                 icon="file"
@@ -245,13 +246,7 @@ function FileHeader() {
   };
 
   const save = state.save;
-  const statusText = state.viewing
-    ? 'Viewing an earlier version'
-    : save.state === 'saved'
-      ? 'Saved locally'
-      : save.state === 'error'
-        ? `Not saved: ${save.error.message}`
-        : 'Saving…';
+  const statusText = state.viewing ? 'Viewing an earlier version' : save.state === 'saved' ? 'Saved locally' : save.state === 'error' ? `Not saved: ${save.error.message}` : 'Saving…';
 
   return (
     <div className={styles.fileHeader}>
@@ -295,7 +290,14 @@ function FileHeader() {
           {menuAnchor && (
             <Menu
               label="File actions"
-              entries={commandSections(app.editor, [['file.showVersionHistory'], ['file.saveLocalCopy', 'file.export']])}
+              // The same file actions the main menu's File section offers, beside the name they act on.
+              entries={commandSections(app.editor, [
+                ['file.browse', 'file.open'],
+                ['file.save', 'file.saveAs', 'file.saveLocalCopy'],
+                ['file.showVersionHistory', 'file.branches'],
+                ['file.export'],
+                ['file.setThumbnail', 'file.restoreThumbnail'],
+              ])}
               anchor={menuAnchor}
               placement="bottom-start"
               onClose={closeMenu}
@@ -430,46 +432,54 @@ function RightHeader() {
         <PrototypeViewGroup />
       </div>
       <div className={styles.tabsRow}>
-      <div className={styles.tabs} role="tablist" aria-label="Properties panel">
-        {(['design', 'prototype'] as const).map((tab) => (
-          <button key={tab} type="button" role="tab" aria-selected={rightTab === tab} className={styles.tab} data-active={rightTab === tab || undefined} onClick={() => editor.state.setRightTab(tab)}>
-            {tab === 'design' ? 'Design' : 'Prototype'}
-          </button>
-        ))}
-      </div>
-      <button
-        type="button"
-        className={styles.zoomButton}
-        data-testid="zoom-level"
-        {...zoomTip.handlers}
-        aria-label="Zoom and view options"
-        aria-haspopup="menu"
-        aria-expanded={anchor !== null}
-        data-menu-root=""
-        onClick={(e) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          setAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
-        }}
-      >
-        {Math.round(zoom * 100)}%
-        <Icon name="chevronDown" size={16} />
-      </button>
-      {!anchor && zoomTip.tooltip}
-      {anchor && (
-        <Menu
-          label="Zoom and view options"
-          entries={commandSections(editor, [
-            ['view.zoomIn', 'view.zoomOut', 'view.zoomToFit', 'view.zoomToSelection'],
-            ['view.zoom50', 'view.zoom100', 'view.zoom200'],
-            ['view.togglePixelGrid', 'view.toggleSnapToPixelGrid', 'view.toggleLayoutGuides'],
-            ['view.toggleRulers', 'view.toggleOutlines', 'view.toggleOutlineHidden', 'view.toggleMaskOutlines'],
-            ['view.togglePropertyLabels'],
-          ])}
-          anchor={anchor}
-          placement="bottom-start"
-          onClose={close}
-        />
-      )}
+        <div className={styles.tabs} role="tablist" aria-label="Properties panel">
+          {(['design', 'prototype'] as const).map((tab) => (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-selected={rightTab === tab}
+              className={styles.tab}
+              data-active={rightTab === tab || undefined}
+              onClick={() => editor.state.setRightTab(tab)}
+            >
+              {tab === 'design' ? 'Design' : 'Prototype'}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          className={styles.zoomButton}
+          data-testid="zoom-level"
+          {...zoomTip.handlers}
+          aria-label="Zoom and view options"
+          aria-haspopup="menu"
+          aria-expanded={anchor !== null}
+          data-menu-root=""
+          onClick={(e) => {
+            const r = e.currentTarget.getBoundingClientRect();
+            setAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
+          }}
+        >
+          {Math.round(zoom * 100)}%
+          <Icon name="chevronDown" size={16} />
+        </button>
+        {!anchor && zoomTip.tooltip}
+        {anchor && (
+          <Menu
+            label="Zoom and view options"
+            entries={commandSections(editor, [
+              ['view.zoomIn', 'view.zoomOut', 'view.zoomToFit', 'view.zoomToSelection'],
+              ['view.zoom50', 'view.zoom100', 'view.zoom200'],
+              ['view.togglePixelGrid', 'view.toggleSnapToPixelGrid', 'view.toggleLayoutGuides'],
+              ['view.toggleRulers', 'view.toggleOutlines', 'view.toggleOutlineHidden', 'view.toggleMaskOutlines'],
+              ['view.togglePropertyLabels'],
+            ])}
+            anchor={anchor}
+            placement="bottom-start"
+            onClose={close}
+          />
+        )}
       </div>
     </div>
   );

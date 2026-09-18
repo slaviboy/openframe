@@ -63,6 +63,7 @@ import {
   selectionFrame,
   type SelectionFrame,
   addVariantButtonRect,
+  quickAddButtons,
   ADD_INSTANCES_LABEL,
   addInstancesButtonRect,
   hoveredInstanceSlots,
@@ -377,6 +378,7 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
     drawSizeLabel(ctx, quad, frame, theme, isLineFrame(editor, frame), animatedGifHash(editor, frame.nodeId) !== undefined);
     const addVariant = addVariantButtonRect(editor);
     if (addVariant) drawAddVariantButton(ctx, addVariant, theme);
+    drawQuickAddButtons(ctx, input);
     // Motion: the path a layer travels, dotted between the boxes marking its position keyframes.
     const path = motionPath(editor);
     if (path) {
@@ -1376,6 +1378,28 @@ function drawSectionTitles(ctx: CanvasRenderingContext2D, input: OverlayInput, s
     ctx.fillStyle = active ? theme.labelText : theme.sectionTitleText;
     ctx.fillText(truncate(ctx, node.name, rect.width - 16), Math.round(rect.x) + 8, rect.y + rect.height / 2 + 0.5);
   });
+}
+
+/** The + buttons on either side of a hovered frame while the Frame tool is in hand, which copy it to that side. */
+function drawQuickAddButtons(ctx: CanvasRenderingContext2D, input: OverlayInput): void {
+  const buttons = quickAddButtons(input.editor);
+  if (!buttons) return;
+  for (const rect of [buttons.left, buttons.right]) {
+    const cx = rect.x + rect.width / 2;
+    const cy = rect.y + rect.height / 2;
+    ctx.fillStyle = input.theme.selection;
+    ctx.beginPath();
+    ctx.arc(cx, cy, rect.width / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = input.theme.labelText;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(cx - 5, cy);
+    ctx.lineTo(cx + 5, cy);
+    ctx.moveTo(cx, cy - 5);
+    ctx.lineTo(cx, cy + 5);
+    ctx.stroke();
+  }
 }
 
 /** The purple + button below a selected component set, which adds a variant. */

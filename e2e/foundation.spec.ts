@@ -105,7 +105,10 @@ test('frames parent new shapes; layers panel reflects hierarchy, visibility and 
 
   // Hide via the eye toggle, then rename via double click.
   await rows.nth(1).hover();
-  await rows.nth(1).getByRole('button', { name: /Hide Ellipse 1/ }).click();
+  await rows
+    .nth(1)
+    .getByRole('button', { name: /Hide Ellipse 1/ })
+    .click();
   await expect(rows.nth(1).getByRole('button', { name: /Show Ellipse 1/ })).toBeVisible();
 
   await rows.nth(1).dblclick();
@@ -191,4 +194,18 @@ test('pages can be added, renamed and switched', async ({ page }) => {
   await expect(pages.nth(1)).toHaveText('Mobile');
   await pages.nth(0).click();
   await expect(pages.nth(0)).toHaveAttribute('aria-selected', 'true');
+});
+
+test('the file name menu carries the file actions', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+
+  await page.getByRole('button', { name: 'File actions' }).click();
+  const menu = page.getByRole('menu', { name: 'File actions' });
+  for (const item of ['Open', 'Save local copy', 'Show version history', 'Branches', 'Export']) {
+    await expect(menu.getByRole('menuitem', { name: new RegExp(item) }).first()).toBeVisible();
+  }
+  // Escape closes it without doing anything.
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
 });
