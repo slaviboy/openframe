@@ -52,10 +52,12 @@
   height: 40px;
 }
 
+/* 550, which is what the reference's panel titles weigh. The token stays 600: it is read by six other
+   modules whose weights have not been measured, so the correction lands here. See docs/UI_REFERENCE.md. */
 .sectionTitle {
   margin: 0;
   font-size: var(--text-sm);
-  font-weight: var(--weight-strong);
+  font-weight: var(--weight-medium);
 }
 
 .sectionActions {
