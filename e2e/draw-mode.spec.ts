@@ -108,18 +108,21 @@ test('Draw mode reaches the vector edit tools, pattern fills and the painterly e
   // The row keeps focus after the click, and Return there renames the layer rather than opening its points.
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 
-  // Return opens its points, and the secondary toolbar carries the vector tools Design mode has: the ones
-  // the reference shows in the row, and Variable width and Shape builder behind its More button.
+  // Return opens its points, and the Vector editing bar — a bar of its own, above the toolbar, which stays
+  // put — carries the vector tools Design mode has: the ones the reference shows in the row, and Variable
+  // width and Shape builder behind its More button.
   await page.keyboard.press('Enter');
+  const toolbelt = page.getByRole('toolbar', { name: 'Vector editing' });
+  await expect(toolbar).toBeVisible();
   for (const name of ['Move', 'Lasso', 'Paint', 'Bend', 'Cut', 'Erase']) {
-    await expect(toolbar.getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible();
+    await expect(toolbelt.getByRole('button', { name: new RegExp(`^${name}`) })).toBeVisible();
   }
-  await toolbar.getByRole('button', { name: 'More' }).click();
+  await toolbelt.getByRole('button', { name: 'More' }).click();
   const more = page.getByRole('menu', { name: 'More' });
   await expect(more.getByRole('menuitemradio', { name: /Shape builder/ })).toBeVisible();
   await more.getByRole('menuitemradio', { name: /Variable width/ }).click();
-  await expect(toolbar.getByRole('button', { name: 'More' })).toHaveAttribute('aria-pressed', 'true');
-  await toolbar.getByRole('button', { name: /^Close/ }).click();
+  await expect(toolbelt.getByRole('button', { name: 'More' })).toHaveAttribute('aria-pressed', 'true');
+  await toolbelt.getByRole('button', { name: /^Close/ }).click();
 
   // A pattern fill, which Draw's illustrations are built from as much as Design's.
   const fill = page.getByRole('region', { name: 'Fill' });

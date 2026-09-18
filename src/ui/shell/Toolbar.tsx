@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type ButtonHTMLAttributes } from 'react';
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type ButtonHTMLAttributes, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { EditorMode, ToolId, VectorEditTool } from '@/editor/stores/editor-store';
 import { formatShortcut } from '@/editor/keymap/keymap';
 import { Icon, type IconName } from '../icons/Icon';
@@ -216,14 +216,18 @@ const VECTOR_MORE_TOOLS: readonly {
 
 const firstAvailable = (group: ToolGroup): ToolItem => group.items.find((i) => i.command) ?? group.items[0]!;
 
-/** Floating bottom toolbar. Each group remembers the last tool picked from its dropdown; vector edit mode shows its secondary toolbar instead. */
+/**
+ * Floating bottom toolbar. Each group remembers the last tool picked from its dropdown. While points are
+ * open the vector toolbelt floats above this bar rather than replacing it, as the reference draws them:
+ * its Editor toolbar stays put, the Pen still pressed, with the Vector editing bar on top.
+ */
 export function Toolbar() {
   const editor = useEditor();
   const tool = useEditorState((s) => s.tool);
   // Tool last picked from each group's dropdown, by group; shown when the group is not active.
   const [picked, setPicked] = useState<Readonly<Record<string, ToolId | PendingTool>>>({});
   const [openGroup, setOpenGroup] = useState<string | null>(null);
-  const vectorTool = useEditorState((s) => (s.vectorEdit ? (s.vectorEdit.tool ?? 'move') : null));
+  const editingPoints = useEditorState((s) => s.vectorEdit !== null);
   const mode = useEditorState((s) => s.mode);
 
   const shortcut = (command: string | undefined) => {
@@ -256,105 +260,122 @@ export function Toolbar() {
 
   return (
     <>
+      {/* Only one secondary bar is ever up: the Pencil and Brush have no points open, and vector edit has no sketch stroke. */}
       {(tool === 'pencil' || tool === 'brush') && <SketchToolbar brush={tool === 'brush'} />}
+      {editingPoints && <VectorToolbelt shortcut={shortcut} />}
       <div
         className={styles.toolbar}
         role="toolbar"
         aria-label="Tools"
         // In Motion the timeline runs along the bottom, so the toolbar sits above it.
         data-above-timeline={mode === 'motion' || undefined}
-        onKeyDown={(e) => {
-          // ←/→ move focus between tool buttons (F6 focuses the toolbar).
-          if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-          const buttons = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('[data-tool-button]')];
-          const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
-          if (index < 0) return;
-          e.preventDefault();
-          e.stopPropagation();
-          buttons[(index + (e.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length]!.focus();
-        }}
+        onKeyDown={rovingFocus}
       >
-        {vectorTool !== null && (
-          <div className={styles.toolsRow}>
-            {VECTOR_TOOLS.map((item) => (
-              <Fragment key={item.command}>
-                {item.startsGroup === true && <div className={styles.toolDivider} role="separator" aria-orientation="vertical" />}
-                <div className={styles.group}>
-                  <ToolButton icon={item.icon} label={item.label} showLabel shortcut={shortcut(item.command)} active={vectorTool === item.tool} onClick={() => editor.commands.run(item.command)} />
-                </div>
-              </Fragment>
-            ))}
-            <div className={styles.toolDivider} role="separator" aria-orientation="vertical" />
-            <VectorMoreMenu open={openGroup === VECTOR_MORE} onOpenChange={(open) => setOpenGroup(open ? VECTOR_MORE : null)} activeTool={vectorTool} shortcut={shortcut} />
-            <div className={styles.toolDivider} role="separator" aria-orientation="vertical" />
-            <ToolButton icon="close" label="Close" shortcut={shortcut('vector.done')} onClick={() => editor.commands.run('vector.done')} />
-          </div>
-        )}
-        {vectorTool === null && (
-          <>
-            <div className={styles.toolsRow}>
-              {(mode === 'draw' ? DRAW_GROUPS : mode === 'dev' ? DEV_GROUPS : GROUPS).map((group) => {
-                const active = group.items.some((t) => t.tool === tool);
-                const current = group.items.find((t) => t.tool === (active ? tool : picked[group.label])) ?? firstAvailable(group);
-                // A group of one has nothing to choose between, so it drops the chevron — and the group
-                // wrapper with it — and reads as the single button it is, the way Actions does.
-                const alone = group.items.length < 2;
-                return (
-                  <div key={group.label} className={styles.group} {...(alone ? {} : { role: 'group', 'aria-label': current.label })}>
-                    <ToolButton
-                      icon={current.icon}
-                      label={current.label}
-                      shortcut={shortcut(current.command)}
-                      active={active}
-                      pending={!current.command}
-                      onClick={(e) => {
-                        if (!current.command) return;
-                        editor.commands.run(current.command);
-                        // Chosen from the keyboard: hand focus back to the canvas so Return places the object.
-                        if (e.detail === 0) e.currentTarget.blur();
-                      }}
-                    />
-                    {!alone && (
-                      <ToolMenu
-                        group={group}
-                        open={openGroup === group.label}
-                        onOpenChange={(open) => setOpenGroup(open ? group.label : null)}
-                        activeTool={tool}
-                        shortcut={shortcut}
-                        onPick={(item) => {
-                          if (!item.command) return;
-                          editor.commands.run(item.command);
-                          setPicked((prev) => ({ ...prev, [group.label]: item.tool }));
-                          setOpenGroup(null);
-                        }}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-              {mode === 'design' && <BooleanMenu open={openGroup === BOOLEAN_MENU} onOpenChange={(open) => setOpenGroup(open ? BOOLEAN_MENU : null)} shortcut={shortcut} />}
-              <ToolButton icon="actions" label="Actions" shortcut={shortcut('view.commandPalette')} onClick={() => editor.commands.run('view.commandPalette')} />
-            </div>
-            <div className={styles.divider} role="separator" aria-orientation="vertical" />
-            <div className={styles.modesWrap}>
-              <div className={styles.modes} role="radiogroup" aria-label="Mode">
-                {MODES.map((m) => (
-                  <ModeOption
-                    key={m.mode}
-                    label={m.label}
-                    icon={m.icon}
-                    checked={mode === m.mode}
-                    available={m.available}
-                    shortcut={m.mode === 'dev' ? shortcut('view.devMode') : undefined}
-                    onSelect={() => editor.state.setMode(m.mode)}
+        <div className={styles.toolsRow}>
+          {(mode === 'draw' ? DRAW_GROUPS : mode === 'dev' ? DEV_GROUPS : GROUPS).map((group) => {
+            const active = group.items.some((t) => t.tool === tool);
+            const current = group.items.find((t) => t.tool === (active ? tool : picked[group.label])) ?? firstAvailable(group);
+            // A group of one has nothing to choose between, so it drops the chevron — and the group
+            // wrapper with it — and reads as the single button it is, the way Actions does.
+            const alone = group.items.length < 2;
+            return (
+              <div key={group.label} className={styles.group} {...(alone ? {} : { role: 'group', 'aria-label': current.label })}>
+                <ToolButton
+                  icon={current.icon}
+                  label={current.label}
+                  shortcut={shortcut(current.command)}
+                  active={active}
+                  pending={!current.command}
+                  onClick={(e) => {
+                    if (!current.command) return;
+                    editor.commands.run(current.command);
+                    // Chosen from the keyboard: hand focus back to the canvas so Return places the object.
+                    if (e.detail === 0) e.currentTarget.blur();
+                  }}
+                />
+                {!alone && (
+                  <ToolMenu
+                    group={group}
+                    open={openGroup === group.label}
+                    onOpenChange={(open) => setOpenGroup(open ? group.label : null)}
+                    activeTool={tool}
+                    shortcut={shortcut}
+                    onPick={(item) => {
+                      if (!item.command) return;
+                      editor.commands.run(item.command);
+                      setPicked((prev) => ({ ...prev, [group.label]: item.tool }));
+                      setOpenGroup(null);
+                    }}
                   />
-                ))}
+                )}
               </div>
-            </div>
-          </>
-        )}
+            );
+          })}
+          {mode === 'design' && <BooleanMenu open={openGroup === BOOLEAN_MENU} onOpenChange={(open) => setOpenGroup(open ? BOOLEAN_MENU : null)} shortcut={shortcut} />}
+          <ToolButton icon="actions" label="Actions" shortcut={shortcut('view.commandPalette')} onClick={() => editor.commands.run('view.commandPalette')} />
+        </div>
+        <div className={styles.divider} role="separator" aria-orientation="vertical" />
+        <div className={styles.modesWrap}>
+          <div className={styles.modes} role="radiogroup" aria-label="Mode">
+            {MODES.map((m) => (
+              <ModeOption
+                key={m.mode}
+                label={m.label}
+                icon={m.icon}
+                checked={mode === m.mode}
+                available={m.available}
+                shortcut={m.mode === 'dev' ? shortcut('view.devMode') : undefined}
+                onSelect={() => editor.state.setMode(m.mode)}
+              />
+            ))}
+          </div>
+        </div>
       </div>
     </>
+  );
+}
+
+/** ←/→ move focus between the tool buttons of a toolbar (F6 focuses one). */
+function rovingFocus(e: ReactKeyboardEvent<HTMLElement>): void {
+  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+  const buttons = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('[data-tool-button]')];
+  const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+  if (index < 0) return;
+  e.preventDefault();
+  e.stopPropagation();
+  buttons[(index + (e.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length]!.focus();
+}
+
+/**
+ * Vector edit mode's toolbelt, a bar of its own floating above the main toolbar — which is where the
+ * reference puts it, rather than in place of it: its container is 96px tall, anchored to the bottom and
+ * aligned to the top, so the 40px bar clears the 48px Editor toolbar below.
+ */
+function VectorToolbelt({ shortcut }: { shortcut: (command: string | undefined) => string }) {
+  const editor = useEditor();
+  const vectorTool = useEditorState((s) => s.vectorEdit?.tool ?? 'move');
+  const mode = useEditorState((s) => s.mode);
+  const [moreOpen, setMoreOpen] = useState(false);
+  return (
+    <div
+      className={styles.vectorToolbelt}
+      role="toolbar"
+      aria-label="Vector editing"
+      aria-orientation="horizontal"
+      data-above-timeline={mode === 'motion' || undefined}
+      onKeyDown={rovingFocus}
+    >
+      {VECTOR_TOOLS.map((item) => (
+        <Fragment key={item.command}>
+          {item.startsGroup === true && <div className={styles.toolDivider} role="separator" aria-orientation="vertical" />}
+          <ToolButton icon={item.icon} label={item.label} showLabel shortcut={shortcut(item.command)} active={vectorTool === item.tool} onClick={() => editor.commands.run(item.command)} />
+        </Fragment>
+      ))}
+      <div className={styles.toolDivider} role="separator" aria-orientation="vertical" />
+      <VectorMoreMenu open={moreOpen} onOpenChange={setMoreOpen} activeTool={vectorTool} shortcut={shortcut} />
+      <div className={styles.toolDivider} role="separator" aria-orientation="vertical" />
+      <ToolButton icon="close" label="Close" shortcut={shortcut('vector.done')} onClick={() => editor.commands.run('vector.done')} />
+    </div>
   );
 }
 
@@ -499,7 +520,7 @@ function ModeOption({
   );
 }
 
-/** The name the toolbar's open-menu state takes while the boolean menu is the one open. */
+/** What the toolbelt's overflow button says — and, in the reference, shows: the word, then a chevron. */
 const VECTOR_MORE = 'More';
 
 /**
@@ -543,11 +564,12 @@ function VectorMoreMenu({
       <button
         ref={buttonRef}
         type="button"
-        className={styles.tool}
+        className={`${styles.tool} ${styles.moreTool}`}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label={VECTOR_MORE}
         aria-pressed={VECTOR_MORE_TOOLS.some((item) => item.tool === activeTool)}
+        data-tool-button=""
         {...handlers}
         onClick={() => {
           setFocus(
@@ -559,7 +581,9 @@ function VectorMoreMenu({
           onOpenChange(!open);
         }}
       >
-        <Icon name="more" />
+        {/* The reference names this one rather than drawing it: "More" beside a 16px chevron. */}
+        <span className={styles.toolLabel}>{VECTOR_MORE}</span>
+        <Icon name="caretDown" size={16} />
       </button>
       {!open && tooltip}
       {open && (

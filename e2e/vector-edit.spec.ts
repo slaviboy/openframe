@@ -102,3 +102,40 @@ test('vector edit mode opens several layers at once, and a drag carries the poin
   await page.getByRole('treeitem', { name: /Vector 2/ }).click();
   await expect(page.getByTestId('field-w')).toHaveValue('140');
 });
+
+test('the Vector editing bar floats above the toolbar, which stays put with the Pen still pressed', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  const toolbar = page.getByRole('toolbar', { name: 'Tools' });
+  const toolbelt = page.getByRole('toolbar', { name: 'Vector editing' });
+  await expect(toolbelt).toBeHidden();
+
+  // A triangle drawn with the Pen, which stays the tool in hand.
+  await page.keyboard.press('p');
+  for (const [x, y] of [
+    [400, 300],
+    [500, 300],
+    [450, 400],
+    [400, 300],
+  ] as const) {
+    await page.mouse.click(box.x + x, box.y + y);
+  }
+  await page.keyboard.press('Enter');
+
+  // Both bars, as the reference draws them: the toolbar keeps the Pen pressed and the mode switcher,
+  // and the Vector editing bar sits above it rather than in its place.
+  await expect(toolbar).toBeVisible();
+  await expect(toolbelt).toBeVisible();
+  await expect(toolbar.getByRole('button', { name: /^Pen \(/ })).toHaveAttribute('aria-pressed', 'true');
+  await expect(toolbar.getByRole('radiogroup', { name: 'Mode' })).toBeVisible();
+  const bar = (await toolbar.boundingBox())!;
+  const belt = (await toolbelt.boundingBox())!;
+  expect(belt.y + belt.height).toBeLessThanOrEqual(bar.y);
+
+  // Close leaves, and the bar goes with it.
+  await toolbelt.getByRole('button', { name: /^Close/ }).click();
+  await expect(toolbelt).toBeHidden();
+  await expect(toolbar).toBeVisible();
+});

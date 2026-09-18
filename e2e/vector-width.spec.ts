@@ -15,8 +15,20 @@
  * limitations under the License.
  */
 
+import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
 import { pixelAt } from './pixel';
+
+/**
+ * Picks Variable width, which the Vector editing bar keeps behind its More button — the reference's own
+ * overflow. Returns that button, which reads pressed while one of the tools behind it is in hand.
+ */
+async function pickVariableWidth(page: Page) {
+  const more = page.getByRole('toolbar', { name: 'Vector editing' }).getByRole('button', { name: 'More' });
+  await more.click();
+  await page.getByRole('menu', { name: 'More' }).getByRole('menuitemradio', { name: /Variable width/ }).click();
+  return more;
+}
 
 test('the Variable width tool adds a width point on the stroke, and its width field widens the stroke', async ({ page }) => {
   await page.goto('/');
@@ -43,8 +55,7 @@ test('the Variable width tool adds a width point on the stroke, and its width fi
   }
   await page.keyboard.press('v');
   await page.keyboard.press('Enter');
-  const tool = page.getByRole('button', { name: 'Variable width' });
-  await tool.click();
+  const tool = await pickVariableWidth(page);
   await expect(tool).toHaveAttribute('aria-pressed', 'true');
   expect(await isDark()).toBe(false);
 
@@ -81,8 +92,7 @@ test('a width profile shapes the stroke, and the tapered stroke outlines as it i
   // The weight field keeps focus after Enter, so the canvas is given it back before Enter opens vector edit mode.
   await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
   await page.keyboard.press('Enter');
-  const tool = page.getByRole('button', { name: 'Variable width' });
-  await tool.click();
+  const tool = await pickVariableWidth(page);
   await expect(tool).toHaveAttribute('aria-pressed', 'true');
   const profile = page.getByTestId('field-width-profile');
   await expect(profile).toHaveValue('uniform');

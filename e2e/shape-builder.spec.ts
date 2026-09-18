@@ -40,7 +40,9 @@ async function overlapping(page: Page) {
   await page.getByRole('menu', { name: 'Boolean operations' }).getByRole('menuitem', { name: 'Flatten selection' }).click();
   await expect(page.getByTestId('inspector')).toContainText('Vector');
   await page.keyboard.press('Enter');
-  await page.getByRole('toolbar', { name: 'Tools' }).getByRole('button', { name: 'Shape builder' }).click();
+  // The Vector editing bar keeps the Shape builder behind its More button, as the reference does.
+  await page.getByRole('toolbar', { name: 'Vector editing' }).getByRole('button', { name: 'More' }).click();
+  await page.getByRole('menu', { name: 'More' }).getByRole('menuitemradio', { name: /Shape builder/ }).click();
   return (await page.getByTestId('canvas').boundingBox())!;
 }
 

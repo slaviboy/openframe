@@ -40,7 +40,8 @@ test('the Eraser (⇧E) removes the area it is dragged over, adding points along
   await page.keyboard.press('v');
   await page.keyboard.press('Enter');
   await page.keyboard.press('Shift+E');
-  await expect(page.getByRole('button', { name: /^Eraser \(/ })).toHaveAttribute('aria-pressed', 'true');
+  // The Vector editing bar calls it Erase, as the reference labels it.
+  await expect(page.getByRole('button', { name: /^Erase \(/ })).toHaveAttribute('aria-pressed', 'true');
   const weight = page.getByTestId('field-eraser-weight');
   await weight.fill('20');
   await weight.press('Enter');
