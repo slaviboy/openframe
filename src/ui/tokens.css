@@ -132,6 +132,13 @@
      referenced by InspectPanel.module.css since it was written and never defined until now. */
   --bg-inspect-padding: #e5f4ff;
   --bg-inset: #f5f5f5;
+  /* Dev Mode's code wells. Measured: --color-border-code-well and the --color-code* ramp entries. */
+  --border-code-well: var(--border);
+  --code-value: #ea10ac;
+  --code-accent: #ce7012;
+  --code-string: #007be5;
+  --code-comment: rgba(0, 0, 0, 0.5);
+  --code-tag: #8638e5;
   --shadow-panel: 0 0 0.5px rgba(0, 0, 0, 0.18), 0 3px 8px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.1);
   /* The lifted pill behind the checked mode. The reference's light value is not in the saved pages — only its
      dark one is — so light keeps the hairline ring it always had. See docs/UI_REFERENCE.md. */
@@ -161,6 +168,12 @@
   --border-strong: #4f4f4f;
   --bg-inspect-padding: #394360;
   --bg-inset: #1e1e1e;
+  --border-code-well: rgba(255, 255, 255, 0.1);
+  --code-value: #fc9ce0;
+  --code-accent: #fcb34a;
+  --code-string: #7cc4f8;
+  --code-comment: rgba(255, 255, 255, 0.7);
+  --code-tag: #d1a8ff;
   --shadow-panel: 0 0 0.5px rgba(0, 0, 0, 0.5), 0 3px 8px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.3);
   /* Measured: The reference's --elevation-100-canvas, declared under [data-preferred-theme=dark]. */
   --shadow-mode: 0 0 0.5px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);

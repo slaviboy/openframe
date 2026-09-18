@@ -101,6 +101,18 @@ const STROKE = {
 } as const;
 
 const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: ReactElement }> = {
+  // Measured from the reference's copy button in the Dev Mode code panel.
+  copy: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M10 6h4v1h-4zM9 6a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1 2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2m0 1a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1 1 1 0 0 1-1 1h-4a1 1 0 0 1-1-1m1 3.5a.5.5 0 0 1 .5-.5h3a.5.5 0 0 1 0 1h-3a.5.5 0 0 1-.5-.5m.5 2.5a.5.5 0 0 0 0 1h3a.5.5 0 0 0 0-1z"
+      />
+    ),
+  },
   line: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M17.854 6.146a.5.5 0 0 1 0 .708l-11 11a.5.5 0 0 1-.708-.708l11-11a.5.5 0 0 1 .708 0" /> },
   arrow: {
     viewBox: 24,
@@ -754,6 +766,7 @@ const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: Rea
 };
 
 type FilledName =
+  | 'copy'
   | 'pause'
   | 'keyframe'
   | 'strokeWeight'

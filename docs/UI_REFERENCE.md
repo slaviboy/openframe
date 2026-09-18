@@ -252,6 +252,61 @@ Still unmatched, in both directions: the reference has **MCP**, **Component info
 **Playground**, **Dev resources**, **Annotations**, **Measurements**, **Compare** and an **Appearance**
 section (opacity, blend mode) that the captures show nothing for. Those are features, not fidelity.
 
+## Dev Mode's code wells
+
+Measured from `dev_mode_text_code_css.html` and `dev_mode_text_code_compose.html`, which are the same
+text layer in CSS and in Compose. Code is **not** one block in the reference: it is split into named
+aspects, each its own titled section with its own copy button and its own well.
+
+| Reference class | CSS read off it | Where it landed |
+| --- | --- | --- |
+| `code_panel--codePanelHeader` | `width:100%; display:flex; justify-content:space-between; align-items:center; min-height:32px; padding:0 16px` | `CodeAspects.module.css .header` |
+| `code_panel--codePanelTitle` | `padding:8px 0; font-weight:400; color:var(--color-text)`, 11px | `.title` |
+| `code_panel--codePanelActions` | `display:flex; gap:4px`, shown on `:hover` of the container | `.actions` |
+| `code_panel--codeWell` (+ `includeMargin`) | `display:flex; padding:8px 0 0; margin:1px 16px; box-shadow:0 0 0 1px var(--color-border-code-well); border-radius:var(--radius-medium)` | `.well` |
+| `code_panel--lineNumbersColumn` | `min-width:20px; margin-top:-8px; padding-top:8px; border-right:1px solid var(--color-border-code-well)` | `.lineNumbers` |
+| `code_panel--lineNumber` | `min-width:12px; color:var(--color-text-tertiary); justify-content:end; padding:0 4px` | `.lineNumber` |
+| `code_panels_shared--code` | `font-family:Roboto Mono,…; font-weight:400; font-size:11px; line-height:18px; letter-spacing:.005em` | `.generated`, `.lineNumber` |
+| `code_panel--line` | `height:18px; min-height:18px; white-space:nowrap; display:flex; align-items:center` | `.line` |
+| the line's inner span | `padding-left:24px; padding-right:8px; text-indent:-16px; flex-grow:1` | `.lineText` |
+
+**Colours.** The reference's syntax colours resolve through its ramp; both ends were read out of the
+same file, `:root` for light and `[data-preferred-theme=dark]` for dark:
+
+| Token | Reference | Light | Dark |
+| --- | --- | --- | --- |
+| `--code-value` (`.token.plain` under `[data-lang=css]`, `.number`, `.unit`) | `--color-codevalue` → pink 600/400 | `#ea10ac` | `#fc9ce0` |
+| `--code-accent` (`.token.function`) | `--color-codeaccent` → orange 900/400 | `#ce7012` | `#fcb34a` |
+| `--code-string` (`.token.string`) | `--color-codestring` → blue 600/400 | `#007be5` | `#7cc4f8` |
+| `--code-comment` (`.token.comment`) | `--color-codecomment` → black/white 500 | `rgba(0,0,0,.5)` | `rgba(255,255,255,.7)` |
+| `--code-tag` | `--color-codetag` → purple 600/400 | `#8638e5` | `#d1a8ff` |
+| `--border-code-well` | `--color-border-code-well` | `var(--border)` | `rgba(255,255,255,.1)` |
+
+`.token.property`, `.token.punctuation`, `.token.operator` and `.token.keyword` carry **no colour rule**
+in the reference — they inherit the code colour — so ours do the same rather than inventing one.
+
+**Deviations, recorded rather than hidden.**
+
+- The reference names its aspects per language and per selection; we can only name the aspects our own
+  generators produce. CSS gives **Layout** and **Typography** and Compose gives **Modifier**, **Layout**
+  and **Text** — all four names are the reference's. SwiftUI, UIKit and Android XML have **no capture at
+  all**, so their single aspect is named `View`/`View`/`Layout` by us, and `code-gen.ts` says so at each
+  one. Compose's **Variables** aspect is the reference's and we do not produce it: we have no bound
+  variables to list in code.
+- `tag` and `attribute` are token kinds of ours, for Android XML, which no capture covers.
+- The reference draws a colour `chit` before a value and, for Compose, before a `0xAARRGGBB` literal.
+  Ours does both. It renders as an empty swatch, so the spans still concatenate back to the exact line —
+  `code-tokens.test.ts` asserts that for every language.
+- Highlighting is a hand-written scanner (`src/core/dev/code-tokens.ts`), not a library: the page's CSP
+  is `script-src 'self' 'wasm-unsafe-eval'`, which rules out the highlighters that build their grammars
+  with `new Function`. It only ever sees what `code-gen.ts` writes, and anything it cannot classify falls
+  through to `plain`.
+- Our generators indent with real spaces, so `.lineText` adds `white-space: pre`; the reference's own
+  lines carry their indent in the styling instead.
+- The **Copy code** button that used to sit under the single `<pre>` is gone. Each aspect now has the
+  reference's icon button, labelled `Copy {Aspect}, press shift to copy all code` — and shift really does
+  copy all of it.
+
 ## The Dev Mode toolbar
 
 The reference's Dev toolbar reads: **Move · Copy colors · Measurement · Annotation · Comment · Inspect ·

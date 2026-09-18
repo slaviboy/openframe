@@ -122,7 +122,7 @@ function fontWeight(style: string): number {
   return weights.find(([word]) => plain.includes(word))?.[1] ?? 400;
 }
 
-function cssFor(node: SceneNode, options: CodeOptions): string[] {
+function cssFor(node: SceneNode, options: CodeOptions): CodeAspect[] {
   const lines = [`width: ${withUnit(node.size.width, options)};`, `height: ${withUnit(node.size.height, options)};`];
   const layout = layoutOf(node);
   if (layout) {
@@ -134,14 +134,15 @@ function cssFor(node: SceneNode, options: CodeOptions): string[] {
   const radius = radiusOf(node);
   if (radius > 0) lines.push(`border-radius: ${withUnit(radius, options)};`);
 
+  const typography: string[] = [];
   if (node.type === 'TEXT') {
-    lines.push(`font-family: "${node.fontName.family}";`, `font-size: ${withUnit(node.fontSize, options)};`, `font-weight: ${fontWeight(node.fontName.style)};`);
+    typography.push(`font-family: "${node.fontName.family}";`, `font-size: ${withUnit(node.fontSize, options)};`, `font-weight: ${fontWeight(node.fontName.style)};`);
     const height = lineHeightPx(node);
-    if (height !== null) lines.push(`line-height: ${withUnit(height, options)};`);
-    if (node.letterSpacing.unit === 'PIXELS' && node.letterSpacing.value !== 0) lines.push(`letter-spacing: ${withUnit(node.letterSpacing.value, options)};`);
-    if (node.textAlignHorizontal !== 'LEFT') lines.push(`text-align: ${node.textAlignHorizontal.toLowerCase()};`);
+    if (height !== null) typography.push(`line-height: ${withUnit(height, options)};`);
+    if (node.letterSpacing.unit === 'PIXELS' && node.letterSpacing.value !== 0) typography.push(`letter-spacing: ${withUnit(node.letterSpacing.value, options)};`);
+    if (node.textAlignHorizontal !== 'LEFT') typography.push(`text-align: ${node.textAlignHorizontal.toLowerCase()};`);
     const color = solidHex(firstPaint('fills' in node ? node.fills : undefined));
-    if (color) lines.push(`color: ${color};`);
+    if (color) typography.push(`color: ${color};`);
   } else {
     const fill = solidHex(firstPaint('fills' in node ? node.fills : undefined));
     if (fill) lines.push(`background: ${fill};`);
@@ -150,10 +151,10 @@ function cssFor(node: SceneNode, options: CodeOptions): string[] {
   const stroke = solidHex(firstPaint('strokes' in node ? node.strokes : undefined));
   if (stroke && 'strokeWeight' in node && node.strokeWeight > 0) lines.push(`border: ${withUnit(node.strokeWeight, options)} solid ${stroke};`);
   if (node.opacity < 1) lines.push(`opacity: ${Math.round(node.opacity * 100) / 100};`);
-  return lines;
+  return typography.length > 0 ? [{ name: 'Layout', lines }, { name: 'Typography', lines: typography }] : [{ name: 'Layout', lines }];
 }
 
-function swiftUiFor(node: SceneNode, options: CodeOptions): string[] {
+function swiftUiFor(node: SceneNode, options: CodeOptions): CodeAspect[] {
   const lines: string[] = [];
   if (node.type === 'TEXT') {
     lines.push(`Text("${node.characters.replace(/["\\]/g, '\\$&').split('\n')[0] ?? ''}")`);
@@ -169,17 +170,19 @@ function swiftUiFor(node: SceneNode, options: CodeOptions): string[] {
   const radius = radiusOf(node);
   if (radius > 0) lines.push(`    .cornerRadius(${measure(radius, options)})`);
   if (node.opacity < 1) lines.push(`    .opacity(${Math.round(node.opacity * 100) / 100})`);
-  return lines;
+  // No reference capture exists for this language, so the aspect's name is ours, not the reference's.
+  return [{ name: 'View', lines }];
 }
 
-function uiKitFor(node: SceneNode, options: CodeOptions): string[] {
+function uiKitFor(node: SceneNode, options: CodeOptions): CodeAspect[] {
   const lines = [`let view = UIView(frame: CGRect(x: 0, y: 0, width: ${measure(node.size.width, options)}, height: ${measure(node.size.height, options)}))`];
   const fill = solidParts(firstPaint('fills' in node ? node.fills : undefined));
   if (fill) lines.push(`view.backgroundColor = UIColor(red: ${fill.r}, green: ${fill.g}, blue: ${fill.b}, alpha: 1)`);
   const radius = radiusOf(node);
   if (radius > 0) lines.push(`view.layer.cornerRadius = ${measure(radius, options)}`);
   if (node.opacity < 1) lines.push(`view.alpha = ${Math.round(node.opacity * 100) / 100}`);
-  return lines;
+  // No reference capture exists for this language, so the aspect's name is ours, not the reference's.
+  return [{ name: 'View', lines }];
 }
 
 /** A color as Compose writes it: `0xAARRGGBB`. */
@@ -188,7 +191,7 @@ const composeColor = (paint: Paint | undefined): string | null => {
   return hex === null ? null : `0xFF${hex.slice(1)}`;
 };
 
-function composeFor(node: SceneNode, options: CodeOptions): string[] {
+function composeFor(node: SceneNode, options: CodeOptions): CodeAspect[] {
   const unit = options.unit === 'px' ? 'dp' : options.unit;
   const size = (value: number) => `${measure(value, options)}.${unit}`;
   const lines = ['Modifier', `    .size(width = ${size(node.size.width)}, height = ${size(node.size.height)})`];
@@ -197,15 +200,27 @@ function composeFor(node: SceneNode, options: CodeOptions): string[] {
   if (color) lines.push(radius > 0 ? `    .background(Color(${color}), shape = RoundedCornerShape(${size(radius)}))` : `    .background(Color(${color}))`);
   else if (radius > 0) lines.push(`    .clip(RoundedCornerShape(${size(radius)}))`);
   const layout = layoutOf(node);
-  if (layout && layout.gap > 0) lines.push(`    // Arrangement.spacedBy(${size(layout.gap)})`);
   if (layout && [layout.top, layout.right, layout.bottom, layout.left].some((value) => value > 0)) {
     lines.push(`    .padding(start = ${size(layout.left)}, top = ${size(layout.top)}, end = ${size(layout.right)}, bottom = ${size(layout.bottom)})`);
   }
   if (node.opacity < 1) lines.push(`    .alpha(${Math.round(node.opacity * 100) / 100}f)`);
-  return lines;
+  const aspects: CodeAspect[] = [{ name: 'Modifier', lines }];
+  // A frame that lays its children out is a Column or a Row holding them, which the reference shows apart
+  // from the modifier chain.
+  if (layout) {
+    const arrangement = layout.gap > 0 ? `Arrangement.spacedBy(${size(layout.gap)})` : null;
+    const column = layout.direction === 'HORIZONTAL' ? 'Row' : 'Column';
+    const align = layout.direction === 'HORIZONTAL' ? 'verticalAlignment = Alignment.Top' : 'horizontalAlignment = Alignment.Start';
+    const args = [arrangement === null ? null : `${layout.direction === 'HORIZONTAL' ? 'horizontalArrangement' : 'verticalArrangement'} = ${arrangement}`, align].filter((part) => part !== null);
+    aspects.push({ name: 'Layout', lines: [`${column}(`, ...args.map((part, i) => `    ${part}${i === args.length - 1 ? '' : ','}`), ') {', '    // Child views.', '}'] });
+  }
+  if (node.type === 'TEXT') {
+    aspects.push({ name: 'Text', lines: ['Text(', `    text = "${node.characters.split('\n')[0]?.replace(/"/g, '\\"') ?? ''}",`, `    fontSize = ${measure(node.fontSize, options)}.sp,`, ')'] });
+  }
+  return aspects;
 }
 
-function androidXmlFor(node: SceneNode, options: CodeOptions): string[] {
+function androidXmlFor(node: SceneNode, options: CodeOptions): CodeAspect[] {
   const unit = options.unit === 'px' ? 'px' : options.unit;
   const size = (value: number) => `${measure(value, options)}${unit}`;
   const tag = node.type === 'TEXT' ? 'TextView' : 'View';
@@ -219,21 +234,35 @@ function androidXmlFor(node: SceneNode, options: CodeOptions): string[] {
   }
   if (node.opacity < 1) lines.push(`    android:alpha="${Math.round(node.opacity * 100) / 100}"`);
   lines.push('    />');
-  return lines;
+  // No reference capture exists for this language, so the aspect's name is ours, not the reference's.
+  return [{ name: 'Layout', lines }];
 }
 
-/** Writes a layer out in the language chosen, in the unit chosen: what Dev Mode's Code section shows. */
-export function generateCode(node: SceneNode, options: CodeOptions): string {
+/** A named block of the generated code — the reference shows one section per aspect of the layer. */
+export interface CodeAspect {
+  readonly name: string;
+  readonly lines: readonly string[];
+}
+
+/** The code that builds a layer, in the blocks the reference splits it into. */
+export function generateCodeAspects(node: SceneNode, options: CodeOptions): readonly CodeAspect[] {
   switch (options.language) {
     case 'CSS':
-      return cssFor(node, options).join('\n');
+      return cssFor(node, options);
     case 'SWIFTUI':
-      return swiftUiFor(node, options).join('\n');
+      return swiftUiFor(node, options);
     case 'UIKIT':
-      return uiKitFor(node, options).join('\n');
+      return uiKitFor(node, options);
     case 'COMPOSE':
-      return composeFor(node, options).join('\n');
+      return composeFor(node, options);
     case 'ANDROID_XML':
-      return androidXmlFor(node, options).join('\n');
+      return androidXmlFor(node, options);
   }
+}
+
+/** The same code as one block, which is what copying it hands over. */
+export function generateCode(node: SceneNode, options: CodeOptions): string {
+  return generateCodeAspects(node, options)
+    .flatMap((aspect) => aspect.lines)
+    .join('\n');
 }

@@ -17,7 +17,7 @@
 
 import { canHaveDevStatus, devStatusLabel, setDevStatus, type DevStatusNode } from '@/editor/commands/dev-status';
 import { ANIMATION_CODE_LABELS, generateAnimationCode, type AnimationCodeFormat } from '@/core/dev/animation-code';
-import { CODE_LANGUAGE_LABELS, CODE_UNITS, DEFAULT_UNIT_SCALE, generateCode, type CodeLanguage, type CodeUnit } from '@/core/dev/code-gen';
+import { CODE_LANGUAGE_LABELS, CODE_UNITS, DEFAULT_UNIT_SCALE, type CodeLanguage, type CodeUnit } from '@/core/dev/code-gen';
 import { viewPrefs } from '../../view/view-prefs';
 import { shownAnimation } from '@/editor/commands/motion';
 import { addDevResource, boundVariablesOf, deleteDevResource, devResources, suggestedVariables } from '@/editor/commands/dev-resources';
@@ -33,6 +33,7 @@ import { CompareSection } from './CompareSection';
 import { DevAssetsPanel } from './DevAssetsPanel';
 import { PlaygroundSection } from './PlaygroundSection';
 import { BoxModel } from './BoxModel';
+import { CodeAspects } from './CodeAspects';
 import { InspectHeader } from './InspectHeader';
 import { InspectSection } from './InspectSection';
 import styles from './InspectPanel.module.css';
@@ -370,15 +371,5 @@ function CodePreferences() {
 /** The code that builds the selected layer, in the language and unit chosen. */
 function CodeSection({ node }: { node: SceneNode }) {
   const { language, unit, scale } = useCodePrefs();
-  const code = generateCode(node, { language, unit, ...(scale === null ? {} : { scale }) });
-  return (
-    <div className={styles.groupBody}>
-      <pre className={styles.code} data-testid="inspect-code">
-        {code}
-      </pre>
-      <button type="button" className={primitives.button} onClick={() => void navigator.clipboard?.writeText(code).catch(() => undefined)}>
-        Copy code
-      </button>
-    </div>
-  );
+  return <CodeAspects node={node} options={{ language, unit, ...(scale === null ? {} : { scale }) }} />;
 }
