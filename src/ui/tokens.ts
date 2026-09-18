@@ -28,6 +28,8 @@ export const SIDEBAR_LEFT_MIN = 200;
 export const SIDEBAR_LEFT_MAX = 500;
 export const NAV_RAIL_W = 48;
 export const SIDEBAR_RIGHT_W = 248;
+/** Dev Mode's panel opens wider, as the reference's does — its box-model diagram needs the room. */
+export const SIDEBAR_RIGHT_DEV_W = 374;
 export const SIDEBAR_RIGHT_MIN = 248;
-export const SIDEBAR_RIGHT_MAX = 400;
+export const SIDEBAR_RIGHT_MAX = 480;
 export const PANEL_GAP = 8;

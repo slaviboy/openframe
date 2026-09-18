@@ -164,3 +164,43 @@
   background: none;
   color: var(--fg-secondary);
 }
+
+/*
+ * The secondary button, which 39 call sites across ten files have been asking for since they were
+ * written: `primitives.button` resolved to undefined, so every one of them rendered as a browser
+ * default. Measured from the reference's `button__secondary` + `button__md`: 24px tall, 5px corners,
+ * 8px of side padding, a hairline drawn as an inset outline so it takes no layout space, and no fill.
+ */
+.button {
+  height: var(--control-h);
+  padding: 0 var(--space-2);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  border: 0;
+  border-radius: var(--radius-md);
+  outline: 1px solid var(--border);
+  outline-offset: -1px;
+  background: none;
+  color: var(--fg-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: center;
+  cursor: default;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+
+.button:disabled {
+  color: var(--fg-disabled);
+  outline-color: var(--border);
+}
+
+/* The same button stretched across its container, which is how the reference lays out a lone action. */
+.buttonFill {
+  width: 100%;
+  padding: 0;
+}

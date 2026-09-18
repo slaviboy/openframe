@@ -69,8 +69,9 @@
   --sidebar-left-min: 200px;
   --sidebar-left-max: 500px;
   --sidebar-right-w: 248px;
+  --sidebar-right-dev-w: 374px;
   --sidebar-right-min: 248px;
-  --sidebar-right-max: 400px;
+  --sidebar-right-max: 480px;
   --panel-gap: 8px;
   --panel-radius: 13px;
   --toolbar-h: 48px;

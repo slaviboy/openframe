@@ -39,7 +39,7 @@ import { Menu, type MenuEntry } from '../primitives/Menu';
 import { PropertyLabelsContext } from '../primitives/property-labels';
 import { viewPrefs } from '../view/view-prefs';
 import type { Box } from '../primitives/position';
-import { NAV_RAIL_W, SIDEBAR_LEFT_DEFAULT, SIDEBAR_LEFT_MAX, SIDEBAR_LEFT_MIN, SIDEBAR_RIGHT_MAX, SIDEBAR_RIGHT_MIN, SIDEBAR_RIGHT_W } from '../tokens';
+import { NAV_RAIL_W, SIDEBAR_LEFT_DEFAULT, SIDEBAR_LEFT_MAX, SIDEBAR_LEFT_MIN, SIDEBAR_RIGHT_DEV_W, SIDEBAR_RIGHT_MAX, SIDEBAR_RIGHT_MIN, SIDEBAR_RIGHT_W } from '../tokens';
 import styles from './EditorShell.module.css';
 import { RailButton } from './RailButton';
 import { Toolbar } from './Toolbar';
@@ -65,7 +65,9 @@ interface EditorShellProps {
 
 export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorShellProps) {
   const [leftWidth, setLeftWidth] = useState(SIDEBAR_LEFT_DEFAULT);
-  const [rightWidth, setRightWidth] = useState(SIDEBAR_RIGHT_W);
+  // Dev Mode keeps a width of its own: its panel opens wider, and dragging one does not disturb the other.
+  const [designRightWidth, setDesignRightWidth] = useState(SIDEBAR_RIGHT_W);
+  const [devRightWidth, setDevRightWidth] = useState(SIDEBAR_RIGHT_DEV_W);
   const [mainMenuAnchor, setMainMenuAnchor] = useState<Box | null>(null);
   const closeMainMenu = useCallback(() => setMainMenuAnchor(null), []);
   const editorState = session.editor.state;
@@ -80,6 +82,8 @@ export function EditorShell({ session, uiMode, onRestoreUi, children }: EditorSh
   const inlinePreviewKey = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().inlinePreviewKey);
   const viewingVersion = useSyncExternalStore(session.session.subscribe, () => session.session.getSnapshot().viewing !== null);
   const mode = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().mode);
+  const rightWidth = mode === 'dev' ? devRightWidth : designRightWidth;
+  const setRightWidth = mode === 'dev' ? setDevRightWidth : setDesignRightWidth;
   const devTimeline = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().devTimeline);
   const tool = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().tool);
   const focusId = useSyncExternalStore(editorState.subscribe, () => editorState.getSnapshot().focusId);
