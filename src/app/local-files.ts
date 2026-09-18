@@ -31,6 +31,9 @@ const sessionHandles = new Map<string, DiskFileHandle>();
 /** Whether a file looks like an Openframe file (by its extension). */
 export const isPackageFile = (file: File): boolean => file.name.toLowerCase().endsWith(PACKAGE_EXTENSION);
 
+/** The Openframe files of a drag, so one dropped on the canvas opens as this one does. */
+export const packageFilesOf = (data: DataTransfer | null): File[] => (data ? Array.from(data.files).filter(isPackageFile) : []);
+
 const packageName = (session: AppSession) => (session.editor.doc.meta.name.replace(UNSAFE_NAME, '_').trim() || 'Untitled') + PACKAGE_EXTENSION;
 
 /** The open file as .openframe bytes, with the images it uses (every edit saved first). */

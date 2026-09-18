@@ -71,6 +71,7 @@ import { addFontFaces } from '../fonts/font-faces';
 import { imageFilesOf } from '../images/import-image';
 import { videoFilesOf } from '../images/import-video';
 import { svgFilesOf } from '../import/svg-files';
+import { packageFilesOf } from '@/app/local-files';
 import { IS_MAC } from '../keyboard/keyboard-controller';
 import { ClickCounter } from './click-counter';
 import { cursorCss } from './cursors';
@@ -142,7 +143,8 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
     dropRef.current = onDropFiles;
   });
 
-  // Dropping image files on the canvas places them at the drop point.
+  // Dropping files on the canvas: images, videos and SVGs are placed at the drop point, and an Openframe
+  // file opens.
   useEffect(() => {
     const container = containerRef.current!;
     const onDragOver = (e: DragEvent) => {
@@ -163,7 +165,8 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
         else insertInstance(editor, componentId, world);
         return;
       }
-      const files = [...imageFilesOf(e.dataTransfer), ...videoFilesOf(e.dataTransfer), ...svgFilesOf(e.dataTransfer)];
+      // An Openframe file dropped here opens, as it does from the File menu; the rest are placed as layers.
+      const files = [...packageFilesOf(e.dataTransfer), ...imageFilesOf(e.dataTransfer), ...videoFilesOf(e.dataTransfer), ...svgFilesOf(e.dataTransfer)];
       if (files.length === 0) return;
       e.preventDefault();
       const rect = container.getBoundingClientRect();
