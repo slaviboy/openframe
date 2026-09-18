@@ -98,7 +98,7 @@ button.swatch {
 
 .error {
   margin: 0;
-  color: var(--fg-danger, #e03e1a);
+  color: var(--accent-danger);
   font-size: var(--text-xs);
 }
 

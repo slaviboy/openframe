@@ -196,7 +196,7 @@
   height: 6px;
   margin-left: 4px;
   border-radius: 50%;
-  background: var(--color-accent, #0d99ff);
+  background: var(--accent);
 }
 
 /* Components are identified by the purple Component icon. */

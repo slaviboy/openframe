@@ -234,7 +234,7 @@ export function Toolbar() {
   if (versionHistoryOpen || viewingVersion) {
     return (
       <div className={styles.toolbar} role="toolbar" aria-label="Tools">
-        <div className={styles.group}>
+        <div className={styles.toolsRow}>
           <button
             type="button"
             className={styles.done}
@@ -271,70 +271,72 @@ export function Toolbar() {
         }}
       >
         {vectorTool !== null && (
-          <>
+          <div className={styles.toolsRow}>
             {VECTOR_TOOLS.map((item) => (
               <div key={item.command} className={styles.group}>
                 <ToolButton icon={item.icon} label={item.label} shortcut={shortcut(item.command)} active={vectorTool === item.tool} onClick={() => editor.commands.run(item.command)} />
               </div>
             ))}
-            <div className={styles.group}>
-              <button type="button" className={styles.done} data-tool-button="" title={`Done  ${shortcut('vector.done')}`} onClick={() => editor.commands.run('vector.done')}>
-                Done
-              </button>
-            </div>
-          </>
+            <button type="button" className={styles.done} data-tool-button="" title={`Done  ${shortcut('vector.done')}`} onClick={() => editor.commands.run('vector.done')}>
+              Done
+            </button>
+          </div>
         )}
         {vectorTool === null && (
           <>
-            {(mode === 'draw' ? DRAW_GROUPS : mode === 'dev' ? DEV_GROUPS : GROUPS).map((group) => {
-              const active = group.items.some((t) => t.tool === tool);
-              const current = group.items.find((t) => t.tool === (active ? tool : picked[group.label])) ?? firstAvailable(group);
-              return (
-                <div key={group.label} className={styles.group} role="group" aria-label={current.label}>
-                  <ToolButton
-                    icon={current.icon}
-                    label={current.label}
-                    shortcut={shortcut(current.command)}
-                    active={active}
-                    pending={!current.command}
-                    onClick={(e) => {
-                      if (!current.command) return;
-                      editor.commands.run(current.command);
-                      // Chosen from the keyboard: hand focus back to the canvas so Return places the object.
-                      if (e.detail === 0) e.currentTarget.blur();
-                    }}
-                  />
-                  <ToolMenu
-                    group={group}
-                    open={openGroup === group.label}
-                    onOpenChange={(open) => setOpenGroup(open ? group.label : null)}
-                    activeTool={tool}
-                    shortcut={shortcut}
-                    onPick={(item) => {
-                      if (!item.command) return;
-                      editor.commands.run(item.command);
-                      setPicked((prev) => ({ ...prev, [group.label]: item.tool }));
-                      setOpenGroup(null);
-                    }}
-                  />
-                </div>
-              );
-            })}
-            {mode === 'design' && <BooleanMenu open={openGroup === BOOLEAN_MENU} onOpenChange={(open) => setOpenGroup(open ? BOOLEAN_MENU : null)} shortcut={shortcut} />}
-            <ToolButton icon="actions" label="Actions" shortcut={shortcut('view.commandPalette')} onClick={() => editor.commands.run('view.commandPalette')} />
+            <div className={styles.toolsRow}>
+              {(mode === 'draw' ? DRAW_GROUPS : mode === 'dev' ? DEV_GROUPS : GROUPS).map((group) => {
+                const active = group.items.some((t) => t.tool === tool);
+                const current = group.items.find((t) => t.tool === (active ? tool : picked[group.label])) ?? firstAvailable(group);
+                return (
+                  <div key={group.label} className={styles.group} role="group" aria-label={current.label}>
+                    <ToolButton
+                      icon={current.icon}
+                      label={current.label}
+                      shortcut={shortcut(current.command)}
+                      active={active}
+                      pending={!current.command}
+                      onClick={(e) => {
+                        if (!current.command) return;
+                        editor.commands.run(current.command);
+                        // Chosen from the keyboard: hand focus back to the canvas so Return places the object.
+                        if (e.detail === 0) e.currentTarget.blur();
+                      }}
+                    />
+                    <ToolMenu
+                      group={group}
+                      open={openGroup === group.label}
+                      onOpenChange={(open) => setOpenGroup(open ? group.label : null)}
+                      activeTool={tool}
+                      shortcut={shortcut}
+                      onPick={(item) => {
+                        if (!item.command) return;
+                        editor.commands.run(item.command);
+                        setPicked((prev) => ({ ...prev, [group.label]: item.tool }));
+                        setOpenGroup(null);
+                      }}
+                    />
+                  </div>
+                );
+              })}
+              {mode === 'design' && <BooleanMenu open={openGroup === BOOLEAN_MENU} onOpenChange={(open) => setOpenGroup(open ? BOOLEAN_MENU : null)} shortcut={shortcut} />}
+              <ToolButton icon="actions" label="Actions" shortcut={shortcut('view.commandPalette')} onClick={() => editor.commands.run('view.commandPalette')} />
+            </div>
             <div className={styles.divider} role="separator" aria-orientation="vertical" />
-            <div className={styles.modes} role="radiogroup" aria-label="Mode">
-              {MODES.map((m) => (
-                <ModeOption
-                  key={m.mode}
-                  label={m.label}
-                  icon={m.icon}
-                  checked={mode === m.mode}
-                  available={m.available}
-                  shortcut={m.mode === 'dev' ? shortcut('view.devMode') : undefined}
-                  onSelect={() => editor.state.setMode(m.mode)}
-                />
-              ))}
+            <div className={styles.modesWrap}>
+              <div className={styles.modes} role="radiogroup" aria-label="Mode">
+                {MODES.map((m) => (
+                  <ModeOption
+                    key={m.mode}
+                    label={m.label}
+                    icon={m.icon}
+                    checked={mode === m.mode}
+                    available={m.available}
+                    shortcut={m.mode === 'dev' ? shortcut('view.devMode') : undefined}
+                    onSelect={() => editor.state.setMode(m.mode)}
+                  />
+                ))}
+              </div>
             </div>
           </>
         )}

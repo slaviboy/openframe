@@ -86,6 +86,6 @@
 }
 
 .error {
-  color: var(--fg-danger, #f24822);
+  color: var(--accent-danger);
   white-space: nowrap;
 }

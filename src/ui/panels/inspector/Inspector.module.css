@@ -359,7 +359,7 @@
 
 .missing {
   flex: none;
-  color: var(--fg-danger, #e03e1a);
+  color: var(--accent-danger);
   font-size: var(--text-xs);
 }
 
@@ -395,7 +395,7 @@
   gap: 2px;
   padding: 4px;
   border-radius: 4px;
-  background: var(--color-bg-secondary, rgba(127, 127, 127, 0.1));
+  background: var(--bg-control);
 }
 
 .alignCell {
@@ -423,11 +423,11 @@
   height: 8px;
   border-radius: 2px;
   opacity: 1;
-  background: var(--color-accent, #0d99ff);
+  background: var(--accent);
 }
 
 .alignCell:focus-visible {
-  outline: 1px solid var(--color-accent, #0d99ff);
+  outline: 1px solid var(--accent);
 }
 
 /* A solid paint whose color comes from a variable. */

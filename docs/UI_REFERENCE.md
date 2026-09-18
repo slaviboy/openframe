@@ -114,6 +114,15 @@ Differences from ours, before this pass:
 | Mode option | 28px, 3px radius | 30px, 7px radius |
 | Selected mode | a separate absolutely-positioned pill that slides | background + `0 0 0 1px` ring on the option |
 
+**Landed.** The gaps, the padded rows, the full-height divider, the 1px split inside a group and the
+mode switcher's geometry are all in. The checked mode now takes `--accent`, so the switcher goes green
+in Draw as the reference's does.
+
+While doing it, nine CSS declarations turned out to reference tokens that **do not exist here** —
+`--color-accent`, `--color-bg-secondary` and `--fg-danger` are the reference's names, pasted in without being
+defined, so the fallback always won and the value could never be themed. They now point at `--accent`,
+`--bg-control` and `--accent-danger`.
+
 **Known gap, deliberately not built:** the sliding selection pill. It needs a position-measuring effect
 in `Toolbar.tsx` and moves 28px; the static highlight reads the same at that size.
 
