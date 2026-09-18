@@ -51,6 +51,27 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * Width and height on one line, `375 × 812`, which is how the reference draws them — but each half is
+ * its own copy button, as it is there, so a width can still be taken without the height.
+ */
+function SizeRow({ width, height }: { width: string; height: string }) {
+  return (
+    <div className={styles.row}>
+      <span className={styles.label}>Size</span>
+      <span className={styles.sizeValue}>
+        <button type="button" className={styles.value} aria-label={`Copy Width: ${width}`} onClick={() => void navigator.clipboard?.writeText(width).catch(() => undefined)}>
+          {width}
+        </button>
+        <span aria-hidden="true">×</span>
+        <button type="button" className={styles.value} aria-label={`Copy Height: ${height}`} onClick={() => void navigator.clipboard?.writeText(height).catch(() => undefined)}>
+          {height}
+        </button>
+      </span>
+    </div>
+  );
+}
+
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className={styles.group} aria-label={title}>
@@ -157,25 +178,16 @@ export function InspectPanel() {
         <CodeSection node={node} />
       ) : (
         <>
-          <Group title="Position">
+          <Group title="Layer properties">
             <Row label="X" value={px(node.transform[4])} />
             <Row label="Y" value={px(node.transform[5])} />
             {rotation !== 0 && <Row label="Rotation" value={`${formatNumber(rotation, 2)}°`} />}
-          </Group>
-
-          <Group title="Size">
-            <Row label="Width" value={px(node.size.width)} />
-            <Row label="Height" value={px(node.size.height)} />
+            <SizeRow width={px(node.size.width)} height={px(node.size.height)} />
             {radius > 0 && <Row label="Corner radius" value={px(radius)} />}
+            {node.type === 'FRAME' && node.layoutMode && <Row label="Direction" value={node.layoutMode === 'HORIZONTAL' ? 'Row' : node.layoutMode === 'VERTICAL' ? 'Column' : 'Grid'} />}
+            {pad !== null && <Row label="Padding" value={pad} />}
+            {gap !== null && <Row label="Gap" value={px(gap)} />}
           </Group>
-
-          {(pad !== null || gap !== null) && (
-            <Group title="Layout">
-              {node.type === 'FRAME' && node.layoutMode && <Row label="Direction" value={node.layoutMode === 'HORIZONTAL' ? 'Row' : node.layoutMode === 'VERTICAL' ? 'Column' : 'Grid'} />}
-              {pad !== null && <Row label="Padding" value={pad} />}
-              {gap !== null && <Row label="Gap" value={px(gap)} />}
-            </Group>
-          )}
 
           <Group title="Appearance">
             <Row label="Opacity" value={`${formatNumber(node.opacity * 100, 0)}%`} />

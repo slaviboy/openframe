@@ -41,7 +41,7 @@ test('⇧D opens Dev Mode, which inspects a layer instead of editing it, and is 
   const inspect = page.getByTestId('inspect-panel');
   await expect(inspect).toBeVisible();
   await expect(page.getByTestId('field-w')).toHaveCount(0);
-  await expect(inspect.getByRole('region', { name: 'Size' }).getByRole('button', { name: `Copy Width: ${width}` })).toBeVisible();
+  await expect(inspect.getByRole('region', { name: 'Layer properties' }).getByRole('button', { name: `Copy Width: ${width}` })).toBeVisible();
   await expect(inspect.getByRole('region', { name: 'Appearance' })).toContainText('100%');
 
   // ⇧D again returns to Design, with its fields back.
@@ -146,7 +146,7 @@ test('Inspect writes the selection out as code, in the language and unit chosen'
   // The List view is still there to go back to.
   await inspect.getByRole('tab', { name: 'List' }).click();
   await expect(code).toHaveCount(0);
-  await expect(inspect.getByRole('region', { name: 'Size' })).toBeVisible();
+  await expect(inspect.getByRole('region', { name: 'Layer properties' })).toBeVisible();
 });
 
 test('⇧M saves a measurement between two layers, which is labelled, kept and removed', async ({ page }) => {

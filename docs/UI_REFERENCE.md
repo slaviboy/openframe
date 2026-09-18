@@ -237,12 +237,20 @@ Playground → Motion → Variables → Dev resources → Annotations → Measur
 **Landed:** the List/Code switch now sits on a row labelled **View**, as the reference names it, and the
 variable **Modes** come before **Motion**, which is the reference's order.
 
-**Not changed, and why.** the reference folds position, size and radius into one **Layer properties** block and
-puts width and height under **Layout**; ours keeps Position, Size and Layout separate. The only Dev list
-capture is of a *text* layer, so there is no reference for how the reference lays a frame's padding and gap out
-here — inferring it is what this pass exists to stop. A Dev Mode capture with a **frame** selected would
-settle it. Our Playground, Dev resources, Annotations, Measurements and Compare sections have no
-counterpart in the capture at all; the reference's MCP, Colors and Transitions have none in ours.
+**Landed too:** Position, Size and Layout are now one **Layer properties** section, as the reference
+holds them, with width and height on a single `160 × 120` line — each half still its own copy button,
+which is how the reference does it as well.
+
+There are **four** Dev Mode captures, not one, and they cover different selections: `dev_mode_1.html` has
+a *frame* (showing distances to the container edges, border radii, Border, Padding and `375 × 812`),
+while the three `dev_mode_text_*` files have a *text* layer in list, CSS and Compose views. An earlier
+note here claimed there was no frame reference; that was wrong, and reading `dev_mode_1.html` is what
+made the merge above possible.
+
+Still unmatched, in both directions: the reference has **MCP**, **Component information**, **Colors**
+(with a colour format control) and **Transitions** sections that we have nothing for; we have
+**Playground**, **Dev resources**, **Annotations**, **Measurements**, **Compare** and an **Appearance**
+section (opacity, blend mode) that the captures show nothing for. Those are features, not fidelity.
 
 ## The Dev Mode toolbar
 
