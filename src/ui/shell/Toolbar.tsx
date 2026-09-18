@@ -195,9 +195,11 @@ const VECTOR_TOOLS: readonly {
   /** A divider is drawn before this tool, as the reference groups them. */
   readonly startsGroup?: boolean;
 }[] = [
-  { tool: 'move', label: 'Move', icon: 'move', command: 'vector.toolMove' },
+  // The glyphs are the reference's own. Its Move here is not the toolbar's: a smaller cursor between two
+  // handles, for dragging points rather than layers.
+  { tool: 'move', label: 'Move', icon: 'vectorMove', command: 'vector.toolMove' },
   { tool: 'lasso', label: 'Lasso', icon: 'lasso', command: 'vector.toolLasso' },
-  { tool: 'paint', label: 'Paint', icon: 'paint', command: 'vector.toolPaint', startsGroup: true },
+  { tool: 'paint', label: 'Paint', icon: 'vectorPaint', command: 'vector.toolPaint', startsGroup: true },
   { tool: 'bend', label: 'Bend', icon: 'bend', command: 'vector.toolBend' },
   { tool: 'cut', label: 'Cut', icon: 'cut', command: 'vector.toolCut' },
   { tool: 'eraser', label: 'Erase', icon: 'eraser', command: 'vector.toolEraser' },
@@ -368,13 +370,13 @@ function VectorToolbelt({ shortcut }: { shortcut: (command: string | undefined) 
       {VECTOR_TOOLS.map((item) => (
         <Fragment key={item.command}>
           {item.startsGroup === true && <div className={styles.toolDivider} role="separator" aria-orientation="vertical" />}
-          <ToolButton icon={item.icon} label={item.label} showLabel shortcut={shortcut(item.command)} active={vectorTool === item.tool} onClick={() => editor.commands.run(item.command)} />
+          <ToolButton belt showLabel icon={item.icon} label={item.label} shortcut={shortcut(item.command)} active={vectorTool === item.tool} onClick={() => editor.commands.run(item.command)} />
         </Fragment>
       ))}
       <div className={styles.toolDivider} role="separator" aria-orientation="vertical" />
       <VectorMoreMenu open={moreOpen} onOpenChange={setMoreOpen} activeTool={vectorTool} shortcut={shortcut} />
       <div className={styles.toolDivider} role="separator" aria-orientation="vertical" />
-      <ToolButton icon="close" label="Close" shortcut={shortcut('vector.done')} onClick={() => editor.commands.run('vector.done')} />
+      <ToolButton belt icon="close" label="Close" shortcut={shortcut('vector.done')} onClick={() => editor.commands.run('vector.done')} />
     </div>
   );
 }
@@ -465,16 +467,23 @@ interface ToolButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 
   readonly pending?: boolean;
   /** Names the tool beside its glyph, as the reference's secondary toolbelt does. */
   readonly showLabel?: boolean;
+  /** A button of the Vector editing bar, which pads its glyph to nothing rather than out to 32px. */
+  readonly belt?: boolean;
 }
 
-/** A 32px toolbar button; hovering or focusing it shows its name and shortcut above it. */
-function ToolButton({ icon, label, shortcut, active = false, pending = false, showLabel = false, ...rest }: ToolButtonProps) {
+/**
+ * A toolbar button. The main toolbar's pad their 24px glyph to 32px; the Vector editing bar's carry no
+ * padding at all, so the glyph is the whole button and any label sits beside it — which is how the
+ * reference's `topLevelButtonSecondaryPadding` differs from its `...PrimaryPadding`.
+ * Hovering or focusing one shows its name and shortcut above it.
+ */
+function ToolButton({ icon, label, shortcut, active = false, pending = false, showLabel = false, belt = false, ...rest }: ToolButtonProps) {
   const { handlers, tooltip } = useHoverTooltip(label, shortcut || undefined, 'above');
   return (
     <>
       <button
         type="button"
-        className={styles.tool}
+        className={belt ? `${styles.tool} ${styles.beltTool}` : styles.tool}
         aria-pressed={active}
         aria-disabled={pending || undefined}
         data-active={active || undefined}

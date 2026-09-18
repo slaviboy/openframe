@@ -244,12 +244,28 @@
   bottom: calc(var(--timeline-h) + var(--toolbar-h) + var(--space-3) + var(--space-2));
 }
 
-/* The toolbelt's overflow button: the word "More", then its chevron, as the reference draws it. */
+/*
+ * toolbelt_button--topLevelButtonSecondaryPadding: the bar's buttons carry no padding, so the 24px glyph
+ * is the whole button and a label sits beside it in a row. Eight px of bar padding above and below a 24px
+ * button is what makes the bar 40 tall.
+ */
+.beltTool {
+  display: flex;
+  align-items: center;
+  padding: 0;
+  border-radius: var(--radius-md);
+}
+
+/*
+ * The toolbelt's overflow button: [8px] More [chevron] [4px], from the margins the reference puts on the
+ * row inside it. 24px tall like the rest of the bar.
+ */
 .moreTool {
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding-left: var(--space-2);
+  height: var(--control-h);
+  padding: 0 var(--space-1) 0 var(--space-2);
+  border-radius: var(--radius-md);
 }
 
 .moreTool .toolLabel {
@@ -262,6 +278,7 @@
   white-space: nowrap;
   padding-right: var(--space-2);
   font-size: var(--text-sm);
+  line-height: 16px;
 }
 
 /* toolbelt_divider: a hairline between the toolbelt's groups, run past the row's padding. */

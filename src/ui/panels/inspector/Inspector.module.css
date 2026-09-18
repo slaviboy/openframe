@@ -156,28 +156,28 @@
 
 /*
  * One option of a segmented radio group (Mirroring). The radio covers its glyph invisibly, so a click and
- * a keypress both reach it, the way the toolbar's mode switcher works.
+ * a keypress both reach it. The reference marks the chosen one by lifting it onto the panel color inside a
+ * hairline rather than by filling it with the accent, and dims the glyphs of the ones not chosen.
  */
 .segmentedOption {
   position: relative;
   flex: 1;
   min-width: var(--control-h);
-  height: 100%;
+  height: var(--control-h);
   display: grid;
   place-items: center;
   border-radius: var(--radius-md);
-  color: var(--fg-primary);
+  color: var(--fg-secondary);
 }
 
-.segmentedOption:hover:not([aria-disabled])[data-checked="true"],
 .segmentedOption:hover:not([aria-disabled]):not([data-checked]) {
   background: var(--bg-control-hover);
 }
 
 .segmentedOption[data-checked] {
+  box-shadow: inset 0 0 0 1px var(--border);
   background: var(--bg-panel);
-  box-shadow: var(--shadow-mode);
-  color: var(--accent);
+  color: var(--fg-primary);
 }
 
 .segmentedOption[aria-disabled] {
@@ -196,7 +196,8 @@
 }
 
 .segmentedOption:has(> input:focus-visible) {
-  outline: 2px solid var(--border-focus);
+  outline: 1px solid var(--border-focus);
+  outline-offset: 1px;
 }
 
 /* An icon button whose native select opens on click (Apply blend mode): the select covers the glyph, invisible. */
