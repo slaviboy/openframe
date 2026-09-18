@@ -31,6 +31,7 @@ import { SceneIndex } from '@/core/scene/scene-index';
 import type { TextLayoutService } from '@/core/text/text-layout';
 import type { GeometryService } from '@/core/vector/geometry-service';
 import type { ThumbnailService } from '@/core/scene/thumbnail-service';
+import { GlyphOutlineCache } from './text/glyph-outline-cache';
 import type { SpellChecker } from '@/core/text/spelling';
 import { createTextFinalizer, fitTextBox } from '@/core/text/text-resize';
 import type { Color, Transform } from '@/core/schema/document';
@@ -114,6 +115,12 @@ export class Editor {
 
   /** Layer thumbnails from the rendering engine (Assets grid); installed by the canvas host once the engine loads. */
   thumbnails: ThumbnailService | null = null;
+
+  /**
+   * Glyph outlines of text layers, read off to the side and kept ready for the frame — what lets a boolean group
+   * combine the letters of a text layer rather than the box it sits in.
+   */
+  glyphOutlines = new GlyphOutlineCache(this);
 
   /** Motion's preview of the animation at the playhead; it stands down whenever the document is edited. */
   motionPreview: { clear(): void } | null = null;

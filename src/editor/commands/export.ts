@@ -73,7 +73,8 @@ export function removeExportSetting(editor: Editor, ids: readonly Id[], index: n
 }
 
 /** What a configuration asks of the rendering engine: the settings that reach the picture rather than its size. */
-const imageOptions = (setting: ExportSetting): ExportImageOptions => ({
+const imageOptions = (editor: Editor, setting: ExportSetting): ExportImageOptions => ({
+  textOutline: (layer: SceneNode) => editor.glyphOutlines.get(layer),
   ...(setting.colorProfile ? { colorProfile: setting.colorProfile } : {}),
   ...(setting.resampling ? { resampling: setting.resampling } : {}),
   ...(setting.quality !== undefined ? { quality: setting.quality } : {}),
@@ -130,7 +131,7 @@ export function renderExports(editor: Editor, ids: readonly Id[], only?: Readonl
         // A PDF page the layer's own size in points, carrying the layer drawn as a JPEG.
         if (!engine) return;
         const scale = exportScale(setting.constraint, bounds.width, bounds.height);
-        const jpeg = engine.exportImage(editor.doc, editor.scene, pageId, node.id, scale, 'JPG', { ...imageOptions(setting), quality: setting.quality ?? DEFAULT_PDF_QUALITY });
+        const jpeg = engine.exportImage(editor.doc, editor.scene, pageId, node.id, scale, 'JPG', { ...imageOptions(editor, setting), quality: setting.quality ?? DEFAULT_PDF_QUALITY });
         if (!jpeg) return;
         const pdf = pdfFromJpeg(jpeg, bounds.width, bounds.height, Math.round(bounds.width * scale), Math.round(bounds.height * scale));
         assets.push({ nodeId: node.id, setting, path: exportFileName(node.name, setting), type: EXPORT_MIME_TYPES.PDF, bytes: pdf, skipped: ['text as text', 'shapes as shapes'] });
@@ -144,7 +145,7 @@ export function renderExports(editor: Editor, ids: readonly Id[], only?: Readonl
         return;
       }
       if (!engine) return;
-      const bytes = engine.exportImage(editor.doc, editor.scene, pageId, node.id, exportScale(setting.constraint, bounds.width, bounds.height), setting.format, imageOptions(setting));
+      const bytes = engine.exportImage(editor.doc, editor.scene, pageId, node.id, exportScale(setting.constraint, bounds.width, bounds.height), setting.format, imageOptions(editor, setting));
       if (bytes) assets.push({ nodeId: node.id, setting, path: exportFileName(node.name, setting), type: EXPORT_MIME_TYPES[setting.format], bytes });
     });
   }

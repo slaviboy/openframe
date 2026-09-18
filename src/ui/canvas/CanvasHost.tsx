@@ -265,7 +265,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
         editor.scene,
         editor.pageId,
         { x: view.x, y: view.y, zoom: scale, width, height, dpr: 1 },
-        { ...outlinesRef.current, cropping: editor.state.getSnapshot().croppingId, colorProfile: surfaceProfile },
+        { ...outlinesRef.current, cropping: editor.state.getSnapshot().croppingId, colorProfile: surfaceProfile, textOutline: (layer) => editor.glyphOutlines.get(layer) },
       );
       rasterSurface.flush();
       const image = rasterSurface.makeImageSnapshot();
@@ -290,6 +290,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
             ...outlinesRef.current,
             cropping: editor.state.getSnapshot().croppingId,
             colorProfile: surfaceProfile,
+            textOutline: (layer) => editor.glyphOutlines.get(layer),
           });
         }
         surface.flush();

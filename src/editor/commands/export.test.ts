@@ -48,7 +48,9 @@ beforeEach(() => {
     thumbnail: () => null,
     fileThumbnail: () => null,
     exportImage: (_store, _index, _pageId, id, scale, format, options) => {
-      rendered.push({ id, scale, format, ...(options && Object.keys(options).length > 0 ? { options } : {}) });
+      // The glyph seam is how the engine reads outlined text, not a setting, so it is left out of what is recorded.
+      const { textOutline: _outline, ...settings } = options ?? {};
+      rendered.push({ id, scale, format, ...(Object.keys(settings).length > 0 ? { options: settings } : {}) });
       return new Uint8Array([1]);
     },
   });

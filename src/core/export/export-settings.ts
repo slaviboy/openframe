@@ -18,6 +18,8 @@
 // Export settings are validated in the document schema, which configures zod first (constructing schemas here, before
 // that configuration, would make them probe `eval`, which the Content Security Policy reports).
 import type { ColorProfile } from '../color/color';
+import type { PathCommand } from '../geometry/corners';
+import type { SceneNode } from '../schema/document';
 import type { ExportConstraint, ExportSetting } from '../schema/document';
 
 export type { ExportConstraint, ExportSetting };
@@ -47,6 +49,8 @@ export interface ExportImageOptions {
   readonly quality?: number;
   /** False draws the whole page and cuts it to the layer's bounds, so overlapping layers are in the export. */
   readonly contentsOnly?: boolean;
+  /** A text layer's glyphs as outlines, so a boolean group exports the letters it combines rather than their box. */
+  readonly textOutline?: (node: SceneNode) => readonly PathCommand[] | null;
 }
 
 /** How hard a JPG export is compressed when the setting says nothing: The reference's own "High". */

@@ -17,6 +17,7 @@
 
 import type { Page } from '@playwright/test';
 import { expect, test } from './fixtures';
+import { rowAt } from './pixel';
 
 const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
 
@@ -86,4 +87,32 @@ test('the toolbar boolean menu combines the selection, and changes an existing g
   await page.getByRole('menu', { name: 'Boolean operations' }).getByRole('menuitem', { name: 'Flatten selection' }).click();
   await expect(page.getByTestId('inspector')).toContainText('Vector');
   await expect(page.getByTestId('field-w')).toHaveValue('50');
+});
+
+test('a boolean group combines the letters of a text layer, not the box they sit in', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  // A filled rectangle with a word over it, then Intersect: what is left is the rectangle cut to the letters.
+  await page.keyboard.press('r');
+  await drag(page, [400, 300], [700, 380]);
+  await page.keyboard.press('t');
+  await page.mouse.click(box.x + 410, box.y + 320);
+  await page.keyboard.type('I I I I');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press(`${mod}+a`);
+  await page.keyboard.press('Alt+Shift+I');
+  await expect(page.getByRole('treeitem', { name: /Intersect 1/ })).toBeVisible();
+  // Nothing is selected, so no chrome is drawn over the shape.
+  await page.mouse.click(box.x + 900, box.y + 600);
+
+  /** How many stretches of one colour a row across the letters is made of. */
+  const runs = async () => {
+    const row = (await rowAt(page, Math.round(box.x + 405), Math.round(box.y + 322), 60)).map((p) => `${p.r},${p.g},${p.b}`);
+    return row.reduce((count, value, i) => (i > 0 && value !== row[i - 1] ? count + 1 : count), 1);
+  };
+  // Glyph outlines are read from a font file off to the side, so the letters arrive a frame or two later. Until
+  // they do the group combines the text's box and the row is one solid stretch of colour.
+  await expect.poll(runs, { timeout: 10_000 }).toBeGreaterThan(4);
 });

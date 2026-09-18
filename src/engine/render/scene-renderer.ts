@@ -127,6 +127,11 @@ export interface RenderOptions {
    * (bicubic), `BASIC` takes the nearest, which keeps hard edges. Absent draws it the way the canvas does.
    */
   readonly resampling?: 'DETAILED' | 'BASIC';
+  /**
+   * A text layer's glyphs as outlines in its own space, when they have been worked out already. A boolean group
+   * combines them rather than the layer's box; without them the box is what it combines, as it always did.
+   */
+  readonly textOutline?: (node: SceneNode) => readonly PathCommand[] | null;
 }
 
 interface DrawContext {
@@ -193,6 +198,8 @@ export class SceneRenderer {
   private imageFrame: ((imageHash: string) => CkImage | null) | null = null;
   /** How image fills are sampled while rendering; null samples them the way the canvas does. */
   private resampling: 'DETAILED' | 'BASIC' | null = null;
+  /** Glyph outlines of text layers, when the caller has them ready; null combines a text layer's box instead. */
+  private textOutline: ((node: SceneNode) => readonly PathCommand[] | null) | null = null;
 
   constructor(
     private readonly ck: CanvasKit,
@@ -247,6 +254,7 @@ export class SceneRenderer {
     this.videoFrame = options.videoFrame ?? null;
     this.imageFrame = options.imageFrame ?? null;
     this.resampling = options.resampling ?? null;
+    this.textOutline = options.textOutline ?? null;
     this.drawStore = store;
     const stats: RenderStats = { drawn: 0, culled: 0, ms: 0 };
     const page = store.get(pageId);
@@ -325,7 +333,7 @@ export class SceneRenderer {
    */
   exportImage(store: DocumentStore, index: SceneIndex, pageId: Id, id: Id, scale: number, format: RasterFormat, options: ExportImageOptions = {}): Uint8Array | null {
     index.ensure(pageId);
-    const { colorProfile, resampling, quality } = options;
+    const { colorProfile, resampling, quality, textOutline } = options;
     // With "ignore overlapping layers" off, the whole page is drawn and cut to the layer's bounds, as a slice is.
     const region = store.get(id)?.type === 'SLICE' || options.contentsOnly === false;
     const bounds = region ? index.worldBounds(id) : (index.paintBounds(id) ?? index.worldBounds(id));
@@ -337,7 +345,12 @@ export class SceneRenderer {
     const flat = format === 'JPG' ? this.ck.MakeSurface(width, height) : null;
     try {
       const view = { x: bounds.x, y: bounds.y, zoom: scale, width, height, dpr: 1 };
-      this.render(surface.getCanvas(), store, index, pageId, view, { ...(region ? {} : { only: id }), ...(colorProfile ? { colorProfile } : {}), resampling: resampling ?? 'DETAILED' });
+      this.render(surface.getCanvas(), store, index, pageId, view, {
+        ...(region ? {} : { only: id }),
+        ...(colorProfile ? { colorProfile } : {}),
+        ...(textOutline ? { textOutline } : {}),
+        resampling: resampling ?? 'DETAILED',
+      });
       surface.flush();
       const drawn = surface.makeImageSnapshot();
       try {
@@ -1021,8 +1034,11 @@ export class SceneRenderer {
     switch (node.type) {
       case 'SLICE':
         return null;
-      case 'TEXT':
-        return new ck.PathBuilder().addRect(ck.LTRBRect(0, 0, node.size.width, node.size.height)).detachAndDelete();
+      case 'TEXT': {
+        // The glyphs themselves, when they have been read from the font already; the box until then.
+        const glyphs = this.textOutline?.(node) ?? null;
+        return glyphs && glyphs.length > 0 ? this.pathFrom(glyphs) : new ck.PathBuilder().addRect(ck.LTRBRect(0, 0, node.size.width, node.size.height)).detachAndDelete();
+      }
       case 'LINE': {
         if (node.strokeWeight <= 0 || node.size.width <= 0) return null;
         const line = new ck.PathBuilder().moveTo(0, 0).lineTo(node.size.width, 0).detachAndDelete();
