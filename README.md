@@ -68,7 +68,10 @@ The full roadmap is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#roadmap). Per
 
 - [Architecture](docs/ARCHITECTURE.md)
 - [Document format](docs/DOCUMENT_FORMAT.md)
+- [Generating `.openframe` files (guide for an AI)](docs/AI_FILE_GENERATION.md)
 - [Editor: commands, transactions, tools](docs/EDITOR.md)
+- [Fonts: the Google Fonts library](docs/FONTS.md)
+- [Icons: Material Symbols](docs/ICONS.md)
 - [Testing](docs/TESTING.md)
 - [Feature matrix](docs/FEATURE_MATRIX.md)
 - Decision records: [docs/adr](docs/adr)

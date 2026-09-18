@@ -268,10 +268,25 @@ from the right-hand point; `innerRadius` is 0–1 of the radius).
   "textAutoResize": "WIDTH_AND_HEIGHT" }
 ```
 
-- **Fonts.** Only **Inter** (every weight, upright and italic) and **Noto Sans SC / TC / JP / KR**
-  ship with the app. `style` is one of `Thin`, `Extra Light`, `Light`, `Regular`, `Medium`,
-  `Semi Bold`, `Bold`, `Extra Bold`, `Black`, each also as `… Italic` (plain `Italic` for 400).
-  Any other family loads, but the app will report it as a missing font.
+- **Fonts.** The whole **Google Fonts library ships with the app** — 1,946 families, every style and
+  every subset — alongside **Inter** and **Noto Sans SC / TC / JP / KR** (see
+  [`docs/FONTS.md`](FONTS.md)). So any Google family may be named and it will draw; a family that is
+  in neither loads but is reported as a missing font. `style` is one of `Thin`, `Extra Light`,
+  `Light`, `Regular`, `Medium`, `Semi Bold`, `Bold`, `Extra Bold`, `Black`, each also as `… Italic`
+  (plain `Italic` for 400).
+  - **Inter for interface text.** It is what the app itself is drawn in, and it is loaded already.
+  - **Source Code Pro for code**, and for anything else that must line up in columns — a terminal, a
+    diff, a table of figures, a licence key. Never set code in Inter: a proportional font takes the
+    alignment out of it, and `l`, `1` and `I` stop being told apart.
+
+    ```json
+    { "fontName": { "family": "Source Code Pro", "style": "Regular" }, "fontSize": 13,
+      "lineHeight": { "unit": "PERCENT", "value": 150 } }
+    ```
+
+    Its weights are `ExtraLight` through `Black`; `Medium` or `SemiBold` reads well for a keyword
+    run inside a code block, set with `styleRuns`. `Roboto Mono`, `JetBrains Mono`, `IBM Plex Mono`
+    and `Fira Code` are all there too if a house style asks for one; 51 monospace families are.
 - **Sizing.** `textAutoResize` is `WIDTH_AND_HEIGHT` (auto width: one line per `\n`), `HEIGHT`
   (fixed width, wraps, height follows), `NONE` (fixed box, may overflow) or `TRUNCATE` (fixed box,
   ellipsis).
@@ -282,6 +297,10 @@ from the right-hand point; `innerRadius` is 0–1 of the radius).
     `height ≈ 1.21 × fontSize × line count` for Inter, and keep
     `textAlignHorizontal: "LEFT"`, `textAlignVertical: "TOP"` so a wrong estimate cannot shift the
     text.
+  - **Monospace is exact, so use it.** Every character of Source Code Pro is the same width, so the
+    box can be worked out rather than guessed: `width = 0.6 × fontSize × longest line length` and
+    `height = 1.26 × fontSize × line count`. (Measured in the app: 20 characters at 100 px come to
+    1200 × 126.) A code block of 48 columns at 13 px is `374.4` wide.
 - `lineHeight` is `{ "unit": "AUTO" }`, `{ "unit": "PIXELS", "value": 24 }` or
   `{ "unit": "PERCENT", "value": 150 }`. `letterSpacing` is `PIXELS` or `PERCENT`.
 - Newlines in `characters` start new paragraphs. Optional extras: `paragraphSpacing`,
@@ -564,6 +583,8 @@ with zipfile.ZipFile('generated.openframe', 'w', zipfile.ZIP_DEFLATED) as z:
 - [ ] Colour channels are 0–1. Every paint has `opacity`, `visible`, `blendMode`.
 - [ ] Text layers carry `characters`, `fontName`, `fontSize`, `lineHeight`, `letterSpacing`,
       `textAlignHorizontal`, `textAlignVertical`, `textAutoResize`.
+- [ ] Code, terminal output and anything that lines up in columns is set in **Source Code Pro**, not
+      in Inter, and its box is `0.6 × fontSize × columns` wide.
 - [ ] `LINE` layers have `size.height === 0`, `startCap` and `endCap`.
 - [ ] Vector segment `start`/`end` are valid vertex indices.
 - [ ] Every manifest image is in the ZIP and hashes to its entry name; every `imageHash` in the
