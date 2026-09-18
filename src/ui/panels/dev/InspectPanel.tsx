@@ -60,7 +60,6 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-
 /**
  * The handoff status of a design, and the buttons that set it. Marking a design that has changed since it was last
  * marked is what settles it again.
@@ -126,51 +125,50 @@ export function InspectPanel() {
 
       {canHaveDevStatus(node) && <DevStatusControl node={node} />}
 
-      {/* Inspect reads the design either as a list of measurements or as the code that builds it. The
-          reference names the switch, so it reads as a property of the panel rather than free-floating tabs. */}
-      <div className={styles.viewRow}>
-        <span className={styles.viewLabel}>View</span>
-        <div className={styles.tabs} role="tablist" aria-label="Inspect view">
-          {(['list', 'code'] as const).map((value) => (
-            <button key={value} type="button" role="tab" className={styles.tab} aria-selected={view === value} data-selected={view === value || undefined} onClick={() => setView(value)}>
-              {value === 'list' ? 'List' : 'Code'}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {view === 'code' ? (
-        <CodeSection node={node} />
-      ) : (
-        <>
-          <InspectSection id="Layer properties" title="Layer properties">
-            {/* The reference draws the size, border, padding and surrounding space as a box rather than
-                listing them; what the box cannot show — where the layer sits, how it is turned, which way
-                it lays its children out — stays as rows beneath it. */}
-            <BoxModel node={node} />
-            <div className={styles.groupBody}>
-              <Row label="X" value={px(node.transform[4])} />
-              <Row label="Y" value={px(node.transform[5])} />
-              {rotation !== 0 && <Row label="Rotation" value={`${formatNumber(rotation, 2)}°`} />}
-              {node.type === 'FRAME' && node.layoutMode && <Row label="Direction" value={node.layoutMode === 'HORIZONTAL' ? 'Row' : node.layoutMode === 'VERTICAL' ? 'Column' : 'Grid'} />}
-              {gap !== null && <Row label="Gap" value={px(gap)} />}
+      {/* Layer properties holds the box, the View switch and then either the rows or the code — the
+          reference nests them, and it hides nothing outside this section when the view changes. */}
+      <InspectSection id="Layer properties" title="Layer properties">
+        <BoxModel node={node} />
+        <div className={styles.preferencesRow}>
+          <div className={styles.preferencesLeft}>
+            <span className={styles.viewLabel}>View</span>
+            <div className={styles.tabs} role="tablist" aria-label="Inspect view">
+              {(['list', 'code'] as const).map((value) => (
+                <button key={value} type="button" role="tab" className={styles.tab} aria-selected={view === value} data-selected={view === value || undefined} onClick={() => setView(value)}>
+                  {value === 'list' ? 'List' : 'Code'}
+                </button>
+              ))}
             </div>
-          </InspectSection>
+          </div>
+          <div className={styles.preferencesRight}>
+            <CodePreferences />
+          </div>
+        </div>
+        {view === 'code' ? (
+          <CodeSection node={node} />
+        ) : (
+          <div className={styles.groupBody}>
+            <Row label="X" value={px(node.transform[4])} />
+            <Row label="Y" value={px(node.transform[5])} />
+            {rotation !== 0 && <Row label="Rotation" value={`${formatNumber(rotation, 2)}°`} />}
+            {node.type === 'FRAME' && node.layoutMode && <Row label="Direction" value={node.layoutMode === 'HORIZONTAL' ? 'Row' : node.layoutMode === 'VERTICAL' ? 'Column' : 'Grid'} />}
+            {gap !== null && <Row label="Gap" value={px(gap)} />}
+          </div>
+        )}
+      </InspectSection>
 
-          <Group title="Appearance">
-            <Row label="Opacity" value={`${formatNumber(node.opacity * 100, 0)}%`} />
-            <Row label="Blend mode" value={node.blendMode.toLowerCase().replace(/_/g, ' ')} />
-          </Group>
-          <PlaygroundSection node={node} />
-          <VariablesSection node={node} />
-          <MotionSection node={node} />
-          <DevResourcesSection node={node} />
-          <AnnotationsSection node={node} />
-          <MeasurementsSection />
-          <DevAssetsPanel />
-          <CompareSection />
-        </>
-      )}
+      <Group title="Appearance">
+        <Row label="Opacity" value={`${formatNumber(node.opacity * 100, 0)}%`} />
+        <Row label="Blend mode" value={node.blendMode.toLowerCase().replace(/_/g, ' ')} />
+      </Group>
+      <PlaygroundSection node={node} />
+      <VariablesSection node={node} />
+      <MotionSection node={node} />
+      <DevResourcesSection node={node} />
+      <AnnotationsSection node={node} />
+      <MeasurementsSection />
+      <DevAssetsPanel />
+      <CompareSection />
     </div>
   );
 }
@@ -311,72 +309,76 @@ function MeasurementsSection() {
   );
 }
 
-/** The code that builds the selected layer, in the language and unit chosen. */
-function CodeSection({ node }: { node: SceneNode }) {
-  // Kept per device, so the choice survives a reload and Copy as code uses the same language and unit.
+/** Reads the code preferences, which are kept per device so Copy as code follows the panel. */
+function useCodePrefs() {
   const prefs = useSyncExternalStore(viewPrefs.subscribe, () => viewPrefs.getSnapshot());
   const language: CodeLanguage = prefs.codeLanguage;
-  const unit: CodeUnit = prefs.codeUnit;
-  const scale = prefs.codeScale > 0 ? prefs.codeScale : null;
-  const setLanguage = (next: CodeLanguage) => viewPrefs.set({ codeLanguage: next });
-  const setUnit = (next: CodeUnit) => viewPrefs.set({ codeUnit: next });
-  const setScale = (next: number | null) => viewPrefs.set({ codeScale: next ?? 0 });
   const units = CODE_UNITS[language];
-  const chosen = units.includes(unit) ? unit : units[0]!;
-  const code = generateCode(node, { language, unit: chosen, ...(scale === null ? {} : { scale }) });
+  const unit = units.includes(prefs.codeUnit) ? prefs.codeUnit : units[0]!;
+  const scale = prefs.codeScale > 0 ? prefs.codeScale : null;
+  return { language, unit, units, scale };
+}
 
+/**
+ * The language, unit and scale the code is written in. The reference keeps these beside the View switch
+ * rather than inside the code itself, so changing them reads as a preference of the panel.
+ */
+function CodePreferences() {
+  const { language, unit, units, scale } = useCodePrefs();
+  const setScale = (next: number | null) => viewPrefs.set({ codeScale: next ?? 0 });
   return (
-    <InspectSection id="Code" title="Code">
-      <div className={styles.groupBody}>
-        <div className={styles.codeControls}>
-          <select
-            className={primitives.select}
-            aria-label="Code language"
-            value={language}
-            onChange={(e) => {
-              const next = e.target.value as CodeLanguage;
-              setLanguage(next);
-              setUnit(CODE_UNITS[next][0]!);
-              setScale(null);
-            }}
-          >
-            {(Object.keys(CODE_LANGUAGE_LABELS) as CodeLanguage[]).map((value) => (
-              <option key={value} value={value}>
-                {CODE_LANGUAGE_LABELS[value]}
-              </option>
-            ))}
-          </select>
-          <select className={primitives.select} aria-label="Code unit" value={chosen} onChange={(e) => setUnit(e.target.value as CodeUnit)}>
-            {units.map((value) => (
-              <option key={value} value={value}>
-                {value}
-              </option>
-            ))}
-          </select>
-        </div>
-        {/* The unit scale: a root font size for rems, a scale factor for points and density-independent pixels. */}
-        <label className={styles.scale}>
-          <span>Unit scale</span>
-          <input
-            type="number"
-            className={primitives.textInput}
-            aria-label="Unit scale"
-            min={0.01}
-            step={0.5}
-            value={scale ?? DEFAULT_UNIT_SCALE[chosen]}
-            onChange={(e) => {
-              const next = Number(e.target.value);
-              setScale(Number.isFinite(next) && next > 0 ? next : null);
-            }}
-          />
-        </label>
-        <pre className={styles.code} data-testid="inspect-code">
-          {code}
-        </pre>
-        <button type="button" className={primitives.button} onClick={() => void navigator.clipboard?.writeText(code).catch(() => undefined)}>
-          Copy code
-        </button>
-      </div>
-    </InspectSection>
+    <>
+      <select
+        className={primitives.select}
+        aria-label="Code language"
+        value={language}
+        onChange={(e) => {
+          const next = e.target.value as CodeLanguage;
+          viewPrefs.set({ codeLanguage: next, codeUnit: CODE_UNITS[next][0]!, codeScale: 0 });
+        }}
+      >
+        {(Object.keys(CODE_LANGUAGE_LABELS) as CodeLanguage[]).map((value) => (
+          <option key={value} value={value}>
+            {CODE_LANGUAGE_LABELS[value]}
+          </option>
+        ))}
+      </select>
+      <select className={primitives.select} aria-label="Code unit" value={unit} onChange={(e) => viewPrefs.set({ codeUnit: e.target.value as CodeUnit })}>
+        {units.map((value) => (
+          <option key={value} value={value}>
+            {value}
+          </option>
+        ))}
+      </select>
+      {/* The unit scale: a root font size for rems, a scale factor for points and density-independent pixels. */}
+      <input
+        type="number"
+        className={`${primitives.textInput} ${styles.scaleInput}`}
+        aria-label="Unit scale"
+        min={0.01}
+        step={0.5}
+        value={scale ?? DEFAULT_UNIT_SCALE[unit]}
+        onChange={(e) => {
+          const next = Number(e.target.value);
+          setScale(Number.isFinite(next) && next > 0 ? next : null);
+        }}
+      />
+    </>
+  );
+}
+
+/** The code that builds the selected layer, in the language and unit chosen. */
+function CodeSection({ node }: { node: SceneNode }) {
+  const { language, unit, scale } = useCodePrefs();
+  const code = generateCode(node, { language, unit, ...(scale === null ? {} : { scale }) });
+  return (
+    <div className={styles.groupBody}>
+      <pre className={styles.code} data-testid="inspect-code">
+        {code}
+      </pre>
+      <button type="button" className={primitives.button} onClick={() => void navigator.clipboard?.writeText(code).catch(() => undefined)}>
+        Copy code
+      </button>
+    </div>
   );
 }

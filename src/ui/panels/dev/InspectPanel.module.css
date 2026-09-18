@@ -255,3 +255,29 @@
   gap: var(--space-1);
   color: var(--fg-secondary);
 }
+
+/* The View switch and the code preferences on one row, as the reference lays them out. */
+.preferencesRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2) var(--space-2) var(--space-4);
+}
+
+.preferencesLeft {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.preferencesRight {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.scaleInput {
+  width: 48px;
+}
