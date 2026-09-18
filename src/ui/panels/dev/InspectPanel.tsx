@@ -32,6 +32,7 @@ import { AnnotationsSection } from './AnnotationsSection';
 import { CompareSection } from './CompareSection';
 import { DevAssetsPanel } from './DevAssetsPanel';
 import { PlaygroundSection } from './PlaygroundSection';
+import { BoxModel } from './BoxModel';
 import { InspectHeader } from './InspectHeader';
 import { InspectSection } from './InspectSection';
 import styles from './InspectPanel.module.css';
@@ -51,27 +52,6 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-/**
- * Width and height on one line, `375 × 812`, which is how the reference draws them — but each half is
- * its own copy button, as it is there, so a width can still be taken without the height.
- */
-function SizeRow({ width, height }: { width: string; height: string }) {
-  return (
-    <div className={styles.row}>
-      <span className={styles.label}>Size</span>
-      <span className={styles.sizeValue}>
-        <button type="button" className={styles.value} aria-label={`Copy Width: ${width}`} onClick={() => void navigator.clipboard?.writeText(width).catch(() => undefined)}>
-          {width}
-        </button>
-        <span aria-hidden="true">×</span>
-        <button type="button" className={styles.value} aria-label={`Copy Height: ${height}`} onClick={() => void navigator.clipboard?.writeText(height).catch(() => undefined)}>
-          {height}
-        </button>
-      </span>
-    </div>
-  );
-}
-
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
     <InspectSection id={title} title={title}>
@@ -80,14 +60,6 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** The padding an auto-layout frame holds, as the shorthand Dev Mode shows. */
-function padding(node: SceneNode): string | null {
-  if (node.type !== 'FRAME' || !node.layoutMode) return null;
-  const { paddingTop: t = 0, paddingRight: r = 0, paddingBottom: b = 0, paddingLeft: l = 0 } = node;
-  if (t === r && r === b && b === l) return px(t);
-  if (t === b && l === r) return `${px(t)} ${px(r)}`;
-  return `${px(t)} ${px(r)} ${px(b)} ${px(l)}`;
-}
 
 /**
  * The handoff status of a design, and the buttons that set it. Marking a design that has changed since it was last
@@ -146,9 +118,7 @@ export function InspectPanel() {
   }
 
   const rotation = rotationDegrees(node);
-  const radius = ('cornerRadius' in node ? node.cornerRadius : 0) ?? 0;
   const gap = node.type === 'FRAME' && node.layoutMode ? (node.itemSpacing ?? 0) : null;
-  const pad = padding(node);
 
   return (
     <div className={styles.panel} data-testid="inspect-panel">
@@ -173,16 +143,19 @@ export function InspectPanel() {
         <CodeSection node={node} />
       ) : (
         <>
-          <Group title="Layer properties">
-            <Row label="X" value={px(node.transform[4])} />
-            <Row label="Y" value={px(node.transform[5])} />
-            {rotation !== 0 && <Row label="Rotation" value={`${formatNumber(rotation, 2)}°`} />}
-            <SizeRow width={px(node.size.width)} height={px(node.size.height)} />
-            {radius > 0 && <Row label="Corner radius" value={px(radius)} />}
-            {node.type === 'FRAME' && node.layoutMode && <Row label="Direction" value={node.layoutMode === 'HORIZONTAL' ? 'Row' : node.layoutMode === 'VERTICAL' ? 'Column' : 'Grid'} />}
-            {pad !== null && <Row label="Padding" value={pad} />}
-            {gap !== null && <Row label="Gap" value={px(gap)} />}
-          </Group>
+          <InspectSection id="Layer properties" title="Layer properties">
+            {/* The reference draws the size, border, padding and surrounding space as a box rather than
+                listing them; what the box cannot show — where the layer sits, how it is turned, which way
+                it lays its children out — stays as rows beneath it. */}
+            <BoxModel node={node} />
+            <div className={styles.groupBody}>
+              <Row label="X" value={px(node.transform[4])} />
+              <Row label="Y" value={px(node.transform[5])} />
+              {rotation !== 0 && <Row label="Rotation" value={`${formatNumber(rotation, 2)}°`} />}
+              {node.type === 'FRAME' && node.layoutMode && <Row label="Direction" value={node.layoutMode === 'HORIZONTAL' ? 'Row' : node.layoutMode === 'VERTICAL' ? 'Column' : 'Grid'} />}
+              {gap !== null && <Row label="Gap" value={px(gap)} />}
+            </div>
+          </InspectSection>
 
           <Group title="Appearance">
             <Row label="Opacity" value={`${formatNumber(node.opacity * 100, 0)}%`} />

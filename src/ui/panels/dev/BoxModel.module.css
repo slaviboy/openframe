@@ -1,0 +1,166 @@
+/*
+ * Copyright (C) 2026 Stanislav Georgiev
+ * https://github.com/slaviboy
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* Measured from the reference's box_model classes; see docs/UI_REFERENCE.md. */
+.gapBox {
+  position: relative;
+  height: 190px;
+  display: grid;
+  grid-template-columns: 1fr min(320px, calc(100% - 64px)) 1fr;
+  grid-template-rows: 35px 120px 35px;
+  align-items: center;
+  justify-items: center;
+  margin: var(--space-1) var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--fg-secondary);
+}
+
+.borderBox {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 32px calc(100% - 64px) 32px;
+  grid-template-rows: 24px 72px 24px;
+  align-items: center;
+  justify-items: center;
+  box-shadow: inset 0 0 0 1px var(--border);
+  background: var(--bg-panel);
+}
+
+.paddingBox {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-columns: 32px calc(100% - 64px) 32px;
+  grid-template-rows: 24px 24px 24px;
+  align-items: center;
+  justify-items: center;
+  border-radius: var(--radius-xs);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  background: var(--bg-inspect-padding);
+}
+
+/* The layer's own size, drawn as the dashed box the reference puts in the middle. */
+.innerSizeBox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-0-5);
+  height: 16px;
+  padding: var(--space-1) var(--space-0-5);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-xs);
+  background: var(--bg-panel);
+}
+
+.cell,
+.size {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 12px;
+  padding: 0 var(--space-0-5);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-xs);
+}
+
+.size {
+  color: var(--fg-primary);
+}
+
+.copyable,
+.size {
+  cursor: default;
+}
+
+.copyable:hover,
+.size:hover {
+  background: var(--bg-hover);
+}
+
+.none {
+  color: var(--fg-tertiary);
+}
+
+.times {
+  color: var(--fg-tertiary);
+}
+
+/* "Border" and "Padding" sit beside their top value without taking a column of their own. */
+.labelled {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.label {
+  color: var(--fg-secondary);
+}
+
+/* A corner's radius sits over the corner it rounds. */
+.topLeft,
+.topRight,
+.bottomLeft,
+.bottomRight {
+  align-self: center;
+}
+
+/* The distance from an edge of the layer to the same edge of what holds it. */
+.gap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.gapHorizontal > .gapLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+  background: var(--accent-measure);
+}
+
+.gapVertical > .gapLine {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--accent-measure);
+}
+
+.gapValue {
+  position: relative;
+  padding: 0 var(--space-0-5);
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: var(--accent-measure);
+  color: #fff;
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: default;
+}

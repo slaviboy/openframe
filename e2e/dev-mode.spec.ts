@@ -41,7 +41,8 @@ test('⇧D opens Dev Mode, which inspects a layer instead of editing it, and is 
   const inspect = page.getByTestId('inspect-panel');
   await expect(inspect).toBeVisible();
   await expect(page.getByTestId('field-w')).toHaveCount(0);
-  await expect(inspect.getByRole('region', { name: 'Layer properties' }).getByRole('button', { name: `Copy Width: ${width}` })).toBeVisible();
+  // The size is read off the box model's own middle box, which is where the reference puts it.
+  await expect(inspect.getByTestId('layoutWidth')).toHaveAccessibleName(`Copy width: ${width}`);
   await expect(inspect.getByRole('region', { name: 'Appearance' })).toContainText('100%');
 
   // ⇧D again returns to Design, with its fields back.
