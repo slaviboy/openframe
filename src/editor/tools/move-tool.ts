@@ -22,7 +22,7 @@ import { apply, invert, multiply, type Matrix } from '@/core/math/matrix';
 import { draggedGap, draggedPadding, type LayoutHandle } from '@/core/layout/layout-handles';
 import type { Padding } from '@/core/layout/flow-layout';
 import { hitLayoutHandle, isUprightHandle } from '../interactions/layout-handles';
-import { fromPoints, transformRect, unionAll, type Rect } from '@/core/math/rect';
+import { corners, fromPoints, transformRect, unionAll, type Rect } from '@/core/math/rect';
 import { edgeValues, guidesFor, snapBounds, snapValue, type SnapGuide } from '@/core/scene/snapping';
 import { isGuideRect, SNAP_THRESHOLD_PX, snapCandidatesFor } from '../interactions/snap-candidates';
 import { guideWorldLine, hitGuide } from '../interactions/guides';
@@ -54,7 +54,7 @@ import { curveOffsetFor, hitMotionPathCurve, hitMotionPathKeyframe, keyframePosi
 import { variantSetOf } from '@/core/prototype/reactions';
 import { addInteraction, moveFlowStartingPoint, removeConnections, removeFlowStartingPoint, setConnectionsDestination, type ConnectionRef } from '../commands/prototype';
 import { snapEqualGaps, type GapIndicator } from '@/core/scene/equal-gaps';
-import { measureBetween, type MeasureLine } from '@/core/scene/measure';
+import { measureBetween, measureToOutline, type MeasureLine } from '@/core/scene/measure';
 import { nodeContainsLocal } from '@/core/scene/scene-index';
 import { isSceneNode, type FrameNode, type GridTrack, type SceneNode } from '@/core/schema/document';
 import { hitGridTrackEdge, hitGridTrackPill, selectedGridTracks } from '../interactions/grid-tracks';
@@ -1114,6 +1114,8 @@ export class MoveTool implements Tool {
 
   private reparentUnderPointer(tx: Transaction, starts: NodeStart[], p: PointerInfo): void {
     const { editor } = this.env;
+    // Space held while dragging leaves the layers where they belong, rather than dropping them into what is under.
+    if (editor.state.getSnapshot().spaceHeld) return;
     const store = editor.doc;
     const moving = new Set(starts.map((s) => s.id));
     editor.scene.ensure(editor.pageId);
@@ -1408,6 +1410,15 @@ export class MoveTool implements Tool {
     const hoverInSelection = hover !== null && editor.selection.some((id) => id === hover || editor.doc.isAncestor(id, hover));
     let target: Rect | null = null;
     if (hover && !hoverInSelection) {
+      // A layer that has been turned is measured to the outline it really has, not to the box around it.
+      const node = editor.doc.get(hover);
+      const m = editor.scene.worldTransform(hover);
+      const turned = node && isSceneNode(node) && (Math.abs(m.b) > 1e-9 || Math.abs(m.c) > 1e-9);
+      if (turned && node) {
+        const outline = corners({ x: 0, y: 0, width: node.size.width, height: node.size.height }).map((point) => apply(m, point));
+        this.measureLines = measureToOutline(selection, outline);
+        return;
+      }
       target = editor.scene.worldBounds(hover);
     } else {
       const parent = editor.doc.parentOf(editor.selection[0]!);

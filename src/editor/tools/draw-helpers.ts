@@ -33,6 +33,8 @@ import { acceptsLayers } from '@/core/document/instances';
  */
 export function containerAt(editor: Editor, world: Vec2, types: readonly NodeType[] = ['FRAME', 'SECTION']): Id {
   const store = editor.doc;
+  // Space held while drawing keeps the new layer out of whatever is under the pointer; it lands on the page.
+  if (editor.state.getSnapshot().spaceHeld) return editor.pageId;
   let result: Id = editor.pageId;
   const visit = (id: Id) => {
     const children = store.children(id);

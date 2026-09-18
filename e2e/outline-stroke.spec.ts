@@ -91,3 +91,25 @@ test('a frame and a boolean group outline their strokes too', async ({ page }) =
   const combined = Number(await page.getByTestId('field-w').inputValue());
   expect(combined).toBeGreaterThanOrEqual(150);
 });
+
+test('an arrow outlines with its head, which reaches past the line’s own width', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  // ⇧L draws an arrow: a line with a triangle at its end.
+  await page.keyboard.press('Shift+L');
+  await page.mouse.move(box.x + 400, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 600, box.y + 300, { steps: 5 });
+  await page.mouse.up();
+  await page.getByTestId('field-stroke-weight').fill('8');
+  await page.getByTestId('field-stroke-weight').press('Enter');
+  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+
+  await page.keyboard.press('ControlOrMeta+Alt+O');
+  await expect(page.getByTestId('inspector')).toContainText('Vector');
+  // The head is wider than the 8 px line, so the outline is taller than the stroke alone would be.
+  const height = Number(await page.getByTestId('field-h').inputValue());
+  expect(height).toBeGreaterThan(8);
+});

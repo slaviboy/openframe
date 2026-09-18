@@ -35,8 +35,71 @@ function overlapCenter(a0: number, a1: number, b0: number, b1: number): number |
   return lo <= hi ? (lo + hi) / 2 : null;
 }
 
-const contains = (outer: Rect, inner: Rect) =>
-  inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.width <= outer.x + outer.width && inner.y + inner.height <= outer.y + outer.height;
+const contains = (outer: Rect, inner: Rect) => inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.width <= outer.x + outer.width && inner.y + inner.height <= outer.y + outer.height;
+
+/** Where a shape reaches along one axis at a given height or position across it, or null when it isn't there. */
+function spanAt(polygon: readonly Vec2[], axis: 'x' | 'y', at: number): [number, number] | null {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 0; i < polygon.length; i++) {
+    const p = polygon[i]!;
+    const q = polygon[(i + 1) % polygon.length]!;
+    // The edge is cut by the line across the other axis; where it crosses says how far the shape reaches here.
+    const [pa, qa] = axis === 'x' ? [p.y, q.y] : [p.x, q.x];
+    const [pb, qb] = axis === 'x' ? [p.x, q.x] : [p.y, q.y];
+    if (pa === qa) {
+      if (pa !== at) continue;
+      lo = Math.min(lo, pb, qb);
+      hi = Math.max(hi, pb, qb);
+      continue;
+    }
+    const t = (at - pa) / (qa - pa);
+    if (t < 0 || t > 1) continue;
+    const value = pb + (qb - pb) * t;
+    lo = Math.min(lo, value);
+    hi = Math.max(hi, value);
+  }
+  return lo <= hi ? [lo, hi] : null;
+}
+
+/** The smallest box a shape sits in, which says where it overlaps the selection. */
+function boundsOf(polygon: readonly Vec2[]): Rect {
+  const xs = polygon.map((p) => p.x);
+  const ys = polygon.map((p) => p.y);
+  return { x: Math.min(...xs), y: Math.min(...ys), width: Math.max(...xs) - Math.min(...xs), height: Math.max(...ys) - Math.min(...ys) };
+}
+
+/**
+ * Distances from the selection `a` to a layer whose outline is turned, measured to the outline itself rather than
+ * to the box around it: each line is drawn across the middle of where the two overlap, and reaches the edge the
+ * shape really has at that height.
+ */
+export function measureToOutline(a: Rect, polygon: readonly Vec2[]): MeasureLine[] {
+  if (polygon.length < 3) return [];
+  const lines: MeasureLine[] = [];
+  const push = (from: Vec2, to: Vec2, axis: 'x' | 'y') => {
+    const distance = round2(axis === 'x' ? Math.abs(to.x - from.x) : Math.abs(to.y - from.y));
+    if (distance > 0) lines.push({ from, to, distance, axis });
+  };
+  const b = boundsOf(polygon);
+  const aRight = a.x + a.width;
+  const aBottom = a.y + a.height;
+
+  const y = overlapCenter(a.y, aBottom, b.y, b.y + b.height);
+  const across = y === null ? null : spanAt(polygon, 'x', y);
+  if (y !== null && across) {
+    if (across[0] >= aRight) push({ x: aRight, y }, { x: across[0], y }, 'x');
+    else if (across[1] <= a.x) push({ x: across[1], y }, { x: a.x, y }, 'x');
+  }
+
+  const x = overlapCenter(a.x, aRight, b.x, b.x + b.width);
+  const down = x === null ? null : spanAt(polygon, 'y', x);
+  if (x !== null && down) {
+    if (down[0] >= aBottom) push({ x, y: aBottom }, { x, y: down[0] }, 'y');
+    else if (down[1] <= a.y) push({ x, y: down[1] }, { x, y: a.y }, 'y');
+  }
+  return lines;
+}
 
 /**
  * Distances shown while holding ⌥ between the selection `a` and another layer `b`:

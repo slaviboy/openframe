@@ -1426,9 +1426,31 @@ export class SceneRenderer {
     outline?.delete();
     release();
     if (!simplified) return null;
-    const commands = this.commandsOf(simplified);
-    simplified.delete();
+    // A line's end markers are part of the ink it draws, so they go into the outline with it.
+    const withMarkers = node.type === 'LINE' ? this.withCaps(simplified, node) : simplified;
+    if (withMarkers !== simplified) simplified.delete();
+    if (!withMarkers) return null;
+    const commands = this.commandsOf(withMarkers);
+    withMarkers.delete();
     return commands.length > 0 ? commands : null;
+  }
+
+  /** A line's stroke with its end markers taken in; the path it is given is left for the caller to delete. */
+  private withCaps(stroke: Path, node: LineNode): Path | null {
+    const size = lineCapSize(node.strokeWeight);
+    let result: Path | null = stroke;
+    for (const [cap, x, dir] of [
+      [node.startCap, 0, -1],
+      [node.endCap, node.size.width, 1],
+    ] as const) {
+      const marker = result ? this.capPath(cap, x, dir, node.strokeWeight, size) : null;
+      if (!marker || !result) continue;
+      const merged: Path | null = this.ck.Path.MakeFromOp(result, marker, this.ck.PathOp.Union);
+      marker.delete();
+      if (result !== stroke) result.delete();
+      result = merged;
+    }
+    return result;
   }
 
   /** What is left of a vector region after a round eraser stroke (GeometryService); null when the stroke misses it. */
@@ -1807,6 +1829,35 @@ export class SceneRenderer {
       this.resetStrokeStyle();
       this.drawCap(canvas, node.startCap, 0, -1, w, size);
       this.drawCap(canvas, node.endCap, length, 1, w, size);
+    }
+  }
+
+  /**
+   * A line end marker as an area, the same shape `drawCap` paints: null for a marker that is only the stroke's
+   * own cap (round and square are already in the stroked line) or for no marker at all.
+   */
+  private capPath(cap: StrokeCap, x: number, dir: 1 | -1, weight: number, size: number): Path | null {
+    const ck = this.ck;
+    const back = x - dir * size * COS30;
+    const spread = size * SIN30;
+    switch (cap) {
+      case 'NONE':
+      case 'ROUND':
+      case 'SQUARE':
+        return null;
+      case 'CIRCLE_FILLED':
+        return new ck.PathBuilder().addOval(ck.LTRBRect(x - size / 2, -size / 2, x + size / 2, size / 2)).detachAndDelete();
+      case 'LINE_ARROW': {
+        // The line arrow is drawn as a stroke rather than filled, so its area is that stroke's.
+        const open = new ck.PathBuilder().addPolygon([back, -spread, x, 0, back, spread], false).detachAndDelete();
+        const stroked = open.makeStroked({ width: weight, cap: ck.StrokeCap.Butt, join: ck.StrokeJoin.Miter });
+        open.delete();
+        return stroked;
+      }
+      case 'TRIANGLE_ARROW':
+        return new ck.PathBuilder().addPolygon([back, -spread, x, 0, back, spread], true).detachAndDelete();
+      case 'DIAMOND_FILLED':
+        return new ck.PathBuilder().addPolygon([x - size / 2, 0, x, -size / 2, x + size / 2, 0, x, size / 2], true).detachAndDelete();
     }
   }
 

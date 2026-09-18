@@ -220,6 +220,7 @@ export class ToolManager {
    * Hand tool, which is what lets a resize or a turn be repositioned without letting go.
    */
   setSpaceHeld(held: boolean): void {
+    this.editor.state.setSpaceHeld(held);
     this.vectorEdit.setSpaceHeld(held);
   }
 

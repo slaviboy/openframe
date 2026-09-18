@@ -112,6 +112,11 @@ export interface EditorState {
   readonly selectedConnections: readonly SelectedConnection[];
   /** The overlay frame whose badge is selected on the canvas (Delete removes the interactions opening it). */
   readonly selectedOverlay: Id | null;
+  /**
+   * Space is held down. While a gesture is running it carries what is being dragged and keeps a layer from being
+   * taken into the frame under the pointer; with nothing running it holds the Hand tool instead.
+   */
+  readonly spaceHeld: boolean;
   /** Grid tracks picked out on the canvas: which frame, which way they run, and which of them. */
   readonly gridTracks: { readonly frameId: Id; readonly axis: 'column' | 'row'; readonly indices: readonly number[] } | null;
   /**
@@ -257,6 +262,7 @@ export class EditorStore extends Observable<EditorState> {
       selectedConnections: [],
       selectedOverlay: null,
       markedLayers: [],
+      spaceHeld: false,
       gridTracks: null,
       tool: 'move',
       spring: null,
@@ -597,6 +603,11 @@ export class EditorStore extends Observable<EditorState> {
     if (this.state.selection.length || this.state.selectedGuide || this.state.selectedOverlay || this.state.croppingId || this.state.gradientEdit || this.state.blurEdit) {
       this.setState({ selection: [], selectedGuide: null, selectedOverlay: null, markedLayers: [], gridTracks: null, croppingId: null, gradientEdit: null, blurEdit: null });
     }
+  }
+
+  /** Told by the tool manager as Space goes down and up. */
+  setSpaceHeld(held: boolean): void {
+    if (this.state.spaceHeld !== held) this.setState({ spaceHeld: held });
   }
 
   /** Picks grid tracks out on the canvas, or clears the choice when given none. */
