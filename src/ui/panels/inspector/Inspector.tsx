@@ -231,7 +231,7 @@ import {
   type PaintField,
 } from '@/editor/commands/properties';
 import { ANCHOR_LABELS, SCALE_ANCHORS, scaleLayersInTx } from '@/editor/commands/scale';
-import { setSpacingInTx, smartSelectionInfo } from '@/editor/commands/smart-selection';
+import { setGridSpacingInTx, setSpacingInTx, smartGridInfo, smartSelectionInfo } from '@/editor/commands/smart-selection';
 import { toTransform } from '@/editor/interactions/transform';
 import { Icon, type IconName } from '../../icons/Icon';
 import { formatShortcut } from '@/editor/keymap/keymap';
@@ -1204,6 +1204,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
   const editingAnchor = useEditorState((s) => s.motion.editingAnchor);
   const spacing = useGesture('Change spacing');
   const smart = smartSelectionInfo(editor);
+  const smartGrid = smart ? null : smartGridInfo(editor);
 
   const single = nodes.length === 1 ? nodes[0]! : null;
   const types = new Set(nodes.map((n) => n.type));
@@ -1442,6 +1443,30 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
               onGestureStart={spacing.start}
               onGestureEnd={spacing.end}
               onChange={(v) => spacing.change((tx) => setSpacingInTx(tx, editor, v))}
+            />
+          </div>
+        )}
+        {smartGrid && (
+          <div className={styles.grid2}>
+            <NumberField
+              label="↔"
+              ariaLabel="Horizontal space between"
+              testId="field-spacing"
+              min={0}
+              value={smartGrid.grid.columnGap}
+              onGestureStart={spacing.start}
+              onGestureEnd={spacing.end}
+              onChange={(v) => spacing.change((tx) => setGridSpacingInTx(tx, editor, 'x', v))}
+            />
+            <NumberField
+              label="↕"
+              ariaLabel="Vertical space between"
+              testId="field-spacing-vertical"
+              min={0}
+              value={smartGrid.grid.rowGap}
+              onGestureStart={spacing.start}
+              onGestureEnd={spacing.end}
+              onChange={(v) => spacing.change((tx) => setGridSpacingInTx(tx, editor, 'y', v))}
             />
           </div>
         )}

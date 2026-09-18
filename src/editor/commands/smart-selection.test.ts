@@ -23,7 +23,7 @@ import { Editor } from '../editor';
 import { ToolManager } from '../tools/tool-manager';
 import type { PointerInfo } from '../tools/types';
 import { BUILTIN_COMMANDS } from './builtin';
-import { setSpacingInTx, smartSelectionInfo } from './smart-selection';
+import { setGridSpacingInTx, setSpacingInTx, smartGridInfo, smartSelectionInfo } from './smart-selection';
 
 let editor: Editor;
 let ids: string[];
@@ -219,5 +219,206 @@ describe('reordering within a smart selection', () => {
     tools.pointerMove(sample(30, 5));
     tools.pointerUp(sample(30, 5));
     expect(xs()).toEqual([20, 90, 140]);
+  });
+});
+
+describe('resizing within a smart selection', () => {
+  let tools: ToolManager;
+  const widths = () => ids.map((id) => (editor.doc.getOrThrow(id) as SceneNode).size.width);
+
+  beforeEach(() => {
+    tools = new ToolManager(editor);
+    editor.state.select(ids);
+  });
+
+  test('the handles sit on the marked layer, and widening it pushes the rest along', () => {
+    // Mark the middle layer (70–100, ring at 85,25), then drag its east edge 20 px out.
+    tools.pointerDown(sample(85, 25));
+    tools.pointerUp(sample(85, 25));
+    tools.pointerDown(sample(100, 25));
+    tools.pointerMove(sample(120, 25));
+    tools.pointerUp(sample(120, 25));
+    expect(widths()).toEqual([50, 50, 40]);
+    // The 20 px gaps are kept, so the last layer moves out by the same 20.
+    expect(xs()).toEqual([0, 70, 140]);
+    editor.history.undo();
+    expect(widths()).toEqual([50, 30, 40]);
+    expect(xs()).toEqual([0, 70, 120]);
+  });
+
+  test('with nothing marked the handles resize the whole selection as before', () => {
+    tools.pointerDown(sample(160, 30));
+    tools.pointerMove(sample(180, 30));
+    tools.pointerUp(sample(180, 30));
+    // Every layer grows by the same eighth, so the row is 20 px wider overall.
+    expect(xs()[2]).toBeCloseTo(135, 5);
+  });
+});
+
+describe('a two-dimensional smart selection', () => {
+  let tools: ToolManager;
+  let grid: string[];
+
+  /** Places four 40-squares in a 2 x 2 grid with 20 px gaps, at 0,0 – 100,100. */
+  beforeEach(() => {
+    for (const id of ids) editor.history.run('clear', (tx) => tx.delete(id));
+    grid = [
+      [0, 0],
+      [60, 0],
+      [0, 60],
+      [60, 60],
+    ].map(([x, y]) =>
+      editor.history.run('seed', (tx) => {
+        const id = editor.ids.next();
+        tx.create(makeRectangle({ id, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'G', x: x!, y: y!, width: 40, height: 40 }));
+        return id;
+      }),
+    );
+    ids = grid;
+    tools = new ToolManager(editor);
+    editor.state.select(grid);
+  });
+
+  const corners = () => grid.map((id) => [(editor.doc.getOrThrow(id) as SceneNode).transform[4], (editor.doc.getOrThrow(id) as SceneNode).transform[5]]);
+
+  test('a grid is read as two dimensions, with a gap along each', () => {
+    expect(smartSelectionInfo(editor)).toBeNull();
+    expect(smartGridInfo(editor)?.grid).toMatchObject({ columnGap: 20, rowGap: 20 });
+  });
+
+  test('each of the two gaps can be set on its own', () => {
+    editor.history.run('Change spacing', (tx) => setGridSpacingInTx(tx, editor, 'y', 0));
+    expect(corners()).toEqual([
+      [0, 0],
+      [60, 0],
+      [0, 40],
+      [60, 40],
+    ]);
+    editor.history.undo();
+    editor.history.run('Change spacing', (tx) => setGridSpacingInTx(tx, editor, 'x', 10));
+    expect(corners()).toEqual([
+      [0, 0],
+      [50, 0],
+      [0, 60],
+      [50, 60],
+    ]);
+  });
+
+  test('dragging the handle between the rows changes the gap down, not the one across', () => {
+    // The handle between the rows sits at the middle of the 40–60 gap, over the first column.
+    tools.pointerDown(sample(20, 50));
+    tools.pointerMove(sample(20, 60));
+    tools.pointerUp(sample(20, 60));
+    expect(corners()).toEqual([
+      [0, 0],
+      [60, 0],
+      [0, 70],
+      [60, 70],
+    ]);
+  });
+
+  test('⇧ double-click marks the layer own row, a plain double-click the whole grid', () => {
+    tools.pointerDown(sample(20, 80, { clickCount: 2, shift: true }));
+    tools.pointerUp(sample(20, 80, { clickCount: 2, shift: true }));
+    expect(editor.state.getSnapshot().markedLayers).toEqual([grid[2], grid[3]]);
+    tools.pointerDown(sample(20, 80, { clickCount: 2 }));
+    tools.pointerUp(sample(20, 80, { clickCount: 2 }));
+    expect(editor.state.getSnapshot().markedLayers).toHaveLength(4);
+  });
+
+  test('Delete takes a marked layer out and the ones after it move up a place', () => {
+    tools.pointerDown(sample(20, 20));
+    tools.pointerUp(sample(20, 20));
+    editor.commands.run('edit.delete');
+    // The three left fill the first three places of the grid.
+    expect(grid.slice(1).map((id) => [(editor.doc.getOrThrow(id) as SceneNode).transform[4], (editor.doc.getOrThrow(id) as SceneNode).transform[5]])).toEqual([
+      [0, 0],
+      [60, 0],
+      [0, 60],
+    ]);
+  });
+
+  test('⌘D copies a marked layer into the place after it, the rest moving along', () => {
+    tools.pointerDown(sample(20, 20));
+    tools.pointerUp(sample(20, 20));
+    editor.commands.run('edit.duplicate');
+    // The copy takes the second place, so the three originals after it each move on one.
+    expect(corners()).toEqual([
+      [0, 0],
+      [0, 60],
+      [60, 60],
+      [0, 120],
+    ]);
+  });
+
+  test('dragging a marked layer carries it into another place in the grid', () => {
+    tools.pointerDown(sample(20, 20));
+    tools.pointerMove(sample(50, 20));
+    tools.pointerMove(sample(80, 80));
+    tools.pointerUp(sample(80, 80));
+    // It lands in the last place; the other three move up one each.
+    expect(corners()).toEqual([
+      [60, 60],
+      [0, 0],
+      [60, 0],
+      [0, 60],
+    ]);
+    editor.history.undo();
+    expect(corners()).toEqual([
+      [0, 0],
+      [60, 0],
+      [0, 60],
+      [60, 60],
+    ]);
+  });
+
+  test('⌘-dragging a layer onto another exchanges the two, leaving the rest alone', () => {
+    tools.pointerDown(sample(20, 20, { mod: true }));
+    tools.pointerMove(sample(50, 50, { mod: true }));
+    tools.pointerMove(sample(80, 80, { mod: true }));
+    expect(tools.moveTool.swapTarget).toMatchObject({ x: 60, y: 60 });
+    tools.pointerUp(sample(80, 80, { mod: true }));
+    expect(corners()).toEqual([
+      [60, 60],
+      [60, 0],
+      [0, 60],
+      [0, 0],
+    ]);
+    editor.history.undo();
+    expect(corners()).toEqual([
+      [0, 0],
+      [60, 0],
+      [0, 60],
+      [60, 60],
+    ]);
+  });
+
+  test('resizing one layer of the grid widens its column and moves the next one along', () => {
+    tools.pointerDown(sample(20, 20));
+    tools.pointerUp(sample(20, 20));
+    // The east edge of the first square, dragged 20 px out.
+    tools.pointerDown(sample(40, 20));
+    tools.pointerMove(sample(60, 20));
+    tools.pointerUp(sample(60, 20));
+    expect((editor.doc.getOrThrow(grid[0]!) as SceneNode).size.width).toBe(60);
+    expect(corners()).toEqual([
+      [0, 0],
+      [80, 0],
+      [0, 60],
+      [80, 60],
+    ]);
+  });
+
+  test('a ⌘-drag that ends away from the selection leaves it as it was', () => {
+    tools.pointerDown(sample(20, 20, { mod: true }));
+    tools.pointerMove(sample(400, 400, { mod: true }));
+    expect(tools.moveTool.swapTarget).toBeNull();
+    tools.pointerUp(sample(400, 400, { mod: true }));
+    expect(corners()).toEqual([
+      [0, 0],
+      [60, 0],
+      [0, 60],
+      [60, 60],
+    ]);
   });
 });

@@ -34,6 +34,11 @@ async function xOf(page: Page, name: string) {
   return Number(await page.getByTestId('field-x').inputValue());
 }
 
+async function yOf(page: Page, name: string) {
+  await page.getByRole('treeitem', { name: new RegExp(name) }).click();
+  return Number(await page.getByTestId('field-y').inputValue());
+}
+
 test('an evenly spaced selection shows "space between"; editing it respaces the row', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('toolbar', { name: 'Tools' })).toBeVisible();
@@ -92,4 +97,46 @@ test('marking a layer in the row: ⌘D copies it in, Delete takes it out, and th
   await page.keyboard.press('Delete');
   await expect(page.getByRole('treeitem', { name: /Rectangle/ })).toHaveCount(2);
   expect((await xOf(page, 'Rectangle 3')) - wasAt).toBe(-80);
+});
+
+test('a grid selection has a gap along each axis, and ⌘-dragging one layer onto another exchanges them', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('toolbar', { name: 'Tools' })).toBeVisible();
+  // Four 50 px squares in a 2 x 2 grid with 30 px gaps: 400 and 480, down 300 and 380.
+  await drawRect(page, 400, 300);
+  await drawRect(page, 480, 300);
+  await drawRect(page, 400, 380);
+  await drawRect(page, 480, 380);
+
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.mouse.click(box.x + 900, box.y + 600);
+  await page.keyboard.press(`${mod}+a`);
+  // Two dimensions, so two fields: one for the gap across and one for the gap down.
+  await expect(page.getByTestId('field-spacing')).toHaveValue('30');
+  const down = page.getByTestId('field-spacing-vertical');
+  await expect(down).toHaveValue('30');
+
+  await down.fill('10');
+  await down.press('Enter');
+  // The second row sits a square and the new gap below the first, the gap across it staying what it was.
+  expect((await yOf(page, 'Rectangle 3')) - (await yOf(page, 'Rectangle 1'))).toBe(60);
+  expect((await xOf(page, 'Rectangle 2')) - (await xOf(page, 'Rectangle 1'))).toBe(80);
+
+  // ⌘-dragging the first square's ring onto the last exchanges the two, the others staying where they are.
+  await page.mouse.click(box.x + 900, box.y + 600);
+  await page.keyboard.press(`${mod}+a`);
+  await page.keyboard.down(mod);
+  await page.mouse.move(box.x + 425, box.y + 325);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 460, box.y + 340, { steps: 4 });
+  await page.mouse.move(box.x + 505, box.y + 385, { steps: 4 });
+  await page.mouse.up();
+  await page.keyboard.up(mod);
+  const x1 = await xOf(page, 'Rectangle 1');
+  const x4 = await xOf(page, 'Rectangle 4');
+  // The first square now stands where the last one did, and the last one where the first did.
+  expect(x1 - x4).toBe(80);
+  expect((await yOf(page, 'Rectangle 1')) - (await yOf(page, 'Rectangle 4'))).toBe(60);
+  // The other two are untouched.
+  expect((await xOf(page, 'Rectangle 2')) - x4).toBe(80);
 });

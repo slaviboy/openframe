@@ -27,8 +27,8 @@ import type { Vec2 } from '@/core/math/vec';
 import type { GapIndicator } from '@/core/scene/equal-gaps';
 import type { PathCommand } from '@/core/geometry/corners';
 import type { MeasureLine } from '@/core/scene/measure';
-import { spacingHandles } from '@/core/scene/smart-selection';
-import { smartSelectionInfo } from '../commands/smart-selection';
+import { gridSpacingHandles, spacingHandles } from '@/core/scene/smart-selection';
+import { smartShape } from '../commands/smart-selection';
 import type { SnapGuide } from '@/core/scene/snapping';
 import { isSceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
@@ -117,6 +117,8 @@ export interface OverlayInput {
   readonly measurements?: readonly MeasureLine[];
   /** Auto layout insertion indicator while moving children of an auto layout frame, in world coordinates. */
   readonly insertion?: readonly [Vec2, Vec2] | null;
+  /** The layer a ⌘-drag within a smart selection would exchange places with, in world coordinates. */
+  readonly swapTarget?: Rect | null;
   /** The Pen's line from the point last placed to the pointer, in world coordinates. */
   readonly penRubberBand?: readonly [Vec2, Vec2] | null;
   /** Equal-spacing indicators while moving, in world coordinates. */
@@ -895,8 +897,9 @@ const SLICE_DASH = [4, 3];
 /** Smart selection chrome: a pink ring at each layer's center and a pink bar in the middle of each gap. */
 function drawSmartSelection(ctx: CanvasRenderingContext2D, input: OverlayInput): void {
   const { editor, theme } = input;
-  const info = smartSelectionInfo(editor);
-  if (!info) return;
+  const shape = smartShape(editor);
+  if (!shape) return;
+  const { info } = shape;
   const v = editor.state.viewport;
   const marked = new Set(editor.state.getSnapshot().markedLayers);
   ctx.save();
@@ -911,9 +914,21 @@ function drawSmartSelection(ctx: CanvasRenderingContext2D, input: OverlayInput):
     if (marked.has(info.ids[i]!)) ctx.fill();
     else ctx.stroke();
   }
-  for (const handle of spacingHandles(info.rects, info.selection)) {
-    const p = worldToScreen(v, handle);
-    const [w, h] = info.selection.axis === 'x' ? [3, 14] : [14, 3];
+  // ⌘-dragging a layer onto another rings the one it would exchange places with.
+  if (input.swapTarget) {
+    const a = worldToScreen(v, { x: input.swapTarget.x, y: input.swapTarget.y });
+    const b = worldToScreen(v, { x: input.swapTarget.x + input.swapTarget.width, y: input.swapTarget.y + input.swapTarget.height });
+    ctx.lineWidth = 2;
+    ctx.strokeRect(Math.round(a.x) + 0.5, Math.round(a.y) + 0.5, Math.round(b.x - a.x), Math.round(b.y - a.y));
+  }
+  // A row or column carries one bar per gap; a grid carries them across its rows and down between them.
+  const bars =
+    shape.kind === 'row'
+      ? spacingHandles(info.rects, shape.info.selection).map((point) => ({ point, axis: shape.info.selection.axis }))
+      : gridSpacingHandles(info.rects, shape.info.grid);
+  for (const bar of bars) {
+    const p = worldToScreen(v, bar.point);
+    const [w, h] = bar.axis === 'x' ? [3, 14] : [14, 3];
     ctx.beginPath();
     ctx.roundRect(Math.round(p.x - w / 2), Math.round(p.y - h / 2), w, h, 1.5);
     ctx.fill();

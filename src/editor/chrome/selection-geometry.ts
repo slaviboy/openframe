@@ -35,8 +35,17 @@ export interface SelectionFrame {
   readonly nodeId: Id | null;
 }
 
+/**
+ * The layers the selection's handles act on: the marked layers of a smart selection, when some but not all of it
+ * are marked, and otherwise the whole selection. Marking a layer is how one layer of a row is resized on its own.
+ */
+export function handledLayers(editor: Editor): readonly Id[] {
+  const marked = editor.state.getSnapshot().markedLayers.filter((id) => editor.selection.includes(id));
+  return marked.length > 0 && marked.length < editor.selection.length ? marked : editor.selection;
+}
+
 /** The transformable frame of the current selection, or null when nothing is selected. */
-export function selectionFrame(editor: Editor, ids: readonly Id[] = editor.selection): SelectionFrame | null {
+export function selectionFrame(editor: Editor, ids: readonly Id[] = handledLayers(editor)): SelectionFrame | null {
   if (ids.length === 0) return null;
   editor.scene.ensure(editor.pageId);
   if (ids.length === 1) {

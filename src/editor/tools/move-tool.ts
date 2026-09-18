@@ -29,19 +29,32 @@ import { guideWorldLine, hitGuide } from '../interactions/guides';
 import { adoptCoveredLayers, duplicateNodes } from '../commands/structure';
 import { setIgnoreAutoLayout, setLayoutSizing } from '../commands/auto-layout';
 import {
+  applyGridReorder,
+  applyGridSpacing,
   applyReorder,
   applySpacing,
+  beginGridReorder,
   beginReorder,
   captureSpacingStarts,
+  gridReorderIndexAt,
+  gridReorderIndexOf,
+  gridReorderLine,
+  gridRowOf,
+  gridSpacingHandleAt,
+  markedOf,
   markedSmartSelection,
+  reflowAfterResize,
   reorderIndexAt,
   reorderIndexOf,
   reorderLine,
   smartRingAt,
-  smartSelectionInfo,
+  smartShape,
   spacingHandleAt,
+  swapLayers,
+  type GridReorderState,
   type ReorderState,
-  type SmartSelectionInfo,
+  type SmartLayers,
+  type SmartShape,
 } from '../commands/smart-selection';
 import { canParent } from '@/core/document/containment';
 import type { DuplicateMemory } from '../editor';
@@ -79,6 +92,7 @@ import {
   hitRotationCorner,
   hitAddInstancesButton,
   hitAddVariantButton,
+  handledLayers,
   hitSectionTitle,
   isLineFrame,
   rotateCursor,
@@ -134,7 +148,11 @@ type Gesture =
     }
   | { kind: 'marquee'; down: PointerInfo; base: readonly Id[]; baseConnections: readonly ConnectionRef[]; scope: Id; current: Vec2 }
   /** Dragging a smart selection's spacing handle: every gap follows the pointer. */
-  | { kind: 'spacing'; tx: Transaction; down: PointerInfo; last: PointerInfo; info: SmartSelectionInfo; starts: NodeStart[]; gap: number }
+  | { kind: 'spacing'; tx: Transaction; down: PointerInfo; last: PointerInfo; shape: SmartShape; axis: 'x' | 'y'; starts: NodeStart[]; gap: number }
+  /** Dragging one layer of a grid selection into another of its places. */
+  | { kind: 'grid-reorder'; down: PointerInfo; tx: Transaction; state: GridReorderState; index: number }
+  /** ⌘-dragging a marked layer onto another of the selection, the two exchanging places on release. */
+  | { kind: 'swap'; down: PointerInfo; layers: SmartLayers; from: Id; over: Id | null }
   /** Dragging one end point of a single selected line; the other end stays fixed. */
   | {
       kind: 'line-end';
@@ -159,6 +177,8 @@ type Gesture =
       guides: readonly SnapGuide[];
       /** Scale tool: snapshot of the selection's subtrees, scaled proportionally instead of resized. */
       scale: ScaleSnapshot | null;
+      /** Resizing marked layers of a smart selection: the shape the rest are laid out in around them. */
+      smart: SmartShape | null;
     }
   | {
       kind: 'rotate';
@@ -250,7 +270,15 @@ export class MoveTool implements Tool {
   /** The blue line showing where a reorder within a smart selection will drop the marked layers, in world space. */
   get reorderInsertion(): readonly [Vec2, Vec2] | null {
     const g = this.gesture;
-    return g.kind === 'reorder' ? reorderLine(g.state, g.index) : null;
+    if (g.kind === 'reorder') return reorderLine(g.state, g.index);
+    return g.kind === 'grid-reorder' ? gridReorderLine(g.state, g.index) : null;
+  }
+
+  /** The layer a ⌘-drag would exchange places with, in world coordinates, so the overlay can ring it. */
+  get swapTarget(): Rect | null {
+    const g = this.gesture;
+    if (g.kind !== 'swap' || g.over === null) return null;
+    return g.layers.rects[g.layers.ids.indexOf(g.over)] ?? null;
   }
 
   /**
@@ -259,6 +287,7 @@ export class MoveTool implements Tool {
    */
   private beginReorderDrag(p: PointerInfo): boolean {
     const { editor } = this.env;
+    if (this.beginGridReorderDrag(p)) return true;
     const state = markedSmartSelection(editor);
     if (!state || state.marked.length === state.info.ids.length) return false;
     const tx = editor.history.begin('Reorder');
@@ -276,6 +305,40 @@ export class MoveTool implements Tool {
     if (index === g.index) return;
     this.gesture = { ...g, index };
     applyReorder(g.tx, g.state, index);
+    g.tx.flushPreview();
+    this.env.editor.requestRender();
+  }
+
+  /**
+   * Starts carrying one marked layer of a grid selection to another of its places. A grid is rearranged one layer
+   * at a time, so a drag with several marked, or with none, is left to the ordinary move.
+   */
+  private beginGridReorderDrag(p: PointerInfo): boolean {
+    const { editor } = this.env;
+    const shape = smartShape(editor);
+    if (shape?.kind !== 'grid') return false;
+    const marked = markedOf(editor, shape.info);
+    const only = marked.length === 1 ? marked[0]! : null;
+    if (only === null) return false;
+    const tx = editor.history.begin('Reorder');
+    const state = beginGridReorder(tx, editor, shape.info, only);
+    if (!state) {
+      editor.history.cancel(tx);
+      return false;
+    }
+    this.gesture = { kind: 'grid-reorder', down: p, tx, state, index: gridReorderIndexOf(state) };
+    this.updateGridReorder(p);
+    return true;
+  }
+
+  /** Drops the carried layer into the place the pointer is nearest, laying the grid out around it. */
+  private updateGridReorder(p: PointerInfo): void {
+    const g = this.gesture;
+    if (g.kind !== 'grid-reorder') return;
+    const index = gridReorderIndexAt(g.state, p.world);
+    if (index === g.index) return;
+    this.gesture = { ...g, index };
+    applyGridReorder(g.tx, g.state, index);
     g.tx.flushPreview();
     this.env.editor.requestRender();
   }
@@ -409,7 +472,7 @@ export class MoveTool implements Tool {
     if (this.gesture.kind === 'flow-tag' && this.gesture.dragged) return 'grabbing';
     if (this.gesture.kind === 'grid-track') return this.gesture.axis === 'column' ? 'ew-resize' : 'ns-resize';
     if (this.gesture.kind === 'layout-handle') return isUprightHandle(this.gesture.handle, this.gesture.direction) ? 'ew-resize' : 'ns-resize';
-    if (this.gesture.kind === 'spacing') return this.gesture.info.selection.axis === 'x' ? 'ew-resize' : 'ns-resize';
+    if (this.gesture.kind === 'spacing') return this.gesture.axis === 'x' ? 'ew-resize' : 'ns-resize';
     return this.hoverCursor;
   }
 
@@ -506,10 +569,13 @@ export class MoveTool implements Tool {
       if (handle) {
         const tx = editor.history.begin('Resize');
         editor.scene.ensure(editor.pageId);
-        const starts = editor.selection.map((id) => captureStart(tx, editor.scene, id));
-        const candidates = snapCandidatesFor(editor, editor.selection);
-        const scale = this.id === 'scale' ? captureScale(tx.store, editor.scene, editor.selection) : null;
-        this.gesture = { kind: 'resize', down: p, tx, handle, frame, starts, last: p, candidates, guides: [], scale };
+        // The handles sit on the marked layers of a smart selection, so only those are resized and the rest reflow.
+        const targets = handledLayers(editor);
+        const smart = targets.length < editor.selection.length ? smartShape(editor) : null;
+        const starts = targets.map((id) => captureStart(tx, editor.scene, id));
+        const candidates = snapCandidatesFor(editor, targets);
+        const scale = this.id === 'scale' ? captureScale(tx.store, editor.scene, targets) : null;
+        this.gesture = { kind: 'resize', down: p, tx, handle, frame, starts, last: p, candidates, guides: [], scale, smart };
         return;
       }
     }
@@ -606,21 +672,34 @@ export class MoveTool implements Tool {
         return;
       }
     }
-    // Smart selection: dragging a pink spacing handle changes every gap.
-    const smart = frame && this.id === 'move' ? smartSelectionInfo(editor) : null;
-    if (smart && spacingHandleAt(editor, smart, p.screen, this.env.hitTolerancePx)) {
+    // Smart selection: dragging a pink spacing handle changes every gap. A grid has one along each axis.
+    const shape = frame && this.id === 'move' ? smartShape(editor) : null;
+    const spacingAxis = shape
+      ? shape.kind === 'row'
+        ? spacingHandleAt(editor, shape.info, p.screen, this.env.hitTolerancePx)
+          ? shape.info.selection.axis
+          : null
+        : gridSpacingHandleAt(editor, shape.info, p.screen, this.env.hitTolerancePx)
+      : null;
+    if (shape && spacingAxis) {
       const tx = editor.history.begin('Change spacing');
-      const starts = captureSpacingStarts(tx, editor, smart);
-      this.gesture = { kind: 'spacing', tx, down: p, last: p, info: smart, starts, gap: smart.selection.gap };
+      const starts = captureSpacingStarts(tx, editor, shape.info);
+      const gap = shape.kind === 'row' ? shape.info.selection.gap : spacingAxis === 'x' ? shape.info.grid.columnGap : shape.info.grid.rowGap;
+      this.gesture = { kind: 'spacing', tx, down: p, last: p, shape, axis: spacingAxis, starts, gap };
       return;
     }
     // Smart selection: the pink ring at a layer's center marks it, so duplicating or deleting acts on it alone.
-    if (smart && !p.mod) {
-      const ring = smartRingAt(editor, smart, p.screen, this.env.hitTolerancePx);
+    if (shape) {
+      const ring = smartRingAt(editor, shape.info, p.screen, this.env.hitTolerancePx);
       if (ring !== null) {
+        // ⌘-dragging a layer of the selection onto another exchanges their places rather than moving either.
+        if (p.mod) {
+          this.gesture = { kind: 'swap', down: p, layers: shape.info, from: ring, over: null };
+          return;
+        }
         const marked = editor.state.getSnapshot().markedLayers;
-        // Double-clicking any layer of a row or column marks the whole of it.
-        if (p.clickCount >= 2) editor.state.markLayers(smart.ids);
+        // Double-clicking marks the whole row or column; in a grid, ⇧ double-click marks the layer's own row.
+        if (p.clickCount >= 2) editor.state.markLayers(shape.kind === 'grid' && p.shift ? gridRowOf(shape.info, ring) : shape.info.ids);
         else if (p.shift) editor.state.markLayers(marked.includes(ring) ? marked.filter((id) => id !== ring) : [...marked, ring]);
         else editor.state.markLayers([ring]);
         this.gesture = { kind: 'pending-move', down: p, targets: [...editor.selection], keepSelection: true };
@@ -721,6 +800,18 @@ export class MoveTool implements Tool {
       case 'reorder':
         this.updateReorder(p);
         return;
+      case 'grid-reorder':
+        this.updateGridReorder(p);
+        return;
+      case 'swap': {
+        // The layer under the pointer, when it is one of the selection's own, is the one to exchange places with.
+        const at = g.layers.rects.findIndex((rect) => p.world.x >= rect.x && p.world.x <= rect.x + rect.width && p.world.y >= rect.y && p.world.y <= rect.y + rect.height);
+        const over = at === -1 || g.layers.ids[at] === g.from ? null : g.layers.ids[at]!;
+        if (over === g.over) return;
+        this.gesture = { ...g, over };
+        this.env.editor.requestRender();
+        return;
+      }
       case 'marquee': {
         g.current = p.world;
         const { editor } = this.env;
@@ -858,9 +949,12 @@ export class MoveTool implements Tool {
       }
       case 'spacing': {
         g.last = p;
-        const delta = g.info.selection.axis === 'x' ? p.world.x - g.down.world.x : p.world.y - g.down.world.y;
-        g.gap = Math.max(0, Math.round(g.info.selection.gap + delta));
-        applySpacing(g.tx, g.info, g.starts, g.gap);
+        const delta = g.axis === 'x' ? p.world.x - g.down.world.x : p.world.y - g.down.world.y;
+        const grid = g.shape.kind === 'grid' ? g.shape.info.grid : null;
+        const base = grid ? (g.axis === 'x' ? grid.columnGap : grid.rowGap) : g.shape.kind === 'row' ? g.shape.info.selection.gap : 0;
+        g.gap = Math.max(0, Math.round(base + delta));
+        if (g.shape.kind === 'row') applySpacing(g.tx, g.shape.info, g.starts, g.gap);
+        else applyGridSpacing(g.tx, g.shape.info, g.starts, g.axis === 'x' ? g.gap : g.shape.info.grid.columnGap, g.axis === 'y' ? g.gap : g.shape.info.grid.rowGap);
         g.tx.flushPreview();
         this.env.editor.requestRender();
         return;
@@ -923,6 +1017,15 @@ export class MoveTool implements Tool {
         // A drop back where they came from leaves no step in the history.
         if (g.index === reorderIndexOf(g.state)) editor.history.cancel(g.tx);
         else editor.history.commit(g.tx);
+        break;
+      case 'grid-reorder':
+        if (g.index === gridReorderIndexOf(g.state)) editor.history.cancel(g.tx);
+        else editor.history.commit(g.tx);
+        break;
+      case 'swap':
+        // A ⌘-drag that ends anywhere but on another layer of the selection leaves everything as it was.
+        if (g.over !== null) swapLayers(editor, g.layers, g.from, g.over);
+        editor.requestRender();
         break;
       case 'grid-track':
         editor.history.commit(g.tx);
@@ -1022,7 +1125,8 @@ export class MoveTool implements Tool {
       g.kind === 'radius' ||
       g.kind === 'layout-handle' ||
       g.kind === 'grid-track' ||
-      g.kind === 'reorder'
+      g.kind === 'reorder' ||
+      g.kind === 'grid-reorder'
     ) {
       editor.history.cancel(g.tx);
       return true;
@@ -1032,7 +1136,7 @@ export class MoveTool implements Tool {
       editor.state.selectConnections(g.baseConnections);
       return true;
     }
-    return g.kind === 'pending-move';
+    return g.kind === 'pending-move' || g.kind === 'swap';
   }
 
   private startMarquee(p: PointerInfo, scope: Id): void {
@@ -1281,7 +1385,7 @@ export class MoveTool implements Tool {
         ? { x: g.frame.width / 2, y: g.frame.height / 2 }
         : { x: ax === 1 ? 0 : ax === -1 ? g.frame.width : g.frame.width / 2, y: ay === 1 ? 0 : ay === -1 ? g.frame.height : g.frame.height / 2 };
       applyScale(g.tx, g.scale, Math.max(factor, 0.01), apply(g.frame.toWorld, fixed));
-      g.tx.flushPreview();
+      this.reflowSmartResize(g.smart);
       editor.requestRender();
       return;
     }
@@ -1309,8 +1413,21 @@ export class MoveTool implements Tool {
         y1: result.y1 + from.y,
       });
     }
-    g.tx.flushPreview();
+    this.reflowSmartResize(g.smart);
     editor.requestRender();
+  }
+
+  /**
+   * Lays a smart selection out around the layers just resized, so the gaps stay what they were. The resize is
+   * flushed first, since where the rest belong is read off where the resized layers now stand.
+   */
+  private reflowSmartResize(shape: SmartShape | null): void {
+    const g = this.gesture;
+    if (g.kind !== 'resize') return;
+    g.tx.flushPreview();
+    if (!shape) return;
+    reflowAfterResize(g.tx, this.env.editor, shape);
+    g.tx.flushPreview();
   }
 
   /** A dragged track edge: the track becomes fixed at its starting length plus the drag distance. */
@@ -1383,10 +1500,15 @@ export class MoveTool implements Tool {
     const handle = frame ? hitHandle(editor, frame, p.screen, this.env.hitTolerancePx) : null;
     const corner = frame && !handle ? hitRotationCorner(editor, frame, p.screen, this.env.hitTolerancePx) : null;
     this.hoverCursor = frame && handle ? handleCursor(frame, handle) : frame && corner ? rotateCursor(frame, corner) : 'default';
-    const smart = frame && !handle && !corner && this.id === 'move' ? smartSelectionInfo(editor) : null;
-    if (smart && spacingHandleAt(editor, smart, p.screen, this.env.hitTolerancePx)) {
-      this.hoverCursor = smart.selection.axis === 'x' ? 'ew-resize' : 'ns-resize';
-    }
+    const shape = frame && !handle && !corner && this.id === 'move' ? smartShape(editor) : null;
+    const spacingAxis = shape
+      ? shape.kind === 'row'
+        ? spacingHandleAt(editor, shape.info, p.screen, this.env.hitTolerancePx)
+          ? shape.info.selection.axis
+          : null
+        : gridSpacingHandleAt(editor, shape.info, p.screen, this.env.hitTolerancePx)
+      : null;
+    if (spacingAxis) this.hoverCursor = spacingAxis === 'x' ? 'ew-resize' : 'ns-resize';
     // Motion: a box on the motion path is dragged, and it covers whatever is under it.
     if (this.id === 'move' && (hitMotionPathKeyframe(editor, p.screen) || hitMotionPathCurve(editor, p.screen))) this.hoverCursor = 'move';
     this.lastHover = p;
