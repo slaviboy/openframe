@@ -319,6 +319,44 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
       return pixel ? { r: pixel[0]! / 255, g: pixel[1]! / 255, b: pixel[2]! / 255, a: 1 } : null;
     });
 
+    // The loupe magnifies the device pixels around the pointer, so it reads a square rather than one
+    // pixel. Clamped to the canvas, then padded back out, so the sampled pixel stays in the middle even
+    // at an edge; the pixels outside are left transparent.
+    editor.setCanvasRegionSampler((screen, radius) => {
+      if (!surface || !renderer || !ck) return null;
+      const cx = Math.floor(screen.x * size.dpr);
+      const cy = Math.floor(screen.y * size.dpr);
+      if (cx < 0 || cy < 0 || cx >= sceneCanvas.width || cy >= sceneCanvas.height) return null;
+      const span = radius * 2 + 1;
+      const x0 = Math.max(0, cx - radius);
+      const y0 = Math.max(0, cy - radius);
+      const x1 = Math.min(sceneCanvas.width, cx + radius + 1);
+      const y1 = Math.min(sceneCanvas.height, cy + radius + 1);
+      renderScene();
+      const image = surface.makeImageSnapshot([x0, y0, x1, y1]);
+      const read = image.readPixels(0, 0, {
+        width: x1 - x0,
+        height: y1 - y0,
+        colorType: ck.ColorType.RGBA_8888,
+        alphaType: ck.AlphaType.Unpremul,
+        colorSpace: surfaceProfile === 'DISPLAY_P3' ? ck.ColorSpace.DISPLAY_P3 : ck.ColorSpace.SRGB,
+      }) as Uint8Array | null;
+      image.delete();
+      if (!read) return null;
+      const pixels = new Uint8Array(span * span * 4);
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const from = ((y - y0) * (x1 - x0) + (x - x0)) * 4;
+          const to = ((y - cy + radius) * span + (x - cx + radius)) * 4;
+          pixels[to] = read[from]!;
+          pixels[to + 1] = read[from + 1]!;
+          pixels[to + 2] = read[from + 2]!;
+          pixels[to + 3] = read[from + 3]!;
+        }
+      }
+      return { size: span, pixels };
+    });
+
     const draw = () => {
       frame = 0;
       if (disposed) return;
@@ -803,6 +841,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
       overlayCanvas.removeEventListener('wheel', onWheel);
       overlayCanvas.removeEventListener('contextmenu', onContextMenu);
       editor.setCanvasSampler(null);
+      editor.setCanvasRegionSampler(null);
       unsubscribeText();
       window.clearInterval(blink);
       textInput.removeEventListener('beforeinput', onBeforeInput);

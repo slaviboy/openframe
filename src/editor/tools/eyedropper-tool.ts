@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+import { toHex6 } from '@/core/color/color';
 import { solid } from '@/core/document/factory';
 import type { Vec2 } from '@/core/math/vec';
 import { hasGeometry, type Color, type SceneNode } from '@/core/schema/document';
@@ -27,7 +28,14 @@ import type { CursorKind, PointerInfo, Tool, ToolEnvironment } from './types';
 export interface EyedropperSample {
   readonly screen: Vec2;
   readonly color: Color;
+  /** The device pixels around it, `size` on a side, RGBA a byte each — what the loupe magnifies. */
+  readonly region: { readonly size: number; readonly pixels: Uint8Array } | null;
+  /** Whether clicking copies the color rather than applying it, which is what Dev Mode does. */
+  readonly copies: boolean;
 }
+
+/** How far around the pointer the loupe reads, in device pixels: an 11×11 square, as the reference shows. */
+export const LOUPE_RADIUS = 5;
 
 /**
  * Applies a sampled color to every selected layer as one undo step: the top visible solid fill
@@ -82,13 +90,24 @@ export class EyedropperTool implements Tool {
   }
 
   cursor(): CursorKind {
-    return 'crosshair';
+    return 'eyedropper';
   }
 
   pointerMove(p: PointerInfo): void {
-    const color = this.env.editor.sampleCanvasPixel?.(p.screen) ?? null;
-    this.sample = color ? { screen: p.screen, color } : null;
-    this.env.editor.requestRender();
+    const { editor } = this.env;
+    const color = editor.sampleCanvasPixel?.(p.screen) ?? null;
+    const region = color ? (editor.sampleCanvasRegion?.(p.screen, LOUPE_RADIUS) ?? null) : null;
+    this.sample = color ? { screen: p.screen, color, region, copies: this.copies() } : null;
+    editor.requestRender();
+  }
+
+  /**
+   * Dev Mode reads the design rather than editing it, so there the eyedropper is the reference's
+   * **Copy colors**: clicking puts the color on the clipboard. Everywhere else it paints the selection.
+   * A caller waiting on `pick` always wins, since it asked for the color itself.
+   */
+  private copies(): boolean {
+    return this.pending === null && this.env.editor.state.getSnapshot().mode === 'dev';
   }
 
   pointerDown(p: PointerInfo): void {
@@ -96,12 +115,19 @@ export class EyedropperTool implements Tool {
     const { editor } = this.env;
     const color = editor.sampleCanvasPixel?.(p.screen) ?? null;
     if (!color) return;
+    const copies = this.copies();
     this.sample = null;
     if (this.pending) {
       const resolve = this.pending;
       this.pending = null;
       editor.state.setTool(this.returnTool);
       resolve(color);
+      return;
+    }
+    if (copies) {
+      // Dev Mode hands the color over rather than painting with it, which is what its label promises.
+      void navigator.clipboard?.writeText(`#${toHex6(color).toUpperCase()}`).catch(() => undefined);
+      editor.state.setTool('move');
       return;
     }
     applyColorToSelection(editor, color);

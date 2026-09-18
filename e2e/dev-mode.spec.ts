@@ -172,6 +172,36 @@ test('a text layer is inspected as type: a measured sample, and the words it car
 });
 
 // Reading the clipboard back needs permissions only Chromium grants to tests.
+test('Copy colors takes a color off the canvas instead of painting with it @chromium-only', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 350, box.y + 250);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 560, box.y + 420, { steps: 5 });
+  await page.mouse.up();
+  const hex = page.getByLabel('Fill 1 hex', { exact: true });
+  await hex.fill('CA2E34');
+  await hex.press('Enter');
+
+  // Dev Mode's toolbar carries the reference's Copy colors beside Measurement.
+  await page.keyboard.press('Shift+D');
+  const toolbar = page.getByRole('toolbar', { name: 'Tools' });
+  await expect(toolbar.getByRole('button', { name: /^Measurement/ })).toBeVisible();
+  await toolbar.getByRole('button', { name: /^Copy colors/ }).click();
+  await expect(page.getByText('Click to copy a color from the canvas · Esc to cancel')).toBeVisible();
+
+  // Clicking hands the color over rather than painting with it, and the rectangle keeps its own fill.
+  await page.mouse.move(box.x + 450, box.y + 330, { steps: 3 });
+  await page.mouse.click(box.x + 450, box.y + 330);
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe('#CA2E34');
+  await page.keyboard.press('Shift+D');
+  await expect(hex).toHaveValue('CA2E34');
+});
+
+// Reading the clipboard back needs permissions only Chromium grants to tests.
 test('MCP says what it would hand an agent, and hands it over through the clipboard @chromium-only', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/');

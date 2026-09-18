@@ -389,8 +389,56 @@ markup is untouched, because the Design inspector renders the same component.
 - **Transitions**, **Selection colors** and the colour-format control in **Colors** have no counterpart
   here; they are features, not fidelity, and stay on the matrix.
 
+## The eyedropper: its icon, its cursor and its loupe
+
+From `dev_mode_color_picker.html` (the Copy colors tool active) and a screenshot the user supplied of the
+loupe, which no saved page carries — the reference draws it on the canvas itself, so it is not in the DOM.
+
+**Icons.** The user supplied the Dev toolbar's five buttons with their artwork. Two landed: `eyedropper`
+(the reference labels it **Copy colors**, its own name for the eyedropper in Dev Mode) and `measurement`.
+The measurement glyph replaces the `width` icon the toolbar was borrowing — an earlier pass mapped
+The reference's Measurement glyph onto `width` and it was removed again, because `width` also serves the Variable
+width tool. This is the real artwork, so the conflation is gone. `move`, `annotation` and `comment` were
+supplied too and are not yet taken up.
+
+**The toolbar row.** `design_toolbelt--enabledToolsRow` holds five plain buttons with no dropdowns, so
+Dev Mode's tools are each their own group here rather than sharing one with a chevron.
+
+**The cursor.** The capture carries it as a class with
+
+```
+cursor: -webkit-image-set(url(data:image/png;base64,...) 4x) 8 24, auto !important
+```
+
+— a 32px eyedropper whose hotspot is its tip at `8 24`, supplied at 4x for retina. Ours is the same glyph
+as an SVG data URI at 32px, translated by 4 so its tip lands on the same hotspot, with `crosshair` as the
+fallback. Two deviations: it is drawn from the path rather than copied as the reference's bitmap, and it carries
+a white outline behind the black, which the rotate and droplet cursors already do so the cursor stays
+visible on a dark canvas.
+
+**The loupe.** Read off the user's screenshot, since no capture has it:
+
+| Part | What it is |
+| --- | --- |
+| The tile | a white rounded square, ~68px, magnifying the device pixels around the pointer, one cell each |
+| The sampled pixel | ringed - white inside, red outside - so it reads on a light or a dark colour |
+| The pill | a dark rounded panel beside it, ~64px tall, holding a round swatch of the colour |
+| Its title | the colour in **RGB**, e.g. `RGB 202 46 52` |
+| Its second line | a small dashed square and **Click to copy** |
+
+Ours reads an 11x11 square of device pixels (`Editor.sampleCanvasRegion`, a readback the size of the
+loupe rather than the one pixel the eyedropper already read) and draws exactly that. The second line says
+*Click to copy* in Dev Mode, where clicking really does put the hex on the clipboard, and *Click to
+apply* elsewhere, where it paints the selection - the reference only ever shows the Dev Mode wording,
+because Design has no loupe of this shape.
+
+One thing worth writing down: the tile's magnified pixels must be drawn with the canvas shadow turned
+off. Left on, each of the 121 cells casts its own blur and the sample reads as a pale grey mesh instead
+of flat colour. The tile itself casts the shadow, before the clip.
+
 ## The Dev Mode toolbar
 
 The reference's Dev toolbar reads: **Move · Copy colors · Measurement · Annotation · Comment · Inspect ·
-Re-center**. Ours has Move tools (Move, Hand), Handoff tools (Measurement) and Comment tools. The four
-missing entries are features rather than fidelity, so they are left for the matrix, not this pass.
+Re-center**. Ours now has Move tools (Move, Hand), **Copy colors**, **Measurement** and Comment tools —
+the first two from the artwork the user supplied. **Annotation**, **Inspect** and **Re-center** are still
+missing; Annotation's artwork has been supplied and is not yet taken up.

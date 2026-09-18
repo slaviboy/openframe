@@ -353,3 +353,17 @@ Landed so far:
 - **This commit — the docs.** `FEATURE_MATRIX.md` row 285 rewritten to say what the panel now is, with Fid **`ref~`** rather than the `ref` the plan guessed at: the deviations are real and recorded (the hand-written highlighter, the aspect names for the three languages no capture covers, the type sample drawn as text rather than as a server-rendered picture), and `ref~` is what the legend calls that. Row 297 stays **Not feasible offline** — Code Connect, the VS Code extension, Dev Mode plugins and the org settings all need the cloud — with prose saying the MCP *section* carries the reference's shape and Openframe's own answers, and `ref~`.
 
 **The rebuild is finished**, all nine slices, each through a full three-browser gate. What is still open on this panel, recorded rather than built: The reference's **Transitions**, **Selection colors** and the colour-format control in **Colors** have no counterpart here; the panel's rows still sit on our own grid rather than the reference's 28-column one (that is what the `Right sidebar tabs` row's `ref~` records, and it wants a slice of its own); and section folds are forgotten on reload, since `viewPrefs` is a flat record with no room for a per-section map.
+
+## The eyedropper, from the capture the user supplied (2026-09-18)
+
+After the panel rebuild the user supplied `reference/app/dev_mode_color_picker.html` — the Dev toolbar with Copy colors active — the toolbar's five buttons as markup, and a screenshot of the loupe. One commit, through the usual full gate.
+
+- **Two icons from the real artwork.** `eyedropper` (which the reference labels **Copy colors** in Dev Mode) and `measurement`. The measurement glyph replaces the `width` icon the toolbar had been borrowing; an earlier pass mapped the reference's Measurement glyph onto `width` and had to take it back out, because `width` also serves the Variable width tool. That conflation is now gone.
+- **The Dev toolbar** shows Copy colors and Measurement as their own buttons. `design_toolbelt--enabledToolsRow` is a row of plain buttons with no dropdowns, so each tool is its own group rather than sharing one with a chevron.
+- **The cursor.** The capture carries it as `cursor: -webkit-image-set(url(…) 4x) 8 24` — a 32px eyedropper whose hotspot is its tip. Ours is the same glyph as an SVG data URI, translated so its tip lands on the same hotspot, with a white outline behind it (as the rotate and droplet cursors have) so it reads on a dark canvas.
+- **The loupe** is redrawn from the screenshot: a white rounded tile magnifying the device pixels around the pointer with the sampled one ringed, and a dark pill beside it naming the colour in RGB with *Click to copy*. `Editor.sampleCanvasRegion` is new — the eyedropper needed a square of pixels, not the one it already read.
+- **Copy colors really copies.** In Dev Mode the eyedropper puts the hex on the clipboard instead of painting the selection, which is what its label and the loupe's second line promise; everywhere else it behaves exactly as before.
+
+Worth remembering: the tile's magnified pixels must be drawn with the canvas shadow off. Left on, each of the 121 cells casts its own blur and the sample reads as a pale grey mesh rather than flat colour — which is what the first screenshot of it showed.
+
+Not taken up yet: the **Annotation** button (artwork supplied), and **Inspect** and **Re-center**, which the reference's Dev toolbar also carries.

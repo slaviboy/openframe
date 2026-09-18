@@ -93,6 +93,11 @@ export class Editor {
   readonly fonts = new FontRegistry();
   /** Reads the rendered scene color at a canvas point (CSS pixels); set by the canvas host. */
   sampleCanvasPixel: ((screen: Vec2) => Color | null) | null = null;
+  /**
+   * Reads a square of rendered scene pixels around a canvas point, for the eyedropper's loupe: `size`
+   * pixels on a side, RGBA a byte each, the sampled pixel in the middle. Set by the canvas host.
+   */
+  sampleCanvasRegion: ((screen: Vec2, radius: number) => { readonly size: number; readonly pixels: Uint8Array } | null) | null = null;
   /** Lets the UI pick a color by clicking the canvas; set by the tool manager. Resolves null when canceled. */
   pickColorFromCanvas: (() => Promise<Color | null>) | null = null;
   /** Lets the UI pick a layer by clicking the canvas (without selecting it); set by the tool manager. */
@@ -160,6 +165,11 @@ export class Editor {
   setCanvasSampler(sampler: ((screen: Vec2) => Color | null) | null): void {
     this.sampleCanvasPixel = sampler;
   }
+
+  /** Installs (or removes, with null) the reader behind the eyedropper's magnified loupe. */
+  setCanvasRegionSampler(sampler: ((screen: Vec2, radius: number) => { readonly size: number; readonly pixels: Uint8Array } | null) | null): void {
+    this.sampleCanvasRegion = sampler;
+  }
   /** Canvas size in CSS pixels; updated by the canvas host. */
   canvasSize = { width: 1200, height: 800 };
   /**
@@ -198,7 +208,17 @@ export class Editor {
       // Text boxes fit their content before groups measure their children.
       // Constraints move children of resized frames before text boxes fit and groups measure them.
       // Constraints and text sizes settle before auto layout measures its children; groups hug the result.
-      finalizers: [styleFinalizer, createComponentFinalizer(() => this.ids.next()), createVariableFinalizer(() => this.ids.next()), vectorFinalizer, constraintsFinalizer, createTextFinalizer(() => this.textLayout), createAutoLayoutFinalizer(() => this.textLayout), groupFinalizer, devStatusFinalizer],
+      finalizers: [
+        styleFinalizer,
+        createComponentFinalizer(() => this.ids.next()),
+        createVariableFinalizer(() => this.ids.next()),
+        vectorFinalizer,
+        constraintsFinalizer,
+        createTextFinalizer(() => this.textLayout),
+        createAutoLayoutFinalizer(() => this.textLayout),
+        groupFinalizer,
+        devStatusFinalizer,
+      ],
       // Constraints and auto layout follow resize drags live.
       previewFinalizers: [styleFinalizer, createComponentFinalizer(() => this.ids.next()), vectorFinalizer, constraintsFinalizer, createAutoLayoutFinalizer(() => this.textLayout, { preview: true })],
       ...(options.validate ? { validate: assertDocumentInvariants } : {}),

@@ -148,7 +148,10 @@ const GROUPS: readonly ToolGroup[] = [
 /** Dev Mode's toolbar: only the tools that read the design. Nothing here draws, because Dev Mode does not edit. */
 const DEV_GROUPS: readonly ToolGroup[] = [
   { label: 'Move tools', items: GROUPS[0]!.items.filter((item) => item.tool === 'move' || item.tool === 'hand') },
-  { label: 'Handoff tools', items: [{ tool: 'measure', label: 'Measurement', icon: 'width', command: 'tools.measure' }] },
+  // The reference's Dev toolbar is a row of plain buttons with no dropdowns, so each tool is its own
+  // group. It calls the eyedropper "Copy colors" here, because Dev Mode reads rather than edits.
+  { label: 'Color tools', items: [{ tool: 'eyedropper', label: 'Copy colors', icon: 'eyedropper', command: 'tools.eyedropper' }] },
+  { label: 'Handoff tools', items: [{ tool: 'measure', label: 'Measurement', icon: 'measurement', command: 'tools.measure' }] },
   GROUPS.at(-1)!,
 ];
 

@@ -61,6 +61,27 @@ const DROPLET: Record<'droplet' | 'droplet-empty', string> = {
   'droplet-empty': dropletSvg(false),
 };
 
+/**
+ * The eyedropper, from the reference's own artwork — the same path the toolbar's Copy colors button
+ * draws. The reference's cursor is a 32px image whose hotspot is the dropper's tip at `8 24`; the glyph
+ * is drawn on a 24 grid, so translating it by 4 puts its tip exactly there. The white outline behind it
+ * is ours, so the cursor stays visible on a dark canvas — the same treatment as the rotate and droplet
+ * cursors. Recorded in docs/UI_REFERENCE.md.
+ */
+function eyedropperSvg(): string {
+  const glyph =
+    'M16.922 3.56a2.501 2.501 0 0 1 3.517 3.517l-.172.19-2.206 2.205a.33.33 0 0 0 0 .466h.001c.548.549.582 1.418.103 2.007l-.104.115a1.5 1.5 0 0 1-2.12 0l-.233-.233-6.94 6.94a2.5 2.5 0 0 1-2.12.705L5.56 20.56a1.5 1.5 0 0 1-2.12-2.121l1.086-1.09a2.5 2.5 0 0 1 .706-2.118l6.94-6.939-.232-.232a1.5 1.5 0 0 1 0-2.122l.114-.103a1.5 1.5 0 0 1 1.893 0l.114.103.052.042c.127.084.3.07.411-.042l2.208-2.207z';
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'>` +
+    `<g transform='translate(4 4)' stroke-linejoin='round'>` +
+    `<path d='${glyph}' fill='white' stroke='white' stroke-width='2.5'/>` +
+    `<path d='${glyph}' fill='black'/>` +
+    `</g></svg>`;
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 8 24, crosshair`;
+}
+
+const EYEDROPPER = eyedropperSvg();
+
 /** CSS `cursor` value for a tool cursor kind. */
 export function cursorCss(kind: CursorKind): string {
   switch (kind) {
@@ -72,6 +93,8 @@ export function cursorCss(kind: CursorKind): string {
     case 'droplet':
     case 'droplet-empty':
       return DROPLET[kind];
+    case 'eyedropper':
+      return EYEDROPPER;
     default:
       return kind;
   }

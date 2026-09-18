@@ -101,6 +101,30 @@ const STROKE = {
 } as const;
 
 const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: ReactElement }> = {
+  // The reference's Copy colors tool. Openframe calls the tool the eyedropper, which is the reference's own name
+  // for it in Design; Dev Mode labels the same glyph "Copy colors".
+  eyedropper: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        d="M16.922 3.56a2.501 2.501 0 0 1 3.517 3.517l-.172.19-2.206 2.205a.33.33 0 0 0 0 .466h.001c.548.549.582 1.418.103 2.007l-.104.115a1.5 1.5 0 0 1-2.12 0l-.233-.233-6.94 6.94a2.5 2.5 0 0 1-2.12.705L5.56 20.56a1.5 1.5 0 0 1-2.12-2.121l1.086-1.09a2.5 2.5 0 0 1 .706-2.118l6.94-6.939-.232-.232a1.5 1.5 0 0 1 0-2.122l.114-.103a1.5 1.5 0 0 1 1.893 0l.114.103.052.042c.127.084.3.07.411-.042l2.208-2.207zM5.939 15.939a1.5 1.5 0 0 0-.405 1.37c.044.208.013.435-.137.585l-1.25 1.25v.002a.5.5 0 0 0 .706.706l1.251-1.251c.15-.15.377-.181.584-.137.48.102 1-.032 1.372-.404L15 11.12 12.88 9zm13.621-11.5a1.5 1.5 0 0 0-2.12 0l-2.21 2.206a1.327 1.327 0 0 1-1.877 0 .5.5 0 0 0-.707.707l3.994 3.994.005.005h.001a.5.5 0 0 0 .707-.707l-.004-.003a1.33 1.33 0 0 1 .004-1.877L19.56 6.56a1.5 1.5 0 0 0 0-2.122"
+      />
+    ),
+  },
+  // The reference's Measurement tool: a ruler laid corner to corner. An earlier pass wrongly mapped this
+  // to our `width` glyph, which serves Variable width as well; this is the real artwork.
+  measurement: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M3.293 7.793a1 1 0 0 0 0 1.414l11.5 11.5a1 1 0 0 0 1.414 0l4.5-4.5a1 1 0 0 0 0-1.414l-11.5-11.5a1 1 0 0 0-1.414 0zM4 8.5l.707.707.69.69.75-.75a.5.5 0 1 1 .707.707l-.75.75 1.292 1.292 2.25-2.25a.5.5 0 0 1 .708.708l-2.25 2.25 1.292 1.292.75-.75a.5.5 0 0 1 .708.708l-.75.75 1.292 1.292 2.25-2.25a.5.5 0 0 1 .708.708l-2.25 2.25 2.689 2.689.707.707.707-.707 3.086-3.086L20 15.5l-.707-.707L9.207 4.707 8.5 4l-.707.707-3.086 3.086zM16 17a1 1 0 1 0 0-2 1 1 0 0 0 0 2"
+      />
+    ),
+  },
   // Measured from the reference's copy button in the Dev Mode code panel.
   copy: {
     viewBox: 24,
@@ -767,6 +791,8 @@ const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: Rea
 
 type FilledName =
   | 'copy'
+  | 'eyedropper'
+  | 'measurement'
   | 'pause'
   | 'keyframe'
   | 'strokeWeight'

@@ -61,7 +61,8 @@ export type CursorKind =
   | 'rotate-sw'
   | 'text'
   | 'droplet'
-  | 'droplet-empty';
+  | 'droplet-empty'
+  | 'eyedropper';
 
 export interface Tool {
   readonly id: ToolId;

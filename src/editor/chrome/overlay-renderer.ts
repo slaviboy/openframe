@@ -32,6 +32,7 @@ import { smartShape } from '../commands/smart-selection';
 import type { SnapGuide } from '@/core/scene/snapping';
 import { isSceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
+import type { EyedropperSample } from '../tools/eyedropper-tool';
 import { cropImageWorldQuad } from '../interactions/crop';
 import { isUprightHandle, selectedLayoutHandles } from '../interactions/layout-handles';
 import { GRID_EDGE_BAND_PX, selectedGridTracks } from '../interactions/grid-tracks';
@@ -42,7 +43,7 @@ import { misspelledRanges } from '@/core/text/spelling';
 import { selectionEnd, selectionStart } from '@/core/text/text-editing';
 import { gradientEditChrome, type GradientChrome } from '../interactions/gradient-edit';
 import { blurEditChrome } from '../interactions/blur-edit';
-import { toCss, toHex6, type ColorProfile } from '@/core/color/color';
+import { toCss, type ColorProfile } from '@/core/color/color';
 import { documentColorProfile } from '@/core/color/color-profile';
 import type { Color, VectorNode } from '@/core/schema/document';
 import { isMaskLayer } from '@/core/scene/masks';
@@ -142,8 +143,8 @@ export interface OverlayInput {
   readonly connectDrag?: { readonly start: Vec2; readonly end: Vec2; readonly destination: Id | null } | null;
   /** A flow starting point's tag being dragged by its name (screen point), and the frame it would move to. */
   readonly flowTagDrag?: { readonly nodeId: Id; readonly end: Vec2; readonly destination: Id | null } | null;
-  /** Eyedropper loupe: the sampled color at a canvas point. */
-  readonly eyedropper?: { readonly screen: Vec2; readonly color: Color } | null;
+  /** Eyedropper loupe: the sampled color at a canvas point, the pixels around it, and what a click does. */
+  readonly eyedropper?: EyedropperSample | null;
   readonly width: number;
   readonly height: number;
   readonly dpr: number;
@@ -594,7 +595,7 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
     ctx.fillText(text, x + 4, y + 8.5);
   }
 
-  if (input.eyedropper) drawEyedropperLoupe(ctx, input.eyedropper, theme, documentColorProfile(editor.doc));
+  if (input.eyedropper) drawEyedropperLoupe(ctx, input.eyedropper, documentColorProfile(editor.doc), input.width);
 
   const gradient = gradientEditChrome(editor);
   if (gradient) drawGradientChrome(ctx, editor, gradient, theme);
@@ -610,34 +611,132 @@ export function drawOverlay(ctx: CanvasRenderingContext2D, input: OverlayInput):
   if (input.rulers) drawRulers(ctx, input);
 }
 
-/** Eyedropper loupe: a swatch of the sampled color beside the pointer, with its hex value. */
-function drawEyedropperLoupe(ctx: CanvasRenderingContext2D, sample: { readonly screen: Vec2; readonly color: Color }, theme: ChromeTheme, profile: ColorProfile): void {
-  const cx = Math.round(sample.screen.x + 28);
-  const cy = Math.round(sample.screen.y - 28);
+/*
+ * The eyedropper's loupe, as the reference draws it: a white rounded tile magnifying the device pixels
+ * around the pointer with the sampled one ringed in red, and a dark pill beside it naming the color in
+ * RGB and saying what a click will do. Measured from the capture the user supplied — see
+ * docs/UI_REFERENCE.md.
+ */
+const LOUPE = {
+  /** The magnified tile: 68px square, one pixel drawn per `cell`. */
+  tile: 68,
+  radius: 8,
+  /** The pill beside it. */
+  pillHeight: 64,
+  pillRadius: 14,
+  pillPad: 14,
+  gap: -6,
+  swatch: 7,
+  /** Where the whole thing sits relative to the pointer. */
+  offsetX: 18,
+  offsetY: -34,
+} as const;
+
+/** A rounded rectangle path, since the loupe draws several. */
+function loupeBox(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
   ctx.beginPath();
-  ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+  ctx.roundRect(x, y, w, h, r);
+}
+
+/** The magnified pixels, the middle one ringed. Falls back to a flat swatch when no region was read. */
+function drawLoupeTile(ctx: CanvasRenderingContext2D, sample: EyedropperSample, x: number, y: number, profile: ColorProfile): void {
+  const { tile, radius } = LOUPE;
+  ctx.save();
+  loupeBox(ctx, x, y, tile, tile, radius);
+  ctx.fillStyle = '#ffffff';
+  ctx.fill();
+  // The tile casts the shadow; its magnified pixels must not, or all 121 of them blur into a grey mesh.
+  ctx.shadowColor = 'transparent';
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.clip();
+  const region = sample.region;
+  if (region && region.size > 0) {
+    // Cell edges are snapped to whole pixels: at fractional positions each edge antialiases against the
+    // tile's white ground and the magnified pixels read as a pale mesh rather than as flat colour.
+    const edge = (index: number) => Math.round((index * tile) / region.size);
+    for (let row = 0; row < region.size; row++) {
+      for (let column = 0; column < region.size; column++) {
+        const at = (row * region.size + column) * 4;
+        const alpha = region.pixels[at + 3]! / 255;
+        if (alpha === 0) continue;
+        ctx.fillStyle = `rgba(${region.pixels[at]}, ${region.pixels[at + 1]}, ${region.pixels[at + 2]}, ${alpha})`;
+        ctx.fillRect(x + edge(column), y + edge(row), edge(column + 1) - edge(column), edge(row + 1) - edge(row));
+      }
+    }
+    // The sampled pixel is ringed white inside and red outside, so it reads on a light or a dark color.
+    const middle = (region.size - 1) / 2;
+    const left = x + edge(middle);
+    const top = y + edge(middle);
+    const side = edge(middle + 1) - edge(middle);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = '#ffffff';
+    ctx.strokeRect(left + 0.5, top + 0.5, side - 1, side - 1);
+    ctx.strokeStyle = '#f24822';
+    ctx.strokeRect(left - 0.5, top - 0.5, side + 1, side + 1);
+  } else {
+    ctx.fillStyle = toCss({ ...sample.color, a: 1 }, profile);
+    ctx.fillRect(x, y, tile, tile);
+  }
+  ctx.restore();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.12)';
+  loupeBox(ctx, x + 0.5, y + 0.5, tile - 1, tile - 1, radius - 0.5);
+  ctx.stroke();
+}
+
+function drawEyedropperLoupe(ctx: CanvasRenderingContext2D, sample: EyedropperSample, profile: ColorProfile, canvasWidth: number): void {
+  const { tile, pillHeight, pillRadius, pillPad, gap, swatch, offsetX, offsetY } = LOUPE;
+  const title = `RGB ${Math.round(sample.color.r * 255)} ${Math.round(sample.color.g * 255)} ${Math.round(sample.color.b * 255)}`;
+  const hint = sample.copies ? 'Click to copy' : 'Click to apply';
+  ctx.font = '600 13px Inter, system-ui, sans-serif';
+  const titleWidth = ctx.measureText(title).width;
+  ctx.font = '400 12px Inter, system-ui, sans-serif';
+  const hintWidth = ctx.measureText(hint).width;
+  const textWidth = Math.max(titleWidth, hintWidth + 18);
+  const pillWidth = swatch * 2 + 10 + textWidth + pillPad * 2;
+
+  // The whole thing sits to the right of the pointer, and flips to its left when that would run off.
+  const total = tile + gap + pillWidth;
+  const flipped = sample.screen.x + offsetX + total > canvasWidth;
+  const left = Math.round(flipped ? sample.screen.x - offsetX - total : sample.screen.x + offsetX);
+  const top = Math.round(sample.screen.y + offsetY);
+
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.25)';
+  ctx.shadowBlur = 12;
+  ctx.shadowOffsetY = 3;
+  const pillX = left + tile + gap;
+  const pillY = top + (tile - pillHeight) / 2;
+  loupeBox(ctx, pillX, pillY, pillWidth, pillHeight, pillRadius);
+  ctx.fillStyle = '#1e1e1e';
+  ctx.fill();
+  drawLoupeTile(ctx, sample, left, top, profile);
+  ctx.restore();
+
+  const textX = pillX + pillPad + swatch * 2 + 10;
+  const titleY = pillY + pillHeight / 2 - 9;
+  ctx.beginPath();
+  ctx.arc(pillX + pillPad + swatch, titleY, swatch, 0, Math.PI * 2);
   ctx.fillStyle = toCss({ ...sample.color, a: 1 }, profile);
   ctx.fill();
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = '#ffffff';
-  ctx.stroke();
-  ctx.lineWidth = 1;
-  ctx.strokeStyle = 'rgba(0, 0, 0, 0.35)';
-  ctx.beginPath();
-  ctx.arc(cx, cy, 19.5, 0, Math.PI * 2);
-  ctx.stroke();
-  const text = `#${toHex6(sample.color)}`;
-  ctx.font = theme.font;
-  const w = Math.ceil(ctx.measureText(text).width) + 8;
-  const x = Math.round(cx - w / 2);
-  const y = cy + 24;
-  ctx.fillStyle = theme.selection;
-  ctx.beginPath();
-  ctx.roundRect(x, y, w, 16, 2);
-  ctx.fill();
-  ctx.fillStyle = theme.labelText;
+
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, x + 4, y + 8.5);
+  ctx.font = '600 13px Inter, system-ui, sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(title, textX, titleY);
+
+  // The hint's own little dashed square, standing for the pixel the click takes.
+  const hintY = pillY + pillHeight / 2 + 12;
+  ctx.save();
+  ctx.setLineDash([2, 2]);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+  ctx.strokeRect(pillX + pillPad + swatch - 4.5, hintY - 4.5, 9, 9);
+  ctx.restore();
+  ctx.font = '400 12px Inter, system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+  ctx.fillText(hint, textX, hintY);
 }
 
 /**
@@ -922,10 +1021,7 @@ function drawSmartSelection(ctx: CanvasRenderingContext2D, input: OverlayInput):
     ctx.strokeRect(Math.round(a.x) + 0.5, Math.round(a.y) + 0.5, Math.round(b.x - a.x), Math.round(b.y - a.y));
   }
   // A row or column carries one bar per gap; a grid carries them across its rows and down between them.
-  const bars =
-    shape.kind === 'row'
-      ? spacingHandles(info.rects, shape.info.selection).map((point) => ({ point, axis: shape.info.selection.axis }))
-      : gridSpacingHandles(info.rects, shape.info.grid);
+  const bars = shape.kind === 'row' ? spacingHandles(info.rects, shape.info.selection).map((point) => ({ point, axis: shape.info.selection.axis })) : gridSpacingHandles(info.rects, shape.info.grid);
   for (const bar of bars) {
     const p = worldToScreen(v, bar.point);
     const [w, h] = bar.axis === 'x' ? [3, 14] : [14, 3];
