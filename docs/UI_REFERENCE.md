@@ -408,17 +408,24 @@ something to choose between, and ours was drawing a disclosure that opened a men
 drops the `role="group"` wrapper with it, so a lone tool reads as the one button it is — the way Actions
 always has. In Design that is the Comment tool; in Dev Mode, Copy colors, Measurement and Comment.
 
-**The cursor.** The capture carries it as a class with
+**The cursor.** the reference ships it twice. The saved page carries a runtime class with
 
 ```
 cursor: -webkit-image-set(url(data:image/png;base64,...) 4x) 8 24, auto !important
 ```
 
-— a 32px eyedropper whose hotspot is its tip at `8 24`, supplied at 4x for retina. Ours is the same glyph
-as an SVG data URI at 32px, translated by 4 so its tip lands on the same hotspot, with `crosshair` as the
-fallback. Two deviations: it is drawn from the path rather than copied as the reference's bitmap, and it carries
-a white outline behind the black, which the rotate and droplet cursors already do so the cursor stays
-visible on a dark canvas.
+and `reference_app.min.css.br.css` carries the same cursor as its **source SVG**, on `.color_swatch--chit`
+(hovering a swatch offers to pick it), at the same `8 24` hotspot. The SVG is the better source, so that
+is what we use, verbatim: a 32px canvas, a white silhouette path under a black drawing path, and the reference's
+own drop-shadow filter (`dy 1`, `stdDeviation 1.5`, black at 35%) over both. An earlier pass had built
+this cursor from the toolbar icon's path with an outline of our own; that is gone. `crosshair` stays as
+the fallback for a browser that refuses SVG cursors.
+
+That stylesheet holds exactly **two** custom cursors — this one and `.hyperlink_popup--clickable`
+(hotspot `16 8`, a pointing hand with a link). Every other cursor in it is a CSS keyword, and the reference's
+canvas tool cursors are set at runtime through `--cursor-type` rather than declared there, so the file
+settles none of the others. The hyperlink cursor is not taken up: we have no call site that `pointer`
+does not already serve.
 
 **The loupe.** Read off the user's screenshot, since no capture has it:
 

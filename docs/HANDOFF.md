@@ -369,3 +369,9 @@ Worth remembering: the tile's magnified pixels must be drawn with the canvas sha
 - **A group of one drops its chevron.** The toolbar was drawing a disclosure beside every group, including the ones holding a single tool, so it opened a menu of one item. Those now render as the plain button they are — the `role="group"` wrapper goes too — which is what Actions has always looked like. In Design that is Comment; in Dev Mode, Copy colors, Measurement and Comment.
 
 Not taken up yet: the **Annotation** button (artwork supplied), and **Inspect** and **Re-center**, which the reference's Dev toolbar also carries.
+
+### The eyedropper cursor, from the reference's own SVG (2026-09-18)
+
+The user then supplied `reference/app/reference_app.min.css.br.css`. It carries the eyedropper cursor as its **source SVG** on `.color_swatch--chit`, at the same `8 24` hotspot as the runtime PNG — a white silhouette under a black drawing with the reference's own drop-shadow filter. That replaces the cursor the previous commit built from the toolbar icon's path. The stylesheet holds only two custom cursors; the other is `.hyperlink_popup--clickable` (a pointing hand with a link), which we have no call site for. The reference's canvas tool cursors are set at runtime through `--cursor-type` and are not in that file, so it settles no others.
+
+`tests/architecture/files.ts` now skips `reference/` when it walks the repo. That folder is gitignored the reference markup, not ours, and the header test only started tripping over it when a `.css` turned up among the `.html` captures.

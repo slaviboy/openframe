@@ -44,7 +44,10 @@ export const LICENSE_HEADER = `/*
 export const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.mjs', '.cjs', '.css'];
 
 /** Generated, installed or third-party content that is not part of the project's sources. */
-const SKIPPED_DIRECTORIES = new Set(['node_modules', 'dist', '.git', 'docs-mirror', 'test-results', 'playwright-report', 'coverage', '.claude']);
+// `reference/` holds the saved reference-app pages and stylesheets the fidelity pass measures against. It is
+// gitignored, it is the reference's markup rather than ours, and it must never be committed — so it is not held to
+// the header rule either. It only started mattering when a .css turned up among the .html captures.
+const SKIPPED_DIRECTORIES = new Set(['node_modules', 'dist', '.git', 'docs-mirror', 'reference', 'test-results', 'playwright-report', 'coverage', '.claude']);
 
 /** Repository files (relative paths, `/`-separated) with one of `extensions`; an empty list returns every file. */
 export function repoFiles(extensions: readonly string[]): string[] {
