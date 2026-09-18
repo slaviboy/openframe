@@ -454,35 +454,110 @@ Re-center**. Ours now has Move tools (Move, Hand), **Copy colors**, **Measuremen
 the first two from the artwork the user supplied. **Annotation**, **Inspect** and **Re-center** are still
 missing; Annotation's artwork has been supplied and is not yet taken up.
 
-## The pen tool: the vector editing toolbelt and the stroke endpoints
+## The pen tool: the two bottom bars and the vector-edit panel
 
-From `pen_tool_1.html` (the Pen active on a vector with its points open) and the endpoint listbox markup
-the user supplied, plus `reference-design/design-with-vector-tools/edit-vector-layers.html` in the docs
-mirror.
+From `pen_tool_1.html` (the Pen active on a vector with its points open), the endpoint listbox markup the
+user supplied, `design_mode_button.html` for the panel's shared controls, and the docs mirror's
+`design-with-vector-tools/` and `additional-properties/` pages.
 
-**The secondary toolbelt.** The reference draws it as a bar of its own, `role="toolbar"` labelled
-*Vector editing*, holding:
+### Two bars, not one
+
+The saved page holds **both** bottom toolbars at once:
+
+| Offset | Element |
+| --- | --- |
+| 2705264 | `toolbelt--root`, `aria-label="Editor"` — the main bar, `height:48px`, **Pen pressed**, mode switcher intact |
+| 2724432 | `secondary_toolbelt--root`, `aria-label="Vector editing"` — the 40px bar, floating above it |
+
+`secondary_toolbelt--rootPositioning` is `height:96px; position:absolute; bottom:0` and the root is
+`align-items:flex-start`, so the 40px bar's lower edge sits 56px above the toolbar's — an 8px gap over a
+48px bar. An earlier note in this file claimed the reference *replaces* the toolbar with the toolbelt as
+soon as the Pen is in hand. It does not; that was inferred from a capture where both were true at once.
 
 > Move (V) · Lasso (Q) │ Paint (⇧B) · Bend (⌘) · Cut (X) · Erase (⇧E) │ More │ Close
 
 | Reference class | CSS read off it | Where it landed |
 | --- | --- | --- |
-| `secondary_toolbelt--secondaryToolbeltContainer` | `height:40px; background:var(--color-bg); border-radius:var(--radius-large); box-shadow:var(--elevation-200-canvas); padding:8px; gap:8px` | our existing `.toolsRow` inside `.toolbar` |
-| `toolbelt_button--buttonLabel` | `white-space:nowrap; padding-right:8px` | `Toolbar.module.css .toolLabel` |
-| `toolbelt_divider--divider` (+ `--extendedDivider`) | `width:1px; background:var(--color-border); align-self:stretch; margin-top:-8px; margin-bottom:-8px` | `.toolDivider` |
+| `secondary_toolbelt--secondaryToolbeltContainer` | `height:40px; background:var(--color-bg); border-radius:var(--radius-large); box-shadow:var(--elevation-200-canvas); padding:8px; gap:8px` | `Toolbar.module.css .vectorToolbelt` |
+| `toolbelt_button--topLevelButtonNew` | `display:flex; align-items:center; border-radius:var(--radius-medium)` | `.tool` |
+| `toolbelt_button--topLevelButtonSecondaryPadding` | `padding:0` — the bar's buttons are the bare 24px glyph, against the toolbar's `...PrimaryPadding` | `.beltTool` |
+| `toolbelt_button--selectedButton` | `background-color:var(--color-bg-toolbar-selected)` (ramp-blue-500), `--color-icon:var(--color-icon-onbrand)` (white) | `.tool[data-active]` |
+| `toolbelt_button--buttonLabel` | `white-space:nowrap; padding-right:8px` | `.toolLabel` |
+| `toolbelt_divider--divider` (+ `--extendedDivider`) | `width:1px; background:var(--color-border); align-self:stretch; margin:-8px 0` | `.toolDivider` |
+| the More button | `--icon-button-size:1.5rem`, `padding:0`, and its inner row `margin-left:8px; margin-right:4px` | `.moreTool` |
 
-Three things changed to match it: the tools are in the reference's order and grouping with dividers
-between the groups; each names itself beside its glyph, which the main toolbar does not; and **Variable
-width** and **Shape builder** moved behind a **More** menu. The documentation lists those two among the
-vector edit tools, and the reference keeps them in the overflow — both are true at once. The bar now ends
-in **Close**, as the reference labels it, rather than a filled *Done* button of ours.
+`--radius-medium` is `.3125rem` = 5px and `--radius-large` `.8125rem` = 13px, which our `--radius-md` and
+`--radius-xl` already were; `--color-border` is `#e6e6e6` / `#444` and `--color-icon-secondary`
+`#00000080`, which ours already were too.
 
-**Deviations.** Our bar keeps `aria-label="Tools"` on the toolbar element rather than the reference's
-*Vector editing*, because about ten specs address it by that name. The reference has no Move/Hand pair
-here and no mode switcher beside it; ours keeps the switcher, since it is how a mode is left.
+**The glyphs are the reference's own.** Lasso, Bend, Cut and Erase replaced hand-drawn approximations;
+Move and Paint have vector-edit glyphs of their own, because the bar's Move is *not* the toolbar's — it is
+a smaller cursor between two handles, for dragging points rather than layers.
 
-**The stroke endpoints.** The reference's Start point / End point control is a listbox, not a select: each
-option is named beside a picture of the end it makes, with a separator after the plain ends.
+**Unmeasured.** Variable width and Shape builder keep our artwork: the reference draws them only inside
+its More menu, which is closed in the capture. The documentation lists both among the vector edit tools,
+and the reference keeps them in the overflow — both are true at once.
+
+**Deviations.** The main toolbar keeps `aria-label="Tools"` rather than the reference's *Editor*, because
+about thirty specs address it by that name; the bar above it takes *Vector editing* verbatim.
+
+### The vector-edit panel
+
+Between the `Vector` `<h1>` and the end of the panel the reference holds exactly four rows and two
+sections — **Alignment → Position → Mirroring → Corner radius → Fill → Stroke** — and nothing about the
+layer as a whole: no size, no rotation, no constraints, no auto layout, no opacity or blend, no effects,
+no export. Every group label is `_14wijgr0`, which is `clip-path:inset(50%)`: screen-reader only. The
+only visible headings are the `Fill` and `Stroke` `<h2>`s.
+
+| Row | Reference classes | Grid | Ours |
+| --- | --- | --- | --- |
+| Alignment, Position | `x1kmaalo x1frmlc7 xbyi07e` | areas `"label1 label2 label2" / "input1 input2 icon"`, rows `auto 32px`, cols `1fr 1fr 24px` | `.row`, already this shape |
+| Mirroring, Corner radius | `x1ra2ayo xdzfydn x16zb2db` | areas `"label1 label1" / "input1 icon"`, cols `1fr 24px` | `.rowNarrow` |
+| Stroke controls, Endpoints | `ui3_rows--ui3TwoInputTwoIconRow` | cols `minmax(76px,1fr) 8px 1fr 8px 24px 4px 24px` | `.strokeRow` |
+
+Every row is `display:grid; column-gap:8px; padding-left:16px; padding-right:8px`, which `.section` and
+`.row` already were.
+
+**Mirroring is a segmented radio group**, not a list: root `background:var(--color-bg-secondary);
+border-radius:var(--radius-medium)`, each option `flex:1; min-width:1.5rem; height:1.5rem`. The chosen one
+is `box-shadow: inset 0 0 0 1px var(--color-border); background: var(--color-bg)` — lifted onto the panel
+colour inside a hairline, *not* filled with the accent — and `input:not(:checked)` draws its glyph in
+`--color-icon-secondary`. The three glyphs are the reference's own.
+
+**Alignment aligns the points**, not the layer, while points are open. **Position** is the picked point's
+place, read in the space the layer's own X and Y are read in; with none picked the fields are blank and
+disabled, so a disabled number field no longer reads *Mixed*.
+
+**Unmeasured.** Where the tool sections the documentation asks for go — the Eraser's weight and shape, the
+Paint tool's paint, the width profile and width point — the capture cannot say: it was taken with Move in
+hand. Ours sit between Corner radius and Fill. The vector More-actions menu's entries are likewise not in
+the capture, so they stay as they were.
+
+### Panel selects
+
+`design_mode_button.html` and `pen_tool_1.html` draw the same control (`_15y6gsq4 _15y6gsql _15y6gsqn`):
+
+```
+border:1px solid var(--color-border); border-radius:var(--radius-medium);
+background:var(--color-bg); padding:0 0 0 var(--spacer-2); height:1.5rem;
+font: 11px/16px; inner grid 1fr 1.5rem, the chevron in the trailing column
+```
+
+Ours were a grey fill with a border that only appeared on hover and no chevron. Fixed in
+`primitives.module.css .select`; the chevron is the reference's own glyph, carried in the
+`--select-chevron` token because a background image cannot take `currentColor`.
+
+### The Stroke section
+
+The reference's stroke row is **`[Stroke align ▾] [weight] [⇉]`** and nothing else. Everything else —
+stroke style and dashes, join and miter angle, path trim, a brush, a dynamic stroke — sits behind
+**Advanced stroke settings**, which is also the list `apply-and-adjust-stroke-properties.html` gives. Ours
+rendered all of it inline, in Design mode too; it is now a dialog behind the reference's own glyph.
+
+**The endpoint triggers.** The reference does not name the end beside a small picture. It draws the end
+across the whole control: `endpoints--longIcon` is `width:100%; overflow:hidden` around a **200 × 24**
+SVG, so the drawing is *clipped* by the control rather than scaled into it, and the End point is the same
+drawing under `endpoints--ui3EndpointFlipped` (`transform:scaleX(-1)`).
 
 | Value | Label | Notes |
 | --- | --- | --- |
@@ -492,21 +567,27 @@ option is named beside a picture of the end it makes, with a separator after the
 | — | — | separator |
 | `ARROW_LINES` | Line arrow | ours is `LINE_ARROW` |
 | `ARROW_EQUILATERAL` | Triangle arrow | ours is `TRIANGLE_ARROW` |
-| `TRIANGLE_FILLED` | Reversed triangle | **was missing here**; now in the schema and drawn |
+| `TRIANGLE_FILLED` | Reversed triangle | ours was missing it |
 | `CIRCLE_FILLED` | Circle arrow | we called it *Circle* |
 | `DIAMOND_FILLED` | Diamond arrow | we called it *Diamond* |
 
-Our order was None, Line arrow, Triangle arrow, Round, Square, Circle, Diamond — neither the reference's
-order nor its labels. Both are fixed, the eight glyphs are the reference's own artwork (the faint part of
-each is the rest of the line, which the reference draws in the tertiary icon colour and we draw at 40%
-opacity), and `Menu` learned to carry an icon per item so the list reads as the reference's does.
+The eight 24px list glyphs are the reference's own artwork (the faint part of each is the rest of the
+line, drawn in the tertiary icon colour, which we draw at 40% opacity), and `Menu` carries an icon per
+item so the list reads as the reference's does.
 
-**Deviations.** The trigger is a `button` with `aria-haspopup="listbox"` rather than a `combobox`,
-because a native `<select>` cannot draw the endpoint; `data-value` carries the chosen cap so it can still
-be asserted. The reference's list is `min-width:271px`; ours uses the shared menu's width.
+**Derived, not measured.** Only `capNoneLong` is captured artwork — both ends are None in the saved page.
+The other seven 200-wide drawings are derived from the 24px glyphs of the same list: the same head or cap,
+with the line run out to the full width, and the captured dash strip for the three that have one.
 
-**Still open on the pen tool.** The reference replaces the main toolbar with the vector toolbelt as soon
-as the Pen is in hand; ours shows the toolbelt only once points are open (Enter, or after drawing). And
-the reference's vector-edit right panel runs Alignment → Position → Mirroring → Corner radius → Fill →
-Stroke, with Start point and End point inside Stroke for a vector, not only for a line; ours puts
-Mirroring below Fill and Stroke and offers the endpoints on lines alone.
+**Deviations.** The trigger is a `button` with `aria-haspopup="listbox"` rather than a `combobox`, because
+a native `<select>` cannot draw the endpoint; `data-value` carries the chosen cap so it can still be
+asserted. The reference's list is `min-width:271px`; ours uses the shared menu's width.
+
+### Still open on the pen tool
+
+- The endpoints are offered for lines alone. The documentation puts them in the sidebar for any open path
+  with two ends and in Advanced stroke settings for one with more, set per point in vector edit mode —
+  which needs a cap on each vector point, and arrowheads drawn on the open ends of a vector network. The
+  renderer only caps them round, square or flat today.
+- Corner radius rounds a point where two straight lines meet, which is the corner the documentation
+  describes. A point with a Bézier on either side stays sharp.

@@ -393,3 +393,43 @@ From `reference/app/pen_tool_1.html`, the toolbar markup and the endpoint listbo
 - **The stroke endpoints** were wrong in three ways and are now the reference's: the order (None, Round, Square, then a separator, then the arrows), the labels (*Circle arrow*, *Diamond arrow*), and the set — **Reversed triangle** (`TRIANGLE_FILLED`) did not exist here at all and is now in the schema, drawn by the renderer as the triangle turned to point back down the line. The control is a listbox with the reference's own glyphs rather than a native select, since a select cannot draw the endpoint; `Menu` learned to carry an icon per item, and the trigger keeps `data-value` so tests can still read the chosen cap.
 
 **Not done yet, and recorded in `docs/UI_REFERENCE.md`:** the reference swaps the main toolbar for the toolbelt as soon as the Pen is picked, where ours waits until points are open; and its vector-edit right panel runs Alignment → Position → Mirroring → Corner radius → Fill → Stroke, with the endpoints available on a vector and not only a line.
+
+
+## The pen tool, second pass: both bars, the vector-edit panel, corner radius, the Stroke section (2026-09-18)
+
+Five commits, each gated on `npm run check`, the related Chromium specs, and a full three-browser run.
+The last full run: **912 passed, 0 failed**, one WebKit wasm-load flake re-verified on its own.
+
+The note the previous pass left behind was half wrong, and re-reading the capture settled it.
+
+- **`b5d6687` — two bars, not one.** `pen_tool_1.html` holds *both* bottom toolbars: the Editor toolbelt
+  (48px, Pen pressed, mode switcher intact) at offset 2705264, and `secondary_toolbelt` (40px,
+  *Vector editing*) floating above it at 2724432. Its container is 96px tall, anchored to the bottom and
+  aligned to the top, so the bar clears the toolbar by 8px. The previous note claimed the reference
+  *replaces* the toolbar; that was inferred from a page where both were true at once. The vector branch
+  became its own element beside the toolbar, and the toolbar renders unconditionally again.
+  Also repaired here: **five specs the two previous commits broke and never reran** — Erase had been
+  renamed from Eraser, and Variable width and Shape builder had moved behind More.
+- **`e79d42f` — the panel is about the points.** The reference's vector-edit panel holds exactly
+  Alignment → Position → Mirroring → Corner radius → Fill → Stroke and nothing about the layer. Alignment
+  aligns the selected *points* (`alignPoints`), Position is the picked point's place, and Mirroring is the
+  reference's segmented group of three pictures. Every group label there is screen-reader only. Ten specs
+  read the layer's size while points were open; each now reads it once they are closed.
+- **`1e1717f` — a point's corner radius.** `VectorVertex.cornerRadius`, drawn in by
+  `roundNetworkCorners` inside `networkStrokePath`, `regionFillPath` and `networkBounds`, so every reader
+  downstream sees the shape as drawn while the file keeps the sharp corner. Only where two straight lines
+  meet, which is the corner the documentation describes.
+- **`1eb9017` — the bar's own buttons and glyphs.** The user pointed out the bar still did not look like
+  the reference's, and it did not: its buttons carry **no padding** (`topLevelButtonSecondaryPadding`), so
+  the 24px glyph *is* the button, and ours padded them to 32px and stacked each label under its glyph.
+  Lasso, Bend, Cut and Erase were hand-drawn approximations and are now the reference's own artwork; Move and
+  Paint got vector-edit glyphs, since the bar's Move is not the toolbar's.
+- **`5e314ca` — the Stroke section.** Panel selects were measured off two captures and were wrong app-wide
+  (grey fill, hover-only border, no chevron; should be 24px on the panel colour inside a hairline with the
+  chevron in a 24px column). Everything but position and weight moved behind **Advanced stroke settings**.
+  The endpoint triggers draw the end across the whole control, clipped not scaled, mirrored for the End
+  point.
+
+**Still open, recorded in `docs/UI_REFERENCE.md` and the matrix:** endpoints are offered for lines alone —
+the documentation wants them per point on a vector, which needs a cap on each vector point and arrowheads
+drawn on the open ends of a network; and a corner whose neighbouring segment is a curve stays sharp.
