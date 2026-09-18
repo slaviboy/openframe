@@ -16,6 +16,7 @@
  */
 
 import type { HandleMirroring, Paint } from '../schema/document';
+import { roundNetworkCorners } from './vector-corners';
 import { flattenPath, type PathCommand } from '../geometry/corners';
 import { apply, applyLinear, type Matrix } from '../math/matrix';
 import type { Rect } from '../math/rect';
@@ -32,6 +33,11 @@ export interface VectorVertex {
   readonly y: number;
   /** How the point's two handles follow each other while one is dragged; absent means exact opposites. */
   readonly mirror?: HandleMirroring | undefined;
+  /**
+   * How far the corner at this point is rounded, in the layer's own units. Kept on the point, so the file
+   * holds the sharp corner and its radius; the geometry is drawn with the corner rounded in.
+   */
+  readonly cornerRadius?: number | undefined;
 }
 
 export interface VectorSegment {
@@ -76,7 +82,10 @@ function segmentCommand(network: VectorNetwork, segment: VectorSegment, reversed
  * continuing from the end vertex while it has an unused segment; a chain that returns to its first
  * vertex is closed.
  */
-export function networkStrokePath(network: VectorNetwork): PathCommand[] {
+export function networkStrokePath(source: VectorNetwork): PathCommand[] {
+  // Points that carry a corner radius are rounded in first, so every reader of the path — the renderer,
+  // hit-testing, export, outlining, the width tool — sees the shape as it is drawn.
+  const network = roundNetworkCorners(source);
   const used = new Array<boolean>(network.segments.length).fill(false);
   const commands: PathCommand[] = [];
   const next = (vertex: number) => network.segments.findIndex((s, i) => !used[i] && (s.start === vertex || s.end === vertex));
@@ -105,10 +114,17 @@ export function networkStrokePath(network: VectorNetwork): PathCommand[] {
   return commands;
 }
 
-/** The fill path of one region: each loop walked through its segments and closed. */
-export function regionFillPath(network: VectorNetwork, region: VectorRegion): PathCommand[] {
+/**
+ * The fill path of one region: each loop walked through its segments and closed. The region must be one of
+ * the network's own, so that rounding the points' corners can carry it along; a region from anywhere else
+ * is drawn against the network as it stands.
+ */
+export function regionFillPath(source: VectorNetwork, region: VectorRegion): PathCommand[] {
+  const index = source.regions.indexOf(region);
+  const network = index >= 0 ? roundNetworkCorners(source) : source;
+  const rounded = index >= 0 ? network.regions[index]! : region;
   const commands: PathCommand[] = [];
-  for (const loop of region.loops) {
+  for (const loop of rounded.loops) {
     if (loop.length === 0) continue;
     const segments = loop.map((i) => network.segments[i]!);
     // The loop starts at the vertex the first segment doesn't share with the second.
@@ -149,8 +165,13 @@ const cubicAt = (p0: number, p1: number, p2: number, p3: number, t: number) => {
   return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
 };
 
-/** The tight bounds of a network's geometry (vertices and curve extrema, not control points); null when empty. */
-export function networkBounds(network: VectorNetwork): Rect | null {
+/**
+ * The tight bounds of a network's geometry (vertices and curve extrema, not control points); null when
+ * empty. Rounded corners are measured as they are drawn, so the layer's box hugs the shape rather than the
+ * sharp corner it was cut from.
+ */
+export function networkBounds(source: VectorNetwork): Rect | null {
+  const network = roundNetworkCorners(source);
   if (network.vertices.length === 0) return null;
   const xs = network.vertices.map((v) => v.x);
   const ys = network.vertices.map((v) => v.y);

@@ -1016,7 +1016,7 @@ export const HandleMirroringSchema = z.enum(['NONE', 'ANGLE', 'ANGLE_AND_LENGTH'
 export type HandleMirroring = z.infer<typeof HandleMirroringSchema>;
 
 /** A vertex: where it sits, and how its handles follow each other. */
-const VectorVertexSchema = z.object({ x: finite, y: finite, mirror: HandleMirroringSchema.optional() });
+const VectorVertexSchema = z.object({ x: finite, y: finite, mirror: HandleMirroringSchema.optional(), cornerRadius: z.number().min(0).optional() });
 
 /**
  * Vector network: vertices joined by straight or curved segments in any direction (branches

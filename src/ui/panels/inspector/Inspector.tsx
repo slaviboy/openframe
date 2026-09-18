@@ -140,6 +140,7 @@ import { profileOf, profileWidthPoints, WIDTH_PROFILES } from '@/core/vector/vec
 import { invert, apply, applyLinear } from '@/core/math/matrix';
 import { matrixOf } from '@/core/scene/scene-index';
 import { moveVertices } from '@/core/vector/vector-edit';
+import { roundableVertex } from '@/core/vector/vector-corners';
 import { pointsBounds } from '@/core/vector/vector-transform-points';
 import { refitVector } from '@/editor/tools/vector-draw';
 import {
@@ -2570,6 +2571,7 @@ function VectorEditSections() {
         <AlignRow />
         <PointPositionRow />
         <MirroringRow />
+        <PointCornerRadiusRow />
       </div>
       <WidthProfileSection />
       <WidthPointSection />
@@ -2657,6 +2659,51 @@ function MirroringRow() {
           <MirroringOption key={option.mode} label={option.label} icon={option.icon} checked={current === option.mode} disabled={modes.size === 0} onSelect={() => change(option.mode)} />
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * The corner radius of the selected points. The documentation offers it two ways, and so does this: with a
+ * point picked it rounds that corner, and with none picked it rounds every corner of the shape. Only where
+ * two straight lines meet, which is the corner the documentation describes — a point with a curve on
+ * either side, an end of the path, or a junction has no corner to round, so the field goes quiet.
+ */
+function PointCornerRadiusRow() {
+  const editor = useEditor();
+  const state = useEditorState((s) => s.vectorEdit);
+  const gesture = useGesture('Change corner radius');
+  const node = state ? editor.doc.get(state.nodeId) : undefined;
+  if (!state || node?.type !== 'VECTOR') return null;
+  const network = node.vectorNetwork;
+  const picked = state.vertices.filter((i) => network.vertices[i] !== undefined);
+  const targets = (picked.length > 0 ? picked : network.vertices.map((_, i) => i)).filter((i) => roundableVertex(network, i));
+  const radii = new Set(targets.map((i) => network.vertices[i]!.cornerRadius ?? 0));
+  const [only] = radii;
+  return (
+    <div className={styles.rowNarrow}>
+      <NumberField
+        label={<Icon name="radius" size={16} />}
+        ariaLabel="Corner radius"
+        testId="field-point-radius"
+        min={0}
+        decimals={2}
+        disabled={targets.length === 0}
+        value={radii.size === 1 ? only : undefined}
+        onGestureStart={gesture.start}
+        onGestureEnd={gesture.end}
+        onChange={(radius) =>
+          gesture.change((tx) => {
+            const live = (tx.store.getOrThrow(node.id) as Extract<SceneNode, { type: 'VECTOR' }>).vectorNetwork;
+            const chosen = new Set(targets);
+            // Through refit, so the layer's box hugs the rounded corner rather than the sharp one.
+            refitVector(tx, node.id, {
+              ...live,
+              vertices: live.vertices.map((v, i) => (chosen.has(i) ? { ...v, cornerRadius: radius > 0 ? radius : undefined } : v)),
+            });
+          })
+        }
+      />
     </div>
   );
 }
