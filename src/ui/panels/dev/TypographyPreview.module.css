@@ -1,0 +1,175 @@
+/*
+ * Copyright (C) 2026 Stanislav Georgiev
+ * https://github.com/slaviboy
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/* typography_preview--previewContainer, boxed, on common--well. */
+.well {
+  color: var(--fg-secondary);
+  height: 140px;
+  margin: var(--space-1) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-2);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+}
+
+/* typography_preview--centredRow */
+.row {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  gap: 0;
+  width: 100%;
+}
+
+/* typography_preview--measureContainer */
+.measureSide {
+  display: flex;
+  flex-grow: 1;
+  position: relative;
+}
+
+/*
+ * typography_preview--measure: the value sits centred on a dashed bracket the height of what it measures,
+ * the left one against the sample and the right one away from it.
+ */
+.measure {
+  display: flex;
+  flex-grow: 0;
+  max-width: calc(100% - 4px);
+  min-width: 0;
+  overflow: hidden;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 0 var(--space-1);
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.left {
+  right: 0;
+}
+
+.right {
+  left: 0;
+}
+
+/* typography_preview--value */
+.value {
+  align-self: center;
+  border-radius: var(--radius-xs);
+  background: var(--accent-measure);
+  color: #ffffff;
+  padding: 1px 3px;
+  max-width: calc(100% - 6px);
+  min-width: 0;
+  margin: 0 var(--space-2);
+  border: none;
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+/* typography_preview--dash: the bracket's two dashed arms, above and below the value. */
+.dash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.dash::before,
+.dash::after {
+  content: "";
+  display: block;
+  position: absolute;
+  width: 50%;
+  background: transparent;
+}
+
+.dash::before {
+  top: 0;
+  border-top: 1px dashed var(--accent-measure);
+}
+
+.dash::after {
+  bottom: 0;
+  border-bottom: 1px dashed var(--accent-measure);
+}
+
+.left .dash::before,
+.left .dash::after {
+  right: 0;
+}
+
+.right .dash::before,
+.right .dash::after {
+  left: 0;
+}
+
+/* typography_preview--borderedPreview: the sample the two measurements bracket. */
+.sample {
+  position: relative;
+  flex-grow: 0;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 84px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--inspect-guide);
+  z-index: 1;
+  box-sizing: border-box;
+}
+
+/* typography_preview--measurementLine */
+.sampleLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dashed var(--inspect-guide);
+}
+
+.sampleText {
+  color: var(--fg-primary);
+  white-space: nowrap;
+}
+
+/* typography_preview--styleName on --labelBase */
+.styleName {
+  font-weight: var(--weight-medium);
+  font-size: var(--text-sm);
+  color: var(--fg-primary);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-xs);
+  padding: var(--space-1) var(--space-1-5);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.styleName:hover {
+  background: var(--bg-hover);
+}

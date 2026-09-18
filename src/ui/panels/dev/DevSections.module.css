@@ -144,3 +144,22 @@
   color: var(--fg-secondary);
   line-height: var(--line-ui);
 }
+
+/* text_well--textWell, on common--well: the words a text layer carries. */
+.textWell {
+  padding: var(--space-1) var(--space-2);
+  margin-inline: var(--space-4);
+  margin-top: var(--space-1);
+  align-self: stretch;
+  user-select: text;
+  cursor: text;
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  line-height: var(--line-ui);
+  letter-spacing: 0.05px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--fg-primary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -150,6 +150,27 @@ test('Inspect writes the selection out as code, in the language and unit chosen'
   await expect(inspect.getByRole('region', { name: 'Layer properties' })).toBeVisible();
 });
 
+test('a text layer is inspected as type: a measured sample, and the words it carries', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('t');
+  await page.mouse.click(box.x + 400, box.y + 300);
+  await page.keyboard.type('Handoff');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Shift+D');
+
+  // Layer properties draws the type rather than the box, with both measurements as copy buttons.
+  const properties = page.getByRole('region', { name: 'Layer properties' });
+  await expect(properties.getByRole('img', { name: /Visual representation of typography/ })).toBeVisible();
+  await expect(properties.getByRole('button', { name: /^Copy font size:/ })).toBeVisible();
+  await expect(properties.getByRole('button', { name: /^Copy line height:/ })).toBeVisible();
+  await expect(properties.getByTestId('layoutWidth')).toHaveCount(0);
+
+  // The words themselves are a section of their own, as the reference gives them.
+  await expect(page.getByTestId('textContent')).toHaveText('Handoff');
+});
+
 // Reading the clipboard back needs permissions only Chromium grants to tests.
 test('MCP says what it would hand an agent, and hands it over through the clipboard @chromium-only', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);

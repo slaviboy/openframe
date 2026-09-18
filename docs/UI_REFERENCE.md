@@ -343,6 +343,52 @@ The reference's spacers resolve to `--spacer-1: .25rem` (4px), `--spacer-2: .5re
   faithful: labelling it "Copy example prompt for …" collided with the *Copy example prompt* button under
   it, since Playwright matches accessible names case-insensitively by substring.
 
+## Dev Mode's typography preview, Text content, and the section order
+
+For a text layer the reference puts a **typography preview** inside Layer properties where a frame gets
+the box model — `inspect_panel--layerPreview` holds one or the other, never both.
+
+| Reference class | CSS read off it | Where it landed |
+| --- | --- | --- |
+| `typography_preview--previewContainer` (+ `--previewContainerBoxed`, `common--well`) | `height:140px; margin:4px 16px; display:flex; justify-content:center; align-items:center; color:var(--color-text-secondary)` | `TypographyPreview.module.css .well` |
+| `typography_preview--centredRow` | `position:relative; display:flex; justify-content:center; gap:0; width:100%` | `.row` |
+| `typography_preview--measure` | `position:absolute; flex-direction:column; justify-content:center; padding:0 4px`; `.left{right:0}`, `.right{left:0}` | `.measure`, `.left`, `.right` |
+| `typography_preview--value` | `border-radius:2px; background:var(--color-bg-measure); color:var(--color-text-onmeasure); padding:1px 3px; margin:0 8px` | `.value` |
+| `typography_preview--dash` `:before`/`:after` | `width:50%; border-top/bottom:1px dashed var(--color-bg-measure)` | `.dash::before/::after` |
+| `typography_preview--measurementLine` | `position:absolute; left:0; right:0; border-top:1px dashed var(--color-bginspectpadding)` | `.sampleLine` |
+| `typography_preview--borderedPreview` | `border:1px solid var(--color-bginspectpadding)` | `.sample` |
+| `typography_preview--styleName` on `--labelBase` | `font-weight:500; padding:4px 6px; border-radius:2px; color:var(--color-text)` | `.styleName` |
+| `text_well--textWell` (+ `common--well`) | `padding:4px 8px; margin-inline:16px; margin-top:4px; font-size:11px; font-family:Roboto Mono; line-height:16px; letter-spacing:.05px; border:1px solid var(--color-border)` | `DevSections.module.css .textWell` |
+
+`--color-bg-measure` is red 500 — `#f24822` light, `#e03e1a` dark — which is our existing
+`--accent-measure`. `--color-bginspectpadding` is blue 500, `#0d99ff` light and `#0c8ce9` dark, and is a
+**different token** from the pale padding fill the box model uses; it landed as `--inspect-guide` rather
+than being folded into `--bg-inspect-padding`.
+
+**Section order.** The three captures that show the whole panel agree on:
+
+> MCP → Component information *(only when the layer stands for one)* → Layer properties →
+> Layout / Typography *(list view)* → Modes → Colors → Selection or Text colors → Motion → Transitions →
+> Assets / Icons / Text content → Export
+
+Ours now reads: header → MCP → Component information → Layer properties → Variables *(our Modes and
+Colors)* → Motion → Text content → Dev assets → **then Openframe's own**: Status, Appearance, Playground,
+Dev resources, Annotations, Measurements, Compare. Only *where* `DevStatusControl` is called moved; its
+markup is untouched, because the Design inspector renders the same component.
+
+**Deviations, recorded rather than hidden.**
+
+- The reference's type sample is a picture its server renders; ours is the text itself, set in the layer's
+  own font. The labels carry the real measurements and only the drawing is scaled — to a 64px line box,
+  which is what the reference's 32sp line at 64.5px works out to — clamped to between half size and four
+  times, so a 6px caption and a 96px display both read.
+- The reference names a **text style** under the sample; we have no text styles bound to a layer to name,
+  so the button under ours names the font and its weight, which is what we do know.
+- The reference's Text content title row carries a variable button beside its copy button. We have no
+  variable bound to a text layer's content, so only the copy button is there.
+- **Transitions**, **Selection colors** and the colour-format control in **Colors** have no counterpart
+  here; they are features, not fidelity, and stay on the matrix.
+
 ## The Dev Mode toolbar
 
 The reference's Dev toolbar reads: **Move · Copy colors · Measurement · Annotation · Comment · Inspect ·

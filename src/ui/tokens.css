@@ -20,12 +20,13 @@
  * must not hard-code pixel values. Which of these values have actually been measured
  * against real the reference — and which are still guesses — is recorded in docs/UI_REFERENCE.md.
  */
-@import '@fontsource-variable/inter';
+@import "@fontsource-variable/inter";
 
 :root {
   /* Typography */
-  --font-ui: 'Inter Variable', Inter, system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-ui:
+    "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --text-xs: 10px;
   --text-sm: 11px;
   --text-md: 12px;
@@ -139,15 +140,21 @@
   --code-string: #007be5;
   --code-comment: rgba(0, 0, 0, 0.5);
   --code-tag: #8638e5;
-  --shadow-panel: 0 0 0.5px rgba(0, 0, 0, 0.18), 0 3px 8px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.1);
+  /* Measured: --color-bginspectpadding, the dashed guides in the typography preview. */
+  --inspect-guide: #0d99ff;
+  --shadow-panel:
+    0 0 0.5px rgba(0, 0, 0, 0.18), 0 3px 8px rgba(0, 0, 0, 0.1),
+    0 1px 3px rgba(0, 0, 0, 0.1);
   /* The lifted pill behind the checked mode. The reference's light value is not in the saved pages — only its
      dark one is — so light keeps the hairline ring it always had. See docs/UI_REFERENCE.md. */
   --shadow-mode: 0 0 0 1px var(--border);
-  --shadow-menu: 0 2px 5px rgba(0, 0, 0, 0.15), 0 10px 16px rgba(0, 0, 0, 0.12), 0 0 0.5px rgba(0, 0, 0, 0.12);
+  --shadow-menu:
+    0 2px 5px rgba(0, 0, 0, 0.15), 0 10px 16px rgba(0, 0, 0, 0.12),
+    0 0 0.5px rgba(0, 0, 0, 0.12);
   --accent: var(--accent-design);
 }
 
-:root[data-theme='dark'] {
+:root[data-theme="dark"] {
   --bg-app: #1e1e1e;
   --bg-panel: #2c2c2c;
   --bg-elevated: #383838;
@@ -174,16 +181,23 @@
   --code-string: #7cc4f8;
   --code-comment: rgba(255, 255, 255, 0.7);
   --code-tag: #d1a8ff;
-  --shadow-panel: 0 0 0.5px rgba(0, 0, 0, 0.5), 0 3px 8px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.3);
+  --inspect-guide: #0c8ce9;
+  --shadow-panel:
+    0 0 0.5px rgba(0, 0, 0, 0.5), 0 3px 8px rgba(0, 0, 0, 0.35),
+    0 1px 3px rgba(0, 0, 0, 0.3);
   /* Measured: The reference's --elevation-100-canvas, declared under [data-preferred-theme=dark]. */
-  --shadow-mode: 0 0 0.5px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  --shadow-menu: 0 2px 5px rgba(0, 0, 0, 0.35), 0 10px 16px rgba(0, 0, 0, 0.3), 0 0 0.5px rgba(0, 0, 0, 0.5);
+  --shadow-mode:
+    0 0 0.5px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  --shadow-menu:
+    0 2px 5px rgba(0, 0, 0, 0.35), 0 10px 16px rgba(0, 0, 0, 0.3),
+    0 0 0.5px rgba(0, 0, 0, 0.5);
 }
 
-:root[data-mode='draw'] {
+:root[data-mode="draw"] {
   --accent: var(--accent-draw);
 }
-:root[data-mode='dev'] {
+:root[data-mode="dev"] {
   --accent: var(--accent-dev);
 }
 

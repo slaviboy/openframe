@@ -35,6 +35,8 @@ import { PlaygroundSection } from './PlaygroundSection';
 import { BoxModel } from './BoxModel';
 import { CodeAspects } from './CodeAspects';
 import { ComponentInfoSection } from './ComponentInfoSection';
+import { TextContentSection } from './TextContentSection';
+import { TypographyPreview } from './TypographyPreview';
 import { McpSection } from './McpSection';
 import { InspectHeader } from './InspectHeader';
 import { InspectSection } from './InspectSection';
@@ -127,8 +129,6 @@ export function InspectPanel() {
     <div className={styles.panel} data-testid="inspect-panel">
       <InspectHeader node={node} />
 
-      {canHaveDevStatus(node) && <DevStatusControl node={node} />}
-
       {/* The reference opens with MCP, then Component information when the layer stands for one. */}
       <McpSection node={node} />
       <ComponentInfoSection node={node} />
@@ -136,7 +136,8 @@ export function InspectPanel() {
       {/* Layer properties holds the box, the View switch and then either the rows or the code — the
           reference nests them, and it hides nothing outside this section when the view changes. */}
       <InspectSection id="Layer properties" title="Layer properties">
-        <BoxModel node={node} />
+        {/* The reference swaps the box model for a type sample when the layer is text. */}
+        {node.type === 'TEXT' ? <TypographyPreview node={node} /> : <BoxModel node={node} />}
         <div className={styles.preferencesRow}>
           <div className={styles.preferencesLeft}>
             <span className={styles.viewLabel}>View</span>
@@ -165,17 +166,22 @@ export function InspectPanel() {
         )}
       </InspectSection>
 
+      {/* The reference's own order from here: the variable modes and colours, Motion, Text content, Assets. */}
+      <VariablesSection node={node} />
+      <MotionSection node={node} />
+      <TextContentSection node={node} />
+      <DevAssetsPanel />
+
+      {/* Openframe's own sections, below the ones the reference has, so its order reads unchanged. */}
+      {canHaveDevStatus(node) && <DevStatusControl node={node} />}
       <Group title="Appearance">
         <Row label="Opacity" value={`${formatNumber(node.opacity * 100, 0)}%`} />
         <Row label="Blend mode" value={node.blendMode.toLowerCase().replace(/_/g, ' ')} />
       </Group>
       <PlaygroundSection node={node} />
-      <VariablesSection node={node} />
-      <MotionSection node={node} />
       <DevResourcesSection node={node} />
       <AnnotationsSection node={node} />
       <MeasurementsSection />
-      <DevAssetsPanel />
       <CompareSection />
     </div>
   );

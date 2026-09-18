@@ -58,8 +58,8 @@ function measure(px: number, options: CodeOptions): string {
   return `${Math.round(value * 100) / 100}`;
 }
 
-/** A measurement with the unit after it, as CSS and Android write them. */
-const withUnit = (px: number, options: CodeOptions): string => `${measure(px, options)}${options.unit}`;
+/** A measurement with the unit after it, as CSS and Android write them — and as Dev Mode labels one. */
+export const withUnit = (px: number, options: CodeOptions): string => `${measure(px, options)}${options.unit}`;
 
 /** The first paint that is actually painted, which is the one the code shows. */
 const firstPaint = (paints: readonly Paint[] | undefined): Paint | undefined => paints?.find((paint) => paint.visible && paint.opacity > 0);

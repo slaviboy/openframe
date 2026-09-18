@@ -341,4 +341,13 @@ Landed so far:
 
 - `afe13b1` … and **this commit** adds the two sections the reference opens with, above Layer properties. **Component information** is entirely real: the main component drawn through `useLayerThumbnail`, and "Explore component behavior" opens and scrolls to the Playground (`revealInspectSection`). **MCP** carries the reference's shape with Openframe's own answers — *Session activity: Not sent* is simply true offline, the token estimate is computed from the code this panel generates, and the example prompt is real text the button really copies. "Open help" and "Set up third-party agents for the reference MCP" are left out, and a line of body text says plainly there is no server behind it. `useCodePrefs` moved to `use-code-prefs.ts` so MCP and the code wells need not import one another.
 
-Still to do: **8** a typography preview for text layers, a Text content section, and moving our five extra sections below the reference's — moving *where* `DevStatusControl` is called, never what it renders, since the Design inspector renders it too; **9** the matrix's Fid column and row 297.
+- **This commit — the type preview, Text content, and the order.** A text layer's Layer properties draws a
+  **typography preview** instead of the box model: the sample set in the layer's own font, its size
+  measured down the left and its line height down the right, both as copy buttons, with the font named
+  under it. **Text content** is a section of its own with a copy action, as the reference gives it. And
+  our five extra sections moved **below** the reference's, so the panel reads MCP → Component information → Layer
+  properties → Variables → Motion → Text content → Dev assets, then Status, Appearance, Playground, Dev
+  resources, Annotations, Measurements and Compare. Only *where* `DevStatusControl` is called moved — the
+  Design inspector renders the same component, so its markup is untouched.
+
+Still to do: **9** a typography preview for text layers, a Text content section, and moving our five extra sections below the reference's — moving *where* `DevStatusControl` is called, never what it renders, since the Design inspector renders it too; **9** the matrix's Fid column and row 297.
