@@ -291,8 +291,11 @@ export function Toolbar() {
               {(mode === 'draw' ? DRAW_GROUPS : mode === 'dev' ? DEV_GROUPS : GROUPS).map((group) => {
                 const active = group.items.some((t) => t.tool === tool);
                 const current = group.items.find((t) => t.tool === (active ? tool : picked[group.label])) ?? firstAvailable(group);
+                // A group of one has nothing to choose between, so it drops the chevron — and the group
+                // wrapper with it — and reads as the single button it is, the way Actions does.
+                const alone = group.items.length < 2;
                 return (
-                  <div key={group.label} className={styles.group} role="group" aria-label={current.label}>
+                  <div key={group.label} className={styles.group} {...(alone ? {} : { role: 'group', 'aria-label': current.label })}>
                     <ToolButton
                       icon={current.icon}
                       label={current.label}
@@ -306,19 +309,21 @@ export function Toolbar() {
                         if (e.detail === 0) e.currentTarget.blur();
                       }}
                     />
-                    <ToolMenu
-                      group={group}
-                      open={openGroup === group.label}
-                      onOpenChange={(open) => setOpenGroup(open ? group.label : null)}
-                      activeTool={tool}
-                      shortcut={shortcut}
-                      onPick={(item) => {
-                        if (!item.command) return;
-                        editor.commands.run(item.command);
-                        setPicked((prev) => ({ ...prev, [group.label]: item.tool }));
-                        setOpenGroup(null);
-                      }}
-                    />
+                    {!alone && (
+                      <ToolMenu
+                        group={group}
+                        open={openGroup === group.label}
+                        onOpenChange={(open) => setOpenGroup(open ? group.label : null)}
+                        activeTool={tool}
+                        shortcut={shortcut}
+                        onPick={(item) => {
+                          if (!item.command) return;
+                          editor.commands.run(item.command);
+                          setPicked((prev) => ({ ...prev, [group.label]: item.tool }));
+                          setOpenGroup(null);
+                        }}
+                      />
+                    )}
                   </div>
                 );
               })}

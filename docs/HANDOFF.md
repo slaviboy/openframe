@@ -366,4 +366,6 @@ After the panel rebuild the user supplied `reference/app/dev_mode_color_picker.h
 
 Worth remembering: the tile's magnified pixels must be drawn with the canvas shadow off. Left on, each of the 121 cells casts its own blur and the sample reads as a pale grey mesh rather than flat colour — which is what the first screenshot of it showed.
 
+- **A group of one drops its chevron.** The toolbar was drawing a disclosure beside every group, including the ones holding a single tool, so it opened a menu of one item. Those now render as the plain button they are — the `role="group"` wrapper goes too — which is what Actions has always looked like. In Design that is Comment; in Dev Mode, Copy colors, Measurement and Comment.
+
 Not taken up yet: the **Annotation** button (artwork supplied), and **Inspect** and **Re-center**, which the reference's Dev toolbar also carries.

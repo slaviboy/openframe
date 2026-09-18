@@ -190,6 +190,9 @@ test('Copy colors takes a color off the canvas instead of painting with it @chro
   await page.keyboard.press('Shift+D');
   const toolbar = page.getByRole('toolbar', { name: 'Tools' });
   await expect(toolbar.getByRole('button', { name: /^Measurement/ })).toBeVisible();
+  // A tool that is the only one in its group has nothing to choose between, so it carries no chevron.
+  await expect(toolbar.getByRole('button', { name: 'Color tools' })).toHaveCount(0);
+  await expect(toolbar.getByRole('button', { name: 'Handoff tools' })).toHaveCount(0);
   await toolbar.getByRole('button', { name: /^Copy colors/ }).click();
   await expect(page.getByText('Click to copy a color from the canvas · Esc to cancel')).toBeVisible();
 

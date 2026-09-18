@@ -402,7 +402,11 @@ width tool. This is the real artwork, so the conflation is gone. `move`, `annota
 supplied too and are not yet taken up.
 
 **The toolbar row.** `design_toolbelt--enabledToolsRow` holds five plain buttons with no dropdowns, so
-Dev Mode's tools are each their own group here rather than sharing one with a chevron.
+Dev Mode's tools are each their own group here rather than sharing one with a chevron. And a group of one
+now drops its chevron everywhere, not just in Dev Mode: the reference only puts one on a button that has
+something to choose between, and ours was drawing a disclosure that opened a menu of a single item. It
+drops the `role="group"` wrapper with it, so a lone tool reads as the one button it is — the way Actions
+always has. In Design that is the Comment tool; in Dev Mode, Copy colors, Measurement and Comment.
 
 **The cursor.** The capture carries it as a class with
 
