@@ -59,3 +59,17 @@
   font-size: 16px;
   white-space: pre;
 }
+
+/*
+ * The canvas as a screen reader reads it: out of sight and out of the pointer's way, but still in the accessibility
+ * tree, so it is clipped to nothing rather than hidden with `display` or `visibility`, which would take it out.
+ */
+.outline {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  pointer-events: none;
+}

@@ -23,6 +23,7 @@ import type { Vec2 } from '@/core/math/vec';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { DARK_CHROME, LIGHT_CHROME } from '@/editor/chrome/chrome-theme';
 import { drawOverlay } from '@/editor/chrome/overlay-renderer';
+import { CanvasOutline } from './CanvasOutline';
 import type { PixelPreview } from '../view/view-prefs';
 import type { Editor } from '@/editor/editor';
 import type { ToolManager } from '@/editor/tools/tool-manager';
@@ -834,6 +835,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
       data-spelling={spellingReady || undefined}
       data-keyboard-box={keyboardBox !== null || undefined}
     >
+      <CanvasOutline editor={editor} />
       <canvas ref={sceneRef} className={styles.layer} aria-hidden="true" />
       <canvas ref={overlayRef} className={styles.layer} role="application" aria-label="Design canvas" aria-roledescription="canvas" tabIndex={-1} />
       <textarea

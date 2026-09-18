@@ -42,7 +42,7 @@ test('multi-edit variants selects every variant of the set, and Q ends it', asyn
 
   const button = page.getByRole('button', { name: 'Multi-edit variants' });
   await button.click();
-  await expect(page.getByText('2 layers')).toBeVisible();
+  await expect(page.getByTestId('inspector').getByText('2 layers')).toBeVisible();
   const exit = page.getByRole('button', { name: 'Exit multi-edit' });
   await expect(exit).toHaveAttribute('aria-pressed', 'true');
 

@@ -180,7 +180,7 @@ test('Place all places every waiting image at once; Delete discards them', async
   await expect(page.getByTestId('place-image-hint')).toHaveCount(0);
   await expect(page.getByRole('treeitem', { name: /one/ })).toHaveCount(1);
   await expect(page.getByRole('treeitem', { name: /two/ })).toHaveCount(1);
-  await expect(page.getByText('2 layers')).toBeVisible();
+  await expect(page.getByTestId('inspector').getByText('2 layers')).toBeVisible();
 
   await load();
   await page.keyboard.press('Delete');
