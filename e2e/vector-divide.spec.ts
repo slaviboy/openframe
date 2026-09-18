@@ -51,7 +51,9 @@ test('dragging the Cut tool across a path divides it, moving the part that comes
   await page.mouse.move(...at(450, 430), { steps: 4 });
   await page.mouse.up();
   await expect(layers).toHaveCount(2);
-  // The layer being edited keeps the half with its first point.
+  // The layer being edited keeps the half with its first point. The panel is about the points while they
+  // are open, so the width is read once they are closed.
+  await page.keyboard.press('Escape');
   await expect(width).toHaveValue('50');
 
   await page.keyboard.press('ControlOrMeta+Z');

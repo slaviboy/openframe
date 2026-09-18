@@ -21,6 +21,7 @@ import type { Vec2 } from '@/core/math/vec';
 import type { SceneNode } from '@/core/schema/document';
 import type { Editor } from '../editor';
 import { captureStart, translateNodes } from '../interactions/transform';
+import { alignSelectedPoints } from '../interactions/vector-edit';
 import { selectedSceneNodes } from './selection-helpers';
 
 export type AlignEdge = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom';
@@ -66,6 +67,8 @@ function parentBounds(editor: Editor, id: Id): Rect | null {
  * layer to its own parent. Locked layers are not moved.
  */
 export function alignSelection(editor: Editor, edge: AlignEdge, eachToParent = false): void {
+  // While points are open the Alignment row aligns them, not the layer they belong to.
+  if (editor.state.getSnapshot().vectorEdit && alignSelectedPoints(editor, edge, LABELS[edge])) return;
   const ids = unlockedSelection(editor);
   if (ids.length === 0) return;
   editor.scene.ensure(editor.pageId);

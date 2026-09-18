@@ -68,6 +68,34 @@ export function scalePoints(network: VectorNetwork, indices: readonly number[], 
   );
 }
 
+/** Which edge of their shared box the selected points are brought onto. */
+export type PointsAlignEdge = 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom';
+
+/**
+ * Aligns selected points onto one edge — or the middle — of the box they share, the way the vector-edit
+ * panel's Alignment row does. The handles at those points travel with them unchanged, since each point
+ * only slides along one axis. Fewer than two points have no box to align to, so nothing moves.
+ */
+export function alignPoints(network: VectorNetwork, indices: readonly number[], edge: PointsAlignEdge): VectorNetwork {
+  const box = pointsBounds(network, indices);
+  if (!box) return network;
+  const to = {
+    left: box.x,
+    hcenter: box.x + box.width / 2,
+    right: box.x + box.width,
+    top: box.y,
+    vcenter: box.y + box.height / 2,
+    bottom: box.y + box.height,
+  }[edge];
+  const horizontal = edge === 'left' || edge === 'hcenter' || edge === 'right';
+  return mapPoints(
+    network,
+    indices,
+    (p) => (horizontal ? { x: to, y: p.y } : { x: p.x, y: to }),
+    (t) => t,
+  );
+}
+
 /** Rotates selected points about `pivot` by `radians`, turning the handles at those points with them. */
 export function rotatePoints(network: VectorNetwork, indices: readonly number[], pivot: Vec2, radians: number): VectorNetwork {
   const [cos, sin] = [Math.cos(radians), Math.sin(radians)];

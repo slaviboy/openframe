@@ -45,19 +45,21 @@ test('the Cut tool (X) breaks a path at a point into two separate ends', async (
   await page.mouse.click(...at(550, 350));
 
   // With the Move tool, Shift-click the tip to keep only the other end selected, and delete it:
-  // the tip is still there on its remaining side, so the path stays 150 wide.
+  // the tip is still there on its remaining side, so the path stays 150 wide. The panel is about the
+  // points while they are open, so the width is read once they are closed, and opened again after.
   await page.keyboard.press('v');
   await page.keyboard.down('Shift');
   await page.mouse.click(...at(550, 350));
   await page.keyboard.up('Shift');
   await page.keyboard.press('Delete');
+  await page.keyboard.press('Escape');
   await expect(page.getByTestId('field-w')).toHaveValue('150');
   await expect(page.getByRole('treeitem', { name: /Vector 1/ })).toHaveCount(1);
 
   // The end left at the tip goes too: now the path is 100 wide.
-  await page.keyboard.down('Shift');
+  await page.keyboard.press('Enter');
   await page.mouse.click(...at(550, 350));
-  await page.keyboard.up('Shift');
   await page.keyboard.press('Delete');
+  await page.keyboard.press('Escape');
   await expect(page.getByTestId('field-w')).toHaveValue('100');
 });

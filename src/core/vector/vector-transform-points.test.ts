@@ -17,7 +17,7 @@
 
 import { describe, expect, test } from 'vitest';
 import { straightSegment, type VectorNetwork } from './vector-network';
-import { pointsBounds, rotatePoints, scalePoints } from './vector-transform-points';
+import { alignPoints, pointsBounds, rotatePoints, scalePoints } from './vector-transform-points';
 
 /** A square whose top edge (0 → 1) curves: its handles are (10, 10) at vertex 0 and (−10, 10) at vertex 1. */
 const square: VectorNetwork = {
@@ -82,5 +82,32 @@ describe('transforming selected points with their bounding box', () => {
     // The unselected vertex 0 and its handle stay put.
     expect(turned.vertices[0]).toEqual({ x: 0, y: 0 });
     expect(turned.segments[0]!.tangentStart).toEqual({ x: 10, y: 10 });
+  });
+
+  test('aligning brings the selected points onto one edge of the box they share', () => {
+    // Left: both right-hand points come to x = 0, the left-hand ones stay.
+    const left = alignPoints(square, [0, 1, 2, 3], 'left');
+    expect(left.vertices.map((v) => v.x)).toEqual([0, 0, 0, 0]);
+    expect(left.vertices.map((v) => v.y)).toEqual([0, 0, 100, 100]);
+
+    // Centres, and one edge on the other axis, measured off the same box.
+    expect(alignPoints(square, [0, 1, 2, 3], 'hcenter').vertices.map((v) => v.x)).toEqual([50, 50, 50, 50]);
+    expect(alignPoints(square, [0, 1, 2, 3], 'vcenter').vertices.map((v) => v.y)).toEqual([50, 50, 50, 50]);
+    expect(alignPoints(square, [0, 1, 2, 3], 'bottom').vertices.map((v) => v.y)).toEqual([100, 100, 100, 100]);
+
+    // Only the selected points move, and to the box those points share, not the whole path's.
+    const two = alignPoints(square, [1, 2], 'left');
+    expect(two.vertices).toEqual([
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 100, y: 100 },
+      { x: 0, y: 100 },
+    ]);
+
+    // Handles travel with their point, unchanged: each point only slides along one axis.
+    expect(left.segments[0]).toEqual(square.segments[0]);
+
+    // Fewer than two points have no box, so nothing moves.
+    expect(alignPoints(square, [1], 'left')).toBe(square);
   });
 });

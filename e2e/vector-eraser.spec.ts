@@ -52,6 +52,9 @@ test('the Eraser (⇧E) removes the area it is dragged over, adding points along
   await page.mouse.move(...at(500, 350), { steps: 5 });
   await page.mouse.move(...at(500, 420), { steps: 5 });
   await page.mouse.up();
+
+  // The panel is about the points while they are open, so the layer's size is read once they are closed.
+  await page.keyboard.press('Escape');
   await expect(width).toHaveValue('90');
 
   await page.keyboard.press('ControlOrMeta+Z');

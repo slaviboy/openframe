@@ -59,6 +59,9 @@ test('selected points get a bounding box: dragging its edge resizes them, and un
   await page.mouse.move(...at(550, 350), { steps: 4 });
   await page.mouse.move(...at(600, 350), { steps: 4 });
   await page.mouse.up();
+
+  // The panel is about the points while they are open, so the width is read once they are closed.
+  await page.keyboard.press('Escape');
   await expect(width).toHaveValue('200');
 
   await page.keyboard.press('ControlOrMeta+Z');

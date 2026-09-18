@@ -40,7 +40,9 @@ test('⇧Delete in vector edit mode deletes a point and heals the path; undo res
   await page.keyboard.press('Enter');
   await page.mouse.click(box.x + 550, box.y + 350);
   await page.keyboard.press('Shift+Delete');
-  // The tip is gone and its sides joined: the path is a 100-wide rectangle, still one layer.
+  // The tip is gone and its sides joined: the path is a 100-wide rectangle, still one layer. The panel is
+  // about the points while they are open, so the widths are read once they are closed.
+  await page.keyboard.press('Escape');
   await expect(page.getByTestId('field-w')).toHaveValue('100');
   await expect(page.getByRole('treeitem', { name: /Vector 1/ })).toHaveCount(1);
 
@@ -48,7 +50,6 @@ test('⇧Delete in vector edit mode deletes a point and heals the path; undo res
   await expect(page.getByTestId('field-w')).toHaveValue('150');
   await page.keyboard.press('ControlOrMeta+Shift+Z');
   await expect(page.getByTestId('field-w')).toHaveValue('100');
-  await page.keyboard.press('Escape');
 
   await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
   await page.reload();

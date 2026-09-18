@@ -34,7 +34,7 @@ import { bendVertex, mirroredTangent, mirroringOf, moveHandles, oppositeEnd, set
 import { keyBetween } from '@/core/ids/fractional-index';
 import { matrixOf } from '@/core/scene/scene-index';
 import { divideNetwork } from '@/core/vector/vector-divide';
-import { rotatePoints, scalePoints } from '@/core/vector/vector-transform-points';
+import { alignPoints, pointsBounds, rotatePoints, scalePoints, type PointsAlignEdge } from '@/core/vector/vector-transform-points';
 import { eraseNetwork } from '@/core/vector/vector-erase';
 import { addWidthPoint, chainPointAt, nearestOnChain, snapPosition, strokeChain, widthAt, type StrokeChain, type WidthPoint } from '@/core/vector/vector-width';
 import { regionAt, setRegionFills } from '@/core/vector/vector-paint';
@@ -186,6 +186,29 @@ export function deleteSelectedPoints(editor: Editor): boolean {
 /** ⇧Delete: deletes the selected points and heals the path across them. */
 export function healSelectedPoints(editor: Editor): boolean {
   return removeSelectedPoints(editor, 'Delete and heal points', healVertices);
+}
+
+/** How many of the open layers have at least two points selected — what the Alignment row needs to act. */
+export function alignablePointCount(editor: Editor): number {
+  const state = editor.state.getSnapshot().vectorEdit;
+  if (!state) return 0;
+  return openVectorNodes(editor, state).filter((layer) => pointsBounds(layer.node.vectorNetwork, layer.vertices) !== null).length;
+}
+
+/**
+ * The Alignment row while points are open: the selected points come onto one edge of the box they share,
+ * rather than the layers moving. Each open layer aligns within its own box, since a network's points are
+ * written in that layer's own space — the same rule the tools that reshape a path follow.
+ */
+export function alignSelectedPoints(editor: Editor, edge: PointsAlignEdge, label: string): boolean {
+  const state = editor.state.getSnapshot().vectorEdit;
+  if (!state) return false;
+  const layers = openVectorNodes(editor, state).filter((layer) => pointsBounds(layer.node.vectorNetwork, layer.vertices) !== null);
+  if (layers.length === 0) return false;
+  editor.history.run(label, (tx) => {
+    for (const layer of layers) refitVector(tx, layer.node.id, alignPoints(layer.node.vectorNetwork, layer.vertices, edge));
+  });
+  return true;
 }
 
 /** Takes the selected points out of every open layer that has any, in one undo step. */

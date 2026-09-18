@@ -29,6 +29,13 @@ async function drawRect(page: Page, from: [number, number], to: [number, number]
   await page.mouse.up();
 }
 
+/** Opens the points and picks the Shape builder, which the Vector editing bar keeps behind More. */
+async function pickShapeBuilder(page: Page) {
+  await page.keyboard.press('Enter');
+  await page.getByRole('toolbar', { name: 'Vector editing' }).getByRole('button', { name: 'More' }).click();
+  await page.getByRole('menu', { name: 'More' }).getByRole('menuitemradio', { name: /Shape builder/ }).click();
+}
+
 /** Two overlapping squares flattened into one vector layer, then opened in vector edit mode. */
 async function overlapping(page: Page) {
   await page.goto('/');
@@ -39,10 +46,7 @@ async function overlapping(page: Page) {
   await page.getByRole('button', { name: 'Boolean operations' }).click();
   await page.getByRole('menu', { name: 'Boolean operations' }).getByRole('menuitem', { name: 'Flatten selection' }).click();
   await expect(page.getByTestId('inspector')).toContainText('Vector');
-  await page.keyboard.press('Enter');
-  // The Vector editing bar keeps the Shape builder behind its More button, as the reference does.
-  await page.getByRole('toolbar', { name: 'Vector editing' }).getByRole('button', { name: 'More' }).click();
-  await page.getByRole('menu', { name: 'More' }).getByRole('menuitemradio', { name: /Shape builder/ }).click();
+  await pickShapeBuilder(page);
   return (await page.getByTestId('canvas').boundingBox())!;
 }
 
@@ -52,6 +56,10 @@ test('the Shape builder takes a piece out onto its own layer', async ({ page }) 
   await page.mouse.click(box.x + 475, box.y + 350);
   await expect(page.getByRole('treeitem')).toHaveCount(2);
   await expect(page.getByTestId('inspector')).toContainText('Vector');
+  // The panel is about the points while they are open, so the piece's size is read once they are closed
+  // and the layer it went onto is picked in the tree.
+  await page.keyboard.press('Escape');
+  await page.getByRole('treeitem').first().click();
   await expect(page.getByTestId('field-w')).toHaveValue('50');
 
   await page.keyboard.press(`${mod}+z`);
@@ -65,14 +73,19 @@ test('⌥-clicking a piece takes it away, and a sweep merges the pieces it cross
   await page.mouse.click(box.x + 475, box.y + 350);
   await page.keyboard.up('Alt');
   await expect(page.getByRole('treeitem')).toHaveCount(1);
+  // The panel is about the points while they are open, so the sizes are read once they are closed, and
+  // the points are opened again for the sweep.
+  await page.keyboard.press('Escape');
   await expect(page.getByTestId('field-w')).toHaveValue('150');
   await page.keyboard.press(`${mod}+z`);
 
   // A sweep across the left piece and the overlap merges them into one shape, 100 across.
+  await pickShapeBuilder(page);
   await page.mouse.move(box.x + 420, box.y + 350);
   await page.mouse.down();
   await page.mouse.move(box.x + 460, box.y + 350, { steps: 4 });
   await page.mouse.move(box.x + 475, box.y + 350, { steps: 4 });
   await page.mouse.up();
+  await page.keyboard.press('Escape');
   await expect(page.getByTestId('field-w')).toHaveValue('100');
 });

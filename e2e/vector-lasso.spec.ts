@@ -52,9 +52,10 @@ test('the secondary toolbar Lasso selects points inside a drawn outline; Done le
   await page.mouse.move(...at(530, 370), { steps: 4 });
   await page.mouse.up();
   await page.keyboard.press('Delete');
-  await expect(page.getByTestId('field-w')).toHaveValue('100');
 
+  // Close leaves; the panel is about the points while they are open, so the width is read after it.
   await done.click();
   await expect(done).toHaveCount(0);
+  await expect(page.getByTestId('field-w')).toHaveValue('100');
   await expect(page.getByRole('treeitem', { name: /Vector 1/ })).toHaveCount(1);
 });

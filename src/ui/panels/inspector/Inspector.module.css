@@ -105,6 +105,27 @@
   width: var(--control-h);
 }
 
+/*
+ * The rows the vector-edit panel opens with — Alignment, Position, Mirroring, Corner radius. The reference
+ * gives them no heading of their own and no separator between them: one block, four rows, on the panel's
+ * own 16px/8px grid.
+ */
+.pointRows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+/* One field and an icon button: the shape the reference gives Mirroring and Corner radius. */
+.rowNarrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--control-h);
+  align-items: center;
+  column-gap: var(--space-2);
+}
+
 /* A group of icon buttons on one control-colored surface (the align buttons). */
 .segmented {
   display: flex;
@@ -131,6 +152,51 @@
 
 .segmented > button:disabled {
   color: var(--fg-disabled);
+}
+
+/*
+ * One option of a segmented radio group (Mirroring). The radio covers its glyph invisibly, so a click and
+ * a keypress both reach it, the way the toolbar's mode switcher works.
+ */
+.segmentedOption {
+  position: relative;
+  flex: 1;
+  min-width: var(--control-h);
+  height: 100%;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md);
+  color: var(--fg-primary);
+}
+
+.segmentedOption:hover:not([aria-disabled])[data-checked="true"],
+.segmentedOption:hover:not([aria-disabled]):not([data-checked]) {
+  background: var(--bg-control-hover);
+}
+
+.segmentedOption[data-checked] {
+  background: var(--bg-panel);
+  box-shadow: var(--shadow-mode);
+  color: var(--accent);
+}
+
+.segmentedOption[aria-disabled] {
+  color: var(--fg-disabled);
+}
+
+.segmentedOption > input[type="radio"] {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  opacity: 0;
+}
+
+.segmentedOption > input[type="radio"]:not(:disabled) {
+  cursor: pointer;
+}
+
+.segmentedOption:has(> input:focus-visible) {
+  outline: 2px solid var(--border-focus);
 }
 
 /* An icon button whose native select opens on click (Apply blend mode): the select covers the glyph, invisible. */

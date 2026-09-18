@@ -43,18 +43,19 @@ test('vector edit mode moves points with Return or a double-click; Escape leaves
   }
   await expect(page.getByTestId('field-w')).toHaveValue('100');
 
-  // Return edits the points: dragging the right-hand point widens the layer instead of moving it.
+  // Return edits the points: dragging the right-hand point widens the layer instead of moving it. The
+  // panel is about the points while they are open, so the layer's size is read once they are closed.
   await page.keyboard.press('v');
   await page.keyboard.press('Enter');
   await drag(page, [500, 300], [540, 300]);
-  await expect(page.getByTestId('field-w')).toHaveValue('140');
   await page.keyboard.press('Escape');
+  await expect(page.getByTestId('field-w')).toHaveValue('140');
 
   // A double-click enters it again.
   await page.mouse.dblclick(box.x + 450, box.y + 330);
   await drag(page, [540, 300], [560, 300]);
-  await expect(page.getByTestId('field-w')).toHaveValue('160');
   await page.keyboard.press('Escape');
+  await expect(page.getByTestId('field-w')).toHaveValue('160');
 
   await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
   await page.reload();
@@ -138,4 +139,90 @@ test('the Vector editing bar floats above the toolbar, which stays put with the 
   await toolbelt.getByRole('button', { name: /^Close/ }).click();
   await expect(toolbelt).toBeHidden();
   await expect(toolbar).toBeVisible();
+});
+
+test('the panel while points are open is the short one, and its Position follows the point picked', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  // A triangle drawn with the Pen, 400..500 across.
+  await page.keyboard.press('p');
+  for (const [x, y] of [
+    [400, 300],
+    [500, 300],
+    [450, 400],
+    [400, 300],
+  ] as const) {
+    await page.mouse.click(box.x + x, box.y + y);
+  }
+  const inspector = page.getByTestId('inspector');
+  await expect(page.getByTestId('field-w')).toHaveValue('100');
+
+  // The points are read in the same space the layer's own X and Y are, which the canvas is offset from.
+  await page.keyboard.press('v');
+  const left = Number(await page.getByTestId('field-x').inputValue());
+  const top = Number(await page.getByTestId('field-y').inputValue());
+  await page.keyboard.press('Enter');
+
+  // The reference's panel is about the points: Alignment, Position, Mirroring, Fill and Stroke. Nothing
+  // about the layer as a whole is there.
+  await expect(inspector.getByRole('group', { name: 'Position' })).toBeVisible();
+  await expect(inspector.getByRole('group', { name: 'Align layers' })).toBeVisible();
+  await expect(inspector.getByRole('radiogroup', { name: 'Mirroring' })).toBeVisible();
+  await expect(inspector.getByRole('region', { name: 'Fill' })).toBeVisible();
+  await expect(inspector.getByRole('region', { name: 'Stroke' })).toBeVisible();
+  await expect(page.getByTestId('field-w')).toHaveCount(0);
+  await expect(page.getByTestId('field-rotation')).toHaveCount(0);
+  await expect(inspector.getByRole('region', { name: 'Export' })).toHaveCount(0);
+
+  // With nothing picked the position fields are empty; picking the right-hand point fills them.
+  const x = page.getByTestId('field-point-x');
+  const y = page.getByTestId('field-point-y');
+  await expect(x).toHaveValue('');
+  await page.mouse.click(box.x + 500, box.y + 300);
+  await expect(x).toHaveValue(String(left + 100));
+  await expect(y).toHaveValue(String(top));
+
+  // Typing into X moves that point alone: the path widens to 140.
+  await x.fill(String(left + 140));
+  await x.press('Enter');
+  await expect(x).toHaveValue(String(left + 140));
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('field-w')).toHaveValue('140');
+});
+
+test('Alignment while points are open aligns the points, not the layer', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  // A quadrilateral whose tip sticks out to 550, so the path is 150 across.
+  await page.keyboard.press('p');
+  for (const [x, y] of [
+    [400, 300],
+    [550, 350],
+    [500, 400],
+    [400, 400],
+    [400, 300],
+  ] as const) {
+    await page.mouse.click(box.x + x, box.y + y);
+  }
+  await expect(page.getByTestId('field-w')).toHaveValue('150');
+
+  // The tip and the corner below it onto the left edge of the box those two share: the tip comes back to
+  // 500, so the path is 100 across and the layer itself has not moved.
+  await page.keyboard.press('v');
+  const left = Number(await page.getByTestId('field-x').inputValue());
+  await page.keyboard.press('Enter');
+  await page.mouse.click(box.x + 550, box.y + 350);
+  await page.keyboard.down('Shift');
+  await page.mouse.click(box.x + 500, box.y + 400);
+  await page.keyboard.up('Shift');
+  await page.getByTestId('inspector').getByRole('button', { name: 'Align left' }).click();
+  await expect(page.getByTestId('field-point-x')).toHaveValue(String(left + 100));
+
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('field-w')).toHaveValue('100');
+  await expect(page.getByTestId('field-x')).toHaveValue(String(left));
 });

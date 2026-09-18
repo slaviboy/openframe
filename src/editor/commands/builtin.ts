@@ -34,7 +34,16 @@ import { canTidyUp, tidyUpSelection } from './tidy';
 import { canToggleMask, toggleMask } from './masks';
 import { canFlatten, flattenSelection } from './flatten';
 import { addRepeatTransform, applyTransforms, canApplyTransforms } from './transforms';
-import { beginVectorEdit, canBeginVectorEdit, deleteSelectedPoints, deleteSelectedWidthPoints, healSelectedPoints, setVectorEditTool, endVectorEdit } from '../interactions/vector-edit';
+import {
+  alignablePointCount,
+  beginVectorEdit,
+  canBeginVectorEdit,
+  deleteSelectedPoints,
+  deleteSelectedWidthPoints,
+  healSelectedPoints,
+  setVectorEditTool,
+  endVectorEdit,
+} from '../interactions/vector-edit';
 import { isInFlow, moveInFlow } from '@/core/layout/flow-order';
 import { addAutoLayout, canAddAutoLayout, canRemoveAutoLayout, removeAutoLayout, suggestAutoLayoutForSelection } from './auto-layout';
 import { COLOR_PROFILE_LABELS, documentColorProfile, setColorProfile } from '@/core/color/color-profile';
@@ -542,7 +551,8 @@ const ALIGN_COMMANDS: CommandDefinition[] = [
       ['arrange.alignBottom', 'Align bottom', 'bottom', 'S'],
     ] as const
   ).flatMap(([id, label, edge, key]): CommandDefinition[] => [
-    { id, label, category: 'Arrange', shortcuts: [`Alt+${key}`], enabled: hasLayerSelection, run: (e) => alignSelection(e, edge) },
+    // While points are open these align the selected points, so two of those are enough to enable them.
+    { id, label, category: 'Arrange', shortcuts: [`Alt+${key}`], enabled: (e) => (e.state.getSnapshot().vectorEdit ? alignablePointCount(e) > 0 : hasLayerSelection(e)), run: (e) => alignSelection(e, edge) },
     {
       id: `${id}ToParent`,
       label: `${label} to parent`,

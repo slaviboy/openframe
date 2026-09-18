@@ -137,7 +137,11 @@ import { canResetOverrides, overrideLabel, resetSelectedOverride, resetSelectedO
 import { eraserShape, eraserWeight, vectorEditPaint } from '@/editor/interactions/vector-edit';
 import { mirroringOf, setMirroring } from '@/core/vector/vector-bend';
 import { profileOf, profileWidthPoints, WIDTH_PROFILES } from '@/core/vector/vector-width';
-import { invert, applyLinear } from '@/core/math/matrix';
+import { invert, apply, applyLinear } from '@/core/math/matrix';
+import { matrixOf } from '@/core/scene/scene-index';
+import { moveVertices } from '@/core/vector/vector-edit';
+import { pointsBounds } from '@/core/vector/vector-transform-points';
+import { refitVector } from '@/editor/tools/vector-draw';
 import {
   DEFAULT_MITER_ANGLE,
   hasGeometry,
@@ -148,6 +152,7 @@ import {
   type ShadowEffect,
   type StrokeJoin,
   type BlendMode,
+  isSceneNode,
   type Constraint,
   type CornerRadii,
   type GradientPaint,
@@ -336,11 +341,15 @@ export function Inspector() {
   useDocumentRevision();
   const selection = useEditorState((s) => s.selection);
   const tool = useEditorState((s) => s.tool);
+  const editingPoints = useEditorState((s) => s.vectorEdit !== null);
   const nodes = sceneNodes(editor.doc, selection);
 
   return (
     <div className={styles.inspector} data-testid="inspector">
-      {nodes.length === 0 ? (
+      {/* Points open: the panel is the short one the reference draws, about the points rather than the layer. */}
+      {editingPoints ? (
+        <VectorEditSections />
+      ) : nodes.length === 0 ? (
         <>
           {tool === 'frame' && <FramePresetsSection />}
           <PageSection />
@@ -1674,11 +1683,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
           {nodes.every((n) => n.type !== 'TEXT') && <PaintSection title="Stroke" field="strokes" nodes={geometryNodes} defaultPaint={() => solid(BLACK)} />}
         </>
       )}
-      <MirroringSection />
-      <WidthProfileSection />
-      <WidthPointSection />
-      <VectorEraserSection />
-      <VectorPaintSection />
+      {/* Mirroring and the vector tools' settings belong to the panel points are edited in, not to this one. */}
       {!allSlices && <EffectsSection nodes={nodes} />}
       <SelectionColorsSection nodes={nodes} />
       {frames.length === nodes.length && <LayoutGuideSection nodes={frames} />}
@@ -2534,6 +2539,142 @@ function ComponentSection({ node }: { node: SceneNode }) {
 }
 
 /** The shape a stroke's width takes along its length, while the Variable width tool is picked. */
+/**
+ * The properties panel while points are open. The reference keeps it short: the layer's type, then
+ * Alignment, Position, Mirroring and Corner radius — all about the points — and then Fill and Stroke.
+ * Nothing about the layer as a whole is there: no size, rotation, constraints, auto layout, opacity,
+ * effects or export, since none of those are what is being edited.
+ *
+ * The four rows carry no visible heading. The reference names each for screen readers alone, so they are
+ * groups with an `aria-label` and no text. The tool sections between them and Fill are ours: the
+ * documentation asks for the Eraser's and the Paint tool's settings in the sidebar, and the reference —
+ * captured with Move in hand — cannot say where they sit.
+ */
+function VectorEditSections() {
+  const editor = useEditor();
+  useDocumentRevision();
+  const state = useEditorState((s) => s.vectorEdit);
+  const node = state ? editor.doc.get(state.nodeId) : undefined;
+  if (!state || !node || !isSceneNode(node)) return null;
+  const geometry = hasGeometry(node) ? [node] : [];
+  const open = 1 + (state.others?.length ?? 0);
+  return (
+    <>
+      <div className={styles.typeHeader}>
+        <span className={styles.typeLabel} data-testid="type-label">
+          {TYPE_LABELS[node.type]}
+        </span>
+        {open > 1 && <span className={styles.count}>{open} layers</span>}
+      </div>
+      <div className={styles.pointRows}>
+        <AlignRow />
+        <PointPositionRow />
+        <MirroringRow />
+      </div>
+      <WidthProfileSection />
+      <WidthPointSection />
+      <VectorEraserSection />
+      <VectorPaintSection />
+      {geometry.length > 0 && (
+        <>
+          <PaintSection title="Fill" field="fills" nodes={geometry} defaultPaint={() => solid(DEFAULT_SHAPE_FILL)} />
+          <PaintSection title="Stroke" field="strokes" nodes={geometry} defaultPaint={() => solid(BLACK)} />
+        </>
+      )}
+    </>
+  );
+}
+
+/**
+ * Where the selected points are, in the space the layer's own X and Y are read in. One point gives its
+ * own place; several give the corner of the box they share, and moving it carries them all. With none
+ * selected the fields show empty and can't be typed in, which is how the reference draws them.
+ */
+function PointPositionRow() {
+  const editor = useEditor();
+  const state = useEditorState((s) => s.vectorEdit);
+  const gesture = useGesture('Move points');
+  const node = state ? editor.doc.get(state.nodeId) : undefined;
+  if (!state || node?.type !== 'VECTOR') return null;
+  const network = node.vectorNetwork;
+  const selected = state.vertices.filter((i) => network.vertices[i] !== undefined);
+  const single = selected.length === 1 ? network.vertices[selected[0]!]! : undefined;
+  const box = pointsBounds(network, selected);
+  const local = single ?? (box ? { x: box.x, y: box.y } : undefined);
+  const at = local ? apply(matrixOf(node.transform), local) : undefined;
+
+  const setAxis = (axis: 'x' | 'y', value: number) => {
+    if (!at) return;
+    const linear = invert(matrixOf(node.transform));
+    if (!linear) return;
+    // The fields are read in the layer's parent space, so the step typed there comes back through the
+    // layer's own transform before it moves the points.
+    const delta = applyLinear(linear, { x: axis === 'x' ? value - at.x : 0, y: axis === 'y' ? value - at.y : 0 });
+    gesture.change((tx) => {
+      const current = (tx.store.getOrThrow(node.id) as Extract<SceneNode, { type: 'VECTOR' }>).vectorNetwork;
+      refitVector(tx, node.id, moveVertices(current, selected, delta));
+    });
+  };
+
+  return (
+    <div className={styles.row} role="group" aria-label="Position">
+      <NumberField label="X" ariaLabel="X-position" testId="field-point-x" decimals={2} value={at?.x} disabled={!at} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => setAxis('x', v)} />
+      <NumberField label="Y" ariaLabel="Y-position" testId="field-point-y" decimals={2} value={at?.y} disabled={!at} onGestureStart={gesture.start} onGestureEnd={gesture.end} onChange={(v) => setAxis('y', v)} />
+    </div>
+  );
+}
+
+/** The three ways a point's handles can follow each other, as the reference's segmented control. */
+const MIRRORING_OPTIONS: readonly { readonly mode: HandleMirroring; readonly label: string; readonly icon: IconName }[] = [
+  { mode: 'NONE', label: 'No mirroring', icon: 'mirrorNone' },
+  { mode: 'ANGLE', label: 'Mirror angle', icon: 'mirrorAngle' },
+  { mode: 'ANGLE_AND_LENGTH', label: 'Mirror angle and length', icon: 'mirrorAngleAndLength' },
+];
+
+/**
+ * How the handles of the selected points follow each other. The reference makes this a segmented group of
+ * three pictures rather than a list, so that is what it is here; the modes are the documentation's own.
+ */
+function MirroringRow() {
+  const editor = useEditor();
+  const state = useEditorState((s) => s.vectorEdit);
+  const node = state ? editor.doc.get(state.nodeId) : undefined;
+  const network = node?.type === 'VECTOR' ? node.vectorNetwork : undefined;
+  const modes = new Set((state && network ? state.vertices.filter((i) => network.vertices[i] !== undefined) : []).map((i) => mirroringOf(network!, i)));
+  const [only] = modes;
+  const current = modes.size === 1 ? only : undefined;
+  const change = (mode: HandleMirroring) => {
+    if (!state || !node) return;
+    editor.history.run('Change mirroring', (tx) => {
+      const live = (tx.store.getOrThrow(node.id) as Extract<SceneNode, { type: 'VECTOR' }>).vectorNetwork;
+      tx.set(node.id, 'vectorNetwork', setMirroring(live, state.vertices, mode));
+    });
+  };
+  return (
+    <div className={styles.rowNarrow}>
+      <div className={styles.segmented} role="radiogroup" aria-label="Mirroring" data-testid="field-mirroring" data-value={current ?? ''}>
+        {MIRRORING_OPTIONS.map((option) => (
+          <MirroringOption key={option.mode} label={option.label} icon={option.icon} checked={current === option.mode} disabled={modes.size === 0} onSelect={() => change(option.mode)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** One of the mirroring pictures: a radio that covers its glyph, so pointer and keyboard both reach it. */
+function MirroringOption({ label, icon, checked, disabled, onSelect }: { label: string; icon: IconName; checked: boolean; disabled: boolean; onSelect: () => void }) {
+  const { handlers, tooltip } = useHoverTooltip(label, undefined, 'below');
+  return (
+    <>
+      <label className={styles.segmentedOption} data-checked={checked || undefined} aria-disabled={disabled || undefined} {...handlers}>
+        <input type="radio" name="vector-mirroring" aria-label={label} checked={checked} disabled={disabled} onChange={onSelect} />
+        <Icon name={icon} />
+      </label>
+      {tooltip}
+    </>
+  );
+}
+
 function WidthProfileSection() {
   const editor = useEditor();
   const state = useEditorState((s) => s.vectorEdit);
@@ -2600,41 +2741,6 @@ function WidthPointSection() {
           })
         }
       />
-    </Section>
-  );
-}
-
-/** How the handles of the points selected in vector edit mode follow each other. */
-function MirroringSection() {
-  const editor = useEditor();
-  const state = useEditorState((s) => s.vectorEdit);
-  const node = state ? editor.doc.get(state.nodeId) : undefined;
-  if (!state || state.vertices.length === 0 || node?.type !== 'VECTOR') return null;
-  const network = node.vectorNetwork;
-  const modes = new Set(state.vertices.filter((i) => network.vertices[i] !== undefined).map((i) => mirroringOf(network, i)));
-  if (modes.size === 0) return null;
-  const [only] = modes;
-  return (
-    <Section title="Mirroring">
-      <select
-        className={primitives.select}
-        aria-label="Handle mirroring"
-        data-testid="field-mirroring"
-        value={modes.size === 1 ? only : ''}
-        onKeyDown={(e) => e.stopPropagation()}
-        onChange={(e) => {
-          const mode = e.target.value as HandleMirroring;
-          editor.history.run('Change mirroring', (tx) => {
-            const current = (tx.store.getOrThrow(node.id) as Extract<SceneNode, { type: 'VECTOR' }>).vectorNetwork;
-            tx.set(node.id, 'vectorNetwork', setMirroring(current, state.vertices, mode));
-          });
-        }}
-      >
-        {modes.size > 1 && <option value="">Mixed</option>}
-        <option value="NONE">No mirroring</option>
-        <option value="ANGLE">Mirror angle</option>
-        <option value="ANGLE_AND_LENGTH">Mirror angle and length</option>
-      </select>
     </Section>
   );
 }

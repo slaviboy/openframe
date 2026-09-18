@@ -50,7 +50,9 @@ test('the Bend tool pulls mirrored handles out of a point, and the Move tool dra
   await expect(page.getByRole('button', { name: /^Bend/ })).toHaveAttribute('aria-pressed', 'true');
 
   // Pulling a handle straight up out of the right-hand corner curves both of its sides past the top edge.
+  // The panel is about the points while they are open, so the layer's height is read once they are closed.
   await drag(page, [500, 300], [500, 260]);
+  await page.keyboard.press('Escape');
   await expect(height).not.toHaveValue('100');
   const bentText = await height.inputValue();
   const bent = Number(bentText);
@@ -62,7 +64,11 @@ test('the Bend tool pulls mirrored handles out of a point, and the Move tool dra
   await expect(height).toHaveValue(bentText);
 
   // With the Move tool, dragging the upper handle further up bends the path more; its mirror follows.
+  // The handles show once their point is picked again.
+  await page.keyboard.press('Enter');
   await page.keyboard.press('v');
+  await page.mouse.click(box.x + 500, box.y + 300);
   await drag(page, [500, 260], [500, 200]);
+  await page.keyboard.press('Escape');
   await expect.poll(async () => Number(await height.inputValue())).toBeGreaterThan(bent);
 });
