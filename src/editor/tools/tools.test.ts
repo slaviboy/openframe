@@ -180,11 +180,21 @@ describe('move tool', () => {
     expect(get<RectangleNode>(b).parent.id).toBe(editor.pageId);
   });
 
-  test('wheel pans and ctrl-wheel zooms around the cursor', () => {
-    tools.wheel({ screen: { x: 100, y: 100 }, deltaX: 0, deltaY: 50, ctrlOrMeta: false, shift: false });
-    expect(editor.state.viewport.y).toBe(50);
+  test('wheel pans and ctrl-wheel zooms around the cursor, a mouse notch by less than it reports', () => {
+    // A trackpad's small deltas pan by exactly what they report.
+    tools.wheel({ screen: { x: 100, y: 100 }, deltaX: 0, deltaY: 20, ctrlOrMeta: false, shift: false });
+    expect(editor.state.viewport.y).toBe(20);
+    // A mouse notch is damped, or the canvas leaps a hundred pixels at a time.
+    tools.wheel({ screen: { x: 100, y: 100 }, deltaX: 0, deltaY: 100, ctrlOrMeta: false, shift: false });
+    expect(editor.state.viewport.y).toBe(70);
+
     tools.wheel({ screen: { x: 100, y: 100 }, deltaX: 0, deltaY: -10, ctrlOrMeta: true, shift: false });
     expect(editor.state.viewport.zoom).toBeGreaterThan(1);
+    // A notch of zoom moves it by about 6%, not the 18% it used to take.
+    const before = editor.state.viewport.zoom;
+    tools.wheel({ screen: { x: 100, y: 100 }, deltaX: 0, deltaY: -100, ctrlOrMeta: true, shift: false });
+    expect(editor.state.viewport.zoom / before).toBeGreaterThan(1.05);
+    expect(editor.state.viewport.zoom / before).toBeLessThan(1.08);
   });
 });
 

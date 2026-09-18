@@ -53,6 +53,19 @@ export interface WheelSample {
   readonly shift: boolean;
 }
 
+/**
+ * A wheel delta at or above this many pixels is a mouse notch rather than a trackpad: a trackpad reports a
+ * stream of small deltas, a wheel one jump of 100 or 120.
+ */
+const COARSE_WHEEL = 50;
+/** How much of a mouse notch the view pans: a notch moved the canvas by its full 100 pixels at once. */
+const COARSE_WHEEL_PAN = 0.5;
+/**
+ * How much of the zoom a mouse notch takes, per pixel of its delta. A notch of 100 used to move the zoom by
+ * 18% in one jump, which reads as the view leaping rather than moving; this makes it about 6%.
+ */
+const COARSE_WHEEL_ZOOM = 0.0006;
+
 /** Hand tool: drag to pan. */
 class HandTool implements Tool {
   readonly id = 'hand' as const;
@@ -423,16 +436,22 @@ export class ToolManager {
     return null;
   }
 
+
   wheel(w: WheelSample): void {
     const v: Viewport = this.editor.state.viewport;
     if (w.ctrlOrMeta) {
-      // Pinch gestures arrive as ctrl+wheel with small deltas; mouse wheels with large ones.
-      const factor = Math.exp(-w.deltaY * (Math.abs(w.deltaY) < 50 ? 0.01 : 0.002));
-      this.editor.setViewport(zoomAt(v, w.screen, v.zoom * factor));
+      // A pinch arrives as ctrl+wheel in small steps, a mouse wheel in notches of 100 or 120 at a time. A
+      // notch took 18% of the zoom in one jump; it now takes about 6%, so the view closes on what you are
+      // looking at instead of leaping past it.
+      const perPixel = Math.abs(w.deltaY) < COARSE_WHEEL ? 0.01 : COARSE_WHEEL_ZOOM;
+      this.editor.setViewport(zoomAt(v, w.screen, v.zoom * Math.exp(-w.deltaY * perPixel)));
       return;
     }
     const dx = w.shift && w.deltaX === 0 ? w.deltaY : w.deltaX;
     const dy = w.shift && w.deltaX === 0 ? 0 : w.deltaY;
-    this.editor.setViewport(panBy(v, -dx, -dy));
+    // A trackpad already reports a smooth stream of small deltas, so only a mouse notch is damped.
+    const step = Math.max(Math.abs(dx), Math.abs(dy)) < COARSE_WHEEL ? 1 : COARSE_WHEEL_PAN;
+    this.editor.setViewport(panBy(v, -dx * step, -dy * step));
   }
+
 }
