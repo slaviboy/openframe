@@ -1241,8 +1241,9 @@ export class MoveTool implements Tool {
     let result = resizeTo(p.world);
     g.guides = [];
     const m = g.frame.toWorld;
-    // Snap the moving edges of axis-aligned selections (holding Control disables snapping).
-    if (!p.ctrl && g.candidates.length > 0 && Math.abs(m.b) < 1e-9 && Math.abs(m.c) < 1e-9) {
+    // Snap the corner being dragged, wherever it is in the world — a turned selection snaps like any other,
+    // since the resize is worked out from a world point (holding Control disables snapping).
+    if (!p.ctrl && g.candidates.length > 0) {
       const [ax, ay] = HANDLE_AXES[g.handle];
       const threshold = SNAP_THRESHOLD_PX / editor.state.viewport.zoom;
       const edge = apply(m, { x: ax === 1 ? result.x1 : result.x0, y: ay === 1 ? result.y1 : result.y0 });
