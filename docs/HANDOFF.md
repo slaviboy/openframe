@@ -375,3 +375,11 @@ Not taken up yet: the **Annotation** button (artwork supplied), and **Inspect** 
 The user then supplied `reference/app/reference_app.min.css.br.css`. It carries the eyedropper cursor as its **source SVG** on `.color_swatch--chit`, at the same `8 24` hotspot as the runtime PNG — a white silhouette under a black drawing with the reference's own drop-shadow filter. That replaces the cursor the previous commit built from the toolbar icon's path. The stylesheet holds only two custom cursors; the other is `.hyperlink_popup--clickable` (a pointing hand with a link), which we have no call site for. The reference's canvas tool cursors are set at runtime through `--cursor-type` and are not in that file, so it settles no others.
 
 `tests/architecture/files.ts` now skips `reference/` when it walks the repo. That folder is gitignored the reference markup, not ours, and the header test only started tripping over it when a `.css` turned up among the `.html` captures.
+
+
+## The rotation row, and the point a layer turns around (2026-09-18)
+
+Two things the user reported together, and they were one bug and one real gap.
+
+- **The row was collapsed.** `.row` is a three-column grid (`1fr 1fr 24px`) and the rotation row had *four* children — the field, the rotation-origin button, the three turn/flip buttons as one group, and a trailing spacer. So the group landed in the 24px column: each button came out **eight pixels wide**, and the spacer wrapped onto a row of its own. It now has its own `.rotationRow` (`1fr 24px auto`) with the buttons at their natural size, and the origin button's slot is kept even when the button is not offered so nothing shifts.
+- **Dragging to rotate ignored the rotation origin.** The Rotation field turned the layer around its anchor — `setRotation` has always read it — but the canvas gesture pivoted on `frameCenterWorld(frame)` whatever the origin was set to. Since dragging a corner is how a layer is usually turned, the feature read as broken even though the field path worked. A single selection now pivots on its own anchor (`rotationPivotWorld`); a multi-selection still turns around the middle of the frame it shares, since it has no one anchor. `e2e/transform.spec.ts` covers the drag path now, and the assertion was checked against the unfixed code first: it reads X 355 instead of 260.

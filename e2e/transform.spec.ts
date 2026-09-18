@@ -93,5 +93,16 @@ test('⌥R sets the point a layer turns around, while designing as well as in Mo
   await page.getByTestId('field-rotation').press('Enter');
   await expect.poll(async () => Math.round(Number(await page.getByTestId('field-x').inputValue()))).toBe(Math.round(startX));
   await expect.poll(async () => Math.round(Number(await page.getByTestId('field-y').inputValue()))).toBe(Math.round(startY));
+
+  // Turning it by dragging a corner obeys the same point — which is how a layer is usually turned, and
+  // where this used to fall back to the middle of the selection whatever the origin was set to.
+  await page.getByTestId('field-rotation').fill('0');
+  await page.getByTestId('field-rotation').press('Enter');
+  await expect.poll(async () => Math.round(Number(await page.getByTestId('field-x').inputValue()))).toBe(Math.round(startX));
+  await drag(page, [350, 250], [460, 250]);
+  await expect(page.getByTestId('field-rotation')).not.toHaveValue('0°');
+  await expect.poll(async () => Math.round(Number(await page.getByTestId('field-x').inputValue()))).toBe(Math.round(startX));
+  await expect.poll(async () => Math.round(Number(await page.getByTestId('field-y').inputValue()))).toBe(Math.round(startY));
+
   await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
 });

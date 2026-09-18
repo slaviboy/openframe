@@ -1327,7 +1327,7 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
         </div>
         {/* Sections never rotate or flip. */}
         {!hasSection && (
-          <div className={styles.row}>
+          <div className={styles.rotationRow}>
             <MotionField nodes={nodes} property="rotation" motion={motion}>
               <NumberField
                 label={<Icon name="rotation" />}
@@ -1339,8 +1339,11 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
                 onChange={keyframes('rotation', (deg) => rotate.change((tx) => nodes.forEach((n) => setRotation(tx, tx.store.getOrThrow(n.id) as SceneNode, deg))))}
               />
             </MotionField>
-            {!motion && single && (
+            {/* The slot is kept even when the button is not offered, so the buttons beside it stay put. */}
+            {!motion && single ? (
               <IconButton icon="target" label="Edit rotation origin" tooltip="The point the layer turns around" pressed={editingAnchor} onClick={() => editor.commands.run('motion.editAnchor')} />
+            ) : (
+              <span />
             )}
             <div className={styles.segmented}>
               <SegmentButton
@@ -1360,7 +1363,6 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
               <SegmentButton icon="flipHorizontal" label="Flip horizontal" command="object.flipHorizontal" />
               <SegmentButton icon="flipVertical" label="Flip vertical" command="object.flipVertical" />
             </div>
-            <span />
           </div>
         )}
         {constrainable && (

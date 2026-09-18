@@ -57,12 +57,13 @@ import {
   type SmartShape,
 } from '../commands/smart-selection';
 import { canParent } from '@/core/document/containment';
-import type { DuplicateMemory } from '../editor';
+import type { DuplicateMemory, Editor } from '../editor';
 import type { Vec2 } from '@/core/math/vec';
 import { hitTestDeepest, isArtboardWithChildren, isInteractive, marqueeSelect, selectionTarget } from '@/core/scene/hit-test';
 import { connectDestinationAt, connectHandle, connectionAt, connectionsInScreenRect, flowTagAt, hitConnectHandle, overlayBadgeAt, variantDestinationAt } from '../chrome/prototype-geometry';
 import { hitTextPathHandle, textPathHandle, textPathPositionAt } from '../chrome/text-path-handle';
 import { anchorShareAt, anchorTarget, hitAnchorHandle } from '../chrome/anchor-handle';
+import { anchorPoint } from '../commands/properties';
 import { curveOffsetFor, hitMotionPathCurve, hitMotionPathKeyframe, keyframePositionAt } from '../chrome/motion-path';
 import { variantSetOf } from '@/core/prototype/reactions';
 import { addInteraction, moveFlowStartingPoint, removeConnections, removeFlowStartingPoint, setConnectionsDestination, type ConnectionRef } from '../commands/prototype';
@@ -252,6 +253,19 @@ type Gesture =
   /** Prototype tab: pressing a connection's noodle selects it; dragging the selected connections moves their destination. */
   | { kind: 'connection'; refs: readonly ConnectionRef[]; down: PointerInfo; current: PointerInfo; dragged: boolean; destination: Id | null; overEmpty: boolean }
   | { kind: 'flow-tag'; nodeId: Id; down: PointerInfo; current: PointerInfo; dragged: boolean; destination: Id | null; overEmpty: boolean };
+
+/**
+ * The world point a rotation drag turns a selection around: the layer's own anchor when exactly one is
+ * selected, so the target set with Edit rotation origin governs the drag as well as the Rotation field.
+ * Null when there is no single layer to read one from.
+ */
+function rotationPivotWorld(editor: Editor): Vec2 | null {
+  const [id, ...rest] = editor.selection;
+  if (id === undefined || rest.length > 0) return null;
+  const node = editor.doc.get(id);
+  if (!node || !isSceneNode(node) || node.type === 'SECTION') return null;
+  return apply(editor.scene.computeWorld(id), anchorPoint(node));
+}
 
 /**
  * Move tool (V): selection, dragging, marquee selection, and resizing via handles.
@@ -655,7 +669,10 @@ export class MoveTool implements Tool {
         const tx = editor.history.begin('Rotate');
         editor.scene.ensure(editor.pageId);
         const starts = editor.selection.map((id) => captureStart(tx, editor.scene, id));
-        const pivot = frameCenterWorld(frame);
+        // A single layer turns around its own anchor point — the same point the Rotation field turns it
+        // around, and the one the target handle sets. A multi-selection has no single anchor, so it turns
+        // around the middle of the frame it shares.
+        const pivot = rotationPivotWorld(editor) ?? frameCenterWorld(frame);
         const baseRotation = starts.length === 1 ? matrixRotationDegrees(starts[0]!.world) : null;
         this.gesture = {
           kind: 'rotate',

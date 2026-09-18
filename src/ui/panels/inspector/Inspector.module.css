@@ -87,6 +87,24 @@
   column-gap: var(--space-2);
 }
 
+/*
+ * Rotation, the point the layer turns around, and the turn/flip buttons. Its own row because the three
+ * buttons are a group: on `.row`'s `1fr 1fr 24px` they were all crushed into the 24px trailing column,
+ * eight pixels wide each and unreadable.
+ */
+.rotationRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--control-h) auto;
+  align-items: center;
+  column-gap: var(--space-2);
+}
+
+/* In this row the buttons keep their own size rather than sharing the column between them. */
+.rotationRow .segmented > button {
+  flex: 0 0 auto;
+  width: var(--control-h);
+}
+
 /* A group of icon buttons on one control-colored surface (the align buttons). */
 .segmented {
   display: flex;
@@ -156,7 +174,7 @@
 }
 
 /* The reference's checkbox: a rounded 16px box, filled with the accent and a white check when on. */
-.checkbox input[type='checkbox'] {
+.checkbox input[type="checkbox"] {
   flex: none;
   width: 16px;
   height: 16px;
@@ -167,13 +185,13 @@
   appearance: none;
 }
 
-.checkbox input[type='checkbox']:checked {
+.checkbox input[type="checkbox"]:checked {
   border-color: var(--accent);
   background-color: var(--accent);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none'%3E%3Cpath d='M5 8.5 7.5 11l4-6' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
-.checkbox input[type='checkbox']:focus-visible {
+.checkbox input[type="checkbox"]:focus-visible {
   outline: 2px solid var(--border-focus);
   outline-offset: 1px;
 }
@@ -355,7 +373,7 @@
   text-align: left;
 }
 
-.fontButton[aria-expanded='true'] {
+.fontButton[aria-expanded="true"] {
   border-color: var(--accent, #0d99ff);
 }
 
@@ -377,7 +395,7 @@
 }
 
 .disclosure:hover,
-.disclosure[aria-expanded='true'] {
+.disclosure[aria-expanded="true"] {
   color: var(--fg-primary);
 }
 
@@ -412,7 +430,7 @@
 }
 
 .alignCell::after {
-  content: '';
+  content: "";
   width: 4px;
   height: 4px;
   border-radius: 50%;
@@ -420,7 +438,7 @@
   opacity: 0.35;
 }
 
-.alignCell[aria-pressed='true']::after {
+.alignCell[aria-pressed="true"]::after {
   width: 8px;
   height: 8px;
   border-radius: 2px;
@@ -521,7 +539,8 @@
   margin-top: var(--space-1);
   border: 1px solid var(--border);
   border-radius: var(--radius-xs);
-  background: repeating-conic-gradient(var(--border) 0 25%, transparent 0 50%) 0 0 / 12px 12px;
+  background: repeating-conic-gradient(var(--border) 0 25%, transparent 0 50%) 0
+    0 / 12px 12px;
   object-fit: contain;
 }
 
