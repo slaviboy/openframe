@@ -1,0 +1,146 @@
+/*
+ * Copyright (C) 2026 Stanislav Georgiev
+ * https://github.com/slaviboy
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+/*
+ * The MCP and Component information sections. Measured from dev_mode_1.html (Component information) and
+ * dev_mode_text_list.html (MCP); the reference class each rule comes from is in docs/UI_REFERENCE.md.
+ */
+
+/* component_preview_panel--componentPreviewContainer, on common--well. */
+.previewWell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  margin: 0 var(--space-4) var(--space-2);
+  height: 140px;
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+}
+
+.previewImage {
+  margin: var(--space-4);
+  max-width: calc(100% - 2 * var(--space-4));
+  max-height: calc(140px - 2 * var(--space-4));
+}
+
+.previewEmpty {
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+}
+
+/* component_props_list--playgroundButtonContainer */
+.buttonRow {
+  padding: var(--space-2) var(--space-4);
+}
+
+.buttonRow button {
+  width: 100%;
+}
+
+/* mcp_panel--container */
+.mcp {
+  padding: 0 var(--space-4);
+  display: flex;
+  flex-direction: column;
+  margin-bottom: var(--space-1);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+}
+
+.mcpHeading {
+  color: var(--fg-secondary);
+}
+
+/* mcp_panel--settingsContainer */
+.mcpSettings {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-2);
+  gap: var(--space-2);
+}
+
+/* mcp_panel--settingRow */
+.mcpRow {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* mcp_panel--settingLabel */
+.mcpLabel {
+  color: var(--fg-secondary);
+  width: 116px;
+  flex-grow: 0;
+  flex-shrink: 0;
+}
+
+.mcpValue {
+  color: var(--fg-primary);
+}
+
+/* mcp_panel--examplePromptContainer */
+.mcpPrompt {
+  display: flex;
+  flex-direction: column;
+  margin-top: var(--space-3);
+  gap: var(--space-2);
+}
+
+/* mcp_panel--examplePromptWell */
+.promptWell {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  justify-content: stretch;
+  width: 100%;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.promptWell:hover {
+  background: var(--bg-hover);
+}
+
+.promptText {
+  color: var(--fg-primary);
+  white-space: break-spaces;
+}
+
+/* mcp_panel--examplePromptLink, which the reference colours with its code-string colour. */
+.promptLink {
+  color: var(--code-string);
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Openframe's own line: the reference has no equivalent, because the reference has a server behind this. */
+.mcpNote {
+  margin: var(--space-2) 0 0;
+  color: var(--fg-secondary);
+  line-height: var(--line-ui);
+}

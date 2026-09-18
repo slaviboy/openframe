@@ -150,6 +150,38 @@ test('Inspect writes the selection out as code, in the language and unit chosen'
   await expect(inspect.getByRole('region', { name: 'Layer properties' })).toBeVisible();
 });
 
+// Reading the clipboard back needs permissions only Chromium grants to tests.
+test('MCP says what it would hand an agent, and hands it over through the clipboard @chromium-only', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 520, box.y + 380, { steps: 5 });
+  await page.mouse.up();
+  await page.keyboard.press('Shift+D');
+
+  // The reference's own two readings, with Openframe's answers: offline, nothing is ever sent.
+  const mcp = page.getByRole('region', { name: 'MCP' });
+  await expect(mcp).toContainText('Session activity');
+  await expect(mcp).toContainText('Not sent');
+  await expect(mcp).toContainText('runs no MCP server');
+  // The token estimate is computed from the prompt, so it is a number greater than nothing.
+  const tokens = Number(await mcp.getByText(/^\d+$/).innerText());
+  expect(tokens).toBeGreaterThan(0);
+
+  // The prompt names where the layer sits, and the button really copies it.
+  await expect(mcp).toContainText('Implement this design from Openframe.');
+  await expect(mcp).toContainText('Rectangle 1');
+  await mcp.getByRole('button', { name: 'Copy example prompt' }).click();
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain('Implement this design from Openframe.');
+  expect(copied).toContain('Rectangle 1');
+  expect(copied).toContain('width:');
+});
+
 test('⇧M saves a measurement between two layers, which is labelled, kept and removed', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
@@ -386,6 +418,13 @@ test('the playground turns a component property another way without touching the
   await page.keyboard.press('ControlOrMeta+D');
   await expect(page.getByTestId('type-label')).toHaveText('Instance');
   await page.keyboard.press('Shift+D');
+
+  // The component the instance comes from is drawn above Layer properties, as the reference draws it,
+  // and its button is the way into the playground below.
+  const info = page.getByRole('region', { name: 'Component information' });
+  await expect(info).toBeVisible();
+  await expect(info.getByRole('img', { name: /Component thumbnail/ })).toBeVisible();
+  await info.getByRole('button', { name: 'Explore component behavior' }).click();
 
   const playground = page.getByRole('region', { name: 'Playground' });
   await expect(playground).toBeVisible();

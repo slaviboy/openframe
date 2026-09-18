@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Icon } from '../../icons/Icon';
 import styles from './InspectSection.module.css';
 
@@ -25,6 +25,19 @@ import styles from './InspectSection.module.css';
  * re-mounts for as long as the tab is open, and is forgotten on reload — recorded in docs/UI_REFERENCE.md.
  */
 const folded = new Map<string, boolean>();
+
+/** Sections listening for someone else unfolding them, so `revealInspectSection` reaches whichever is mounted. */
+const listeners = new Set<() => void>();
+
+/**
+ * Opens a section and brings it into view — what "Explore component behavior" does to the Playground.
+ * A no-op when that section is not on screen for this selection.
+ */
+export function revealInspectSection(id: string): void {
+  folded.set(id, false);
+  for (const listener of listeners) listener();
+  requestAnimationFrame(() => document.querySelector(`[data-inspect-section="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' }));
+}
 
 interface InspectSectionProps {
   /** Identifies the section for the folded-away set; not rendered. */
@@ -44,13 +57,18 @@ interface InspectSectionProps {
 /** A section of the inspect panel, drawn the way the reference draws one. */
 export function InspectSection({ id, title, level = 'top', actions, children }: InspectSectionProps) {
   const [open, setOpen] = useState(() => !folded.get(id));
+  useEffect(() => {
+    const listener = () => setOpen(!folded.get(id));
+    listeners.add(listener);
+    return () => void listeners.delete(listener);
+  }, [id]);
   const fold = (next: boolean) => {
     folded.set(id, !next);
     setOpen(next);
   };
   const heading = <h3 className={styles.title}>{title}</h3>;
   return (
-    <section className={level === 'sub' ? `${styles.section} ${styles.sub}` : styles.section} aria-label={title}>
+    <section className={level === 'sub' ? `${styles.section} ${styles.sub}` : styles.section} aria-label={title} data-inspect-section={id}>
       <div className={level === 'sub' ? `${styles.titleRow} ${styles.snug}` : styles.titleRow}>
         {level === 'sub' ? (
           <div className={styles.titleText}>

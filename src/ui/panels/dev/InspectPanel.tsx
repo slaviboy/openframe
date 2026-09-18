@@ -24,7 +24,7 @@ import { addDevResource, boundVariablesOf, deleteDevResource, devResources, sugg
 import { deleteMeasurement, measurementsOf, setMeasurementLabel } from '@/editor/commands/measurements';
 import { rotationDegrees } from '@/editor/commands/properties';
 import type { SceneNode } from '@/core/schema/document';
-import { type ReactNode, useState, useSyncExternalStore } from 'react';
+import { type ReactNode, useState } from 'react';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import { formatNumber } from '../../primitives/math';
 import primitives from '../../primitives/primitives.module.css';
@@ -34,8 +34,11 @@ import { DevAssetsPanel } from './DevAssetsPanel';
 import { PlaygroundSection } from './PlaygroundSection';
 import { BoxModel } from './BoxModel';
 import { CodeAspects } from './CodeAspects';
+import { ComponentInfoSection } from './ComponentInfoSection';
+import { McpSection } from './McpSection';
 import { InspectHeader } from './InspectHeader';
 import { InspectSection } from './InspectSection';
+import { useCodePrefs } from './use-code-prefs';
 import styles from './InspectPanel.module.css';
 
 /** A measurement as Dev Mode reads it: whole pixels where it can, two decimals where it cannot. */
@@ -125,6 +128,10 @@ export function InspectPanel() {
       <InspectHeader node={node} />
 
       {canHaveDevStatus(node) && <DevStatusControl node={node} />}
+
+      {/* The reference opens with MCP, then Component information when the layer stands for one. */}
+      <McpSection node={node} />
+      <ComponentInfoSection node={node} />
 
       {/* Layer properties holds the box, the View switch and then either the rows or the code — the
           reference nests them, and it hides nothing outside this section when the view changes. */}
@@ -310,16 +317,6 @@ function MeasurementsSection() {
   );
 }
 
-/** Reads the code preferences, which are kept per device so Copy as code follows the panel. */
-function useCodePrefs() {
-  const prefs = useSyncExternalStore(viewPrefs.subscribe, () => viewPrefs.getSnapshot());
-  const language: CodeLanguage = prefs.codeLanguage;
-  const units = CODE_UNITS[language];
-  const unit = units.includes(prefs.codeUnit) ? prefs.codeUnit : units[0]!;
-  const scale = prefs.codeScale > 0 ? prefs.codeScale : null;
-  return { language, unit, units, scale };
-}
-
 /**
  * The language, unit and scale the code is written in. The reference keeps these beside the View switch
  * rather than inside the code itself, so changing them reads as a preference of the panel.
@@ -370,6 +367,6 @@ function CodePreferences() {
 
 /** The code that builds the selected layer, in the language and unit chosen. */
 function CodeSection({ node }: { node: SceneNode }) {
-  const { language, unit, scale } = useCodePrefs();
-  return <CodeAspects node={node} options={{ language, unit, ...(scale === null ? {} : { scale }) }} />;
+  const { options } = useCodePrefs();
+  return <CodeAspects node={node} options={options} />;
 }

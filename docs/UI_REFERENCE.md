@@ -307,6 +307,42 @@ in the reference — they inherit the code colour — so ours do the same rather
   reference's icon button, labelled `Copy {Aspect}, press shift to copy all code` — and shift really does
   copy all of it.
 
+## Dev Mode's MCP and Component information
+
+Section order across the three captures that show it: **MCP → Component information** (frames standing
+for a component only) **→ Layer properties → …**. Both now sit there.
+
+| Reference class | CSS read off it | Where it landed |
+| --- | --- | --- |
+| `mcp_panel--container` | `padding:0 16px; margin-bottom:4px; color:var(--color-text-secondary)` | `DevSections.module.css .mcp` |
+| `mcp_panel--settingsContainer` | `margin-top:8px; gap:8px` | `.mcpSettings` |
+| `mcp_panel--settingRow` / `--settingLabel` | `gap:8px`; label `width:116px; flex:0 0` | `.mcpRow` / `.mcpLabel` |
+| `mcp_panel--examplePromptContainer` | `margin-top:12px; gap:8px` | `.mcpPrompt` |
+| `mcp_panel--examplePromptWell` | `padding:8px 12px; gap:4px; border:1px solid var(--color-border); border-radius:var(--radius-medium)` | `.promptWell` |
+| `mcp_panel--examplePromptLink` | `color:var(--color-codestring)` | `.promptLink` (our `--code-string`) |
+| `component_preview_panel--componentPreviewContainer` (+ `common--well`) | `margin:0 16px 8px; height:140px; border-radius:var(--radius-medium); background:var(--color-bg-secondary)` | `.previewWell` |
+| `component_preview_panel--componentPreviewImage` | `margin:16px` | `.previewImage` |
+| `component_props_list--playgroundButtonContainer` | `padding:8px 16px` | `.buttonRow` |
+
+The reference's spacers resolve to `--spacer-1: .25rem` (4px), `--spacer-2: .5rem` (8px), `--spacer-2-5: .75rem`
+(12px) and `--radius-medium: .3125rem` (5px) — which is our `--radius-md`.
+
+**Deviations, recorded rather than hidden.**
+
+- **Component information is real.** The preview is the main component drawn by `useLayerThumbnail`, and
+  "Explore component behavior" opens the Playground and scrolls to it.
+- **MCP has the reference's shape and Openframe's answers.** the reference's MCP server hands a selection to an
+  agent over the network; Openframe is offline and runs none, so *Not sent* is the truth here rather than
+  a state that might change. The token estimate is computed locally (four characters to the token) from
+  the prompt this panel builds, and the prompt is text the button really copies. A line of body text the
+  reference does not have says plainly that there is no server — that is the alternative to drawing a
+  control that does nothing.
+- **Two of the reference's buttons are left out**: "Open help" (there is no help page) and "Set up
+  third-party agents for the reference MCP" (there is nothing to set up).
+- The reference's prompt well is labelled with the prompt itself, and so is ours. That is not only
+  faithful: labelling it "Copy example prompt for …" collided with the *Copy example prompt* button under
+  it, since Playwright matches accessible names case-insensitively by substring.
+
 ## The Dev Mode toolbar
 
 The reference's Dev toolbar reads: **Move · Copy colors · Measurement · Annotation · Comment · Inspect ·
