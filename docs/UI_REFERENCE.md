@@ -168,3 +168,27 @@ secondary of `var(--color-icon-color-3)`, which becomes `var(--fg-tertiary)`.
 same label, and `Comment` arrives as `Comment (515 unread)`.
 
 The reference brand mark is **not** copied. Our `logo` icon stays ours.
+
+### What these captures do not contain
+
+Running the extractor shows 128 distinct glyphs: 43 already in our set (lifted in an earlier session from
+the same kind of page), 1 newly named, and 84 still to name. Reading the 84 labels settles a scoping
+question — **none of our 52 hairline `STROKE` icons has a counterpart here.** The pages were saved with
+every flyout closed and vector edit mode inactive, so the reference's shape glyphs (line, arrow, ellipse,
+polygon, star, image) and its vector-tool glyphs (lasso, cut, bend, paint, eraser, variable width,
+shape builder) are simply not in the markup, and neither are the typography icons.
+
+Those are exactly the icons that make our toolbar look mixed. They cannot be taken from these captures,
+and inferring them is the very thing this pass exists to stop, so two more saved pages would close the
+gap: **the Shape tools flyout open**, and **vector edit mode active**. Until then the stroke icons that
+*do* have a reference here are converted and the rest are left alone.
+
+Usable references present for icons we already have: Instance, Text, Auto layout, Collapse layers,
+Detach variable, Select layer, Individual padding, Horizontal/Vertical padding, Annotation, Origin,
+Apply variable, Edit object, Create collection, Edit variable, Copy colors, Timeline panel,
+Collapse timeline, Measurement, Play, Loop, Filter, Comment, Main menu, Select layer.
+
+**One conflation found while mapping:** our `width` icon is rendered both for the Measurement tool
+(Dev Mode, `Toolbar.tsx:151`) and for the Variable width tool (vector edit, `Toolbar.tsx:202`) — one
+glyph for two unrelated things. The reference draws a ruler for the first. They must be split into two names
+before either can take a reference glyph.
