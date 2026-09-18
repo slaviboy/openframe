@@ -111,7 +111,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
   const { editor, tools } = session;
   const editorState = useSyncExternalStore(editor.state.subscribe, editor.state.getSnapshot);
   const prefs = useSyncExternalStore(viewPrefs.subscribe, viewPrefs.getSnapshot);
-  const outlines = useMemo(() => ({ outlines: prefs.outlines, includeHidden: prefs.outlineHidden }), [prefs.outlines, prefs.outlineHidden]);
+  const outlines = useMemo(() => ({ outlines: prefs.outlines, includeHidden: prefs.outlineHidden, objectBounds: prefs.outlineBounds }), [prefs.outlines, prefs.outlineHidden, prefs.outlineBounds]);
   const [palette, setPalette] = useState<'commands' | 'components' | null>(null);
   const [contextMenu, setContextMenu] = useState<(CanvasContextMenu & { pasteEntries: MenuEntry[] }) | null>(null);
   const [uiMode, setUiMode] = useState<UiMode>('full');

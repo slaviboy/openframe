@@ -41,3 +41,39 @@ test('⌘⇧O toggles outline mode, persists across reloads, and hidden layers c
   await menu.click();
   await expect(item(/Show outlines/)).toHaveAttribute('aria-checked', 'false');
 });
+
+test('in outline mode a hidden layer can be clicked, and object bounds can be shown', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  await page.keyboard.press('o');
+  await page.mouse.move(box.x + 400, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 520, box.y + 400, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByRole('treeitem', { name: /Ellipse 1/ })).toBeVisible();
+
+  // Hide it — the button shows on hover — and clicking where it was selects nothing.
+  await page.getByRole('treeitem', { name: /Ellipse 1/ }).hover();
+  await page.getByRole('button', { name: 'Hide Ellipse 1' }).click();
+  await page.keyboard.press('Escape');
+  await page.mouse.click(box.x + 460, box.y + 350);
+  await expect(page.getByTestId('inspector')).toContainText('Page');
+
+  // Outline mode showing hidden layers draws it, so it takes a click again.
+  const menu = page.getByTestId('zoom-level');
+  const item = (name: RegExp) => page.getByRole('menuitemcheckbox', { name });
+  await menu.click();
+  await item(/Show outlines/).click();
+  await menu.click();
+  await item(/Include hidden layers/).click();
+  await page.mouse.click(box.x + 460, box.y + 350);
+  await expect(page.getByTestId('inspector')).toContainText('Ellipse');
+
+  // Include object bounds is offered alongside, and turns on.
+  await menu.click();
+  await item(/Include object bounds/).click();
+  await menu.click();
+  await expect(item(/Include object bounds/)).toHaveAttribute('aria-checked', 'true');
+});

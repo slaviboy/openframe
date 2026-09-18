@@ -291,13 +291,7 @@ function FileHeader() {
             <Menu
               label="File actions"
               // The same file actions the main menu's File section offers, beside the name they act on.
-              entries={commandSections(app.editor, [
-                ['file.browse', 'file.open'],
-                ['file.save', 'file.saveAs', 'file.saveLocalCopy'],
-                ['file.showVersionHistory', 'file.branches'],
-                ['file.export'],
-                ['file.setThumbnail', 'file.restoreThumbnail'],
-              ])}
+              entries={commandSections(app.editor, [['file.browse', 'file.open'], ['file.save', 'file.saveAs', 'file.saveLocalCopy'], ['file.showVersionHistory', 'file.branches'], ['file.export']])}
               anchor={menuAnchor}
               placement="bottom-start"
               onClose={closeMenu}
@@ -472,7 +466,7 @@ function RightHeader() {
               ['view.zoomIn', 'view.zoomOut', 'view.zoomToFit', 'view.zoomToSelection'],
               ['view.zoom50', 'view.zoom100', 'view.zoom200'],
               ['view.togglePixelGrid', 'view.toggleSnapToPixelGrid', 'view.toggleLayoutGuides'],
-              ['view.toggleRulers', 'view.toggleOutlines', 'view.toggleOutlineHidden', 'view.toggleMaskOutlines'],
+              ['view.toggleRulers', 'view.toggleOutlines', 'view.toggleOutlineHidden', 'view.toggleOutlineBounds', 'view.toggleMaskOutlines'],
               ['view.togglePropertyLabels'],
             ])}
             anchor={anchor}

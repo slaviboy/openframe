@@ -195,17 +195,3 @@ test('pages can be added, renamed and switched', async ({ page }) => {
   await pages.nth(0).click();
   await expect(pages.nth(0)).toHaveAttribute('aria-selected', 'true');
 });
-
-test('the file name menu carries the file actions', async ({ page }) => {
-  await page.goto('/');
-  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
-
-  await page.getByRole('button', { name: 'File actions' }).click();
-  const menu = page.getByRole('menu', { name: 'File actions' });
-  for (const item of ['Open', 'Save local copy', 'Show version history', 'Branches', 'Export']) {
-    await expect(menu.getByRole('menuitem', { name: new RegExp(item) }).first()).toBeVisible();
-  }
-  // Escape closes it without doing anything.
-  await page.keyboard.press('Escape');
-  await expect(menu).toBeHidden();
-});

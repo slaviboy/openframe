@@ -656,7 +656,10 @@ export class MoveTool implements Tool {
     }
 
     const tolerance = this.env.hitTolerancePx / editor.state.viewport.zoom;
-    const deepest = hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, { tolerance: 0 }) ?? hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, { tolerance });
+    const includeHidden = editor.state.getSnapshot().outlinedHidden;
+    const deepest =
+      hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, { tolerance: 0, includeHidden }) ??
+      hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, { tolerance, includeHidden });
 
     // Clicking inside the current selection's bounds keeps it (so multi-selections can be dragged).
     if (frame && !p.shift && !p.mod && this.insideFrame(frame, p.world) && (deepest === null || this.isWithinSelection(deepest))) {
@@ -1379,7 +1382,7 @@ export class MoveTool implements Tool {
       this.updateMeasurement(p);
       return;
     }
-    const deepest = hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, { tolerance: 0 });
+    const deepest = hitTestDeepest(editor.doc, editor.scene, editor.pageId, p.world, { tolerance: 0, includeHidden: editor.state.getSnapshot().outlinedHidden });
     // With ⌥ held, hover the deepest layer so distances can be measured to nested content.
     const target = deepest ? selectionTarget(editor.doc, editor.pageId, deepest, editor.selection, p.mod || p.alt) : null;
     editor.state.setHover(target && isArtboardWithChildren(editor.doc, editor.pageId, target) && target === deepest && !p.mod && !p.alt ? null : target);

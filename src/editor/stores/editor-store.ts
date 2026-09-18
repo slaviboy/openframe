@@ -117,6 +117,8 @@ export interface EditorState {
    * taken into the frame under the pointer; with nothing running it holds the Hand tool instead.
    */
   readonly spaceHeld: boolean;
+  /** Outline mode is showing hidden layers, so they can be clicked as well as seen. */
+  readonly outlinedHidden: boolean;
   /** Grid tracks picked out on the canvas: which frame, which way they run, and which of them. */
   readonly gridTracks: { readonly frameId: Id; readonly axis: 'column' | 'row'; readonly indices: readonly number[] } | null;
   /**
@@ -263,6 +265,7 @@ export class EditorStore extends Observable<EditorState> {
       selectedOverlay: null,
       markedLayers: [],
       spaceHeld: false,
+      outlinedHidden: false,
       gridTracks: null,
       tool: 'move',
       spring: null,
@@ -603,6 +606,11 @@ export class EditorStore extends Observable<EditorState> {
     if (this.state.selection.length || this.state.selectedGuide || this.state.selectedOverlay || this.state.croppingId || this.state.gradientEdit || this.state.blurEdit) {
       this.setState({ selection: [], selectedGuide: null, selectedOverlay: null, markedLayers: [], gridTracks: null, croppingId: null, gradientEdit: null, blurEdit: null });
     }
+  }
+
+  /** Told by the canvas as the view options change, so hit testing matches what outline mode draws. */
+  setOutlinedHidden(shown: boolean): void {
+    if (this.state.outlinedHidden !== shown) this.setState({ outlinedHidden: shown });
   }
 
   /** Told by the tool manager as Space goes down and up. */

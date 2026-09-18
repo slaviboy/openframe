@@ -28,6 +28,8 @@ import { nodeContainsLocal, type SceneIndex } from './scene-index';
 export interface HitOptions {
   /** Hit tolerance in world units (e.g. 4 screen px / zoom). */
   tolerance: number;
+  /** Outline mode showing hidden layers: they are drawn, so they can be clicked as well. */
+  includeHidden?: boolean;
 }
 
 /** Whether a node and all its ancestors are visible and unlocked (i.e. interactive on canvas). */
@@ -74,7 +76,7 @@ export function hitTestDeepest(store: DocumentStore, index: SceneIndex, pageId: 
   const visit = (id: Id): Id | null => {
     const node = store.get(id);
     if (!node) return null;
-    if (isSceneNode(node) && (!node.visible || node.locked)) return null;
+    if (isSceneNode(node) && ((!node.visible && !options.includeHidden) || node.locked)) return null;
     // Boolean groups are hit only inside their combined shape, whichever child lies under the point.
     if (node.type === 'BOOLEAN_OPERATION') {
       const local = candidates.has(id) ? index.toLocal(id, world) : null;
@@ -148,13 +150,7 @@ function scaleOfWorld(index: SceneIndex, id: Id): number {
  * - If the current selection has siblings under the pointer, the click stays at that
  *   hierarchy level (so selecting inside a group keeps working until clicking away).
  */
-export function selectionTarget(
-  store: DocumentStore,
-  pageId: Id,
-  deepest: Id,
-  currentSelection: readonly Id[],
-  deep: boolean,
-): Id {
+export function selectionTarget(store: DocumentStore, pageId: Id, deepest: Id, currentSelection: readonly Id[], deep: boolean): Id {
   if (deep) return deepest;
   const chain: Id[] = [];
   for (let cur: Id | null = deepest; cur !== null && cur !== pageId; cur = store.parentOf(cur)) chain.unshift(cur);
@@ -191,14 +187,7 @@ export function isArtboardWithChildren(store: DocumentStore, pageId: Id, id: Id)
  * page's top-level layers — or inside the artboard where the marquee started.
  * With `deep`, the deepest intersecting leaves are selected.
  */
-export function marqueeSelect(
-  store: DocumentStore,
-  index: SceneIndex,
-  pageId: Id,
-  marquee: Rect,
-  scopeId: Id,
-  deep: boolean,
-): Id[] {
+export function marqueeSelect(store: DocumentStore, index: SceneIndex, pageId: Id, marquee: Rect, scopeId: Id, deep: boolean): Id[] {
   index.ensure(pageId);
   const hits = new Set(index.query(marquee));
   const result: Id[] = [];

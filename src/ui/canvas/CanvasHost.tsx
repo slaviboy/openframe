@@ -182,6 +182,8 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, layoutGuid
     pixelGridRef.current = pixelGrid;
     layoutGuidesRef.current = layoutGuides;
     maskOutlinesRef.current = maskOutlines;
+    // Hidden layers drawn in outline mode are clickable too, so hit testing is told what is on show.
+    editor.state.setOutlinedHidden(outlines.outlines === true && outlines.includeHidden === true);
     editor.requestRender();
   }, [outlines, pixelGrid, layoutGuides, maskOutlines, editor]);
 

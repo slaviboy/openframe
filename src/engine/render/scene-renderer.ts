@@ -110,6 +110,8 @@ export interface RenderOptions {
   readonly outlines?: boolean;
   /** In outline mode, also outline hidden layers. */
   readonly includeHidden?: boolean;
+  /** In outline mode, also draw the box each layer sits in. */
+  readonly objectBounds?: boolean;
   /** Layer in crop mode: its whole image is shown faded under the crop. */
   readonly cropping?: Id | null;
   /** The file's color profile: how document color values are interpreted. */
@@ -130,6 +132,7 @@ interface DrawContext {
   readonly pixelSize: number;
   readonly outlines: boolean;
   readonly includeHidden: boolean;
+  readonly objectBounds: boolean;
   readonly cropping: Id | null;
 }
 
@@ -253,7 +256,17 @@ export class SceneRenderer {
     canvas.translate(-view.x, -view.y);
     const visible: Rect = { x: view.x, y: view.y, width: view.width / view.zoom, height: view.height / view.zoom };
     index.ensure(pageId);
-    const ctx: DrawContext = { store, index, visible, stats, pixelSize: 1 / s, outlines: options.outlines ?? false, includeHidden: options.includeHidden ?? false, cropping: options.cropping ?? null };
+    const ctx: DrawContext = {
+      store,
+      index,
+      visible,
+      stats,
+      pixelSize: 1 / s,
+      outlines: options.outlines ?? false,
+      includeHidden: options.includeHidden ?? false,
+      objectBounds: options.objectBounds ?? false,
+      cropping: options.cropping ?? null,
+    };
     if (options.only !== undefined) {
       // A single layer: its parents' transform, then the layer with its children.
       const parentId = store.parentOf(options.only);
@@ -441,7 +454,7 @@ export class SceneRenderer {
       const om = matrixOf(node.transform);
       canvas.concat([om.a, om.c, om.e, om.b, om.d, om.f, 0, 0, 1]);
       if (node.type !== 'GROUP') {
-        this.drawOutline(canvas, node);
+        this.drawOutline(canvas, node, ctx.objectBounds);
         ctx.stats.drawn++;
       }
       for (const child of children) this.drawNode(canvas, child, ctx);
@@ -1139,7 +1152,19 @@ export class SceneRenderer {
   }
 
   /** Outline mode: a hairline (one device pixel at any zoom) along the layer's geometry. */
-  private drawOutline(canvas: Canvas, node: GeometryNode): void {
+  private drawOutline(canvas: Canvas, node: GeometryNode, bounds = false): void {
+    // "Include object bounds": the box each layer sits in, drawn as well as the shape it draws.
+    if (bounds) canvas.drawRect(this.ck.LTRBRect(0, 0, node.size.width, node.size.height), this.outlinePaint);
+    // Stroke placement: where the stroke really sits — inside, outside or astride the edge — shown as its own
+    // hairline beside the shape, since outline mode draws no strokes.
+    const half = node.strokeWeight / 2;
+    if (node.strokeWeight > 0 && node.strokes.some((paint) => paint.visible && paint.opacity > 0) && node.type !== 'TEXT' && node.type !== 'LINE') {
+      const offsets = node.strokeAlign === 'CENTER' ? [-half, half] : node.strokeAlign === 'INSIDE' ? [node.strokeWeight] : [-node.strokeWeight];
+      for (const offset of offsets) {
+        const [left, top, right, bottom] = [offset, offset, node.size.width - offset, node.size.height - offset];
+        if (right > left && bottom > top) canvas.drawRect(this.ck.LTRBRect(left, top, right, bottom), this.outlinePaint);
+      }
+    }
     if (node.type === 'TEXT') {
       this.drawText(canvas, node, () => this.outlinePaint);
       return;

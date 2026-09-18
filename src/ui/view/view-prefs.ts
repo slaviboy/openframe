@@ -26,6 +26,8 @@ export interface ViewPrefs {
   readonly outlines: boolean;
   /** In outline mode, also outline hidden layers. */
   readonly outlineHidden: boolean;
+  /** In outline mode, also draw the box each layer sits in. */
+  readonly outlineBounds: boolean;
   /** Outline every mask in green. */
   readonly maskOutlines: boolean;
   /** One-pixel grid, drawn at 400% zoom and above. */
@@ -64,6 +66,7 @@ export const VIEW_PREF_DEFAULTS: ViewPrefs = {
   rulers: false,
   outlines: false,
   outlineHidden: false,
+  outlineBounds: false,
   maskOutlines: false,
   pixelGrid: true,
   layoutGuides: true,
@@ -98,6 +101,7 @@ function readStored(): ViewPrefs {
       rulers: flag('rulers'),
       outlines: flag('outlines'),
       outlineHidden: flag('outlineHidden'),
+      outlineBounds: flag('outlineBounds'),
       maskOutlines: flag('maskOutlines'),
       pixelGrid: flag('pixelGrid'),
       layoutGuides: flag('layoutGuides'),
@@ -158,6 +162,13 @@ export const VIEW_PREF_COMMANDS: CommandDefinition[] = [
     category: 'View',
     checked: () => viewPrefs.getSnapshot().outlineHidden,
     run: () => viewPrefs.toggle('outlineHidden'),
+  },
+  {
+    id: 'view.toggleOutlineBounds',
+    label: 'Include object bounds',
+    category: 'View',
+    checked: () => viewPrefs.getSnapshot().outlineBounds,
+    run: () => viewPrefs.toggle('outlineBounds'),
   },
   {
     id: 'view.toggleMaskOutlines',
