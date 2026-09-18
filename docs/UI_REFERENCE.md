@@ -190,7 +190,12 @@ shape builder) are simply not in the markup, and neither are the typography icon
 Those are exactly the icons that make our toolbar look mixed. They cannot be taken from these captures,
 and inferring them is the very thing this pass exists to stop, so two more saved pages would close the
 gap: **the Shape tools flyout open**, and **vector edit mode active**. Until then the stroke icons that
-*do* have a reference here are converted and the rest are left alone.
+*do* have a reference here are converted and the rest are left alone. Five so far: `instance`,
+`collapse`, `detach` and `paddingSides` moved from hairline to the reference artwork, and `pencil` was
+replaced with the reference's own. The other 48 keep their invented drawings.
+
+The extractor refuses to emit a name two glyphs both claim — the reference labels both its instance diamond and
+a corner-bracket mark "Instance" — and prints them for a decision instead.
 
 Usable references present for icons we already have: Instance, Text, Auto layout, Collapse layers,
 Detach variable, Select layer, Individual padding, Horizontal/Vertical padding, Annotation, Origin,

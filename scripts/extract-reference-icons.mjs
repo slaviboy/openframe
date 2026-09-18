@@ -58,6 +58,10 @@ const LABELS = {
   Close: 'close',
   Remove: 'minus',
   'Main menu': 'logo',
+  Instance: 'instance',
+  'Collapse layers': 'collapse',
+  'Detach variable': 'detach',
+  'Individual padding': 'paddingSides',
 };
 
 // The reference's "Measurement" is deliberately not mapped. Our `width` icon serves both the Measurement tool
@@ -199,9 +203,28 @@ for (const icon of seen.values()) {
 console.log(`// Read from ${pages.length} saved pages in ${DIR}/`);
 console.log(`// ${seen.size} distinct glyphs: ${already.length} already ours, ${named.length} named, ${unnamed.length} to name by hand.\n`);
 
+// One the reference label can sit on two different glyphs — "Instance" is both the diamond and a corner-bracket
+// mark — so a name claimed twice is reported rather than silently emitted twice.
+const claims = new Map();
+for (const icon of named) claims.set(icon.name, (claims.get(icon.name) ?? 0) + 1);
+const contested = [...claims].filter(([, n]) => n > 1).map(([name]) => name);
+
 if (named.length > 0) {
   console.log('// ---- named, ready to paste ----');
-  for (const icon of named.sort((a, b) => a.name.localeCompare(b.name))) console.log(toTsx(icon.name, icon));
+  for (const icon of named.sort((a, b) => a.name.localeCompare(b.name))) {
+    if (contested.includes(icon.name)) continue;
+    console.log(toTsx(icon.name, icon));
+  }
+  console.log();
+}
+if (contested.length > 0) {
+  console.log('// ---- one name, several glyphs: pick by eye ----');
+  for (const name of contested) {
+    for (const icon of named.filter((i) => i.name === name)) {
+      console.log(`  // "${icon.label}" · ${icon.grid}px · ${icon.page}`);
+      console.log(`  //${toTsx(name, icon).trimEnd()}`);
+    }
+  }
   console.log();
 }
 if (unnamed.length > 0) {
