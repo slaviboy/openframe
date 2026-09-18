@@ -222,3 +222,30 @@ deviation); every other row is `—`, which is the honest state: the look was bu
 The 28-column grid is the largest structural difference still open on the panel. Our `.row` puts a fixed
 24px in the trailing column where the reference gives it 4 of 28 columns, so the two drift apart as the panel is
 widened. Changing it touches every row in a 3,700-line file, so it wants a slice of its own.
+
+## Dev Mode
+
+From `dev_mode_text_list.html` (a text layer, list view). Section order:
+
+> layer name + type → **MCP** → **Layer properties** → **View** (List | Code) → *Unit* →
+> **Layout** (Width, Height) → **Typography** → **Modes** → **Colors** → **Motion** →
+> **Transitions** → **Text content** → **Export**
+
+Ours: layer name → Status → (unlabelled List|Code tabs) → Position → Size → Layout → Appearance →
+Playground → Motion → Variables → Dev resources → Annotations → Measurements → Dev assets → Compare.
+
+**Landed:** the List/Code switch now sits on a row labelled **View**, as the reference names it, and the
+variable **Modes** come before **Motion**, which is the reference's order.
+
+**Not changed, and why.** the reference folds position, size and radius into one **Layer properties** block and
+puts width and height under **Layout**; ours keeps Position, Size and Layout separate. The only Dev list
+capture is of a *text* layer, so there is no reference for how the reference lays a frame's padding and gap out
+here — inferring it is what this pass exists to stop. A Dev Mode capture with a **frame** selected would
+settle it. Our Playground, Dev resources, Annotations, Measurements and Compare sections have no
+counterpart in the capture at all; the reference's MCP, Colors and Transitions have none in ours.
+
+## The Dev Mode toolbar
+
+The reference's Dev toolbar reads: **Move · Copy colors · Measurement · Annotation · Comment · Inspect ·
+Re-center**. Ours has Move tools (Move, Hand), Handoff tools (Measurement) and Comment tools. The four
+missing entries are features rather than fidelity, so they are left for the matrix, not this pass.

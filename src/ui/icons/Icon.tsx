@@ -24,10 +24,6 @@ import type { ReactElement, SVGProps } from 'react';
  */
 const STROKE = {
   component: <path d="M12 4.5l2.5 2.5L12 9.5 9.5 7zm0 10l2.5 2.5-2.5 2.5-2.5-2.5zM7 9.5l2.5 2.5L7 14.5 4.5 12zm10 0l2.5 2.5-2.5 2.5-2.5-2.5z" />,
-  ellipse: <circle cx="12" cy="12" r="5.5" />,
-  line: <path d="m6.5 17.5 11-11" />,
-  arrow: <path d="m6.5 17.5 11-11M11.5 6.5h6v6" />,
-  polygon: <path d="M12 6 18.5 17.5h-13z" />,
   underline: <path d="M8.5 6.5v5a3.5 3.5 0 0 0 7 0v-5M7 18.5h10" />,
   textLtr: <path d="M10 5.5h7M14 5.5v8M11 5.5a2.75 2.75 0 0 0 0 5.5h3M6 18h12m0 0-2-2m2 2-2 2" />,
   textRtl: <path d="M10 5.5h7M14 5.5v8M11 5.5a2.75 2.75 0 0 0 0 5.5h3M18 18H6m0 0 2-2m-2 2 2 2" />,
@@ -61,7 +57,6 @@ const STROKE = {
   autoHeight: <path d="M12 5.5v13M9.5 8 12 5.5 14.5 8M9.5 16l2.5 2.5 2.5-2.5" />,
   fixedSize: <path d="M6.5 6.5h11v11h-11zM9.5 12h5" />,
   truncate: <path d="M6.5 9.5h11M6.5 13.5h6M15 13.5h.5M17.5 13.5h.5" />,
-  star: <path d="M12 6l1.53 4.4 4.65.09-3.71 2.81 1.35 4.46L12 15.1l-3.82 2.66 1.35-4.46-3.71-2.81 4.65-.09z" />,
   eyeOff: (
     <>
       <path d="M6.3 9.6C5.2 10.8 4.5 12 4.5 12s2.8 4.5 7.5 4.5c1 0 2-.2 2.8-.5m2.9-1.7c1.2-1.1 1.8-2.3 1.8-2.3S16.7 7.5 12 7.5c-.6 0-1.2.1-1.8.2" />
@@ -89,13 +84,6 @@ const STROKE = {
       <circle cx="12" cy="12" r="4" />
     </>
   ),
-  image: (
-    <>
-      <rect x="5.5" y="5.5" width="13" height="13" rx="1.5" />
-      <circle cx="9.75" cy="9.75" r="1.25" />
-      <path d="m18.5 14.5-3.5-3.5-9 7.5" />
-    </>
-  ),
   video: (
     <>
       <rect x="5.5" y="6.5" width="13" height="11" rx="1.5" />
@@ -113,6 +101,41 @@ const STROKE = {
 } as const;
 
 const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: ReactElement }> = {
+  line: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M17.854 6.146a.5.5 0 0 1 0 .708l-11 11a.5.5 0 0 1-.708-.708l11-11a.5.5 0 0 1 .708 0" /> },
+  arrow: {
+    viewBox: 24,
+    body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M12.5 7a.5.5 0 0 1 0-1h5a.5.5 0 0 1 .5.5v5a.5.5 0 0 1-1 0V7.707L6.854 17.854a.5.5 0 0 1-.708-.708L16.293 7z" />,
+  },
+  ellipse: { viewBox: 24, body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12m0 1a7 7 0 1 0 0-14 7 7 0 0 0 0 14" /> },
+  polygon: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="m17.55 16.605-5.333-9.232a.25.25 0 0 0-.433 0L6.45 16.605a.25.25 0 0 0 .216.375h10.668a.25.25 0 0 0 .216-.375m-4.468-9.732a1.25 1.25 0 0 0-2.164 0l-5.334 9.232a1.25 1.25 0 0 0 1.082 1.875h10.668a1.25 1.25 0 0 0 1.082-1.875z"
+      />
+    ),
+  },
+  star: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        d="M11.147 5.25c.276-.815 1.429-.815 1.705 0L14.125 9h4.212c.86 0 1.23 1.093.545 1.616l-3.445 2.628 1.263 3.859c.271.829-.677 1.52-1.383 1.009L12 15.71l-3.318 2.402-.135.082c-.685.342-1.502-.314-1.248-1.091l1.263-3.86-3.445-2.627C4.433 10.093 4.802 9 5.663 9h4.212zm-.325 4.07-.23.68H5.958l3.21 2.449.564.43-.22.675-1.169 3.568 3.07-2.221.586-.425.586.425 3.068 2.22-1.167-3.567-.22-.675.564-.43 3.21-2.45h-4.633l-.23-.678L12 5.849z"
+      />
+    ),
+  },
+  image: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        d="M16 6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM8 7a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V8a1 1 0 0 0-1-1zm1.725 4.582a.5.5 0 0 1 .629.064l3.5 3.5a.5.5 0 1 1-.707.707L10 12.708l-1.146 1.146a.5.5 0 1 1-.708-.707l1.5-1.5zM14 8a2 2 0 1 1 0 4 2 2 0 0 1 0-4m0 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2"
+      />
+    ),
+  },
   pause: { viewBox: 24, body: <path fill="currentColor" d="M9 6a.5.5 0 0 1 .5.5v11a.5.5 0 0 1-1 0v-11A.5.5 0 0 1 9 6m6 0a.5.5 0 0 1 .5.5v11a.5.5 0 0 1-1 0v-11A.5.5 0 0 1 15 6" /> },
   keyframe: {
     viewBox: 24,
@@ -760,6 +783,12 @@ type FilledName =
   | 'slice'
   | 'penMenu'
   | 'pencil'
+  | 'line'
+  | 'arrow'
+  | 'ellipse'
+  | 'polygon'
+  | 'star'
+  | 'image'
   | 'instance'
   | 'collapse'
   | 'detach'

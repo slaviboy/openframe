@@ -140,13 +140,17 @@ export function InspectPanel() {
 
       {canHaveDevStatus(node) && <DevStatusControl node={node} />}
 
-      {/* Inspect reads the design either as a list of measurements or as the code that builds it. */}
-      <div className={styles.tabs} role="tablist" aria-label="Inspect view">
-        {(['list', 'code'] as const).map((value) => (
-          <button key={value} type="button" role="tab" className={styles.tab} aria-selected={view === value} data-selected={view === value || undefined} onClick={() => setView(value)}>
-            {value === 'list' ? 'List' : 'Code'}
-          </button>
-        ))}
+      {/* Inspect reads the design either as a list of measurements or as the code that builds it. The
+          reference names the switch, so it reads as a property of the panel rather than free-floating tabs. */}
+      <div className={styles.viewRow}>
+        <span className={styles.viewLabel}>View</span>
+        <div className={styles.tabs} role="tablist" aria-label="Inspect view">
+          {(['list', 'code'] as const).map((value) => (
+            <button key={value} type="button" role="tab" className={styles.tab} aria-selected={view === value} data-selected={view === value || undefined} onClick={() => setView(value)}>
+              {value === 'list' ? 'List' : 'Code'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {view === 'code' ? (
@@ -178,8 +182,8 @@ export function InspectPanel() {
             <Row label="Blend mode" value={node.blendMode.toLowerCase().replace(/_/g, ' ')} />
           </Group>
           <PlaygroundSection node={node} />
-          <MotionSection node={node} />
           <VariablesSection node={node} />
+          <MotionSection node={node} />
           <DevResourcesSection node={node} />
           <AnnotationsSection node={node} />
           <MeasurementsSection />
