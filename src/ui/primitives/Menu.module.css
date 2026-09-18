@@ -44,6 +44,11 @@
   white-space: nowrap;
 }
 
+/* An item that draws its option leaves the picture a column of its own, so the label still starts left. */
+.item[data-icon] {
+  grid-template-columns: 16px auto 1fr auto auto;
+}
+
 .item[data-active] {
   background: var(--accent-design);
 }
@@ -82,4 +87,11 @@
   height: 1px;
   margin: var(--space-2) 0;
   background: rgba(255, 255, 255, 0.1);
+}
+
+/* The picture an option is named beside, as the reference's endpoint list draws it. */
+.entryIcon {
+  flex: none;
+  margin-right: var(--space-1);
+  color: var(--fg-primary);
 }

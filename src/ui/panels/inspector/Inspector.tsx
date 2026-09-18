@@ -155,7 +155,6 @@ import {
   type Paint,
   type SceneNode,
   type StrokeAlign,
-  type StrokeCap,
 } from '@/core/schema/document';
 
 const PAINT_TYPES: readonly PaintType[] = ['SOLID', 'GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND', 'IMAGE', 'VIDEO', 'PATTERN'];
@@ -243,6 +242,7 @@ import { useGesture } from '../../hooks/useGesture';
 import { IconButton } from '../../primitives/IconButton';
 import { NumberField } from '../../primitives/NumberField';
 import primitives from '../../primitives/primitives.module.css';
+import { EndpointSelect } from './EndpointSelect';
 import styles from './Inspector.module.css';
 
 const val = <T,>(v: Mixed<T> | undefined): T | undefined => (v === MIXED ? undefined : v);
@@ -261,16 +261,6 @@ const TYPE_LABELS: Record<SceneNode['type'], string> = {
   SLICE: 'Slice',
   TEXT: 'Text',
 };
-
-const CAP_OPTIONS: readonly [StrokeCap, string][] = [
-  ['NONE', 'None'],
-  ['LINE_ARROW', 'Line arrow'],
-  ['TRIANGLE_ARROW', 'Triangle arrow'],
-  ['ROUND', 'Round'],
-  ['SQUARE', 'Square'],
-  ['CIRCLE_FILLED', 'Circle'],
-  ['DIAMOND_FILLED', 'Diamond'],
-];
 
 /** While the Frame tool is on: frame presets by category; clicking one places a frame of its size in the middle of the view. */
 function FramePresetsSection() {
@@ -3159,20 +3149,12 @@ function PaintSection({ title, field, nodes, defaultPaint }: { title: string; fi
           {(['startCap', 'endCap'] as const).map((end) => {
             const value = shared(nodes, (n) => (n.type === 'LINE' ? n[end] : 'NONE'));
             return (
-              <select
+              <EndpointSelect
                 key={end}
-                className={primitives.select}
-                aria-label={end === 'startCap' ? 'Start point' : 'End point'}
-                value={val(value) ?? ''}
-                onChange={(e) => editor.history.run('Change end point', (tx) => nodes.forEach((n) => setLineCap(tx, n, end, e.target.value as StrokeCap)))}
-              >
-                {value === MIXED && <option value="">Mixed</option>}
-                {CAP_OPTIONS.map(([cap, label]) => (
-                  <option key={cap} value={cap}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+                label={end === 'startCap' ? 'Start point' : 'End point'}
+                value={value === MIXED ? null : (val(value) ?? null)}
+                onChange={(cap) => editor.history.run('Change end point', (tx) => nodes.forEach((n) => setLineCap(tx, n, end, cap)))}
+              />
             );
           })}
         </div>

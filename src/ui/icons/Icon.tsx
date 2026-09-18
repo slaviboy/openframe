@@ -101,6 +101,96 @@ const STROKE = {
 } as const;
 
 const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: ReactElement }> = {
+  // The stroke endpoints, verbatim from the reference's Start point / End point list. The faint part of
+  // each is the rest of the line, which the reference draws in the tertiary icon color.
+  capNone: {
+    viewBox: 24,
+    body: (
+      <>
+        <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M19 7.5a.5.5 0 0 0-.5-.5h-13a.5.5 0 0 0-.5.5v8a.5.5 0 0 0 .5.5h13a.5.5 0 0 0 0-1H6V8h12.5a.5.5 0 0 0 .5-.5" />
+        <path
+          fill="currentColor"
+          opacity={0.4}
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="m17.618 11.01.1-.01h.782a.5.5 0 0 1 0 1h-.781l-.1-.01a.5.5 0 0 1 0-.98m-4.167 0 .1-.01h1.563a.5.5 0 0 1 0 1h-1.562l-.1-.01a.5.5 0 0 1 0-.98m-4.167 0 .102-.01h1.562a.5.5 0 0 1 0 1H9.386l-.102-.01a.5.5 0 0 1 0-.98m-3.385 0L6 11h.781a.5.5 0 0 1 0 1H6l-.1-.01a.5.5 0 0 1 0-.98"
+        />
+      </>
+    ),
+  },
+  capRound: {
+    viewBox: 24,
+    body: (
+      <>
+        <path fill="currentColor" d="M18.5 7a.5.5 0 0 1 0 1h-9a3.5 3.5 0 1 0 0 7h9a.5.5 0 0 1 0 1h-9a4.5 4.5 0 1 1 0-9z" />
+        <path
+          fill="currentColor"
+          opacity={0.4}
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M17.65 11.01a.5.5 0 0 0 0 .98l.1.01h.75a.5.5 0 0 0 0-1h-.75zm-4 0a.5.5 0 0 0 0 .98l.1.01h1.5a.5.5 0 0 0 0-1h-1.5zm-3.25 0a.5.5 0 0 0 0 .98l.1.01h.75a.5.5 0 0 0 0-1h-.75z"
+        />
+      </>
+    ),
+  },
+  capSquare: {
+    viewBox: 24,
+    body: (
+      <>
+        <path fill="currentColor" d="M18.5 7a.5.5 0 0 1 0 1H6v7h12.5a.5.5 0 0 1 0 1h-13a.5.5 0 0 1-.5-.5v-8a.5.5 0 0 1 .5-.5z" />
+        <path
+          fill="currentColor"
+          opacity={0.4}
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M17.65 11.01a.5.5 0 0 0 0 .98l.1.01h.75a.5.5 0 0 0 0-1h-.75zm-4 0a.5.5 0 0 0 0 .98l.1.01h1.5a.5.5 0 0 0 0-1h-1.5zm-3.25 0a.5.5 0 0 0 0 .98l.1.01h.75a.5.5 0 0 0 0-1h-.75z"
+        />
+      </>
+    ),
+  },
+  capLineArrow: {
+    viewBox: 24,
+    body: (
+      <path fill="currentColor" d="M8.854 8.146a.5.5 0 0 0-.708 0l-3 3a.5.5 0 0 0 0 .706l3 3.002a.5.5 0 0 0 .708-.707l-2.148-2.148L18.5 12a.5.5 0 0 0 0-1l-11.793-.001 2.147-2.145a.5.5 0 0 0 0-.708" />
+    ),
+  },
+  capTriangleArrow: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M9.47 8.152A1 1 0 0 1 11 9v2h7.5a.5.5 0 1 1 0 1H11v2a1 1 0 0 1-1.53.848l-4-2.5a1 1 0 0 1 0-1.696zm.53 2.027V9l-1 .625-2.057 1.285L6 11.5l.943.59L9 13.375 10 14z"
+      />
+    ),
+  },
+  capReversedTriangle: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M6.53 8.152A1 1 0 0 0 5 9v5a1 1 0 0 0 1.53.848l4-2.5.557-.348H18.5a.5.5 0 0 0 0-1h-7.413l-.557-.348zM6 10.179V9l1 .625 2.057 1.285.943.59-.943.59L7 13.375 6 14z"
+      />
+    ),
+  },
+  capCircleArrow: {
+    viewBox: 24,
+    body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M11 11.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0m.965-.5a3.5 3.5 0 1 0 0 1H18.5a.5.5 0 0 0 0-1z" />,
+  },
+  capDiamondArrow: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M5.293 10.793a1 1 0 0 0 0 1.414l2.5 2.5a1 1 0 0 0 1.414 0l2.5-2.5q.094-.095.16-.207H18.5a.5.5 0 0 0 0-1h-6.634a1 1 0 0 0-.159-.207l-2.5-2.5a1 1 0 0 0-1.414 0zM11 11.5l-.707-.707-1.086-1.086L8.5 9l-.707.707-1.086 1.086L6 11.5l.707.707 1.086 1.086L8.5 14l.707-.707 1.086-1.086z"
+      />
+    ),
+  },
   // The reference's Copy colors tool. Openframe calls the tool the eyedropper, which is the reference's own name
   // for it in Design; Dev Mode labels the same glyph "Copy colors".
   eyedropper: {
@@ -790,6 +880,14 @@ const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: Rea
 };
 
 type FilledName =
+  | 'capNone'
+  | 'capRound'
+  | 'capSquare'
+  | 'capLineArrow'
+  | 'capTriangleArrow'
+  | 'capReversedTriangle'
+  | 'capCircleArrow'
+  | 'capDiamondArrow'
   | 'copy'
   | 'eyedropper'
   | 'measurement'

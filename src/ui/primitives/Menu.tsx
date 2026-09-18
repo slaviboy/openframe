@@ -17,7 +17,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { Icon } from '../icons/Icon';
+import { Icon, type IconName } from '../icons/Icon';
 import styles from './Menu.module.css';
 import { placeFloating, type Box, type Placement } from './position';
 
@@ -26,6 +26,8 @@ export type MenuEntry =
       readonly kind: 'item';
       readonly id: string;
       readonly label: string;
+      /** Drawn before the label — the reference's endpoint list names each option beside its picture. */
+      readonly icon?: IconName;
       readonly shortcut?: string;
       readonly checked?: boolean;
       readonly disabled?: boolean;
@@ -206,6 +208,7 @@ function MenuList({ label, entries, anchor, placement, onCloseAll, onCloseSelf, 
               className={styles.item}
               data-active={index === active || undefined}
               data-disabled={entry.disabled || undefined}
+              data-icon={(entry.kind === 'item' && entry.icon !== undefined) || undefined}
               onPointerEnter={() => {
                 setActive(index);
                 if (entry.kind === 'submenu' && !entry.disabled) openSubmenuFor(entry);
@@ -216,6 +219,7 @@ function MenuList({ label, entries, anchor, placement, onCloseAll, onCloseSelf, 
               <span className={styles.check} aria-hidden="true">
                 {entry.kind === 'item' && entry.checked ? '✓' : ''}
               </span>
+              {entry.kind === 'item' && entry.icon !== undefined && <Icon name={entry.icon} size={24} className={styles.entryIcon} />}
               <span className={styles.label}>{entry.label}</span>
               {entry.kind === 'item' && entry.shortcut && <span className={styles.shortcut}>{entry.shortcut}</span>}
               {entry.kind === 'submenu' && <Icon name="caretRight" size={16} className={styles.chevron} />}

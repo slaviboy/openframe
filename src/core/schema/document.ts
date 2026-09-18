@@ -991,7 +991,7 @@ export const StarNodeSchema = z.object({
   cornerSmoothing: unit.optional(),
 });
 
-export const StrokeCapSchema = z.enum(['NONE', 'ROUND', 'SQUARE', 'LINE_ARROW', 'TRIANGLE_ARROW', 'CIRCLE_FILLED', 'DIAMOND_FILLED']);
+export const StrokeCapSchema = z.enum(['NONE', 'ROUND', 'SQUARE', 'LINE_ARROW', 'TRIANGLE_ARROW', 'TRIANGLE_FILLED', 'CIRCLE_FILLED', 'DIAMOND_FILLED']);
 
 /**
  * Straight line from local (0,0) to (width, 0); direction comes from the transform and the

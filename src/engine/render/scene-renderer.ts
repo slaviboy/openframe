@@ -1907,6 +1907,9 @@ export class SceneRenderer {
       }
       case 'TRIANGLE_ARROW':
         return new ck.PathBuilder().addPolygon([back, -spread, x, 0, back, spread], true).detachAndDelete();
+      // The reversed triangle is the same shape turned to point back down the line rather than off it.
+      case 'TRIANGLE_FILLED':
+        return new ck.PathBuilder().addPolygon([x, -spread, back, 0, x, spread], true).detachAndDelete();
       case 'DIAMOND_FILLED':
         return new ck.PathBuilder().addPolygon([x - size / 2, 0, x, -size / 2, x + size / 2, 0, x, size / 2], true).detachAndDelete();
     }
@@ -1930,8 +1933,14 @@ export class SceneRenderer {
         return;
       case 'LINE_ARROW':
       case 'TRIANGLE_ARROW':
+      case 'TRIANGLE_FILLED':
       case 'DIAMOND_FILLED': {
-        const points = cap === 'DIAMOND_FILLED' ? [x - size / 2, 0, x, -size / 2, x + size / 2, 0, x, size / 2] : [back, -spread, x, 0, back, spread];
+        const points =
+          cap === 'DIAMOND_FILLED'
+            ? [x - size / 2, 0, x, -size / 2, x + size / 2, 0, x, size / 2]
+            : cap === 'TRIANGLE_FILLED'
+              ? [x, -spread, back, 0, x, spread]
+              : [back, -spread, x, 0, back, spread];
         const path = new this.ck.PathBuilder().addPolygon(points, cap !== 'LINE_ARROW').detachAndDelete();
         canvas.drawPath(path, cap === 'LINE_ARROW' ? this.strokePaint : this.fillPaint);
         path.delete();

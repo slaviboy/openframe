@@ -40,13 +40,17 @@ test('draw a line with L, change its end point, and reload', async ({ page }) =>
   await expect(page.getByRole('region', { name: 'Stroke' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Fill' })).toHaveCount(0);
 
-  await page.getByRole('combobox', { name: 'End point' }).selectOption('TRIANGLE_ARROW');
-  await expect(page.getByRole('combobox', { name: 'End point' })).toHaveValue('TRIANGLE_ARROW');
+  // The endpoint list is the reference's: each option named beside a picture of the end it makes.
+  await page.getByRole('button', { name: 'End point' }).click();
+  const endpoints = page.getByRole('menu', { name: 'End point' });
+  await expect(endpoints.getByRole('menuitemcheckbox', { name: 'Reversed triangle' })).toBeVisible();
+  await endpoints.getByRole('menuitemcheckbox', { name: 'Triangle arrow' }).click();
+  await expect(page.getByRole('button', { name: 'End point' })).toHaveAttribute('data-value', 'TRIANGLE_ARROW');
 
   await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
   await page.reload();
   await page.getByRole('treeitem', { name: /Line 1/ }).click();
-  await expect(page.getByRole('combobox', { name: 'End point' })).toHaveValue('TRIANGLE_ARROW');
+  await expect(page.getByRole('button', { name: 'End point' })).toHaveAttribute('data-value', 'TRIANGLE_ARROW');
   await expect(page.getByTestId('field-w')).toHaveValue('150');
 });
 
@@ -54,7 +58,7 @@ test('Shift+L draws an arrow', async ({ page }) => {
   await page.keyboard.press('Shift+L');
   await drag(page, [300, 300], [400, 400]);
   await expect(page.getByRole('treeitem', { name: /Arrow 1/ })).toBeVisible();
-  await expect(page.getByRole('combobox', { name: 'End point' })).toHaveValue('LINE_ARROW');
+  await expect(page.getByRole('button', { name: 'End point' })).toHaveAttribute('data-value', 'LINE_ARROW');
   await expect(page.getByTestId('field-rotation')).toHaveValue('-45°');
 });
 
