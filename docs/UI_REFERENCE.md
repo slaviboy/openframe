@@ -201,3 +201,19 @@ Collapse timeline, Measurement, Play, Loop, Filter, Comment, Main menu, Select l
 (Dev Mode, `Toolbar.tsx:151`) and for the Variable width tool (vector edit, `Toolbar.tsx:202`) — one
 glyph for two unrelated things. The reference draws a ruler for the first. They must be split into two names
 before either can take a reference glyph.
+
+## What has been checked so far
+
+`docs/FEATURE_MATRIX.md` now carries a **Fid** column saying whether a row's *look* has been held against
+a saved page — a separate question from whether it works. Three rows are `ref~` (checked, with a recorded
+deviation); every other row is `—`, which is the honest state: the look was built from prose.
+
+| Row | State | The deviation |
+|---|---|---|
+| Floating bottom toolbar | `ref~` | The mode switcher's selection does not slide |
+| Mode switcher | `ref~` | Same |
+| Right sidebar tabs | `ref~` | Section order, names and title weight match; **rows are not on the reference's 28-column grid** |
+
+The 28-column grid is the largest structural difference still open on the panel. Our `.row` puts a fixed
+24px in the trailing column where the reference gives it 4 of 28 columns, so the two drift apart as the panel is
+widened. Changing it touches every row in a 3,700-line file, so it wants a slice of its own.
