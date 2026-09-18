@@ -46,6 +46,7 @@ import {
   setDefaultMode,
   setVariableAlias,
   setVariableCodeSyntax,
+  setVariableHiddenFromPublishing,
   setVariableDescription,
   setVariableOverride,
   setVariableScopes,
@@ -160,7 +161,15 @@ function StringValue({ label, value, onCommit }: { label: string; value: string;
  * A variable's value in a mode: a value editor for its type, or the variable it aliases with Detach alias. In an extended
  * collection, values that differ from the parent collection's are highlighted.
  */
-function ValueCell({ variable, modeName, value, overridden, onValue, onDetach, onAlias }: {
+function ValueCell({
+  variable,
+  modeName,
+  value,
+  overridden,
+  onValue,
+  onDetach,
+  onAlias,
+}: {
   variable: VariableNode;
   modeName: string;
   value: VariableValue | undefined;
@@ -291,7 +300,11 @@ function EditVariableDialog({ variable, onClose }: { variable: VariableNode; onC
   const scopeOptions: readonly string[] = variable.resolvedType === 'BOOLEAN' || variable.resolvedType === 'EASING' ? [] : VARIABLE_SCOPES[variable.resolvedType];
   const [allScopes, setAllScopes] = useState(variable.scopes === undefined);
   const [scopes, setScopes] = useState<readonly string[]>(variable.scopes ?? scopeOptions);
-  const [codeSyntax, setCodeSyntax] = useState<Record<CodeSyntaxPlatform, string>>({ WEB: variable.codeSyntax?.WEB ?? '', ANDROID: variable.codeSyntax?.ANDROID ?? '', iOS: variable.codeSyntax?.iOS ?? '' });
+  const [codeSyntax, setCodeSyntax] = useState<Record<CodeSyntaxPlatform, string>>({
+    WEB: variable.codeSyntax?.WEB ?? '',
+    ANDROID: variable.codeSyntax?.ANDROID ?? '',
+    iOS: variable.codeSyntax?.iOS ?? '',
+  });
   const [error, setError] = useState('');
   const save = () => {
     if (name.trim() !== variable.name && !renameVariable(editor, variable.id, name)) {
@@ -338,6 +351,15 @@ function EditVariableDialog({ variable, onClose }: { variable: VariableNode; onC
             ))}
         </fieldset>
       )}
+      <label className={css.syntax}>
+        <input
+          type="checkbox"
+          aria-label="Hide from publishing"
+          checked={variable.hiddenFromPublishing ?? false}
+          onChange={(e) => setVariableHiddenFromPublishing(editor, variable.id, e.target.checked)}
+        />
+        <span>Hide from publishing</span>
+      </label>
       <fieldset className={css.fieldset}>
         <legend>Code syntax</legend>
         {PLATFORMS.map(([platform, label]) => (
@@ -611,11 +633,23 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                                 anchor: at(e),
                                 label: 'Mode actions',
                                 entries: [
-                                  { kind: 'item', id: 'rename', label: 'Rename mode', disabled: extended, onSelect: () => setPrompt({ kind: 'renameMode', collectionId: collection.id, modeId: mode.modeId, name: mode.name }) },
+                                  {
+                                    kind: 'item',
+                                    id: 'rename',
+                                    label: 'Rename mode',
+                                    disabled: extended,
+                                    onSelect: () => setPrompt({ kind: 'renameMode', collectionId: collection.id, modeId: mode.modeId, name: mode.name }),
+                                  },
                                   { kind: 'item', id: 'duplicate', label: 'Duplicate mode', disabled: extended, onSelect: () => duplicateMode(editor, collection.id, mode.modeId) },
                                   { kind: 'item', id: 'default', label: 'Set as default', disabled: extended || index === 0, onSelect: () => setDefaultMode(editor, collection.id, mode.modeId) },
                                   { kind: 'item', id: 'left', label: 'Move column left', disabled: extended || index === 0, onSelect: () => moveMode(editor, collection.id, mode.modeId, index - 1) },
-                                  { kind: 'item', id: 'right', label: 'Move column right', disabled: extended || index === last, onSelect: () => moveMode(editor, collection.id, mode.modeId, index + 1) },
+                                  {
+                                    kind: 'item',
+                                    id: 'right',
+                                    label: 'Move column right',
+                                    disabled: extended || index === last,
+                                    onSelect: () => moveMode(editor, collection.id, mode.modeId, index + 1),
+                                  },
                                   { kind: 'separator', id: 'file-separator' },
                                   { kind: 'item', id: 'import', label: 'Import mode', onSelect: () => pickImport(collection.id, mode.modeId) },
                                   { kind: 'item', id: 'export', label: 'Export mode', onSelect: () => exportModeFile(collection, mode.modeId, mode.name) },
@@ -693,9 +727,22 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                                     entries: [
                                       { kind: 'item', id: 'copy', label: ids.length === 1 ? 'Copy variable' : 'Copy variables', shortcut: '⌘C', onSelect: () => copy(ids) },
                                       { kind: 'item', id: 'edit', label: 'Edit variable', disabled: extended || ids.length !== 1, onSelect: () => setPrompt({ kind: 'edit', variable }) },
-                                      { kind: 'item', id: 'duplicate', label: ids.length === 1 ? 'Duplicate variable' : 'Duplicate variables', shortcut: '⇧↩', disabled: extended, onSelect: () => setSelected(duplicateVariables(editor, ids)) },
+                                      {
+                                        kind: 'item',
+                                        id: 'duplicate',
+                                        label: ids.length === 1 ? 'Duplicate variable' : 'Duplicate variables',
+                                        shortcut: '⇧↩',
+                                        disabled: extended,
+                                        onSelect: () => setSelected(duplicateVariables(editor, ids)),
+                                      },
                                       { kind: 'separator', id: 'variable-separator' },
-                                      { kind: 'item', id: 'delete', label: ids.length === 1 ? 'Delete variable' : 'Delete variables', disabled: extended, onSelect: () => deleteVariables(editor, ids) },
+                                      {
+                                        kind: 'item',
+                                        id: 'delete',
+                                        label: ids.length === 1 ? 'Delete variable' : 'Delete variables',
+                                        disabled: extended,
+                                        onSelect: () => deleteVariables(editor, ids),
+                                      },
                                     ],
                                   });
                                 }}
@@ -720,7 +767,13 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
                                       ...(extended
                                         ? ([
                                             { kind: 'separator', id: 'reset-separator' },
-                                            { kind: 'item', id: 'reset', label: 'Reset change', disabled: collection.variableOverrides?.[variable.id]?.[mode.modeId] === undefined, onSelect: () => resetVariableOverride(editor, collection.id, variable.id, mode.modeId) },
+                                            {
+                                              kind: 'item',
+                                              id: 'reset',
+                                              label: 'Reset change',
+                                              disabled: collection.variableOverrides?.[variable.id]?.[mode.modeId] === undefined,
+                                              onSelect: () => resetVariableOverride(editor, collection.id, variable.id, mode.modeId),
+                                            },
                                           ] satisfies MenuEntry[])
                                         : []),
                                     ],
@@ -773,10 +826,24 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
       )}
       {menu && <Menu label={menu.label} entries={menu.entries} anchor={menu.anchor} placement="bottom-start" onClose={() => setMenu(null)} />}
       {prompt?.kind === 'renameCollection' && (
-        <NameDialog title="Rename collection" label="Collection name" initial={prompt.collection.name} submitLabel="Rename" onSubmit={(name) => renameCollection(editor, prompt.collection.id, name)} onClose={() => setPrompt(null)} />
+        <NameDialog
+          title="Rename collection"
+          label="Collection name"
+          initial={prompt.collection.name}
+          submitLabel="Rename"
+          onSubmit={(name) => renameCollection(editor, prompt.collection.id, name)}
+          onClose={() => setPrompt(null)}
+        />
       )}
       {prompt?.kind === 'renameMode' && (
-        <NameDialog title="Rename mode" label="Mode name" initial={prompt.name} submitLabel="Rename" onSubmit={(name) => renameMode(editor, prompt.collectionId, prompt.modeId, name)} onClose={() => setPrompt(null)} />
+        <NameDialog
+          title="Rename mode"
+          label="Mode name"
+          initial={prompt.name}
+          submitLabel="Rename"
+          onSubmit={(name) => renameMode(editor, prompt.collectionId, prompt.modeId, name)}
+          onClose={() => setPrompt(null)}
+        />
       )}
       {prompt?.kind === 'renameVariable' && (
         <NameDialog
@@ -790,7 +857,9 @@ export function VariablesView({ onClose }: { onClose: () => void }) {
           onClose={() => setPrompt(null)}
         />
       )}
-      {prompt?.kind === 'edit' && isVariable(editor.doc.get(prompt.variable.id)) && <EditVariableDialog variable={editor.doc.get(prompt.variable.id) as VariableNode} onClose={() => setPrompt(null)} />}
+      {prompt?.kind === 'edit' && isVariable(editor.doc.get(prompt.variable.id)) && (
+        <EditVariableDialog variable={editor.doc.get(prompt.variable.id) as VariableNode} onClose={() => setPrompt(null)} />
+      )}
       {prompt?.kind === 'alias' && (
         <AliasPicker variable={prompt.variable} onPick={(targetId) => setValueOf(prompt.variable, prompt.modeId, { type: 'VARIABLE_ALIAS', id: targetId })} onClose={() => setPrompt(null)} />
       )}

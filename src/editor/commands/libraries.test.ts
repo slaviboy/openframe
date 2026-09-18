@@ -22,6 +22,8 @@ import { IdGenerator } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
 import { Editor } from '../editor';
 import { createComponent } from './components';
+import { collectionVariables, localCollections } from '@/core/variables/document';
+import { applyPaintVariable, createCollection, createVariable, setVariableHiddenFromPublishing } from './variables';
 import { applyLibraryUpdates, componentSignature, importLibrary, importedLibraries, libraryComponentsOf, libraryUpdates, removeLibrary, swapLibrary } from './libraries';
 import { insertInstance } from './insert-instance';
 
@@ -174,5 +176,52 @@ describe('swapping one library for another', () => {
     const first = importLibrary(editor, library, 'Kit')!;
     const second = importLibrary(editor, makeLibraryFile(), 'Kit Two')!;
     expect(swapLibrary(editor, first.pageId, second.pageId)).toBe(0);
+  });
+});
+
+describe('the variables a library lends', () => {
+  /** A library file whose component's fill is bound to a colour variable, and one variable kept back. */
+  function libraryWithVariables(hideShared: boolean): { store: DocumentStore; shared: string; kept: string } {
+    const ids = new IdGenerator('lv');
+    const other = new Editor({ doc: createEmptyDocument({ name: 'Kit', now: 'n', appVersion: 't', ids }), ids, validate: true });
+    const collection = createCollection(other, 'Brand');
+    const shared = createVariable(other, collection, 'COLOR', 'Brand/Primary')!;
+    const kept = createVariable(other, collection, 'COLOR', 'Brand/Private')!;
+    if (hideShared) setVariableHiddenFromPublishing(other, shared, true);
+    const frame = other.history.run('create', (tx) => {
+      const id = other.ids.next();
+      tx.create(makeFrame({ id, parent: { id: other.pageId, key: keyOnTop(tx.store, other.pageId) }, name: 'Button', x: 0, y: 0, width: 120, height: 40 }));
+      return id;
+    });
+    other.state.select([frame]);
+    applyPaintVariable(other, [frame], 'fills', shared);
+    createComponent(other);
+    return { store: other.doc, shared, kept };
+  }
+
+  test('a variable a component is bound to comes across, in a collection of its own, and the binding follows it', () => {
+    const { store } = libraryWithVariables(false);
+    const result = importLibrary(editor, store, 'Kit')!;
+    const collections = localCollections(editor.doc);
+    expect(collections.map((c) => c.name)).toEqual(['Brand']);
+    const copied = collectionVariables(editor.doc, collections[0]!.id);
+    // Only the variable the component uses is brought over, not every variable of that file.
+    expect(copied.map((v) => v.name)).toEqual(['Brand/Primary']);
+
+    const component = editor.doc.children(result.pageId).map((id) => editor.doc.getOrThrow(id) as SceneNode)[0]!;
+    const fill = 'fills' in component ? component.fills[0] : undefined;
+    const bound = fill?.type === 'SOLID' ? fill.boundVariables?.color.id : undefined;
+    expect(bound).toBe(copied[0]!.id);
+    // It is this file's own copy, not a pointer into the other file.
+    expect(bound).not.toBe(libraryWithVariables(false).shared);
+  });
+
+  test('a variable hidden from publishing stays behind, and the component simply loses that binding', () => {
+    const { store } = libraryWithVariables(true);
+    const result = importLibrary(editor, store, 'Kit')!;
+    expect(localCollections(editor.doc)).toHaveLength(0);
+    const component = editor.doc.children(result.pageId).map((id) => editor.doc.getOrThrow(id) as SceneNode)[0]!;
+    const fill = 'fills' in component ? component.fills[0] : undefined;
+    expect(fill?.type === 'SOLID' ? fill.boundVariables : undefined).toBeUndefined();
   });
 });

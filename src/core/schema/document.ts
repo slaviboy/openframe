@@ -747,6 +747,8 @@ export const MeasurementSchema = z.object({
 export const PageAnimationSchema = z.object({
   /** Milliseconds; a new animation is 2000 ms long. */
   duration: z.number().int().min(1).max(600_000),
+  /** A number variable carrying the duration in milliseconds, which is what a timing variable is. */
+  durationVariable: VariableAliasSchema.optional(),
   playback: z.enum(['LOOP', 'ONCE', 'PING_PONG']),
   tracks: z.array(AnimationTrackSchema).max(2000),
   /** The bends in the layers' motion paths. Absent while every path runs straight. */
@@ -1282,6 +1284,8 @@ export const VariableNodeSchema = z.object({
   scopes: z.array(z.string().min(1).max(64)).max(64).optional(),
   /** Names of the variable in code, per platform. */
   codeSyntax: z.object({ WEB: z.string().min(1).max(1000).optional(), ANDROID: z.string().min(1).max(1000).optional(), iOS: z.string().min(1).max(1000).optional() }).optional(),
+  /** Kept out of what this file lends as a library: a variable of the file's own, not one to share. */
+  hiddenFromPublishing: z.literal(true).optional(),
 });
 
 export const NodeSchema = z.discriminatedUnion('type', [

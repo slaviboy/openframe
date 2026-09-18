@@ -19,7 +19,23 @@ import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as
 import { ANIMATED_PROPERTY_LABELS, animatedLayers, playheadAt, valueAt } from '@/core/motion/animation';
 import type { Id } from '@/core/ids/ids';
 import type { AnimationTrack, PageAnimation, PageNode, SceneNode } from '@/core/schema/document';
-import { animatedInstances, animationOf, deleteKeyframes, instanceOffset, instanceTracks, moveKeyframes, setAnimationDuration, setAnimationPlayback, setInstanceOffset, setLayerExtent, setSegmentEasing, type KeyframeRef } from '@/editor/commands/motion';
+import { collectionVariables, localCollections } from '@/core/variables/document';
+import {
+  animatedInstances,
+  animationOf,
+  bindAnimationDuration,
+  deleteKeyframes,
+  instanceOffset,
+  instanceTracks,
+  moveKeyframes,
+  setAnimationDuration,
+  setAnimationPlayback,
+  setInstanceOffset,
+  setLayerExtent,
+  setSegmentEasing,
+  resolvedAnimation,
+  type KeyframeRef,
+} from '@/editor/commands/motion';
 import { EASING_LABELS, makeEasing } from '@/core/prototype/reactions';
 import type { KeyframeEasing } from '@/core/schema/document';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
@@ -63,6 +79,12 @@ export function TimelinePanel({ readOnly = false }: { readOnly?: boolean } = {})
   /** The box being swept over the tracks, in screen coordinates, while one is being dragged. */
   const [marquee, setMarquee] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   // The timeline shows a window of the animation: the whole of it at zoom 1, and less the further it is zoomed in.
+  // The number variables a duration can be bound to, and the length the animation actually runs for.
+  const timingVariables = localCollections(editor.doc)
+    .flatMap((collection) => collectionVariables(editor.doc, collection.id))
+    .filter((variable) => variable.resolvedType === 'FLOAT');
+  const bound = animation.durationVariable;
+  const shownDuration = resolvedAnimation(editor)?.duration ?? animation.duration;
   const span = animation.duration / Math.max(1, motion.zoom);
   const offset = Math.min(Math.max(0, motion.offset), Math.max(0, animation.duration - span));
   const percent = (time: number) => `${((time - offset) / span) * 100}%`;
@@ -78,10 +100,13 @@ export function TimelinePanel({ readOnly = false }: { readOnly?: boolean } = {})
   );
   /** The keyframes picked out on the timeline, which move and delete together, and share an easing. */
   const selected = motion.selectedKeyframes;
-  const setSelected = useCallback((next: readonly KeyframeRef[] | ((current: readonly KeyframeRef[]) => readonly KeyframeRef[])) => {
-    const state = editor.state.getSnapshot().motion;
-    editor.state.setMotion({ selectedKeyframes: typeof next === 'function' ? next(state.selectedKeyframes) : next });
-  }, [editor]);
+  const setSelected = useCallback(
+    (next: readonly KeyframeRef[] | ((current: readonly KeyframeRef[]) => readonly KeyframeRef[])) => {
+      const state = editor.state.getSnapshot().motion;
+      editor.state.setMotion({ selectedKeyframes: typeof next === 'function' ? next(state.selectedKeyframes) : next });
+    },
+    [editor],
+  );
   const isSelected = useCallback((ref: KeyframeRef) => selected.some((k) => k.nodeId === ref.nodeId && k.property === ref.property && k.time === ref.time), [selected]);
 
   /** Dragging keyframes: ⇧ snaps to tenths of the animation, and the selection follows to its new times. */
@@ -145,7 +170,6 @@ export function TimelinePanel({ readOnly = false }: { readOnly?: boolean } = {})
     },
     [editor, offset, span],
   );
-
 
   /**
    * Dragging across the tracks, starting on empty room rather than a keyframe, sweeps a box around the keyframes it
@@ -212,17 +236,8 @@ export function TimelinePanel({ readOnly = false }: { readOnly?: boolean } = {})
       }}
     >
       <header className={styles.controls}>
-        <IconButton
-          icon={motion.playing ? 'pause' : 'present'}
-          label={motion.playing ? 'Pause' : 'Play'}
-          onClick={() => editor.state.setMotion({ playing: !motion.playing })}
-        />
-        {!readOnly && <IconButton
-          icon="keyframe"
-          label="Auto-keyframe"
-          pressed={motion.autoKeyframe}
-          onClick={() => editor.state.setMotion({ autoKeyframe: !motion.autoKeyframe })}
-        />}
+        <IconButton icon={motion.playing ? 'pause' : 'present'} label={motion.playing ? 'Pause' : 'Play'} onClick={() => editor.state.setMotion({ playing: !motion.playing })} />
+        {!readOnly && <IconButton icon="keyframe" label="Auto-keyframe" pressed={motion.autoKeyframe} onClick={() => editor.state.setMotion({ autoKeyframe: !motion.autoKeyframe })} />}
         <label className={styles.field}>
           <span>Current</span>
           <input
@@ -245,10 +260,27 @@ export function TimelinePanel({ readOnly = false }: { readOnly?: boolean } = {})
             min={1}
             max={600_000}
             decimals={motion.unit === 'MS' ? 0 : 2}
-            value={motion.unit === 'MS' ? animation.duration : animation.duration / 1000}
+            disabled={bound !== undefined}
+            value={motion.unit === 'MS' ? shownDuration : shownDuration / 1000}
             onChange={(value) => setAnimationDuration(editor, motion.unit === 'MS' ? value : value * 1000)}
           />
         </label>
+        {/* A timing variable carries the length in milliseconds, so the same length can be shared. */}
+        <select
+          className={primitives.select}
+          aria-label="Duration variable"
+          data-testid="field-duration-variable"
+          value={animation.durationVariable?.id ?? ''}
+          onKeyDown={(e) => e.stopPropagation()}
+          onChange={(e) => bindAnimationDuration(editor, e.target.value === '' ? null : e.target.value)}
+        >
+          <option value="">No variable</option>
+          {timingVariables.map((variable) => (
+            <option key={variable.id} value={variable.id}>
+              {variable.name}
+            </option>
+          ))}
+        </select>
         <button type="button" className={primitives.button} aria-label="Time unit" onClick={() => editor.state.setMotion({ unit: motion.unit === 'MS' ? 'S' : 'MS' })}>
           {motion.unit === 'MS' ? 'ms' : 's'}
         </button>
@@ -260,12 +292,7 @@ export function TimelinePanel({ readOnly = false }: { readOnly?: boolean } = {})
         >
           {PLAYBACK_LABELS[animation.playback]}
         </button>
-        <IconButton
-          icon={motion.collapsed ? 'caretRight' : 'caretDown'}
-          label="Collapse layers"
-          pressed={motion.collapsed}
-          onClick={() => editor.state.setMotion({ collapsed: !motion.collapsed })}
-        />
+        <IconButton icon={motion.collapsed ? 'caretRight' : 'caretDown'} label="Collapse layers" pressed={motion.collapsed} onClick={() => editor.state.setMotion({ collapsed: !motion.collapsed })} />
         {/* Zoom sits at the far end of the controls, as the slider down the right of the reference's timeline does. */}
         <label className={styles.zoom}>
           <input
@@ -283,7 +310,18 @@ export function TimelinePanel({ readOnly = false }: { readOnly?: boolean } = {})
       </header>
 
       <div className={styles.body}>
-        <div className={styles.ruler} ref={rulerRef} role="slider" aria-label="Playhead" aria-valuemin={0} aria-valuemax={animation.duration} aria-valuenow={Math.round(motion.time)} tabIndex={0} onPointerDown={seek} onWheel={wheelZoom}>
+        <div
+          className={styles.ruler}
+          ref={rulerRef}
+          role="slider"
+          aria-label="Playhead"
+          aria-valuemin={0}
+          aria-valuemax={animation.duration}
+          aria-valuenow={Math.round(motion.time)}
+          tabIndex={0}
+          onPointerDown={seek}
+          onWheel={wheelZoom}
+        >
           {[0, 0.25, 0.5, 0.75, 1].map((share) => (
             <span key={share} className={styles.tick} style={{ left: `${share * 100}%` }}>
               {formatTime(offset + span * share, motion.unit)}
@@ -413,10 +451,33 @@ function LayerTrack({
           }}
         />
         {collapsed ? (
-          <TrackRow label={node.name} nodeId={nodeId} tracks={tracks} percent={percent} time={time} readOnly={instance || locked} isSelected={isSelected} onSelect={onSelect} onSelectAll={onSelectAll} onDrag={onDrag} />
+          <TrackRow
+            label={node.name}
+            nodeId={nodeId}
+            tracks={tracks}
+            percent={percent}
+            time={time}
+            readOnly={instance || locked}
+            isSelected={isSelected}
+            onSelect={onSelect}
+            onSelectAll={onSelectAll}
+            onDrag={onDrag}
+          />
         ) : (
           tracks.map((track) => (
-            <TrackRow key={track.property} label={ANIMATED_PROPERTY_LABELS[track.property]} nodeId={nodeId} tracks={[track]} percent={percent} time={time} readOnly={instance || locked} isSelected={isSelected} onSelect={onSelect} onSelectAll={onSelectAll} onDrag={onDrag} />
+            <TrackRow
+              key={track.property}
+              label={ANIMATED_PROPERTY_LABELS[track.property]}
+              nodeId={nodeId}
+              tracks={[track]}
+              percent={percent}
+              time={time}
+              readOnly={instance || locked}
+              isSelected={isSelected}
+              onSelect={onSelect}
+              onSelectAll={onSelectAll}
+              onDrag={onDrag}
+            />
           ))
         )}
       </div>
@@ -428,7 +489,21 @@ function LayerTrack({
  * A layer's animation as one bar across the timeline: dragging the bar moves the whole track, and pulling either end
  * stretches it, so everything the layer does runs later, earlier, longer or shorter together.
  */
-function TrackSpan({ label, extent, percent, visibleMs, ends, onRetime }: { label: string; extent: { readonly from: number; readonly to: number } | undefined; percent: (time: number) => string; visibleMs: number; ends: boolean; onRetime: (from: number, to: number) => void }) {
+function TrackSpan({
+  label,
+  extent,
+  percent,
+  visibleMs,
+  ends,
+  onRetime,
+}: {
+  label: string;
+  extent: { readonly from: number; readonly to: number } | undefined;
+  percent: (time: number) => string;
+  visibleMs: number;
+  ends: boolean;
+  onRetime: (from: number, to: number) => void;
+}) {
   const laneRef = useRef<HTMLDivElement>(null);
   if (!extent) return null;
 
@@ -504,7 +579,12 @@ function TrackRow({
       {readOnly ? (
         <span className={styles.trackName}>{label}</span>
       ) : (
-        <button type="button" className={styles.trackName} aria-label={`Select ${label} keyframes`} onClick={() => onSelectAll(tracks.flatMap((track) => track.keyframes.map((k) => ({ nodeId, property: track.property, time: k.time }))))}>
+        <button
+          type="button"
+          className={styles.trackName}
+          aria-label={`Select ${label} keyframes`}
+          onClick={() => onSelectAll(tracks.flatMap((track) => track.keyframes.map((k) => ({ nodeId, property: track.property, time: k.time }))))}
+        >
           {label}
         </button>
       )}
@@ -522,18 +602,18 @@ function TrackRow({
               >
                 <span className={styles.segmentLine} data-eased={easing ? '' : undefined} />
                 {readOnly ? null : (
-                <select
-                  aria-label={`${ANIMATED_PROPERTY_LABELS[track.property]} easing from ${Math.round(keyframe.time)} ms`}
-                  value={easing?.type ?? 'LINEAR'}
-                  onChange={(e) => setSegmentEasing(editor, { nodeId, property: track.property, time: keyframe.time }, easingFor(e.target.value))}
-                  onKeyDown={(e) => e.stopPropagation()}
-                >
-                  {EASING_CHOICES.map(([type, label]) => (
-                    <option key={type} value={type}>
-                      {label}
-                    </option>
-                  ))}
-                </select>
+                  <select
+                    aria-label={`${ANIMATED_PROPERTY_LABELS[track.property]} easing from ${Math.round(keyframe.time)} ms`}
+                    value={easing?.type ?? 'LINEAR'}
+                    onChange={(e) => setSegmentEasing(editor, { nodeId, property: track.property, time: keyframe.time }, easingFor(e.target.value))}
+                    onKeyDown={(e) => e.stopPropagation()}
+                  >
+                    {EASING_CHOICES.map(([type, label]) => (
+                      <option key={type} value={type}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
                 )}
               </label>
             );

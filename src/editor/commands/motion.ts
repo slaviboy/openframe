@@ -16,7 +16,20 @@
  */
 
 import type { KeyframeRef } from '@/core/motion/animation';
-import { DEFAULT_ANIMATION, keyframeAt, layerExtent, retimeLayer, moveKeyframe, pathSegmentAt, removeKeyframe, setCurve, setKeyframe, setKeyframeEasing, trackFor, valueAt } from '@/core/motion/animation';
+import {
+  DEFAULT_ANIMATION,
+  keyframeAt,
+  layerExtent,
+  retimeLayer,
+  moveKeyframe,
+  pathSegmentAt,
+  removeKeyframe,
+  setCurve,
+  setKeyframe,
+  setKeyframeEasing,
+  trackFor,
+  valueAt,
+} from '@/core/motion/animation';
 import { animatedInstances, instanceOffset, instanceTracks, withInstances } from '@/core/motion/instances';
 import { presetById, PRESET_DURATION, type PresetBase } from '@/core/motion/presets';
 import type { Id } from '@/core/ids/ids';
@@ -39,8 +52,18 @@ export function pageAnimation(editor: Editor, pageId: Id = editor.pageId): PageA
  */
 export function resolvedAnimation(editor: Editor, pageId: Id = editor.pageId): PageAnimation | undefined {
   const animation = pageAnimation(editor, pageId);
-  if (!animation?.tracks.some((track) => track.keyframes.some((keyframe) => keyframe.easing?.type === 'VARIABLE_ALIAS'))) return animation;
+  const boundEasing = animation?.tracks.some((track) => track.keyframes.some((keyframe) => keyframe.easing?.type === 'VARIABLE_ALIAS'));
+  if (!animation || (!boundEasing && !animation.durationVariable)) return animation;
   const lookup = variableLookup(editor.doc);
+
+  // A timing variable carries the animation's length in milliseconds; one that is gone leaves the stored length.
+  let duration = animation.duration;
+  if (animation.durationVariable) {
+    const value = resolveForLayer(editor.doc, lookup, pageId, animation.durationVariable.id);
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 1) duration = Math.round(value);
+  }
+  if (!boundEasing) return { ...animation, duration };
+
   const tracks = animation.tracks.map((track) => ({
     ...track,
     keyframes: track.keyframes.map((keyframe) => {
@@ -51,7 +74,7 @@ export function resolvedAnimation(editor: Editor, pageId: Id = editor.pageId): P
       return isVariableEasing(value) ? { ...rest, easing: value } : rest;
     }),
   }));
-  return { ...animation, tracks };
+  return { ...animation, duration, tracks };
 }
 
 /**
@@ -144,9 +167,7 @@ export { animatedInstances, instanceOffset, instanceTracks };
 /** Moves keyframes by `delta` milliseconds, as one undo step; they stop at the animation's start. */
 export function moveKeyframes(editor: Editor, refs: readonly KeyframeRef[], delta: number): boolean {
   if (refs.length === 0 || Math.round(delta) === 0) return false;
-  return writeAnimation(editor, 'Move keyframe', (animation) =>
-    refs.reduce((next, ref) => moveKeyframe(next, ref.nodeId, ref.property, ref.time, Math.max(0, ref.time + delta)), animation),
-  );
+  return writeAnimation(editor, 'Move keyframe', (animation) => refs.reduce((next, ref) => moveKeyframe(next, ref.nodeId, ref.property, ref.time, Math.max(0, ref.time + delta)), animation));
 }
 
 /**
@@ -158,12 +179,7 @@ export function moveKeyframePosition(editor: Editor, nodeId: Id, time: number, p
   if (!node || !isSceneNode(node)) return false;
   const at = Math.round(time);
   // A whole drag is one undo step.
-  return writeAnimation(
-    editor,
-    'Move keyframe',
-    (animation) => setKeyframe(setKeyframe(animation, nodeId, 'x', at, point.x), nodeId, 'y', at, point.y),
-    `motion-path:${nodeId}:${at}`,
-  );
+  return writeAnimation(editor, 'Move keyframe', (animation) => setKeyframe(setKeyframe(animation, nodeId, 'x', at, point.x), nodeId, 'y', at, point.y), `motion-path:${nodeId}:${at}`);
 }
 
 /**
@@ -293,6 +309,23 @@ export function applyMotionPreset(editor: Editor, ids: readonly Id[], presetId: 
 export function setAnimationDuration(editor: Editor, duration: number): boolean {
   const ms = Math.round(Math.min(600_000, Math.max(1, duration)));
   return writeAnimation(editor, 'Change duration', (animation) => ({ ...animation, duration: ms }));
+}
+
+/**
+ * Binds the animation's length to a number variable — a timing variable — so the same length can be shared, or
+ * unbinds it, leaving the length the variable last gave it.
+ */
+export function bindAnimationDuration(editor: Editor, variableId: Id | null): boolean {
+  if (variableId === null) {
+    const resolved = resolvedAnimation(editor)?.duration;
+    return writeAnimation(editor, 'Unbind duration', (animation) => {
+      const { durationVariable: _bound, ...rest } = animation;
+      return { ...rest, duration: resolved ?? animation.duration };
+    });
+  }
+  const variable = editor.doc.get(variableId);
+  if (variable?.type !== 'VARIABLE' || variable.resolvedType !== 'FLOAT') return false;
+  return writeAnimation(editor, 'Bind duration', (animation) => ({ ...animation, durationVariable: { type: 'VARIABLE_ALIAS', id: variableId } }));
 }
 
 /** How the animation plays: over and over, once, or forward and back. */

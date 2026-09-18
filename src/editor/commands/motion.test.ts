@@ -20,13 +20,31 @@ import { createEmptyDocument, keyOnTop, makeRectangle } from '@/core/document/fa
 import { IdGenerator } from '@/core/ids/ids';
 import { layerExtent, trackFor } from '@/core/motion/animation';
 import type { RectangleNode, SceneNode } from '@/core/schema/document';
-import { createCollection } from './variables';
+import { createCollection, createVariable, setVariableValue } from './variables';
 import { Editor } from '../editor';
 import { curveOffsetFor, hitMotionPathCurve, hitMotionPathKeyframe, keyframePositionAt, motionPath } from '../chrome/motion-path';
 import { MotionPreview } from '../motion/preview';
 import { screenToWorld } from '../viewport/viewport';
 import { anchorPoint, rotationDegrees, setRotation } from './properties';
-import { addKeyframe, applyMotionPreset, deleteKeyframe, hasKeyframe, isAnimated, pageAnimation, removeAnimatedProperty, curveMotionPath, easingVariables, moveKeyframePosition, resolvedAnimation, saveEasingAsVariable, setLayerExtent, setAnimationDuration, setAnimationPlayback, setSegmentEasing } from './motion';
+import {
+  addKeyframe,
+  applyMotionPreset,
+  bindAnimationDuration,
+  deleteKeyframe,
+  hasKeyframe,
+  isAnimated,
+  pageAnimation,
+  removeAnimatedProperty,
+  curveMotionPath,
+  easingVariables,
+  moveKeyframePosition,
+  resolvedAnimation,
+  saveEasingAsVariable,
+  setLayerExtent,
+  setAnimationDuration,
+  setAnimationPlayback,
+  setSegmentEasing,
+} from './motion';
 
 let editor: Editor;
 let rect: string;
@@ -367,5 +385,38 @@ describe('an easing kept as a variable', () => {
     preview.show(500);
     expect(node().transform[4]).toBe(50);
     preview.clear();
+  });
+});
+
+describe('a duration kept as a variable', () => {
+  test('binds the animation’s length, is looked up when it is read, and leaves the length behind when unbound', () => {
+    addKeyframe(editor, [rect], 'x', 0, 0);
+    setAnimationDuration(editor, 2000);
+    const collection = createCollection(editor, 'Motion');
+    const id = createVariable(editor, collection, 'FLOAT', 'Beat')!;
+    const mode = (editor.doc.getOrThrow(collection) as { modes: readonly { modeId: string }[] }).modes[0]!.modeId;
+    setVariableValue(editor, id, mode, 500);
+
+    expect(bindAnimationDuration(editor, id)).toBe(true);
+    // The stored length is left as it was; what the animation runs for comes from the variable.
+    expect(pageAnimation(editor)!.duration).toBe(2000);
+    expect(resolvedAnimation(editor)!.duration).toBe(500);
+
+    // Unbinding keeps the length the variable last gave it, so nothing jumps.
+    expect(bindAnimationDuration(editor, null)).toBe(true);
+    expect(pageAnimation(editor)!.duration).toBe(500);
+    expect(pageAnimation(editor)!.durationVariable).toBeUndefined();
+  });
+
+  test('only a number variable can carry a duration, and one that is gone leaves the stored length', () => {
+    addKeyframe(editor, [rect], 'x', 0, 0);
+    const collection = createCollection(editor, 'Motion');
+    const colour = createVariable(editor, collection, 'COLOR', 'Brand')!;
+    expect(bindAnimationDuration(editor, colour)).toBe(false);
+
+    const id = createVariable(editor, collection, 'FLOAT', 'Beat')!;
+    bindAnimationDuration(editor, id);
+    editor.history.run('remove', (tx) => tx.delete(id));
+    expect(resolvedAnimation(editor)!.duration).toBe(pageAnimation(editor)!.duration);
   });
 });

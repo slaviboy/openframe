@@ -19,7 +19,9 @@ import { keyOnTop, makePage } from '@/core/document/factory';
 import type { DocumentStore } from '@/core/document/store';
 import type { Transaction } from '@/core/history/history';
 import { ROOT_ID, type Id } from '@/core/ids/ids';
-import { isSceneNode, type Node, type PageNode, type SceneNode } from '@/core/schema/document';
+import { isSceneNode, type Node, type Paint, type PageNode, type SceneNode } from '@/core/schema/document';
+import { localCollections } from '@/core/variables/document';
+import { boundVariablesOf } from './dev-resources';
 import type { Editor } from '../editor';
 
 /** A library brought into this file: the pages holding its components, by the name it was imported under. */
@@ -98,6 +100,81 @@ function remap(tx: Transaction, ids: Map<Id, Id>): void {
   }
 }
 
+/**
+ * Copies the variables the library's components are bound to, with the collections holding them, and returns
+ * which variable of this file each one of theirs became. A variable marked as kept out of publishing is left
+ * behind, and the components bound to it simply lose that binding, as they would against a library without it.
+ */
+function copyVariables(tx: Transaction, editor: Editor, from: DocumentStore, components: readonly SceneNode[]): Map<Id, Id> {
+  const wanted = new Set<Id>();
+  for (const component of components) {
+    for (const id of [component.id, ...from.descendants(component.id, false)]) {
+      const node = from.get(id);
+      if (node && isSceneNode(node)) for (const entry of boundVariablesOf(node)) wanted.add(entry.variableId);
+    }
+  }
+  const ids = new Map<Id, Id>();
+  const collections = new Map<Id, Id>();
+  for (const variableId of wanted) {
+    const variable = from.get(variableId);
+    if (variable?.type !== 'VARIABLE' || variable.hiddenFromPublishing) continue;
+    const collection = from.get(variable.parent.id);
+    if (collection?.type !== 'VARIABLE_COLLECTION') continue;
+    let collectionId = collections.get(collection.id);
+    if (collectionId === undefined) {
+      collectionId = editor.ids.next();
+      collections.set(collection.id, collectionId);
+      tx.create({ ...collection, id: collectionId, name: freeCollectionName(tx.store, collection.name), parent: { id: collection.parent.id, key: keyOnTop(tx.store, collection.parent.id) } });
+    }
+    const copyId = editor.ids.next();
+    ids.set(variableId, copyId);
+    tx.create({ ...variable, id: copyId, parent: { id: collectionId, key: keyOnTop(tx.store, collectionId) } });
+  }
+  return ids;
+}
+
+/** A name for a copied collection that is not already taken, so the library's and the file's own stay apart. */
+function freeCollectionName(store: DocumentStore, wanted: string): string {
+  const taken = new Set(localCollections(store).map((collection) => collection.name));
+  if (!taken.has(wanted)) return wanted;
+  for (let i = 2; ; i += 1) if (!taken.has(`${wanted} ${i}`)) return `${wanted} ${i}`;
+}
+
+/** Points the copied layers' variable bindings at the copied variables, dropping the ones left behind. */
+function remapVariables(tx: Transaction, layers: Iterable<Id>, variables: ReadonlyMap<Id, Id>): void {
+  for (const id of layers) {
+    const node = tx.store.get(id);
+    if (!node || !isSceneNode(node)) continue;
+    const bound = node.boundVariables;
+    if (bound) {
+      const next = Object.fromEntries(
+        Object.entries(bound).flatMap(([field, alias]) => {
+          const mapped = alias && typeof alias === 'object' && 'id' in alias ? variables.get(alias.id) : undefined;
+          return mapped === undefined ? [] : [[field, { ...alias, id: mapped }]];
+        }),
+      );
+      tx.set(id, 'boundVariables', Object.keys(next).length > 0 ? next : undefined);
+    }
+    for (const field of ['fills', 'strokes'] as const) {
+      const paints = field in node ? (node as SceneNode & Record<typeof field, readonly Paint[]>)[field] : undefined;
+      // Only a solid paint carries a colour binding, which is what a colour variable is bound to.
+      const bindings = paints?.map((paint) => (paint.type === 'SOLID' ? paint.boundVariables?.color : undefined));
+      if (!paints || !bindings?.some((alias) => alias !== undefined)) continue;
+      tx.set(
+        id,
+        field,
+        paints.map((paint, index) => {
+          const alias = bindings[index];
+          if (!alias || paint.type !== 'SOLID') return paint;
+          const mapped = variables.get(alias.id);
+          const { boundVariables: _bound, ...rest } = paint;
+          return mapped === undefined ? rest : { ...rest, boundVariables: { color: { ...alias, id: mapped } } };
+        }),
+      );
+    }
+  }
+}
+
 /** A name for the library page that is not already taken. */
 function freeName(editor: Editor, wanted: string): string {
   const taken = new Set(editor.doc.pages().map((id) => editor.doc.get(id)?.name));
@@ -119,9 +196,11 @@ export function importLibrary(editor: Editor, from: DocumentStore, name: string,
     pageId = editor.ids.next();
     tx.create(makePage(pageId, pageName, keyOnTop(tx.store, ROOT_ID)));
     tx.set(pageId, 'library', { name, importedAt: now });
+    const variables = copyVariables(tx, editor, from, components);
     const ids = new Map<Id, Id>();
     for (const component of components) copyInto(tx, editor, from, component.id, pageId, keyOnTop(tx.store, pageId), ids);
     remap(tx, ids);
+    remapVariables(tx, ids.values(), variables);
   });
   return { pageId, components: components.length };
 }
