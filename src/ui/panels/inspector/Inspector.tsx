@@ -1305,6 +1305,17 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       {single && <AnnotationsSection node={single} />}
       {tool === 'scale' && <ScaleSection nodes={nodes} />}
       <Section title="Position">
+        {nodes.length > 0 && nodes.every((n) => isAutoLayoutFrame(editor.doc.get(n.parent.id))) && (
+          <IconButton
+            icon="ignoreLayout"
+            label="Ignore auto layout"
+            pressed={nodes.every((n) => n.layoutPositioning === 'ABSOLUTE')}
+            onClick={() => {
+              const on = !nodes.every((n) => n.layoutPositioning === 'ABSOLUTE');
+              editor.history.run(on ? 'Ignore auto layout' : 'Use auto layout', (tx) => nodes.forEach((n) => setIgnoreAutoLayout(tx, tx.store.getOrThrow(n.id) as SceneNode, on)));
+            }}
+          />
+        )}
         <AlignRow />
         <div className={styles.grid2}>
           <MotionField nodes={nodes} property="x" motion={motion}>
@@ -1372,20 +1383,9 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
             </select>
           </div>
         )}
-        {nodes.length > 0 && nodes.every((n) => isAutoLayoutFrame(editor.doc.get(n.parent.id))) && (
-          <IconButton
-            icon="ignoreLayout"
-            label="Ignore auto layout"
-            pressed={nodes.every((n) => n.layoutPositioning === 'ABSOLUTE')}
-            onClick={() => {
-              const on = !nodes.every((n) => n.layoutPositioning === 'ABSOLUTE');
-              editor.history.run(on ? 'Ignore auto layout' : 'Use auto layout', (tx) => nodes.forEach((n) => setIgnoreAutoLayout(tx, tx.store.getOrThrow(n.id) as SceneNode, on)));
-            }}
-          />
-        )}
         <GridChildFields nodes={nodes} />
       </Section>
-      <Section title="Layout">
+      <Section title="Auto layout">
         <div className={styles.row}>
           <MotionField nodes={nodes} property="width" motion={motion}>
             <VariableNumberField
@@ -1687,8 +1687,8 @@ function SelectionSections({ nodes }: { nodes: SceneNode[] }) {
       <WidthPointSection />
       <VectorEraserSection />
       <VectorPaintSection />
-      <SelectionColorsSection nodes={nodes} />
       {!allSlices && <EffectsSection nodes={nodes} />}
+      <SelectionColorsSection nodes={nodes} />
       {frames.length === nodes.length && <LayoutGuideSection nodes={frames} />}
       <ExportSection nodes={nodes} />
     </>
