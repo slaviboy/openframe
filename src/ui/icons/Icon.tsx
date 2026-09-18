@@ -96,7 +96,7 @@ const STROKE = {
   ),
 } as const;
 
-const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: ReactElement }> = {
+const FILLED: Record<FilledName, { readonly viewBox: 16 | 24 | 200; readonly body: ReactElement }> = {
   // The stroke endpoints, verbatim from the reference's Start point / End point list. The faint part of
   // each is the rest of the line, which the reference draws in the tertiary icon color.
   capNone: {
@@ -184,6 +184,70 @@ const FILLED: Record<FilledName, { readonly viewBox: 16 | 24; readonly body: Rea
         fillRule="evenodd"
         clipRule="evenodd"
         d="M5.293 10.793a1 1 0 0 0 0 1.414l2.5 2.5a1 1 0 0 0 1.414 0l2.5-2.5q.094-.095.16-.207H18.5a.5.5 0 0 0 0-1h-6.634a1 1 0 0 0-.159-.207l-2.5-2.5a1 1 0 0 0-1.414 0zM11 11.5l-.707-.707-1.086-1.086L8.5 9l-.707.707-1.086 1.086L6 11.5l.707.707 1.086 1.086L8.5 14l.707-.707 1.086-1.086z"
+      />
+    ),
+  },
+  /*
+   * The full-width endpoint drawings the reference puts in the Start point / End point triggers: a 200-wide
+   * picture of the line, clipped by the control rather than scaled into it, with the end at its left. Only
+   * `capNoneLong` is captured artwork — both ends are None in the saved page. The other seven are derived
+   * from the 24px glyphs of the same list: the same head or cap, with the line run out to the full width.
+   * Recorded as derived, not measured, in docs/UI_REFERENCE.md.
+   */
+  capNoneLong: {
+    viewBox: 200,
+    body: (
+      <>
+        <path fill="currentColor" d="M.5 7a.5.5 0 0 0-.5.5v9a.5.5 0 0 0 .5.5h199a.5.5 0 0 0 0-1H1V8h198.5a.5.5 0 0 0 0-1z" />
+        <path fill="currentColor" opacity={0.4} d="M198.51 11.5a.5.5 0 0 0 0 1h.99a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-4.061.01a.5.5 0 0 0 0 .98l.101.01h1.98a.5.5 0 0 0 0-1h-1.98zm-3.859-.01a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-4.06.01a.5.5 0 0 0 0 .98l.1.01h1.98a.5.5 0 0 0 0-1h-1.98zm-3.96 0a.5.5 0 0 0 0 .98l.1.01h1.98a.5.5 0 0 0 0-1h-1.98zm-3.96 0a.5.5 0 0 0 0 .98l.1.01h1.98a.5.5 0 1 0 0-1h-1.98zm-3.86-.01a.5.5 0 1 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 1 0 0 1h1.98a.5.5 0 1 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 1 0 0-1zm-3.96 0a.5.5 0 1 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 1 0 0 1h1.98a.5.5 0 1 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 1 0 0-1zm-3.96 0a.5.5 0 1 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 1 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zM1 12.5h1.49a.5.5 0 0 0 0-1H1z" />
+      </>
+    ),
+  },
+  capRoundLong: {
+    viewBox: 200,
+    body: (
+      <>
+        <path fill="currentColor" d="M199.5 7a.5.5 0 0 1 0 1H4.5a3.5 3.5 0 1 0 0 7h195a.5.5 0 0 1 0 1h-195a4.5 4.5 0 1 1 0-9z" />
+        <path fill="currentColor" opacity={0.4} d="M198.51 11.5a.5.5 0 0 0 0 1h.99a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-4.061.01a.5.5 0 0 0 0 .98l.101.01h1.98a.5.5 0 0 0 0-1h-1.98zm-3.859-.01a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-4.06.01a.5.5 0 0 0 0 .98l.1.01h1.98a.5.5 0 0 0 0-1h-1.98zm-3.96 0a.5.5 0 0 0 0 .98l.1.01h1.98a.5.5 0 0 0 0-1h-1.98zm-3.96 0a.5.5 0 0 0 0 .98l.1.01h1.98a.5.5 0 1 0 0-1h-1.98zm-3.86-.01a.5.5 0 1 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 1 0 0 1h1.98a.5.5 0 1 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 1 0 0-1zm-3.96 0a.5.5 0 1 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 1 0 0 1h1.98a.5.5 0 1 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 1 0 0-1zm-3.96 0a.5.5 0 1 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 1 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zM1 12.5h1.49a.5.5 0 0 0 0-1H1z" />
+      </>
+    ),
+  },
+  capSquareLong: {
+    viewBox: 200,
+    body: (
+      <>
+        <path fill="currentColor" d="M199.5 7a.5.5 0 0 1 0 1H1v7h198.5a.5.5 0 0 1 0 1H.5a.5.5 0 0 1-.5-.5v-8a.5.5 0 0 1 .5-.5z" />
+        <path fill="currentColor" opacity={0.4} d="M198.51 11.5a.5.5 0 0 0 0 1h.99a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-4.061.01a.5.5 0 0 0 0 .98l.101.01h1.98a.5.5 0 0 0 0-1h-1.98zm-3.859-.01a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-4.06.01a.5.5 0 0 0 0 .98l.1.01h1.98a.5.5 0 0 0 0-1h-1.98zm-3.96 0a.5.5 0 0 0 0 .98l.1.01h1.98a.5.5 0 0 0 0-1h-1.98zm-3.96 0a.5.5 0 0 0 0 .98l.1.01h1.98a.5.5 0 1 0 0-1h-1.98zm-3.86-.01a.5.5 0 1 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 1 0 0 1h1.98a.5.5 0 1 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 1 0 0-1zm-3.96 0a.5.5 0 1 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 1 0 0 1h1.98a.5.5 0 1 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 1 0 0-1zm-3.96 0a.5.5 0 1 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 1 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zm-3.96 0a.5.5 0 0 0 0 1h1.98a.5.5 0 0 0 0-1zM1 12.5h1.49a.5.5 0 0 0 0-1H1z" />
+      </>
+    ),
+  },
+  capLineArrowLong: {
+    viewBox: 200,
+    body: <g transform="translate(-5 0)"><path fill="currentColor" d="M8.854 8.146a.5.5 0 0 0-.708 0l-3 3a.5.5 0 0 0 0 .706l3 3.002a.5.5 0 0 0 .708-.707l-2.148-2.148L204.5 12a.5.5 0 0 0 0-1l-197.793-.001 2.147-2.145a.5.5 0 0 0 0-.708" /></g>,
+  },
+  capTriangleArrowLong: {
+    viewBox: 200,
+    body: <g transform="translate(-5 0)"><path fill="currentColor" d="M9.47 8.152A1 1 0 0 1 11 9v2h193.5a.5.5 0 1 1 0 1H11v2a1 1 0 0 1-1.53.848l-4-2.5a1 1 0 0 1 0-1.696zm.53 2.027V9l-1 .625-2.057 1.285L6 11.5l.943.59L9 13.375 10 14z" /></g>,
+  },
+  capReversedTriangleLong: {
+    viewBox: 200,
+    body: <g transform="translate(-5 0)"><path fill="currentColor" d="M6.53 8.152A1 1 0 0 0 5 9v5a1 1 0 0 0 1.53.848l4-2.5.557-.348H204.5a.5.5 0 0 0 0-1h-193.413l-.557-.348zM6 10.179V9l1 .625 2.057 1.285.943.59L7 13.375 6 14z" /></g>,
+  },
+  capCircleArrowLong: {
+    viewBox: 200,
+    body: <g transform="translate(-5 0)"><path fill="currentColor" d="M11 11.5a2.5 2.5 0 1 1-5 0 2.5 2.5 0 0 1 5 0m.965-.5a3.5 3.5 0 1 0 0 1H204.5a.5.5 0 0 0 0-1z" /></g>,
+  },
+  capDiamondArrowLong: {
+    viewBox: 200,
+    body: <g transform="translate(-5 0)"><path fill="currentColor" d="M5.293 10.793a1 1 0 0 0 0 1.414l2.5 2.5a1 1 0 0 0 1.414 0l2.5-2.5q.094-.095.16-.207H204.5a.5.5 0 0 0 0-1h-192.634a1 1 0 0 0-.159-.207l-2.5-2.5a1 1 0 0 0-1.414 0zM11 11.5l-.707-.707-1.086-1.086L8.5 9l-.707.707-1.086 1.086L6 11.5l.707.707 1.086 1.086L8.5 14l.707-.707 1.086-1.086z" /></g>,
+  },
+  // The reference's Advanced stroke settings button, in the Stroke row's first icon cell.
+  advancedStroke: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        d="M8.5 18a.5.5 0 0 0 .5-.5v-1.55a2.5 2.5 0 0 0 0-4.9V6.5a.5.5 0 0 0-1 0v4.55a2.501 2.501 0 0 0 0 4.9v1.55a.5.5 0 0 0 .5.5m7 0a.5.5 0 0 0 .5-.5v-4.55a2.501 2.501 0 0 0 0-4.9V6.5a.5.5 0 0 0-1 0v1.55a2.5 2.5 0 0 0 0 4.9v4.55a.5.5 0 0 0 .5.5m0-6a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3m-7 3a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3"
       />
     ),
   },
@@ -1007,6 +1071,15 @@ type FilledName =
   | 'capReversedTriangle'
   | 'capCircleArrow'
   | 'capDiamondArrow'
+  | 'capNoneLong'
+  | 'capRoundLong'
+  | 'capSquareLong'
+  | 'capLineArrowLong'
+  | 'capTriangleArrowLong'
+  | 'capReversedTriangleLong'
+  | 'capCircleArrowLong'
+  | 'capDiamondArrowLong'
+  | 'advancedStroke'
   | 'vectorMove'
   | 'vectorPaint'
   | 'lasso'
@@ -1102,8 +1175,11 @@ export interface IconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
 export function Icon({ name, size = 24, ...rest }: IconProps) {
   if (name in FILLED) {
     const { viewBox, body } = FILLED[name as FilledName];
+    // The endpoint drawings are 200 wide on a 24 grid, and are clipped by their control rather than scaled
+    // into it, so they keep that size whatever `size` says.
+    const [width, height] = viewBox === 200 ? [200, 24] : [size, size];
     return (
-      <svg width={size} height={size} viewBox={`0 0 ${viewBox} ${viewBox}`} fill="none" aria-hidden="true" focusable="false" {...rest}>
+      <svg width={width} height={height} viewBox={viewBox === 200 ? '0 0 200 24' : `0 0 ${viewBox} ${viewBox}`} fill="none" aria-hidden="true" focusable="false" {...rest}>
         {body}
       </svg>
     );

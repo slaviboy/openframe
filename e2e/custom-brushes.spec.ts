@@ -48,6 +48,9 @@ test('a closed vector layer becomes a brush, which paints another layer’s stro
   const sketch = page.getByRole('treeitem', { name: /Vector/ }).last();
   await expect(sketch).toBeVisible();
 
+  // The brush a stroke is painted with lives behind Advanced stroke settings, where the reference keeps it.
+  const advanced = page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' });
+  await advanced.click();
   const brush = page.getByRole('combobox', { name: 'Brush' });
   await expect(brush).toHaveValue('');
   await brush.selectOption({ index: 1 });
@@ -58,5 +61,6 @@ test('a closed vector layer becomes a brush, which paints another layer’s stro
   await page.reload();
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
   await page.getByRole('treeitem', { name: /Vector/ }).last().click();
+  await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
   await expect(page.getByRole('combobox', { name: 'Brush' })).not.toHaveValue('');
 });

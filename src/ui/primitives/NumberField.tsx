@@ -164,7 +164,8 @@ export function NumberField(props: NumberFieldProps) {
         aria-label={ariaLabel}
         data-testid={props.testId}
         value={text}
-        placeholder={value === undefined ? 'Mixed' : ''}
+        // A disabled field has nothing to be mixed about: the reference leaves it blank.
+        placeholder={value === undefined && !disabled ? 'Mixed' : ''}
         disabled={disabled}
         inputMode="decimal"
         spellCheck={false}

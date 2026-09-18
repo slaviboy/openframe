@@ -29,31 +29,36 @@ test('stroke style, join and sides are editable and persist', async ({ page }) =
 
   const stroke = page.getByRole('region', { name: 'Stroke' });
   await stroke.getByRole('button', { name: 'Add stroke' }).click();
-  await stroke.getByRole('combobox', { name: 'Stroke style' }).selectOption('dashed');
+  // Everything but where the stroke goes and how thick it is lives behind Advanced stroke settings.
+  await stroke.getByRole('button', { name: 'Advanced stroke settings' }).click();
+  const advanced = page.getByRole('dialog', { name: 'Advanced stroke settings' });
+  await advanced.getByRole('combobox', { name: 'Stroke style' }).selectOption('dashed');
   await expect(page.getByTestId('field-dash')).toHaveValue('10');
   await page.getByTestId('field-dash').fill('6');
   await page.getByTestId('field-dash').press('Enter');
   await page.getByTestId('field-gap').fill('3');
   await page.getByTestId('field-gap').press('Enter');
-  await stroke.getByRole('combobox', { name: 'Dash cap' }).selectOption('ROUND');
-  await stroke.getByRole('combobox', { name: 'Stroke join' }).selectOption('ROUND');
+  await advanced.getByRole('combobox', { name: 'Dash cap' }).selectOption('ROUND');
+  await advanced.getByRole('combobox', { name: 'Stroke join' }).selectOption('ROUND');
   await expect(page.getByTestId('field-miter')).toHaveCount(0);
-  await stroke.getByRole('combobox', { name: 'Stroke sides' }).selectOption('top');
+  await advanced.getByRole('combobox', { name: 'Stroke sides' }).selectOption('top');
   await expect(page.getByTestId('field-stroke-top')).toHaveValue('1');
   await expect(page.getByTestId('field-stroke-bottom')).toHaveValue('0');
   await page.getByTestId('field-stroke-bottom').fill('2');
   await page.getByTestId('field-stroke-bottom').press('Enter');
   // Two sides with different weights: the select shows its (disabled) Custom entry.
-  await expect(stroke.getByRole('combobox', { name: 'Stroke sides' })).toHaveValue('custom');
+  await expect(advanced.getByRole('combobox', { name: 'Stroke sides' })).toHaveValue('custom');
 
   await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
   await page.reload();
   await page.getByRole('treeitem', { name: /Rectangle 1/ }).click();
   const reloaded = page.getByRole('region', { name: 'Stroke' });
-  await expect(reloaded.getByRole('combobox', { name: 'Stroke style' })).toHaveValue('dashed');
+  await reloaded.getByRole('button', { name: 'Advanced stroke settings' }).click();
+  const reopened = page.getByRole('dialog', { name: 'Advanced stroke settings' });
+  await expect(reopened.getByRole('combobox', { name: 'Stroke style' })).toHaveValue('dashed');
   await expect(page.getByTestId('field-dash')).toHaveValue('6');
   await expect(page.getByTestId('field-gap')).toHaveValue('3');
-  await expect(reloaded.getByRole('combobox', { name: 'Stroke join' })).toHaveValue('ROUND');
+  await expect(reopened.getByRole('combobox', { name: 'Stroke join' })).toHaveValue('ROUND');
   await expect(page.getByTestId('field-stroke-top')).toHaveValue('1');
   await expect(page.getByTestId('field-stroke-bottom')).toHaveValue('2');
 });
@@ -71,6 +76,7 @@ test('path trim draws part of the stroke, and its values persist', async ({ page
   const stroke = page.getByRole('region', { name: 'Stroke' });
   await stroke.getByRole('button', { name: 'Add stroke' }).click();
   // A path can only be trimmed where the stroke runs down the middle of it, so the fields wait for that.
+  await stroke.getByRole('button', { name: 'Advanced stroke settings' }).click();
   await expect(page.getByTestId('field-trim-start')).toHaveCount(0);
   await stroke.getByRole('combobox', { name: 'Stroke position' }).selectOption('CENTER');
   await expect(page.getByTestId('field-trim-start')).toHaveValue('0%');
@@ -84,6 +90,7 @@ test('path trim draws part of the stroke, and its values persist', async ({ page
   await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
   await page.reload();
   await page.getByRole('treeitem', { name: /Rectangle 1/ }).click();
+  await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
   await expect(page.getByTestId('field-trim-start')).toHaveValue('25%');
   await expect(page.getByTestId('field-trim-end')).toHaveValue('75%');
 });

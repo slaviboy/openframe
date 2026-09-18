@@ -15,18 +15,32 @@
  * limitations under the License.
  */
 
-/* Reads as the panel's other selects do; it is a button only so it can draw the endpoint. */
+/*
+ * Reads as the panel's other selects do; it is a button only so it can draw the endpoint. The reference
+ * gives the drawing the whole control rather than naming the end beside a small picture, so the glyph
+ * stretches and the chevron keeps its 24px column.
+ */
 .trigger {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  overflow: hidden;
   text-align: left;
   cursor: default;
 }
 
+/* endpoints--longIcon: the 200-wide drawing is clipped to the control, never squashed into it. */
 .glyph {
-  flex: none;
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  display: block;
+  overflow: hidden;
   color: var(--fg-primary);
+}
+
+/* endpoints--ui3EndpointFlipped: the End point is the same drawing, mirrored. */
+.flipped {
+  transform: scaleX(-1);
 }
 
 .name {

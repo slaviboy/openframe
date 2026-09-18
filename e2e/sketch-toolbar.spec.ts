@@ -41,7 +41,10 @@ test('the Pencil draws with the stroke its toolbar sets, and ⌘-click samples o
   await expect(page.getByRole('treeitem', { name: /Vector 1/ })).toBeVisible();
   // The sketch took the toolbar's stroke.
   await expect(page.getByTestId('field-stroke-weight')).toHaveValue('8');
+  // The stroke's style lives behind Advanced stroke settings, where the reference keeps it.
+  await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
   await expect(page.getByRole('combobox', { name: 'Stroke style', exact: true })).toHaveValue('dashed');
+  await page.keyboard.press('Escape');
 
   // A thinner, solid stroke for the next one.
   await page.keyboard.press('Shift+P');
@@ -83,7 +86,9 @@ test('the Brush paints a dynamic stroke, which the Stroke section adjusts', asyn
   await page.mouse.up();
   await expect(page.getByRole('treeitem', { name: /Vector 1/ })).toBeVisible();
 
-  // Its stroke is dynamic, with the wiggle the brush was set to.
+  // Its stroke is dynamic, with the wiggle the brush was set to. Dynamic stroke lives behind Advanced
+  // stroke settings, where the reference keeps it.
+  await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
   const dynamic = page.getByRole('checkbox', { name: 'Dynamic stroke' });
   await expect(dynamic).toBeChecked();
   await expect(page.getByRole('slider', { name: 'Wiggle slider' })).toHaveValue('80');
@@ -95,5 +100,6 @@ test('the Brush paints a dynamic stroke, which the Stroke section adjusts', asyn
   await page.reload();
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
   await page.getByRole('treeitem', { name: /Vector 1/ }).click();
+  await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
   await expect(page.getByRole('checkbox', { name: 'Dynamic stroke' })).not.toBeChecked();
 });

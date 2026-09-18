@@ -28,15 +28,15 @@ import styles from './EndpointSelect.module.css';
  * and the separator it draws after the plain ends. `TRIANGLE_FILLED` is the reference's "Reversed triangle";
  * `LINE_ARROW` and `TRIANGLE_ARROW` are our names for its `ARROW_LINES` and `ARROW_EQUILATERAL`.
  */
-export const CAP_OPTIONS: readonly { readonly cap: StrokeCap; readonly label: string; readonly icon: IconName; readonly startsGroup?: boolean }[] = [
-  { cap: 'NONE', label: 'None', icon: 'capNone' },
-  { cap: 'ROUND', label: 'Round', icon: 'capRound' },
-  { cap: 'SQUARE', label: 'Square', icon: 'capSquare' },
-  { cap: 'LINE_ARROW', label: 'Line arrow', icon: 'capLineArrow', startsGroup: true },
-  { cap: 'TRIANGLE_ARROW', label: 'Triangle arrow', icon: 'capTriangleArrow' },
-  { cap: 'TRIANGLE_FILLED', label: 'Reversed triangle', icon: 'capReversedTriangle' },
-  { cap: 'CIRCLE_FILLED', label: 'Circle arrow', icon: 'capCircleArrow' },
-  { cap: 'DIAMOND_FILLED', label: 'Diamond arrow', icon: 'capDiamondArrow' },
+export const CAP_OPTIONS: readonly { readonly cap: StrokeCap; readonly label: string; readonly icon: IconName; readonly long: IconName; readonly startsGroup?: boolean }[] = [
+  { cap: 'NONE', label: 'None', icon: 'capNone', long: 'capNoneLong' },
+  { cap: 'ROUND', label: 'Round', icon: 'capRound', long: 'capRoundLong' },
+  { cap: 'SQUARE', label: 'Square', icon: 'capSquare', long: 'capSquareLong' },
+  { cap: 'LINE_ARROW', label: 'Line arrow', icon: 'capLineArrow', long: 'capLineArrowLong', startsGroup: true },
+  { cap: 'TRIANGLE_ARROW', label: 'Triangle arrow', icon: 'capTriangleArrow', long: 'capTriangleArrowLong' },
+  { cap: 'TRIANGLE_FILLED', label: 'Reversed triangle', icon: 'capReversedTriangle', long: 'capReversedTriangleLong' },
+  { cap: 'CIRCLE_FILLED', label: 'Circle arrow', icon: 'capCircleArrow', long: 'capCircleArrowLong' },
+  { cap: 'DIAMOND_FILLED', label: 'Diamond arrow', icon: 'capDiamondArrow', long: 'capDiamondArrowLong' },
 ];
 
 const optionFor = (cap: StrokeCap) => CAP_OPTIONS.find((option) => option.cap === cap);
@@ -46,7 +46,7 @@ const optionFor = (cap: StrokeCap) => CAP_OPTIONS.find((option) => option.cap ==
  * picture of the end it makes, which a native `<select>` cannot do, so this is a button and a menu —
  * recorded in docs/UI_REFERENCE.md. `null` is a mixed selection, which shows but is never an option.
  */
-export function EndpointSelect({ label, value, onChange }: { label: string; value: StrokeCap | null; onChange: (cap: StrokeCap) => void }) {
+export function EndpointSelect({ label, value, flipped = false, onChange }: { label: string; value: StrokeCap | null; flipped?: boolean; onChange: (cap: StrokeCap) => void }) {
   const [anchor, setAnchor] = useState<Box | null>(null);
   const current = value === null ? undefined : optionFor(value);
   const entries: MenuEntry[] = CAP_OPTIONS.flatMap((option) => {
@@ -67,8 +67,15 @@ export function EndpointSelect({ label, value, onChange }: { label: string; valu
           setAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
         }}
       >
-        {current && <Icon name={current.icon} size={24} className={styles.glyph} />}
-        <span className={styles.name}>{current?.label ?? 'Mixed'}</span>
+        {/* The reference draws the end across the whole control, clipping the 200-wide picture rather than
+            scaling it, and mirrors the whole thing for the End point. */}
+        {current ? (
+          <span className={flipped ? `${styles.glyph} ${styles.flipped}` : styles.glyph}>
+            <Icon name={current.long} />
+          </span>
+        ) : (
+          <span className={styles.name}>Mixed</span>
+        )}
       </button>
       {anchor && <Menu label={label} entries={entries} anchor={anchor} placement="bottom-start" onClose={() => setAnchor(null)} />}
     </>

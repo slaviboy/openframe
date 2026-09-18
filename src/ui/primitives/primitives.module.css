@@ -121,18 +121,32 @@
   border-color: var(--accent);
 }
 
+/*
+ * A panel select, measured off both `design_mode_button.html` and `pen_tool_1.html`, where it is the same
+ * control: 24px tall on the panel color inside a hairline, 8px in from the left, with the chevron in a
+ * 24px column at the right. It used to be a grey fill with a border that only appeared on hover.
+ */
 .select {
   height: var(--control-h);
-  padding: 0 var(--space-2);
-  border: 1px solid transparent;
+  width: 100%;
+  padding: 0 var(--control-h) 0 var(--space-2);
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  background: var(--bg-control);
+  background: var(--bg-panel) var(--select-chevron) right center / var(--control-h) var(--control-h) no-repeat;
+  color: var(--fg-primary);
   font-size: var(--text-sm);
+  line-height: 16px;
+  text-align: left;
+  text-overflow: ellipsis;
   appearance: none;
 }
 
 .select:hover {
-  border-color: var(--border);
+  background-color: var(--bg-control);
+}
+
+.select:disabled {
+  color: var(--fg-disabled);
 }
 
 /* A number field bound to a variable: the variable's name and Detach variable. */

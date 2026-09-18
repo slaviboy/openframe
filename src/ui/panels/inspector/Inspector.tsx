@@ -15,7 +15,8 @@
  * limitations under the License.
  */
 
-import { Fragment, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { selectionColors, showsSelectionColors, updateSelectionColor, type ColorPaint, type PaintUsage, type SelectionColor } from '@/core/color/selection-colors';
 import { addStop, convertPaint, PAINT_TYPE_LABELS, removeStop, reverseStops, updateStop, type PaintType } from '@/core/color/paints';
 import { VideoSettings } from './VideoSettings';
@@ -142,6 +143,7 @@ import { matrixOf } from '@/core/scene/scene-index';
 import { moveVertices } from '@/core/vector/vector-edit';
 import { roundableVertex } from '@/core/vector/vector-corners';
 import { pointsBounds } from '@/core/vector/vector-transform-points';
+import { placeFloating, type Box } from '../../primitives/position';
 import { refitVector } from '@/editor/tools/vector-draw';
 import {
   DEFAULT_MITER_ANGLE,
@@ -3240,8 +3242,9 @@ function PaintSection({ title, field, nodes, defaultPaint }: { title: string; fi
             ))}
         </ul>
       )}
+      {/* The reference's stroke row: where it goes, how thick it is, and the rest behind Advanced stroke settings. */}
       {field === 'strokes' && list.length > 0 && (
-        <div className={styles.grid2}>
+        <div className={styles.strokeRow}>
           {/* Lines are always stroked on center. */}
           {!nodes.some((n) => n.type === 'LINE') && (
             <select
@@ -3259,7 +3262,7 @@ function PaintSection({ title, field, nodes, defaultPaint }: { title: string; fi
           <VariableNumberField
             nodes={nodes}
             field="strokeWeight"
-            label="≡"
+            label={<Icon name="strokeWeight" size={16} />}
             ariaLabel="Stroke weight"
             testId="field-stroke-weight"
             min={0}
@@ -3268,6 +3271,7 @@ function PaintSection({ title, field, nodes, defaultPaint }: { title: string; fi
             onGestureEnd={strokeWeight.end}
             onChange={(v) => strokeWeight.change((tx) => nodes.forEach((n) => setStrokeWeight(tx, n, v)))}
           />
+          <AdvancedStrokeSettings nodes={nodes} />
         </div>
       )}
       <input
@@ -3296,22 +3300,7 @@ function PaintSection({ title, field, nodes, defaultPaint }: { title: string; fi
           onChange={(v) => strokeWeight.change((tx) => nodes.forEach((n) => setStrokeWeight(tx, n, v)))}
         />
       )}
-      {field === 'strokes' && list.length > 0 && <StrokeSettings nodes={nodes} />}
-      {field === 'strokes' && list.length > 0 && nodes.every((n) => n.type === 'LINE') && (
-        <div className={styles.grid2}>
-          {(['startCap', 'endCap'] as const).map((end) => {
-            const value = shared(nodes, (n) => (n.type === 'LINE' ? n[end] : 'NONE'));
-            return (
-              <EndpointSelect
-                key={end}
-                label={end === 'startCap' ? 'Start point' : 'End point'}
-                value={value === MIXED ? null : (val(value) ?? null)}
-                onChange={(cap) => editor.history.run('Change end point', (tx) => nodes.forEach((n) => setLineCap(tx, n, end, cap)))}
-              />
-            );
-          })}
-        </div>
-      )}
+      {field === 'strokes' && list.length > 0 && <EndpointRow nodes={nodes} />}
     </Section>
   );
 }
@@ -3736,6 +3725,96 @@ function sideMode(n: GeometryNode): SideMode {
 }
 
 /** Stroke style (solid/dashed, dash, gap, dash cap), join and miter angle, and per-side weights for frames and rectangles. */
+/**
+ * The Stroke section's Start point and End point, on the reference's own row. The documentation puts them
+ * here for a path with two ends, and in Advanced stroke settings for one with more; ours are offered for
+ * lines, since arrowheads on the open ends of a vector network are not drawn yet (see FEATURE_MATRIX).
+ */
+function EndpointRow({ nodes }: { nodes: GeometryNode[] }) {
+  const editor = useEditor();
+  if (!nodes.every((n) => n.type === 'LINE')) return null;
+  return (
+    <div className={styles.strokeRow}>
+      {(['startCap', 'endCap'] as const).map((end) => {
+        const value = shared(nodes, (n) => (n.type === 'LINE' ? n[end] : 'NONE'));
+        return (
+          <EndpointSelect
+            key={end}
+            label={end === 'startCap' ? 'Start point' : 'End point'}
+            flipped={end === 'endCap'}
+            value={value === MIXED ? null : (val(value) ?? null)}
+            onChange={(cap) => editor.history.run('Change end point', (tx) => nodes.forEach((n) => setLineCap(tx, n, end, cap)))}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Advanced stroke settings: the reference keeps everything but where the stroke goes and how thick it is
+ * behind this button — the stroke's style and dashes, its join and miter angle, path trim, a brush, and a
+ * dynamic stroke. The documentation lists the same set.
+ */
+function AdvancedStrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
+  const [anchor, setAnchor] = useState<Box | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!anchor || !el) return;
+    const size = el.getBoundingClientRect();
+    const at = placeFloating(anchor, { width: size.width, height: size.height }, { width: window.innerWidth, height: window.innerHeight }, 'bottom-start');
+    el.style.left = `${at.x}px`;
+    el.style.top = `${at.y}px`;
+    el.style.visibility = 'visible';
+  }, [anchor]);
+
+  useEffect(() => {
+    if (!anchor) return;
+    const close = (e: globalThis.PointerEvent) => {
+      if (rootRef.current?.contains(e.target as Node)) return;
+      // The button closes the dialog itself.
+      if (e.clientX >= anchor.x && e.clientX <= anchor.x + anchor.width && e.clientY >= anchor.y && e.clientY <= anchor.y + anchor.height) return;
+      setAnchor(null);
+    };
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      setAnchor(null);
+    };
+    window.addEventListener('pointerdown', close, true);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('pointerdown', close, true);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [anchor]);
+
+  return (
+    <>
+      <IconButton
+        icon="advancedStroke"
+        label="Advanced stroke settings"
+        aria-haspopup="dialog"
+        aria-expanded={anchor !== null}
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          setAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
+        }}
+      />
+      {anchor &&
+        createPortal(
+          <div ref={rootRef} className={styles.advancedStroke} role="dialog" aria-label="Advanced stroke settings" style={{ visibility: 'hidden' }}>
+            <StrokeSettings nodes={nodes} />
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
 function StrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
   const editor = useEditor();
   const dashGesture = useGesture('Change dashes');

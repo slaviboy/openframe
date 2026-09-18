@@ -374,6 +374,9 @@ test('a stroke draws itself on: path trim is keyframed, and the Path preset anim
 
   await page.getByRole('radio', { name: 'Motion' }).check();
   const timeline = page.getByRole('region', { name: 'Timeline' });
+  // Path trim lives behind Advanced stroke settings, where the reference keeps it.
+  const openAdvanced = () => page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
+  await openAdvanced();
 
   // The whole path is drawn at the start, and none of it a second in.
   await page.getByRole('button', { name: 'Add path trim end keyframe' }).click();
@@ -392,6 +395,7 @@ test('a stroke draws itself on: path trim is keyframed, and the Path preset anim
 
   // Back in Design the stroke is whole again: the playhead never touched the file.
   await page.getByRole('radio', { name: 'Design' }).check();
+  await openAdvanced();
   await expect(page.getByTestId('field-trim-end')).toHaveValue('100%');
 });
 
@@ -421,6 +425,7 @@ test('the Path preset waits for a stroke it can trim', async ({ page }) => {
   await add.selectOption('PATH');
   const timeline = page.getByRole('region', { name: 'Timeline' });
   await expect(timeline.getByRole('group', { name: 'Path trim end track' })).toBeVisible();
+  await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
   // It draws the stroke on: nothing at the start, the whole path half a second later.
   const current = timeline.getByRole('textbox', { name: 'Current time' });
   await current.fill('0');
