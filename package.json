@@ -19,7 +19,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "check": "npm run typecheck && npm run lint && npm run test"
+    "check": "npm run typecheck && npm run lint && npm run test",
+    "fonts:fetch": "node scripts/fetch-google-fonts.mjs",
+    "icons:fetch": "node scripts/fetch-material-symbols.mjs"
   },
   "dependencies": {
     "@fontsource-variable/noto-sans-arabic": "^5.3.0",

@@ -15,10 +15,11 @@
  * limitations under the License.
  */
 
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { usedFontFamilies } from '@/core/text/document-fonts';
 import { FONT_ACCEPT, readFontFiles } from '../../fonts/import-fonts';
 import { canListInstalledFonts, knownInstalledFamilies, listInstalledFamilies, readInstalledFamily } from '../../fonts/local-fonts';
+import { googleFamilies, loadGoogleCatalogue, readGoogleFamily } from '../../fonts/google-fonts';
 import type { Box } from '../../primitives/position';
 import { FontPicker, type FontPickerFamily } from './FontPicker';
 import { OpenTypeFields } from './OpenTypeFields';
@@ -513,15 +514,21 @@ function UnderlineDetails({ nodes, range }: { nodes: readonly TextNode[]; range:
 
 /**
  * The font family button and its font picker. Hovering a family previews it on the selection
- * within one gesture; picking commits that gesture as one undo step. Installed families are loaded
- * when picked; uploaded fonts are read, stored and registered.
+ * within one gesture; picking commits that gesture as one undo step. Installed families and the
+ * Google Fonts library are loaded when picked; uploaded fonts are read, stored and registered.
  */
 function FamilyControl({ nodes, range, family, available }: { nodes: readonly TextNode[]; range: TextRange; family: string | undefined; available: readonly FontFamilyInfo[] }) {
   const editor = useEditor();
   const preview = useGesture('Change font');
   const [anchor, setAnchor] = useState<Box | null>(null);
   const [installed, setInstalled] = useState<readonly string[]>(knownInstalledFamilies);
+  const [library, setLibrary] = useState<readonly string[]>(() => googleFamilies().map((f) => f.family));
   const [error, setError] = useState<string | null>(null);
+  // The library's index is small; its families are listed from it, and their files read only when picked.
+  useEffect(() => {
+    if (library.length > 0) return;
+    void loadGoogleCatalogue().then((families) => setLibrary(families.map((f) => f.family)));
+  }, [library.length]);
   // Re-render when fonts are added (the engine registers them first).
   useSyncExternalStore(
     (listener) => editor.fonts.subscribe(listener),
@@ -532,7 +539,8 @@ function FamilyControl({ nodes, range, family, available }: { nodes: readonly Te
   const used = anchor ? usedFontFamilies(editor.doc) : [];
   const entries: FontPickerFamily[] = [
     ...fonts.map((f) => ({ family: f.family, user: f.user ?? false, variable: f.variable ?? false, inFile: used.includes(f.family) })),
-    ...installed.filter((f) => !names.has(f)).map((f) => ({ family: f, user: true, variable: false, inFile: used.includes(f), notLoaded: true })),
+    ...installed.filter((f) => !names.has(f)).map((f) => ({ family: f, user: true, variable: false, inFile: used.includes(f), notLoaded: true, from: 'installed' as const })),
+    ...library.filter((f) => !names.has(f) && !installed.includes(f)).map((f) => ({ family: f, user: false, variable: false, inFile: used.includes(f), notLoaded: true, from: 'google' as const })),
     ...(family !== undefined && !names.has(family) && !installed.includes(family) ? [{ family, user: false, variable: false, inFile: true }] : []),
   ].sort((a, b) => a.family.localeCompare(b.family));
   const apply = (target: string) => (tx: Transaction) => {
@@ -581,17 +589,23 @@ function FamilyControl({ nodes, range, family, available }: { nodes: readonly Te
             preview.change(apply(target));
           }}
           onPick={(target) => {
-            if (!names.has(target) && installed.includes(target)) {
-              preview.cancel();
-              void readInstalledFamily(target)
-                .then((loaded) => editor.fonts.add(loaded))
-                .then(
-                  () => commit(target),
-                  (e: unknown) => setError(e instanceof Error ? e.message : 'The installed font could not be read.'),
-                );
-            } else {
+            if (names.has(target)) {
               commit(target);
+              return;
             }
+            // Not registered yet: read the family's files, then commit the change with them in hand.
+            const fromLibrary = !installed.includes(target) && library.includes(target);
+            if (!fromLibrary && !installed.includes(target)) {
+              commit(target);
+              return;
+            }
+            preview.cancel();
+            void (fromLibrary ? readGoogleFamily(target) : readInstalledFamily(target))
+              .then((loaded) => editor.fonts.add(loaded))
+              .then(
+                () => commit(target),
+                (e: unknown) => setError(e instanceof Error ? e.message : `${target} could not be read.`),
+              );
           }}
           onClose={() => setAnchor(null)}
           onUpload={(files) => {

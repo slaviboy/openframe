@@ -40,8 +40,10 @@ export interface FontPickerFamily {
   readonly variable: boolean;
   /** Used by a text layer in this file. */
   readonly inFile: boolean;
-  /** Installed on this device but not loaded yet (its files are read when picked). */
+  /** Not loaded yet: its files are read when it is picked. */
   readonly notLoaded?: boolean;
+  /** Where it comes from, which is what the badge says: installed on this device, or the bundled library. */
+  readonly from?: 'installed' | 'google';
 }
 
 export interface FontPickerProps {
@@ -183,7 +185,7 @@ export function FontPicker(props: FontPickerProps) {
             onClick={() => pick(f.family)}
           >
             <span style={{ fontFamily: `"${f.family}", var(--font-ui, sans-serif)` }}>{f.family}</span>
-            {f.notLoaded && <span className={styles.badge}>Installed</span>}
+            {f.notLoaded && <span className={styles.badge}>{f.from === 'google' ? 'Google' : 'Installed'}</span>}
           </li>
         ))}
         {visible.length === 0 && <li className={styles.empty}>No fonts found</li>}

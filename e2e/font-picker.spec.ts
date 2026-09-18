@@ -43,7 +43,8 @@ test('the font picker searches, filters, previews, uploads fonts and keeps them'
   // Family options only (the filter menu's options are options too).
   const fonts = picker.getByRole('listbox', { name: 'Fonts' });
   await expect(picker.getByLabel('Search fonts')).toBeFocused();
-  await expect(fonts.getByRole('option', { name: 'Inter' })).toBeVisible();
+  // Exact: the Google Fonts library the app ships with has an "Inter Tight" too.
+  await expect(fonts.getByRole('option', { name: 'Inter', exact: true })).toBeVisible();
   await picker.getByLabel('Search fonts').fill('zzz');
   await expect(fonts.getByRole('option')).toHaveCount(0);
   await picker.getByLabel('Search fonts').fill('');
@@ -54,10 +55,10 @@ test('the font picker searches, filters, previews, uploads fonts and keeps them'
   const chooser = page.waitForEvent('filechooser');
   await picker.getByRole('button', { name: 'Upload fonts…' }).click();
   await (await chooser).setFiles([{ name: 'codicon.ttf', mimeType: 'font/ttf', buffer: fixtureFont() }]);
-  await expect(fonts.getByRole('option', { name: 'codicon' })).toBeVisible();
+  await expect(fonts.getByRole('option', { name: 'codicon', exact: true })).toBeVisible();
 
   // Hovering previews without committing; Escape restores the font.
-  await fonts.getByRole('option', { name: 'codicon' }).hover();
+  await fonts.getByRole('option', { name: 'codicon', exact: true }).hover();
   await expect(family).toHaveText('codicon');
   await page.keyboard.press('Escape');
   await expect(picker).toHaveCount(0);
@@ -65,7 +66,7 @@ test('the font picker searches, filters, previews, uploads fonts and keeps them'
 
   // Picking applies it as one undo step.
   await family.click();
-  await page.getByRole('dialog', { name: 'Font picker' }).getByRole('option', { name: 'codicon' }).click();
+  await page.getByRole('dialog', { name: 'Font picker' }).getByRole('option', { name: 'codicon', exact: true }).click();
   await expect(family).toHaveText('codicon');
   const mod = process.platform === 'darwin' ? 'Meta' : 'Control';
   await page.mouse.click(box.x + 900, box.y + 500);
@@ -83,5 +84,5 @@ test('the font picker searches, filters, previews, uploads fonts and keeps them'
   await expect(page.getByLabel('Font family')).toHaveText('codicon');
   await page.getByLabel('Font family').click();
   await page.getByRole('dialog', { name: 'Font picker' }).getByLabel('Font filter').selectOption('file');
-  await expect(page.getByRole('dialog', { name: 'Font picker' }).getByRole('option', { name: 'codicon' })).toBeVisible();
+  await expect(page.getByRole('dialog', { name: 'Font picker' }).getByRole('option', { name: 'codicon', exact: true })).toBeVisible();
 });

@@ -25,6 +25,7 @@ import { useDocumentRevision, useEditor } from '../../hooks/useEditor';
 import styles from '../find/FindPanel.module.css';
 import assetStyles from './AssetsPanel.module.css';
 import { ComponentDetailsDialog } from './ComponentDetailsDialog';
+import { IconPicker } from './IconPicker';
 import { ComponentThumbnail } from './ComponentThumbnail';
 
 /** Indentation per folder level. */
@@ -215,6 +216,7 @@ export function AssetsPanel() {
       <ul className={styles.results} aria-label="Local components">
         {subFolders ? folderItems(assetTree(editor, components), 0) : items(components, (component) => component.name, 0, 'flat')}
       </ul>
+      <IconPicker />
       {details && <ComponentDetailsDialog component={details} onClose={() => setDetails(null)} />}
     </section>
   );

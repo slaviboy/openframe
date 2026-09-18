@@ -56,4 +56,13 @@ export default tseslint.config(
     files: ['src/pwa/sw.ts'],
     rules: { 'no-restricted-globals': 'off' },
   },
+  {
+    // The Google Fonts library and the Material Symbols set ship with the app, under public/. They are far
+    // too large to inline as modules the way the bundled fonts are — the library alone is hundreds of
+    // megabytes — so they are read from the app's own origin when a family or an icon is picked, and the
+    // service worker caches each one as it is asked for, exactly as it already does for the CJK subsets.
+    // Same-origin reads of what shipped with the app; no request ever leaves it.
+    files: ['src/ui/fonts/google-fonts.ts', 'src/ui/icons/material-symbols.ts'],
+    rules: { 'no-restricted-globals': 'off' },
+  },
 );
