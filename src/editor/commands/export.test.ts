@@ -16,6 +16,7 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest';
+import type { ExportImageOptions } from '@/core/export/export-settings';
 import { createEmptyDocument, keyOnTop, makeRectangle } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
 import type { SceneNode } from '@/core/schema/document';
@@ -26,7 +27,7 @@ import { addExportSetting, layersWithExports, removeExportSetting, renderExports
 let editor: Editor;
 let icon: string;
 let other: string;
-const rendered: Array<{ id: string; scale: number; format: string }> = [];
+const rendered: Array<{ id: string; scale: number; format: string; options?: ExportImageOptions }> = [];
 
 const node = (id: string) => editor.doc.getOrThrow(id) as SceneNode;
 
@@ -46,8 +47,8 @@ beforeEach(() => {
   editor.setThumbnails({
     thumbnail: () => null,
     fileThumbnail: () => null,
-    exportImage: (_store, _index, _pageId, id, scale, format) => {
-      rendered.push({ id, scale, format });
+    exportImage: (_store, _index, _pageId, id, scale, format, options) => {
+      rendered.push({ id, scale, format, ...(options && Object.keys(options).length > 0 ? { options } : {}) });
       return new Uint8Array([1]);
     },
   });
@@ -112,7 +113,9 @@ describe('GIF exports', () => {
 
   const fillWithGif = (id: string, mime = 'image/gif') => {
     void editor.images.add({ hash: 'gif-hash', bytes: gifBytes, mime, width: 80, height: 45 });
-    editor.history.run('fill', (tx) => tx.set(id, 'fills', [{ type: 'IMAGE', imageHash: 'gif-hash', imageSize: { width: 80, height: 45 }, scaleMode: 'FILL', opacity: 1, visible: true, blendMode: 'NORMAL' }]));
+    editor.history.run('fill', (tx) =>
+      tx.set(id, 'fills', [{ type: 'IMAGE', imageHash: 'gif-hash', imageSize: { width: 80, height: 45 }, scaleMode: 'FILL', opacity: 1, visible: true, blendMode: 'NORMAL' }]),
+    );
   };
 
   test('write the layer’s own GIF, so its frame delays and loop count are kept, without the rendering engine', () => {
@@ -134,5 +137,20 @@ describe('GIF exports', () => {
     addExportSetting(editor, [icon]);
     updateExportSetting(editor, [icon], 0, { format: 'GIF' });
     expect(renderExports(editor, [icon])).toEqual([]);
+  });
+});
+
+describe('the settings a format carries of its own', () => {
+  test('reach the rendering engine, and a PDF is compressed to its own default', () => {
+    addExportSetting(editor, [icon]);
+    updateExportSetting(editor, [icon], 0, { format: 'JPG', colorProfile: 'DISPLAY_P3', resampling: 'BASIC', quality: 40, contentsOnly: false });
+    renderExports(editor, [icon]);
+    expect(rendered.at(-1)?.options).toEqual({ colorProfile: 'DISPLAY_P3', resampling: 'BASIC', quality: 40, contentsOnly: false });
+
+    // A PDF carries the layer as a JPEG, compressed at the quality PDFs start with when nothing is asked for.
+    updateExportSetting(editor, [icon], 0, { format: 'PDF', colorProfile: undefined, resampling: undefined, quality: undefined, contentsOnly: undefined });
+    rendered.length = 0;
+    renderExports(editor, [icon]);
+    expect(rendered.at(-1)).toMatchObject({ format: 'JPG', options: { quality: 75 } });
   });
 });

@@ -16,7 +16,7 @@
  */
 
 import { devAssets, type DevAsset } from '@/editor/commands/dev-assets';
-import { renderExports } from '@/editor/commands/export';
+import { renderExportsWithText } from '@/editor/commands/export';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import primitives from '../../primitives/primitives.module.css';
 import { saveExports } from '../inspector/ExportSection';
@@ -32,8 +32,8 @@ export function DevAssetsPanel() {
   useDocumentRevision();
   const assets = devAssets(editor, pageId);
 
-  const download = (chosen: readonly DevAsset[], archive: string) => {
-    const rendered = chosen.flatMap((asset) => renderExports(editor, [asset.nodeId], undefined, asset.setting) ?? []);
+  const download = async (chosen: readonly DevAsset[], archive: string) => {
+    const rendered = (await Promise.all(chosen.map((asset) => renderExportsWithText(editor, [asset.nodeId], undefined, asset.setting)))).flatMap((assets) => assets ?? []);
     if (rendered.length > 0) saveExports(rendered, archive);
   };
 

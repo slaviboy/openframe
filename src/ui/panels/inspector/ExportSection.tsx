@@ -16,9 +16,20 @@
  */
 
 import { useEffect, useState } from 'react';
-import { EXPORT_FORMAT_LABELS, EXPORT_FORMATS, EXPORT_SCALE_PRESETS, formatExportConstraint, parseExportConstraint, type ExportFormat, type ExportSetting } from '@/core/export/export-settings';
+import {
+  DEFAULT_JPEG_QUALITY,
+  DEFAULT_PDF_QUALITY,
+  EXPORT_FORMAT_LABELS,
+  EXPORT_FORMATS,
+  EXPORT_SCALE_PRESETS,
+  formatExportConstraint,
+  parseExportConstraint,
+  QUALITY_PRESETS,
+  type ExportFormat,
+  type ExportSetting,
+} from '@/core/export/export-settings';
 import type { SceneNode } from '@/core/schema/document';
-import { addExportSetting, removeExportSetting, renderExports, updateExportSetting, type ExportedAsset } from '@/editor/commands/export';
+import { addExportSetting, removeExportSetting, renderExportsWithText, updateExportSetting, type ExportedAsset } from '@/editor/commands/export';
 import { downloadBytes, zipFiles } from '@/platform/download';
 import { animatedGifHash } from '@/editor/images/animated-gif';
 import { useEditor } from '../../hooks/useEditor';
@@ -76,6 +87,88 @@ function ScaleInput({ label, setting, onChange }: { label: string; setting: Expo
 }
 
 /**
+ * The settings a format of its own carries, opened from the export configuration they belong to. Which are shown
+ * follows the format: SVG has markup of its own to steer, and only the raster formats have a color profile or a
+ * resampling method. The reference's "Include bounding box" is not among them — a layer already exports as its own box,
+ * which is what that setting asks for — and SVG text is always outlined, since that is how it is exported at all.
+ */
+function FormatSettings({ name, setting, onChange }: { name: string; setting: ExportSetting; onChange: (patch: Partial<ExportSetting>) => void }) {
+  const { format } = setting;
+  const raster = format === 'PNG' || format === 'JPG' || format === 'WEBP';
+  const compressed = format === 'JPG' || format === 'PDF';
+  if (format === 'GIF') return null;
+  return (
+    <details className={styles.exportSettings}>
+      <summary>{name} settings</summary>
+      {(raster || format === 'SVG') && (
+        <label className={styles.checkbox}>
+          <input type="checkbox" checked={setting.contentsOnly !== false} onChange={(e) => onChange({ contentsOnly: e.target.checked ? undefined : false })} />
+          Ignore overlapping layers
+        </label>
+      )}
+      {format === 'SVG' && (
+        <>
+          <label className={styles.checkbox}>
+            <input type="checkbox" checked={setting.svgIdAttribute === true} onChange={(e) => onChange({ svgIdAttribute: e.target.checked ? true : undefined })} />
+            Include &quot;id&quot; attribute
+          </label>
+          <label className={styles.checkbox}>
+            <input type="checkbox" checked={setting.svgSimplifyStroke === true} onChange={(e) => onChange({ svgSimplifyStroke: e.target.checked ? true : undefined })} />
+            Simplify stroke
+          </label>
+        </>
+      )}
+      {raster && (
+        <div className={styles.field}>
+          <span>Color profile</span>
+          <select
+            className={primitives.select}
+            aria-label={`${name} color profile`}
+            value={setting.colorProfile ?? 'FILE'}
+            onChange={(e) => onChange({ colorProfile: e.target.value === 'FILE' ? undefined : (e.target.value as 'SRGB' | 'DISPLAY_P3') })}
+          >
+            <option value="FILE">Same as file</option>
+            <option value="SRGB">sRGB</option>
+            <option value="DISPLAY_P3">Display P3</option>
+          </select>
+        </div>
+      )}
+      {compressed && (
+        <div className={styles.field}>
+          <span>Image quality</span>
+          <select
+            className={primitives.select}
+            aria-label={`${name} image quality`}
+            value={setting.quality ?? (format === 'PDF' ? DEFAULT_PDF_QUALITY : DEFAULT_JPEG_QUALITY)}
+            onChange={(e) => onChange({ quality: Number(e.target.value) })}
+          >
+            {QUALITY_PRESETS.map((preset) => (
+              <option key={preset.value} value={preset.value}>
+                {preset.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      {(raster || format === 'PDF') && (
+        <div className={styles.field}>
+          <span>Image resampling</span>
+          <select
+            className={primitives.select}
+            aria-label={`${name} image resampling`}
+            value={setting.resampling ?? 'DETAILED'}
+            onChange={(e) => onChange({ resampling: e.target.value as 'DETAILED' | 'BASIC' })}
+          >
+            <option value="DETAILED">Detailed</option>
+            <option value="BASIC">Basic</option>
+          </select>
+        </div>
+      )}
+    </details>
+  );
+}
+
+/**
  * The Export section of the right sidebar: export configurations of the selected layers (format, scale as a multiplier
  * or fixed width or height, and a file name suffix), Preview of a single layer's first export, and Export, which saves
  * the files (several as a ZIP archive, in folders from slash-separated layer names).
@@ -93,8 +186,8 @@ export function ExportSection({ nodes }: { nodes: readonly SceneNode[] }) {
   // The preview's object URL is released when it changes or the section goes away.
   useEffect(() => () => void (preview && URL.revokeObjectURL(preview)), [preview]);
 
-  const exportNow = () => {
-    const assets = renderExports(editor, ids);
+  const exportNow = async () => {
+    const assets = await renderExportsWithText(editor, ids);
     if (assets === null) {
       setStatus('The rendering engine is still loading.');
       return;
@@ -107,12 +200,12 @@ export function ExportSection({ nodes }: { nodes: readonly SceneNode[] }) {
     const left = [...new Set(assets.flatMap((asset) => asset.skipped ?? []))];
     setStatus(`${assets.length === 1 ? `Exported ${baseName(assets[0]!.path)}` : `Exported ${assets.length} files`}${left.length > 0 ? `. Left out of the SVG: ${left.join(', ')}` : ''}`);
   };
-  const togglePreview = () => {
+  const togglePreview = async () => {
     if (preview) {
       setPreview(null);
       return;
     }
-    const [first] = renderExports(editor, ids.slice(0, 1), new Set([`${ids[0]}:0`])) ?? [];
+    const [first] = (await renderExportsWithText(editor, ids.slice(0, 1), new Set([`${ids[0]}:0`]))) ?? [];
     if (first) setPreview(URL.createObjectURL(new Blob([first.bytes as BlobPart], { type: first.type })));
   };
 
@@ -161,16 +254,17 @@ export function ExportSection({ nodes }: { nodes: readonly SceneNode[] }) {
                   ))}
                 </select>
                 <IconButton icon="minus" label={`Remove ${name.toLowerCase()}`} onClick={() => removeExportSetting(editor, ids, index)} />
+                <FormatSettings name={name} setting={setting} onChange={change} />
               </div>
             );
           })}
           {settings.length > 0 && (
             <div className={styles.buttonRow}>
-              <button type="button" className={primitives.button} onClick={exportNow}>
+              <button type="button" className={primitives.button} onClick={() => void exportNow()}>
                 {nodes.length === 1 ? `Export ${baseName(nodes[0]!.name)}` : `Export ${nodes.length} layers`}
               </button>
               {nodes.length === 1 && (
-                <button type="button" className={primitives.button} aria-pressed={preview !== null} onClick={togglePreview}>
+                <button type="button" className={primitives.button} aria-pressed={preview !== null} onClick={() => void togglePreview()}>
                   Preview
                 </button>
               )}

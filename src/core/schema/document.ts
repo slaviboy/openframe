@@ -84,6 +84,18 @@ export const ExportSettingSchema = z.object({
   format: z.enum(EXPORT_FORMATS),
   suffix: z.string().max(200),
   constraint: ExportConstraintSchema,
+  /** Ignore overlapping layers: only the exported layer is drawn. Absent means on, as the reference's own default is. */
+  contentsOnly: z.boolean().optional(),
+  /** SVG: write an `id` attribute, taken from the layer's name, on each element. Absent means off. */
+  svgIdAttribute: z.boolean().optional(),
+  /** SVG: keep a stroke as a stroke where it can be, rather than outlining it into a fill. Absent means off. */
+  svgSimplifyStroke: z.boolean().optional(),
+  /** The color profile the image is written in; absent means the file's own. */
+  colorProfile: z.enum(['SRGB', 'DISPLAY_P3']).optional(),
+  /** JPG and PDF: how hard the image is compressed, 1 to 100. Absent means the format's default. */
+  quality: z.number().int().min(1).max(100).optional(),
+  /** How pixels are worked out when an image is scaled: bicubic for detail, nearest for hard edges. */
+  resampling: z.enum(['DETAILED', 'BASIC']).optional(),
 });
 export type ExportSetting = z.infer<typeof ExportSettingSchema>;
 

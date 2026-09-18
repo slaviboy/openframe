@@ -18,7 +18,7 @@
 import { useState } from 'react';
 import { EXPORT_FORMAT_LABELS, exportFileName, exportScale, formatExportConstraint } from '@/core/export/export-settings';
 import type { SceneNode } from '@/core/schema/document';
-import { layersWithExports, renderExports } from '@/editor/commands/export';
+import { layersWithExports, renderExportsWithText } from '@/editor/commands/export';
 import type { Editor } from '@/editor/editor';
 import { saveExports } from '../panels/inspector/ExportSection';
 import findStyles from '../panels/find/FindPanel.module.css';
@@ -49,8 +49,8 @@ export function ExportDialog({ editor, onClose }: { editor: Editor; onClose: () 
   const [status, setStatus] = useState('');
   const checked = rows.filter((row) => !unchecked.has(row.key));
 
-  const exportChecked = () => {
-    const assets = renderExports(editor, [...new Set(checked.map((row) => row.id))], new Set(checked.map((row) => row.key)));
+  const exportChecked = async () => {
+    const assets = await renderExportsWithText(editor, [...new Set(checked.map((row) => row.id))], new Set(checked.map((row) => row.key)));
     if (assets === null) {
       setStatus('The rendering engine is still loading.');
       return;
@@ -118,7 +118,7 @@ export function ExportDialog({ editor, onClose }: { editor: Editor; onClose: () 
           <button type="button" className={styles.secondary} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className={styles.primary} disabled={checked.length === 0} onClick={exportChecked}>
+          <button type="button" className={styles.primary} disabled={checked.length === 0} onClick={() => void exportChecked()}>
             {checked.length === 1 ? 'Export 1 file' : `Export ${checked.length} files`}
           </button>
         </footer>

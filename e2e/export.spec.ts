@@ -113,3 +113,31 @@ test('a layer exports as a PDF page its own size, carrying the drawing', async (
   // The image really is a JPEG: its own start and end markers are in the stream.
   expect(bytes.includes(Buffer.from([0xff, 0xd8, 0xff]))).toBe(true);
 });
+
+test('a text layer exports as SVG with the outlines of its glyphs, and the settings a format carries of its own apply', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  await page.keyboard.press('t');
+  await page.mouse.click(box.x + 400, box.y + 300);
+  await page.keyboard.type('Hi');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('treeitem', { name: /Hi/ })).toBeVisible();
+
+  const section = page.getByRole('region', { name: 'Export' });
+  await section.getByRole('button', { name: 'Add export' }).click();
+  await section.getByRole('combobox', { name: 'Export 1 format' }).selectOption('SVG');
+  // The settings SVG has of its own sit under the configuration they belong to.
+  await section.getByText('Export 1 settings').click();
+  await section.getByRole('checkbox', { name: 'Include "id" attribute' }).check();
+  await expect(section.getByRole('checkbox', { name: 'Ignore overlapping layers' })).toBeChecked();
+
+  const download = page.waitForEvent('download');
+  await section.getByRole('button', { name: /^Export Hi/ }).click();
+  const chunks = await (await (await download).createReadStream()).toArray();
+  const svg = Buffer.concat(chunks).toString('utf8');
+  // The glyphs are drawn as paths, so nothing is left out of the export and the layer is named in the markup.
+  expect(svg).toContain('id="Hi"');
+  expect(svg).toMatch(/<path d="M[-\d.]/);
+});

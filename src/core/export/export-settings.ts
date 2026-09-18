@@ -17,6 +17,7 @@
 
 // Export settings are validated in the document schema, which configures zod first (constructing schemas here, before
 // that configuration, would make them probe `eval`, which the Content Security Policy reports).
+import type { ColorProfile } from '../color/color';
 import type { ExportConstraint, ExportSetting } from '../schema/document';
 
 export type { ExportConstraint, ExportSetting };
@@ -37,6 +38,30 @@ export const EXPORT_MIME_TYPES: Readonly<Record<ExportFormat, string>> = { PNG: 
 
 /** Scale presets offered in the Export section. */
 export const EXPORT_SCALE_PRESETS: readonly string[] = ['0.5x', '0.75x', '1x', '1.5x', '2x', '3x', '4x', '512w', '512h'];
+
+/** What an export asks of the renderer beyond its size: the settings the Export section carries. */
+export interface ExportImageOptions {
+  readonly colorProfile?: ColorProfile;
+  readonly resampling?: 'DETAILED' | 'BASIC';
+  /** How hard a JPG is compressed, 1 to 100. */
+  readonly quality?: number;
+  /** False draws the whole page and cuts it to the layer's bounds, so overlapping layers are in the export. */
+  readonly contentsOnly?: boolean;
+}
+
+/** How hard a JPG export is compressed when the setting says nothing: The reference's own "High". */
+export const DEFAULT_JPEG_QUALITY = 92;
+
+/** How hard a PDF's picture is compressed when the setting says nothing: The reference's own "Medium". */
+export const DEFAULT_PDF_QUALITY = 75;
+
+/** The compression settings the Export section offers for JPG and PDF, as the reference names them. */
+export const QUALITY_PRESETS: readonly { readonly label: string; readonly value: number }[] = [
+  { label: 'Low', value: 40 },
+  { label: 'Medium', value: 75 },
+  { label: 'High', value: 92 },
+  { label: 'Maximum', value: 100 },
+];
 
 /** The largest bitmap an export makes, per side, in pixels. */
 export const MAX_EXPORT_SIDE = 16_384;

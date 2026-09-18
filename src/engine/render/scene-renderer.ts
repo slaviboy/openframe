@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { RasterFormat } from '@/core/export/export-settings';
+import { DEFAULT_JPEG_QUALITY, type ExportImageOptions, type RasterFormat } from '@/core/export/export-settings';
 import type { ThumbnailSource } from '@/core/document/file-thumbnail';
 import type { Canvas, CanvasKit, ColorFilter, EmbindEnumEntity, Paint as CkPaint, ImageFilter, Path, RRect, RuntimeEffect, Shader } from 'canvaskit-wasm';
 import type { Effect } from '@/core/schema/document';
@@ -122,6 +122,11 @@ export interface RenderOptions {
   readonly videoFrame?: (videoHash: string) => CkImage | null;
   /** Presentation view: the current frame of an animated GIF image fill, by image hash (null draws the stored image). */
   readonly imageFrame?: (imageHash: string) => CkImage | null;
+  /**
+   * How an image fill is sampled when it is drawn at another size: `DETAILED` weighs the pixels around each one
+   * (bicubic), `BASIC` takes the nearest, which keeps hard edges. Absent draws it the way the canvas does.
+   */
+  readonly resampling?: 'DETAILED' | 'BASIC';
 }
 
 interface DrawContext {
@@ -186,6 +191,8 @@ export class SceneRenderer {
   private videoFrame: ((videoHash: string) => CkImage | null) | null = null;
   /** The current frames of animated GIFs while rendering (presentation view). */
   private imageFrame: ((imageHash: string) => CkImage | null) | null = null;
+  /** How image fills are sampled while rendering; null samples them the way the canvas does. */
+  private resampling: 'DETAILED' | 'BASIC' | null = null;
 
   constructor(
     private readonly ck: CanvasKit,
@@ -239,6 +246,7 @@ export class SceneRenderer {
     this.profile = options.colorProfile ?? 'SRGB';
     this.videoFrame = options.videoFrame ?? null;
     this.imageFrame = options.imageFrame ?? null;
+    this.resampling = options.resampling ?? null;
     this.drawStore = store;
     const stats: RenderStats = { drawn: 0, culled: 0, ms: 0 };
     const page = store.get(pageId);
@@ -315,9 +323,11 @@ export class SceneRenderer {
    * transparent background, or for a slice everything within its bounds, at `scale`. JPG has no transparency, so it is
    * flattened onto white. Null when there is nothing to draw.
    */
-  exportImage(store: DocumentStore, index: SceneIndex, pageId: Id, id: Id, scale: number, format: RasterFormat, colorProfile?: ColorProfile): Uint8Array | null {
+  exportImage(store: DocumentStore, index: SceneIndex, pageId: Id, id: Id, scale: number, format: RasterFormat, options: ExportImageOptions = {}): Uint8Array | null {
     index.ensure(pageId);
-    const region = store.get(id)?.type === 'SLICE';
+    const { colorProfile, resampling, quality } = options;
+    // With "ignore overlapping layers" off, the whole page is drawn and cut to the layer's bounds, as a slice is.
+    const region = store.get(id)?.type === 'SLICE' || options.contentsOnly === false;
     const bounds = region ? index.worldBounds(id) : (index.paintBounds(id) ?? index.worldBounds(id));
     if (!bounds || bounds.width <= 0 || bounds.height <= 0 || !(scale > 0)) return null;
     const width = Math.max(1, Math.round(bounds.width * scale));
@@ -327,18 +337,18 @@ export class SceneRenderer {
     const flat = format === 'JPG' ? this.ck.MakeSurface(width, height) : null;
     try {
       const view = { x: bounds.x, y: bounds.y, zoom: scale, width, height, dpr: 1 };
-      this.render(surface.getCanvas(), store, index, pageId, view, { ...(region ? {} : { only: id }), ...(colorProfile ? { colorProfile } : {}) });
+      this.render(surface.getCanvas(), store, index, pageId, view, { ...(region ? {} : { only: id }), ...(colorProfile ? { colorProfile } : {}), resampling: resampling ?? 'DETAILED' });
       surface.flush();
       const drawn = surface.makeImageSnapshot();
       try {
-        if (!flat) return drawn.encodeToBytes(format === 'WEBP' ? this.ck.ImageFormat.WEBP : this.ck.ImageFormat.PNG, 100);
+        if (!flat) return drawn.encodeToBytes(format === 'WEBP' ? this.ck.ImageFormat.WEBP : this.ck.ImageFormat.PNG, quality ?? 100);
         const canvas = flat.getCanvas();
         canvas.clear(this.ck.WHITE);
         canvas.drawImage(drawn, 0, 0, null);
         flat.flush();
         const flattened = flat.makeImageSnapshot();
         try {
-          return flattened.encodeToBytes(this.ck.ImageFormat.JPEG, 92);
+          return flattened.encodeToBytes(this.ck.ImageFormat.JPEG, quality ?? DEFAULT_JPEG_QUALITY);
         } finally {
           flattened.delete();
         }
@@ -1972,7 +1982,12 @@ export class SceneRenderer {
     if (!placement) return ck.Shader.MakeColor(ck.TRANSPARENT, ck.ColorSpace.SRGB);
     const m = placement.matrix;
     const tile = placement.tile ? ck.TileMode.Repeat : ck.TileMode.Decal;
-    const shader = image.makeShaderOptions(tile, tile, ck.FilterMode.Linear, ck.MipmapMode.None, [m.a, m.c, m.e, m.b, m.d, m.f, 0, 0, 1]);
+    const local: number[] = [m.a, m.c, m.e, m.b, m.d, m.f, 0, 0, 1];
+    // An export can ask for the image to be resampled for detail or for hard edges; the canvas draws it bilinear.
+    const shader =
+      this.resampling === 'DETAILED'
+        ? image.makeShaderCubic(tile, tile, 1 / 3, 1 / 3, local)
+        : image.makeShaderOptions(tile, tile, this.resampling === 'BASIC' ? ck.FilterMode.Nearest : ck.FilterMode.Linear, ck.MipmapMode.None, local);
     if (!hasAdjustments(paint.filters)) return shader;
     this.adjustEffect ??= ck.RuntimeEffect.Make(IMAGE_ADJUST_SKSL);
     if (!this.adjustEffect) return shader;
