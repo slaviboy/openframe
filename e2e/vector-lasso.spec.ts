@@ -39,7 +39,7 @@ test('the secondary toolbar Lasso selects points inside a drawn outline; Done le
 
   await page.keyboard.press('v');
   await page.keyboard.press('Enter');
-  const done = page.getByRole('button', { name: 'Done' });
+  const done = page.getByRole('button', { name: /^Close/ });
   await expect(done).toBeVisible();
   await page.keyboard.press('q');
   await expect(page.getByRole('button', { name: /^Lasso/ })).toHaveAttribute('aria-pressed', 'true');

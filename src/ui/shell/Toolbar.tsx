@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { useEffect, useRef, useState, useSyncExternalStore, type ButtonHTMLAttributes } from 'react';
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore, type ButtonHTMLAttributes } from 'react';
 import type { EditorMode, ToolId, VectorEditTool } from '@/editor/stores/editor-store';
 import { formatShortcut } from '@/editor/keymap/keymap';
 import { Icon, type IconName } from '../icons/Icon';
@@ -182,35 +182,36 @@ const MODES: readonly {
 ];
 
 /** Vector edit mode's secondary toolbar. */
+/**
+ * The vector editing toolbelt, in the reference's own order and grouping: selection, then the tools that
+ * change a path, then the rest behind More. The documentation lists Variable width and Shape builder
+ * among the vector edit tools too; the reference keeps them in the overflow, and so do we.
+ */
 const VECTOR_TOOLS: readonly {
   readonly tool: VectorEditTool;
   readonly label: string;
   readonly icon: IconName;
   readonly command: string;
+  /** A divider is drawn before this tool, as the reference groups them. */
+  readonly startsGroup?: boolean;
 }[] = [
   { tool: 'move', label: 'Move', icon: 'move', command: 'vector.toolMove' },
   { tool: 'lasso', label: 'Lasso', icon: 'lasso', command: 'vector.toolLasso' },
-  { tool: 'cut', label: 'Cut', icon: 'cut', command: 'vector.toolCut' },
+  { tool: 'paint', label: 'Paint', icon: 'paint', command: 'vector.toolPaint', startsGroup: true },
   { tool: 'bend', label: 'Bend', icon: 'bend', command: 'vector.toolBend' },
-  { tool: 'paint', label: 'Paint', icon: 'paint', command: 'vector.toolPaint' },
-  {
-    tool: 'eraser',
-    label: 'Eraser',
-    icon: 'eraser',
-    command: 'vector.toolEraser',
-  },
-  {
-    tool: 'width',
-    label: 'Variable width',
-    icon: 'width',
-    command: 'vector.toolWidth',
-  },
-  {
-    tool: 'shapeBuilder',
-    label: 'Shape builder',
-    icon: 'boolean',
-    command: 'vector.toolShapeBuilder',
-  },
+  { tool: 'cut', label: 'Cut', icon: 'cut', command: 'vector.toolCut' },
+  { tool: 'eraser', label: 'Erase', icon: 'eraser', command: 'vector.toolEraser' },
+];
+
+/** What the reference keeps behind the toolbelt's More button. */
+const VECTOR_MORE_TOOLS: readonly {
+  readonly tool: VectorEditTool;
+  readonly label: string;
+  readonly icon: IconName;
+  readonly command: string;
+}[] = [
+  { tool: 'width', label: 'Variable width', icon: 'width', command: 'vector.toolWidth' },
+  { tool: 'shapeBuilder', label: 'Shape builder', icon: 'boolean', command: 'vector.toolShapeBuilder' },
 ];
 
 const firstAvailable = (group: ToolGroup): ToolItem => group.items.find((i) => i.command) ?? group.items[0]!;
@@ -276,13 +277,17 @@ export function Toolbar() {
         {vectorTool !== null && (
           <div className={styles.toolsRow}>
             {VECTOR_TOOLS.map((item) => (
-              <div key={item.command} className={styles.group}>
-                <ToolButton icon={item.icon} label={item.label} shortcut={shortcut(item.command)} active={vectorTool === item.tool} onClick={() => editor.commands.run(item.command)} />
-              </div>
+              <Fragment key={item.command}>
+                {item.startsGroup === true && <div className={styles.toolDivider} role="separator" aria-orientation="vertical" />}
+                <div className={styles.group}>
+                  <ToolButton icon={item.icon} label={item.label} showLabel shortcut={shortcut(item.command)} active={vectorTool === item.tool} onClick={() => editor.commands.run(item.command)} />
+                </div>
+              </Fragment>
             ))}
-            <button type="button" className={styles.done} data-tool-button="" title={`Done  ${shortcut('vector.done')}`} onClick={() => editor.commands.run('vector.done')}>
-              Done
-            </button>
+            <div className={styles.toolDivider} role="separator" aria-orientation="vertical" />
+            <VectorMoreMenu open={openGroup === VECTOR_MORE} onOpenChange={(open) => setOpenGroup(open ? VECTOR_MORE : null)} activeTool={vectorTool} shortcut={shortcut} />
+            <div className={styles.toolDivider} role="separator" aria-orientation="vertical" />
+            <ToolButton icon="close" label="Close" shortcut={shortcut('vector.done')} onClick={() => editor.commands.run('vector.done')} />
           </div>
         )}
         {vectorTool === null && (
@@ -437,10 +442,12 @@ interface ToolButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 
   readonly active?: boolean;
   /** Shown but not implemented yet. */
   readonly pending?: boolean;
+  /** Names the tool beside its glyph, as the reference's secondary toolbelt does. */
+  readonly showLabel?: boolean;
 }
 
 /** A 32px toolbar button; hovering or focusing it shows its name and shortcut above it. */
-function ToolButton({ icon, label, shortcut, active = false, pending = false, ...rest }: ToolButtonProps) {
+function ToolButton({ icon, label, shortcut, active = false, pending = false, showLabel = false, ...rest }: ToolButtonProps) {
   const { handlers, tooltip } = useHoverTooltip(label, shortcut || undefined, 'above');
   return (
     <>
@@ -456,6 +463,8 @@ function ToolButton({ icon, label, shortcut, active = false, pending = false, ..
         {...rest}
       >
         <Icon name={icon} />
+        {/* The reference's secondary toolbelt names each tool beside its glyph; the main one does not. */}
+        {showLabel && <span className={styles.toolLabel}>{label}</span>}
       </button>
       {tooltip}
     </>
@@ -491,6 +500,109 @@ function ModeOption({
 }
 
 /** The name the toolbar's open-menu state takes while the boolean menu is the one open. */
+const VECTOR_MORE = 'More';
+
+/**
+ * The vector toolbelt's More button: the tools the reference keeps out of the row, checked when one of
+ * them is the tool in hand. Built like the boolean menu beside it, so both read and behave the same.
+ */
+function VectorMoreMenu({
+  open,
+  onOpenChange,
+  activeTool,
+  shortcut,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  activeTool: VectorEditTool;
+  shortcut: (command: string | undefined) => string;
+}) {
+  const editor = useEditor();
+  const [focus, setFocus] = useState(0);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const { handlers, tooltip } = useHoverTooltip(VECTOR_MORE, undefined, 'above');
+
+  useEffect(() => {
+    if (!open) return;
+    menuRef.current?.focus();
+    const onDown = (e: PointerEvent) => {
+      if (!menuRef.current?.contains(e.target as Node) && !buttonRef.current?.contains(e.target as Node)) onOpenChange(false);
+    };
+    window.addEventListener('pointerdown', onDown, true);
+    return () => window.removeEventListener('pointerdown', onDown, true);
+  }, [open, onOpenChange]);
+
+  const pick = (command: string) => {
+    editor.commands.run(command);
+    onOpenChange(false);
+  };
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        className={styles.tool}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={VECTOR_MORE}
+        aria-pressed={VECTOR_MORE_TOOLS.some((item) => item.tool === activeTool)}
+        {...handlers}
+        onClick={() => {
+          setFocus(
+            Math.max(
+              0,
+              VECTOR_MORE_TOOLS.findIndex((item) => item.tool === activeTool),
+            ),
+          );
+          onOpenChange(!open);
+        }}
+      >
+        <Icon name="more" />
+      </button>
+      {!open && tooltip}
+      {open && (
+        <div
+          ref={menuRef}
+          className={styles.menu}
+          role="menu"
+          aria-label={VECTOR_MORE}
+          tabIndex={-1}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') setFocus((f) => (f + 1) % VECTOR_MORE_TOOLS.length);
+            else if (e.key === 'ArrowUp') setFocus((f) => (f - 1 + VECTOR_MORE_TOOLS.length) % VECTOR_MORE_TOOLS.length);
+            else if (e.key === 'Enter' || e.key === ' ') pick(VECTOR_MORE_TOOLS[focus]!.command);
+            else if (e.key === 'Escape') {
+              onOpenChange(false);
+              buttonRef.current?.focus();
+            } else return;
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+        >
+          {VECTOR_MORE_TOOLS.map((item, i) => (
+            <div
+              key={item.command}
+              role="menuitemradio"
+              aria-checked={item.tool === activeTool}
+              className={styles.menuItem}
+              data-focus={i === focus || undefined}
+              onPointerEnter={() => setFocus(i)}
+              onClick={() => pick(item.command)}
+            >
+              <span className={styles.check}>{item.tool === activeTool && <Icon name="check" size={16} />}</span>
+              <Icon name={item.icon} size={24} />
+              <span className={styles.menuLabel}>{item.label}</span>
+              <span className={styles.menuShortcut}>{shortcut(item.command)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
 const BOOLEAN_MENU = 'Boolean operations';
 
 /** The four boolean operations and Flatten, which is what they are usually followed by. */

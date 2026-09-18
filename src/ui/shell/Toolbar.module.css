@@ -102,7 +102,7 @@
   margin: 0 -4px;
 }
 
-.chevron[aria-expanded='true'] {
+.chevron[aria-expanded="true"] {
   background: var(--bg-hover);
 }
 
@@ -219,6 +219,21 @@
 }
 
 /* Leaves vector edit mode from its secondary toolbar. */
+/* The label the reference's secondary toolbelt puts beside each tool's glyph. */
+.toolLabel {
+  white-space: nowrap;
+  padding-right: var(--space-2);
+  font-size: var(--text-sm);
+}
+
+/* toolbelt_divider: a hairline between the toolbelt's groups, run past the row's padding. */
+.toolDivider {
+  width: 1px;
+  align-self: stretch;
+  margin: calc(-1 * var(--space-2)) 0;
+  background: var(--border);
+}
+
 .done {
   height: 32px;
   padding: 0 12px;

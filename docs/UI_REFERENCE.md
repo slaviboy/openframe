@@ -453,3 +453,60 @@ The reference's Dev toolbar reads: **Move · Copy colors · Measurement · Annot
 Re-center**. Ours now has Move tools (Move, Hand), **Copy colors**, **Measurement** and Comment tools —
 the first two from the artwork the user supplied. **Annotation**, **Inspect** and **Re-center** are still
 missing; Annotation's artwork has been supplied and is not yet taken up.
+
+## The pen tool: the vector editing toolbelt and the stroke endpoints
+
+From `pen_tool_1.html` (the Pen active on a vector with its points open) and the endpoint listbox markup
+the user supplied, plus `reference-design/design-with-vector-tools/edit-vector-layers.html` in the docs
+mirror.
+
+**The secondary toolbelt.** The reference draws it as a bar of its own, `role="toolbar"` labelled
+*Vector editing*, holding:
+
+> Move (V) · Lasso (Q) │ Paint (⇧B) · Bend (⌘) · Cut (X) · Erase (⇧E) │ More │ Close
+
+| Reference class | CSS read off it | Where it landed |
+| --- | --- | --- |
+| `secondary_toolbelt--secondaryToolbeltContainer` | `height:40px; background:var(--color-bg); border-radius:var(--radius-large); box-shadow:var(--elevation-200-canvas); padding:8px; gap:8px` | our existing `.toolsRow` inside `.toolbar` |
+| `toolbelt_button--buttonLabel` | `white-space:nowrap; padding-right:8px` | `Toolbar.module.css .toolLabel` |
+| `toolbelt_divider--divider` (+ `--extendedDivider`) | `width:1px; background:var(--color-border); align-self:stretch; margin-top:-8px; margin-bottom:-8px` | `.toolDivider` |
+
+Three things changed to match it: the tools are in the reference's order and grouping with dividers
+between the groups; each names itself beside its glyph, which the main toolbar does not; and **Variable
+width** and **Shape builder** moved behind a **More** menu. The documentation lists those two among the
+vector edit tools, and the reference keeps them in the overflow — both are true at once. The bar now ends
+in **Close**, as the reference labels it, rather than a filled *Done* button of ours.
+
+**Deviations.** Our bar keeps `aria-label="Tools"` on the toolbar element rather than the reference's
+*Vector editing*, because about ten specs address it by that name. The reference has no Move/Hand pair
+here and no mode switcher beside it; ours keeps the switcher, since it is how a mode is left.
+
+**The stroke endpoints.** The reference's Start point / End point control is a listbox, not a select: each
+option is named beside a picture of the end it makes, with a separator after the plain ends.
+
+| Value | Label | Notes |
+| --- | --- | --- |
+| `NONE` | None | |
+| `ROUND` | Round | |
+| `SQUARE` | Square | |
+| — | — | separator |
+| `ARROW_LINES` | Line arrow | ours is `LINE_ARROW` |
+| `ARROW_EQUILATERAL` | Triangle arrow | ours is `TRIANGLE_ARROW` |
+| `TRIANGLE_FILLED` | Reversed triangle | **was missing here**; now in the schema and drawn |
+| `CIRCLE_FILLED` | Circle arrow | we called it *Circle* |
+| `DIAMOND_FILLED` | Diamond arrow | we called it *Diamond* |
+
+Our order was None, Line arrow, Triangle arrow, Round, Square, Circle, Diamond — neither the reference's
+order nor its labels. Both are fixed, the eight glyphs are the reference's own artwork (the faint part of
+each is the rest of the line, which the reference draws in the tertiary icon colour and we draw at 40%
+opacity), and `Menu` learned to carry an icon per item so the list reads as the reference's does.
+
+**Deviations.** The trigger is a `button` with `aria-haspopup="listbox"` rather than a `combobox`,
+because a native `<select>` cannot draw the endpoint; `data-value` carries the chosen cap so it can still
+be asserted. The reference's list is `min-width:271px`; ours uses the shared menu's width.
+
+**Still open on the pen tool.** The reference replaces the main toolbar with the vector toolbelt as soon
+as the Pen is in hand; ours shows the toolbelt only once points are open (Enter, or after drawing). And
+the reference's vector-edit right panel runs Alignment → Position → Mirroring → Corner radius → Fill →
+Stroke, with Start point and End point inside Stroke for a vector, not only for a line; ours puts
+Mirroring below Fill and Stroke and offers the endpoints on lines alone.
