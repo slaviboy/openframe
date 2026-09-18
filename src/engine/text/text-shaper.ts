@@ -16,7 +16,6 @@
  */
 
 import type { Canvas, CanvasKit, EmbindEnumEntity, LineMetrics, Paint as CkPaint, Paragraph, TextStyle, Typeface, TypefaceFontProvider } from 'canvaskit-wasm';
-import type { Id } from '@/core/ids/ids';
 import type { Rect } from '@/core/math/rect';
 import type { Vec2 } from '@/core/math/vec';
 import type { FontName, OpenTypeFeatures, Size, TextAlignVertical, TextNode } from '@/core/schema/document';
@@ -137,7 +136,8 @@ export class TextShaper implements TextLayoutService {
   private readonly provider: TypefaceFontProvider;
   private readonly families: string[] = [];
   private readonly userFamilies = new Map<string, { styles: Set<string>; variable: boolean }>();
-  private readonly layouts = new Map<Id, CachedLayout>();
+  /** Laid-out blocks by `${node id}` for measuring, and `${node id}\n${paint key}` for drawing. */
+  private readonly layouts = new Map<string, CachedLayout>();
   /** Supported OpenType features by "family\nstyle". */
   private readonly featureSupport = new Map<string, readonly string[]>();
   /** Variation axes of user families, read from their font files. */
@@ -775,26 +775,39 @@ export class TextShaper implements TextLayoutService {
   }
 
   /** Draws a text layer's glyphs and list markers, each mixed-style segment painted by `painter`. */
-  draw(canvas: Canvas, node: TextNode, painter: TextPainter): void {
-    const block = this.stack(node, 'box', painter);
+  /**
+   * Draws a text layer's glyphs and list markers, each mixed-style segment painted by `painter`.
+   *
+   * `paintKey` names what the painter paints with. A painter bakes its paint into the paragraphs as they
+   * are built, so a laid-out block can only be drawn again by the same painter — with a key to say which,
+   * the block is kept and the layer is shaped once instead of once a frame. Without a key the block is
+   * built and thrown away, which is right for a painter that cannot be named.
+   */
+  draw(canvas: Canvas, node: TextNode, painter: TextPainter, paintKey?: string): void {
+    const block = paintKey === undefined ? this.stack(node, 'box', painter) : this.cachedBlock(`${node.id}\n${paintKey}`, node, () => this.stack(node, 'box', painter));
     for (const p of block.paragraphs) {
       if (p.hidden) continue;
       this.drawParagraphLines(canvas, p, block.dy);
       if (p.marker) canvas.drawParagraph(p.marker.paragraph, p.marker.x, block.dy + p.marker.y);
     }
-    deleteBlock(block);
+    if (paintKey === undefined) deleteBlock(block);
     if (painter.decorations !== false) this.drawUnderlines(canvas, node, painter);
   }
 
   private layout(node: TextNode): BlockLayout {
-    const cached = this.layouts.get(node.id);
+    return this.cachedBlock(node.id, node, () => this.stack(node, 'box'));
+  }
+
+  /** A laid-out block, kept until its layer changes; the oldest goes when there are too many. */
+  private cachedBlock(key: string, node: TextNode, make: () => BlockLayout): BlockLayout {
+    const cached = this.layouts.get(key);
     if (cached?.node === node) return cached.block;
     if (cached) {
       deleteBlock(cached.block);
-      this.layouts.delete(node.id);
+      this.layouts.delete(key);
     }
-    const block = this.stack(node, 'box');
-    this.layouts.set(node.id, { node, block });
+    const block = make();
+    this.layouts.set(key, { node, block });
     if (this.layouts.size > CACHE_LIMIT) {
       const [oldest] = this.layouts.keys();
       const evicted = this.layouts.get(oldest!);

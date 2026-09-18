@@ -613,7 +613,12 @@ export class SceneRenderer {
     }
     if (node.type === 'TEXT') {
       // Fill layers bottom to top; each paragraph paints every segment with its own fill at that layer.
-      const layers = Math.max(0, ...textSegments(node).map((s) => s.fills.length));
+      const segments = textSegments(node);
+      const layers = Math.max(0, ...segments.map((s) => s.fills.length));
+      // What a fill layer paints with follows from the layer itself, so its shaped text can be kept and
+      // drawn again — unless a fill is painted from an image, which may only arrive later and would leave
+      // the kept text painted as it was before the image was there.
+      const settled = segments.every((s) => s.fills.every((p) => p.type === 'SOLID' || isGradientPaint(p)));
       for (let i = 0; i < layers; i++) {
         this.drawText(
           canvas,
@@ -627,6 +632,7 @@ export class SceneRenderer {
           // Underlines once, over the top fill.
           i === layers - 1,
           store,
+          settled ? `fill:${i}` : undefined,
         );
       }
       return;
@@ -1154,7 +1160,7 @@ export class SceneRenderer {
   }
 
   /** Draws a text layer's glyphs, each mixed-style segment painted with the paint `paintFor` returns. */
-  private drawText(canvas: Canvas, node: TextNode, paintFor: (segment: TextSegment) => CkPaint, decorations = true, store?: DocumentStore): void {
+  private drawText(canvas: Canvas, node: TextNode, paintFor: (segment: TextSegment) => CkPaint, decorations = true, store?: DocumentStore, paintKey?: string): void {
     const shaper = this.textShaper;
     if (!shaper || node.characters === '') return;
     const painter = {
@@ -1174,7 +1180,7 @@ export class SceneRenderer {
     // Text on a path follows the vector it was placed on; the two share a transform, so the path is read as it is.
     const run = node.textPath && store ? pathRunFor(store, node.textPath.pathId) : null;
     if (run && node.textPath) shaper.drawOnPath(canvas, node, painter, run, node.textPath.start, node.textPath.flipped);
-    else shaper.draw(canvas, node, painter);
+    else shaper.draw(canvas, node, painter, paintKey);
   }
 
   /** Outline mode: a hairline (one device pixel at any zoom) along the layer's geometry. */
