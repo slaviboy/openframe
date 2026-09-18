@@ -17,8 +17,8 @@
 
 /*
  * Openframe design tokens. Every UI dimension/color comes from here; components
- * must not hard-code pixel values. Values are calibrated against the current
- * The reference editor screenshots in the documentation mirror (see docs/UI_REFERENCE.md).
+ * must not hard-code pixel values. Which of these values have actually been measured
+ * against real the reference — and which are still guesses — is recorded in docs/UI_REFERENCE.md.
  */
 @import '@fontsource-variable/inter';
 

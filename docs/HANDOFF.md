@@ -310,12 +310,19 @@ This file is how work continues after a pause (for example, a usage limit). Read
 
 Nothing. The working tree is clean apart from anything noted above.
 
-## Next (the backfill)
+## Next: the visual fidelity pass
 
-Every named milestone, M0 through M14, is finished: their rows in `docs/FEATURE_MATRIX.md` are Implemented, bar the ones recorded as a browser limitation (animated export needs WebCodecs for MP4 and WebM) or as a local equivalent for something that is a cloud service (publishing a library; branches are kept as local files).
+Every row of `docs/FEATURE_MATRIX.md` is Implemented — all 214, counting the handful recorded as a browser limitation (animated MP4 and WebM export needs WebCodecs) or as a local equivalent for a cloud service (publishing a library; branches kept as local files). The backfill the user asked for on 2026-09-17 is finished.
 
-**Every row of `docs/FEATURE_MATRIX.md` is now Implemented**: all 214 of them, counting the handful recorded as a browser limitation (animated MP4 and WebM export needs WebCodecs) or as a local equivalent for a cloud service (publishing a library; branches kept as local files). The backfill the user asked for on 2026-09-17 is finished.
+What is left is fidelity. Every panel was built from the documentation's **prose**; the mirror's screenshots were never opened, so behaviour matches and the tests pass while layout, section order, spacing and icons are invented.
 
-**What is left is the visual fidelity pass.** Every panel was built from the documentation's prose, so behaviour matches and the tests pass, but layout, section order, spacing, labels and icons are invented. The user raised this about Dev Mode on 2026-09-17 and chose to finish the feature rows first — which is now done.
+**The source is the reference HTML the user supplies, not screenshots.** They said so on 2026-09-18 ("instead of reading the images for UI reference I will give UI HTML page") and then supplied 11 saved the reference editor pages in `reference/app/` — Design, Dev, Draw, Motion, Variables and Comments. That folder is **gitignored**: the pages are the reference's own markup and weigh 33 MB. Everything measured from them is written down in `docs/UI_REFERENCE.md`, which is the committable trace — without it none of this is re-derivable.
 
-The source for that pass is **the reference HTML the user supplies**, not the mirror's screenshots: they said so on 2026-09-18 ("instead of reading the images for UI reference I will give UI HTML page"), and a saved page gives exact markup, spacing and inline SVG icons that a screenshot cannot. One is already at `/Users/admin/Desktop/test.html`, and a plan in `~/.claude/plans/` maps its glyphs onto `src/ui/icons/Icon.tsx`. Ask for the page for whichever surface is being worked on; fall back to the screenshots only where no HTML exists. Track it in a new Fidelity column in the matrix, starting with Dev Mode's `InspectPanel`.
+The user chose full depth: structure, exact metrics **and** icons, copying the reference's SVG path data verbatim (excluding the brand mark, so our `logo` stays ours). The approved plan runs in slices: the measurement record → an icon extractor → one filled icon set → the toolbar → the panel's structure → the panel's metrics → a Fidelity column in the matrix.
+
+Two things learned in the first hour that shape the rest:
+
+- **The icon job was already ~40% done from these same pages.** 49 of the `d` strings in `src/ui/icons/Icon.tsx` are byte-identical to ones in the saved pages, so `FILLED` *is* the reference map and `STROKE` is the leftover invented set. Deduplicate by `d` value before naming anything, or you add a second name for an icon already there.
+- **The renames are test-free, but not the toolbar's labels.** Nothing under `e2e/` queries `'Layout'` as a region name or `'Selection colors'` at all. What *is* coupled is the toolbar's `"<label> (<shortcut>)"` aria-label, matched by seven specs — leave it alone.
+
+Three standing cautions, all recorded in `docs/UI_REFERENCE.md`: the saved pages declare each token twice (light first, then a dark override), so the elevation shadows taken from them are **dark-theme only**; each page captures one theme, one mode and one selection state, so anything appearing only for a shape or a multi-selection has no reference and must not be inferred; and a token is re-pointed only when every one of its call sites has been measured — otherwise the fix lands at the call site.
