@@ -49,3 +49,35 @@ test('Copy as PNG (⇧⌘C) copies the selected layer as a PNG at 2×, and Copy 
   await page.getByRole('menuitem', { name: 'Copy as SVG' }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="100" height="100"/);
 });
+
+test('Copy as code copies the layer in the language Dev Mode is set to @chromium-only', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 500, box.y + 400, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.getByTestId('field-w')).toHaveValue('100');
+
+  // CSS is what Dev Mode starts on, so that is what the layer copies as.
+  await page.getByRole('treeitem', { name: /Rectangle 1/ }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Copy/Paste as' }).click();
+  await page.getByRole('menuitem', { name: 'Copy as code' }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(/width: 100px/);
+
+  // Switching Dev Mode to another language switches what is copied, the choice being kept per device.
+  await page.keyboard.press('Shift+D');
+  await page.getByRole('treeitem', { name: /Rectangle 1/ }).click();
+  // The code lives on the Code tab of the Inspect panel.
+  await page.getByRole('tablist', { name: 'Inspect view' }).getByRole('tab', { name: 'Code' }).click();
+  await page.getByLabel('Code language').selectOption('SWIFTUI');
+  await page.keyboard.press('Shift+D');
+  await page.getByRole('treeitem', { name: /Rectangle 1/ }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Copy/Paste as' }).click();
+  await page.getByRole('menuitem', { name: 'Copy as code' }).click();
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(/frame\(width: 100/);
+});

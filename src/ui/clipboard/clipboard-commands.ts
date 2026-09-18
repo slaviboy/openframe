@@ -72,6 +72,13 @@ export function clipboardCommands(clipboard: ClipboardController): CommandDefini
       run: () => void clipboard.copyAsSvg(),
     },
     {
+      id: 'edit.copyAsCode',
+      label: 'Copy as code',
+      category: 'Edit',
+      enabled: (e) => e.selection.length === 1 && hasLayerSelection(e),
+      run: () => void clipboard.copyAsCode(),
+    },
+    {
       id: 'edit.pasteProperties',
       label: 'Paste properties',
       category: 'Edit',

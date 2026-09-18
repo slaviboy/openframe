@@ -61,5 +61,5 @@ test('a layer without an animated GIF fill is not offered the GIF format', async
   const section = page.getByRole('region', { name: 'Export' });
   await section.getByRole('button', { name: 'Add export' }).click();
   const format = section.getByRole('combobox', { name: 'Export 1 format' });
-  await expect(format.locator('option')).toHaveText(['PNG', 'JPG', 'WebP', 'SVG']);
+  await expect(format.locator('option')).toHaveText(['PNG', 'JPG', 'WebP', 'SVG', 'PDF']);
 });

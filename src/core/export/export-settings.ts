@@ -22,17 +22,18 @@ import type { ExportConstraint, ExportSetting } from '../schema/document';
 export type { ExportConstraint, ExportSetting };
 
 /**
- * Export formats: PNG (with transparency), JPG (on white) and WebP images, SVG (at 1x), and GIF (at 1x) for a layer
+ * Export formats: PNG (with transparency), JPG (on white) and WebP images, SVG (at 1x), PDF (one page carrying
+ * the layer as a JPEG, so it is the picture rather than the shapes), and GIF (at 1x) for a layer
  * whose fill is an animated GIF — that export is the original file, so it keeps its frame delays and loop count.
  */
-export const EXPORT_FORMATS = ['PNG', 'JPG', 'WEBP', 'SVG', 'GIF'] as const;
+export const EXPORT_FORMATS = ['PNG', 'JPG', 'WEBP', 'SVG', 'PDF', 'GIF'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 /** The image formats the rendering engine encodes. */
-export type RasterFormat = Exclude<ExportFormat, 'SVG' | 'GIF'>;
+export type RasterFormat = Exclude<ExportFormat, 'SVG' | 'GIF' | 'PDF'>;
 
-export const EXPORT_FORMAT_LABELS: Readonly<Record<ExportFormat, string>> = { PNG: 'PNG', JPG: 'JPG', WEBP: 'WebP', SVG: 'SVG', GIF: 'GIF' };
-const EXTENSIONS: Readonly<Record<ExportFormat, string>> = { PNG: 'png', JPG: 'jpg', WEBP: 'webp', SVG: 'svg', GIF: 'gif' };
-export const EXPORT_MIME_TYPES: Readonly<Record<ExportFormat, string>> = { PNG: 'image/png', JPG: 'image/jpeg', WEBP: 'image/webp', SVG: 'image/svg+xml', GIF: 'image/gif' };
+export const EXPORT_FORMAT_LABELS: Readonly<Record<ExportFormat, string>> = { PNG: 'PNG', JPG: 'JPG', WEBP: 'WebP', SVG: 'SVG', PDF: 'PDF', GIF: 'GIF' };
+const EXTENSIONS: Readonly<Record<ExportFormat, string>> = { PNG: 'png', JPG: 'jpg', WEBP: 'webp', SVG: 'svg', PDF: 'pdf', GIF: 'gif' };
+export const EXPORT_MIME_TYPES: Readonly<Record<ExportFormat, string>> = { PNG: 'image/png', JPG: 'image/jpeg', WEBP: 'image/webp', SVG: 'image/svg+xml', PDF: 'application/pdf', GIF: 'image/gif' };
 
 /** Scale presets offered in the Export section. */
 export const EXPORT_SCALE_PRESETS: readonly string[] = ['0.5x', '0.75x', '1x', '1.5x', '2x', '3x', '4x', '512w', '512h'];

@@ -226,7 +226,7 @@ function objectCommandEntries(editor: Editor): MenuEntry[] {
   ]);
   // "Copy/Paste as" follows Copy, Cut and Paste, as in the reference.
   const copyPasteAs = commandSections(editor, [
-    ['edit.copyAsPng', 'edit.copyAsSvg'],
+    ['edit.copyAsPng', 'edit.copyAsSvg', 'edit.copyAsCode'],
     ['edit.copyProperties', 'edit.pasteProperties'],
   ]);
   if (copyPasteAs.length === 0) return entries;

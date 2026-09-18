@@ -16,6 +16,7 @@
  */
 
 import { defaultExportSetting, EXPORT_MIME_TYPES, exportFileName, exportScale, uniqueFileNames, type ExportSetting } from '@/core/export/export-settings';
+import { pdfFromJpeg } from '@/core/export/pdf-document';
 import { animatedGifHash } from '../images/animated-gif';
 import { exportSvg } from '@/core/export/svg-document';
 import type { Id } from '@/core/ids/ids';
@@ -36,9 +37,7 @@ const settingsOf = (node: SceneNode | undefined, fallback?: ExportSetting): read
 export function addExportSetting(editor: Editor, ids: readonly Id[]): boolean {
   const targets = layers(editor, ids);
   if (targets.length === 0) return false;
-  editor.history.run('Add export', (tx) =>
-    targets.forEach((node) => tx.set(node.id, 'exportSettings', [...settingsOf(tx.store.get(node.id) as SceneNode), defaultExportSetting()])),
-  );
+  editor.history.run('Add export', (tx) => targets.forEach((node) => tx.set(node.id, 'exportSettings', [...settingsOf(tx.store.get(node.id) as SceneNode), defaultExportSetting()])));
   return true;
 }
 
@@ -47,7 +46,13 @@ export function updateExportSetting(editor: Editor, ids: readonly Id[], index: n
   const targets = layers(editor, ids).filter((node) => settingsOf(node)[index] !== undefined);
   if (targets.length === 0) return false;
   editor.history.run('Change export', (tx) =>
-    targets.forEach((node) => tx.set(node.id, 'exportSettings', settingsOf(tx.store.get(node.id) as SceneNode).map((setting, i) => (i === index ? { ...setting, ...patch } : setting)))),
+    targets.forEach((node) =>
+      tx.set(
+        node.id,
+        'exportSettings',
+        settingsOf(tx.store.get(node.id) as SceneNode).map((setting, i) => (i === index ? { ...setting, ...patch } : setting)),
+      ),
+    ),
   );
   return true;
 }
@@ -98,7 +103,18 @@ export function renderExports(editor: Editor, ids: readonly Id[], only?: Readonl
       if (setting.format === 'SVG') {
         const geometry = editor.geometry;
         const result = exportSvg(editor.doc, node.id, geometry ? { strokeOutline: (layer) => geometry.strokeOutline(layer) } : {});
-        if (result) assets.push({ nodeId: node.id, setting, path: exportFileName(node.name, setting), type: EXPORT_MIME_TYPES.SVG, bytes: new TextEncoder().encode(result.svg), skipped: result.skipped });
+        if (result)
+          assets.push({ nodeId: node.id, setting, path: exportFileName(node.name, setting), type: EXPORT_MIME_TYPES.SVG, bytes: new TextEncoder().encode(result.svg), skipped: result.skipped });
+        return;
+      }
+      if (setting.format === 'PDF') {
+        // A PDF page the layer's own size in points, carrying the layer drawn as a JPEG.
+        if (!engine) return;
+        const scale = exportScale(setting.constraint, bounds.width, bounds.height);
+        const jpeg = engine.exportImage(editor.doc, editor.scene, pageId, node.id, scale, 'JPG');
+        if (!jpeg) return;
+        const pdf = pdfFromJpeg(jpeg, bounds.width, bounds.height, Math.round(bounds.width * scale), Math.round(bounds.height * scale));
+        assets.push({ nodeId: node.id, setting, path: exportFileName(node.name, setting), type: EXPORT_MIME_TYPES.PDF, bytes: pdf, skipped: ['text as text', 'shapes as shapes'] });
         return;
       }
       if (setting.format === 'GIF') {

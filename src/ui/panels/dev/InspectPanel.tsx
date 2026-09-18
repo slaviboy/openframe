@@ -18,12 +18,13 @@
 import { canHaveDevStatus, devStatusLabel, setDevStatus, type DevStatusNode } from '@/editor/commands/dev-status';
 import { ANIMATION_CODE_LABELS, generateAnimationCode, type AnimationCodeFormat } from '@/core/dev/animation-code';
 import { CODE_LANGUAGE_LABELS, CODE_UNITS, DEFAULT_UNIT_SCALE, generateCode, type CodeLanguage, type CodeUnit } from '@/core/dev/code-gen';
+import { viewPrefs } from '../../view/view-prefs';
 import { shownAnimation } from '@/editor/commands/motion';
 import { addDevResource, boundVariablesOf, deleteDevResource, devResources, suggestedVariables } from '@/editor/commands/dev-resources';
 import { deleteMeasurement, measurementsOf, setMeasurementLabel } from '@/editor/commands/measurements';
 import { rotationDegrees } from '@/editor/commands/properties';
 import type { SceneNode } from '@/core/schema/document';
-import { useState, type ReactNode } from 'react';
+import { type ReactNode, useState, useSyncExternalStore } from 'react';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import { formatNumber } from '../../primitives/math';
 import primitives from '../../primitives/primitives.module.css';
@@ -43,12 +44,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className={styles.row}>
       <span className={styles.label}>{label}</span>
-      <button
-        type="button"
-        className={styles.value}
-        aria-label={`Copy ${label}: ${value}`}
-        onClick={() => void navigator.clipboard?.writeText(value).catch(() => undefined)}
-      >
+      <button type="button" className={styles.value} aria-label={`Copy ${label}: ${value}`} onClick={() => void navigator.clipboard?.writeText(value).catch(() => undefined)}>
         {value}
       </button>
     </div>
@@ -157,38 +153,38 @@ export function InspectPanel() {
         <CodeSection node={node} />
       ) : (
         <>
-      <Group title="Position">
-        <Row label="X" value={px(node.transform[4])} />
-        <Row label="Y" value={px(node.transform[5])} />
-        {rotation !== 0 && <Row label="Rotation" value={`${formatNumber(rotation, 2)}°`} />}
-      </Group>
+          <Group title="Position">
+            <Row label="X" value={px(node.transform[4])} />
+            <Row label="Y" value={px(node.transform[5])} />
+            {rotation !== 0 && <Row label="Rotation" value={`${formatNumber(rotation, 2)}°`} />}
+          </Group>
 
-      <Group title="Size">
-        <Row label="Width" value={px(node.size.width)} />
-        <Row label="Height" value={px(node.size.height)} />
-        {radius > 0 && <Row label="Corner radius" value={px(radius)} />}
-      </Group>
+          <Group title="Size">
+            <Row label="Width" value={px(node.size.width)} />
+            <Row label="Height" value={px(node.size.height)} />
+            {radius > 0 && <Row label="Corner radius" value={px(radius)} />}
+          </Group>
 
-      {(pad !== null || gap !== null) && (
-        <Group title="Layout">
-          {node.type === 'FRAME' && node.layoutMode && <Row label="Direction" value={node.layoutMode === 'HORIZONTAL' ? 'Row' : node.layoutMode === 'VERTICAL' ? 'Column' : 'Grid'} />}
-          {pad !== null && <Row label="Padding" value={pad} />}
-          {gap !== null && <Row label="Gap" value={px(gap)} />}
-        </Group>
-      )}
+          {(pad !== null || gap !== null) && (
+            <Group title="Layout">
+              {node.type === 'FRAME' && node.layoutMode && <Row label="Direction" value={node.layoutMode === 'HORIZONTAL' ? 'Row' : node.layoutMode === 'VERTICAL' ? 'Column' : 'Grid'} />}
+              {pad !== null && <Row label="Padding" value={pad} />}
+              {gap !== null && <Row label="Gap" value={px(gap)} />}
+            </Group>
+          )}
 
-      <Group title="Appearance">
-        <Row label="Opacity" value={`${formatNumber(node.opacity * 100, 0)}%`} />
-        <Row label="Blend mode" value={node.blendMode.toLowerCase().replace(/_/g, ' ')} />
-      </Group>
-      <PlaygroundSection node={node} />
-      <MotionSection node={node} />
-      <VariablesSection node={node} />
-      <DevResourcesSection node={node} />
-      <AnnotationsSection node={node} />
-      <MeasurementsSection />
-      <DevAssetsPanel />
-      <CompareSection />
+          <Group title="Appearance">
+            <Row label="Opacity" value={`${formatNumber(node.opacity * 100, 0)}%`} />
+            <Row label="Blend mode" value={node.blendMode.toLowerCase().replace(/_/g, ' ')} />
+          </Group>
+          <PlaygroundSection node={node} />
+          <MotionSection node={node} />
+          <VariablesSection node={node} />
+          <DevResourcesSection node={node} />
+          <AnnotationsSection node={node} />
+          <MeasurementsSection />
+          <DevAssetsPanel />
+          <CompareSection />
         </>
       )}
     </div>
@@ -329,9 +325,14 @@ function MeasurementsSection() {
 
 /** The code that builds the selected layer, in the language and unit chosen. */
 function CodeSection({ node }: { node: SceneNode }) {
-  const [language, setLanguage] = useState<CodeLanguage>('CSS');
-  const [unit, setUnit] = useState<CodeUnit>('px');
-  const [scale, setScale] = useState<number | null>(null);
+  // Kept per device, so the choice survives a reload and Copy as code uses the same language and unit.
+  const prefs = useSyncExternalStore(viewPrefs.subscribe, () => viewPrefs.getSnapshot());
+  const language: CodeLanguage = prefs.codeLanguage;
+  const unit: CodeUnit = prefs.codeUnit;
+  const scale = prefs.codeScale > 0 ? prefs.codeScale : null;
+  const setLanguage = (next: CodeLanguage) => viewPrefs.set({ codeLanguage: next });
+  const setUnit = (next: CodeUnit) => viewPrefs.set({ codeUnit: next });
+  const setScale = (next: number | null) => viewPrefs.set({ codeScale: next ?? 0 });
   const units = CODE_UNITS[language];
   const chosen = units.includes(unit) ? unit : units[0]!;
   const code = generateCode(node, { language, unit: chosen, ...(scale === null ? {} : { scale }) });

@@ -15,35 +15,23 @@
  * limitations under the License.
  */
 
+import { generateCode } from '@/core/dev/code-gen';
 import { exportSvg } from '@/core/export/svg-document';
+import { isSceneNode } from '@/core/schema/document';
 import type { Vec2 } from '@/core/math/vec';
 import { pastePayload, type PasteMode } from '@/editor/clipboard/paste';
-import {
-  ClipboardError,
-  clipboardPlainText,
-  createClipboardPayload,
-  decodeClipboardHtml,
-  encodeClipboardHtml,
-  type ClipboardPayload,
-} from '@/editor/clipboard/payload';
+import { ClipboardError, clipboardPlainText, createClipboardPayload, decodeClipboardHtml, encodeClipboardHtml, type ClipboardPayload } from '@/editor/clipboard/payload';
 import type { Editor } from '@/editor/editor';
 import { copiedInteractions, decodeInteractionsHtml, encodeInteractionsHtml } from '@/editor/clipboard/interactions';
 import { pasteInteractions, removeConnections } from '@/editor/commands/prototype';
-import {
-  allPropertiesPayload,
-  decodePropertiesHtml,
-  encodePropertiesHtml,
-  pasteProperties,
-  rowPropertyPayload,
-  type PropertiesPayload,
-} from '@/editor/clipboard/properties';
+import { allPropertiesPayload, decodePropertiesHtml, encodePropertiesHtml, pasteProperties, rowPropertyPayload, type PropertiesPayload } from '@/editor/clipboard/properties';
 import { imageFilesOf } from '../images/import-image';
 import { videoFilesOf } from '../images/import-video';
 import { isSvgMarkup, svgFilesOf, svgMarkupFile } from '../import/svg-files';
 import { IS_MAC } from '../keyboard/keyboard-controller';
+import { viewPrefs } from '../view/view-prefs';
 
-const isEditableTarget = (target: EventTarget | null): boolean =>
-  target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
+const isEditableTarget = (target: EventTarget | null): boolean => target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName));
 
 /**
  * Connects the editor to the system clipboard through native copy/cut/paste events, which
@@ -300,6 +288,24 @@ export class ClipboardController {
     }
     const copied = await this.writeItem({ 'text/plain': new Blob([result.svg], { type: 'text/plain' }) }, 'The SVG could not be copied to the clipboard.');
     if (copied && result.skipped.length > 0) this.onError(`Copied as SVG. Left out of the SVG: ${result.skipped.join(', ')}`);
+  }
+
+  /**
+   * Copy as code: the selected layer as the code Dev Mode shows for it, in the language and unit picked there, as
+   * text on the system clipboard.
+   */
+  async copyAsCode(): Promise<void> {
+    const [id] = this.editor.selection;
+    const node = id === undefined ? undefined : this.editor.doc.get(id);
+    if (!node || !isSceneNode(node)) return;
+    const prefs = viewPrefs.getSnapshot();
+    // A scale of zero means the unit's own scale, which is what the Dev Mode panel shows by default.
+    const code = generateCode(node, { language: prefs.codeLanguage, unit: prefs.codeUnit, ...(prefs.codeScale > 0 ? { scale: prefs.codeScale } : {}) });
+    if (code.trim() === '') {
+      this.onError('Nothing to copy: the layer has no code.');
+      return;
+    }
+    await this.writeItem({ 'text/plain': new Blob([code], { type: 'text/plain' }) }, 'The code could not be copied to the clipboard.');
   }
 
   /** Paste properties (⌥⌘V): reads properties from the system clipboard when permitted, else this tab's last copy. */

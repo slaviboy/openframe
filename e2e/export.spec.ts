@@ -82,3 +82,34 @@ test('a layer exports as SVG at 1x', async ({ page }) => {
   const chunks = await (await svg.createReadStream()).toArray();
   expect(Buffer.concat(chunks).toString('utf8').startsWith('<svg xmlns="http://www.w3.org/2000/svg"')).toBe(true);
 });
+
+test('a layer exports as a PDF page its own size, carrying the drawing', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  await page.keyboard.press('r');
+  await page.mouse.move(box.x + 400, box.y + 300);
+  await page.mouse.down();
+  await page.mouse.move(box.x + 520, box.y + 380, { steps: 5 });
+  await page.mouse.up();
+
+  const section = page.getByRole('region', { name: 'Export' });
+  await section.getByRole('button', { name: 'Add export' }).click();
+  await section.getByRole('combobox', { name: 'Export 1 format' }).selectOption('PDF');
+
+  const download = page.waitForEvent('download');
+  await section.getByRole('button', { name: 'Export Rectangle 1' }).click();
+  const pdf = await download;
+  expect(pdf.suggestedFilename()).toBe('Rectangle 1.pdf');
+
+  const bytes = Buffer.concat(await (await pdf.createReadStream()).toArray());
+  const text = bytes.toString('latin1');
+  expect(text.startsWith('%PDF-')).toBe(true);
+  // The page is the layer's own 120 × 80, and the drawing rides in it as a JPEG.
+  expect(text).toContain('/MediaBox [0 0 120 80]');
+  expect(text).toContain('/Filter /DCTDecode');
+  expect(text.trimEnd().endsWith('%%EOF')).toBe(true);
+  // The image really is a JPEG: its own start and end markers are in the stream.
+  expect(bytes.includes(Buffer.from([0xff, 0xd8, 0xff]))).toBe(true);
+});

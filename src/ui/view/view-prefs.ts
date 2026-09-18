@@ -46,10 +46,18 @@ export interface ViewPrefs {
   readonly nudgeBig: number;
   /** The mode the editor opens in. */
   readonly mode: 'design' | 'draw' | 'motion' | 'dev';
+  /** Dev Mode: the language its code is shown in, and copied as. */
+  readonly codeLanguage: CodeLanguage;
+  /** Dev Mode: the unit that code carries its sizes in. */
+  readonly codeUnit: CodeUnit;
+  /** Dev Mode: how the design's sizes are scaled into the code; 0 means the unit's own scale. */
+  readonly codeScale: number;
 }
 
 type BooleanPref = { [K in keyof ViewPrefs]: ViewPrefs[K] extends boolean ? K : never }[keyof ViewPrefs];
 type NumberPref = { [K in keyof ViewPrefs]: ViewPrefs[K] extends number ? K : never }[keyof ViewPrefs];
+
+import { CODE_LANGUAGE_LABELS, CODE_UNITS, type CodeLanguage, type CodeUnit } from '@/core/dev/code-gen';
 
 const STORAGE_KEY = 'openframe.view';
 export const VIEW_PREF_DEFAULTS: ViewPrefs = {
@@ -66,6 +74,9 @@ export const VIEW_PREF_DEFAULTS: ViewPrefs = {
   nudgeSmall: 1,
   nudgeBig: 10,
   mode: 'design',
+  codeLanguage: 'CSS',
+  codeUnit: 'px',
+  codeScale: 0,
 };
 
 /** Nudge amounts must be positive, finite and at most 10,000 px. */
@@ -97,6 +108,9 @@ function readStored(): ViewPrefs {
       nudgeSmall: amount('nudgeSmall'),
       nudgeBig: amount('nudgeBig'),
       mode: record['mode'] === 'draw' || record['mode'] === 'motion' || record['mode'] === 'dev' ? record['mode'] : VIEW_PREF_DEFAULTS.mode,
+      codeLanguage: typeof record['codeLanguage'] === 'string' && record['codeLanguage'] in CODE_LANGUAGE_LABELS ? (record['codeLanguage'] as CodeLanguage) : VIEW_PREF_DEFAULTS.codeLanguage,
+      codeUnit: typeof record['codeUnit'] === 'string' && record['codeUnit'] in CODE_UNITS ? (record['codeUnit'] as CodeUnit) : VIEW_PREF_DEFAULTS.codeUnit,
+      codeScale: typeof record['codeScale'] === 'number' && record['codeScale'] >= 0 && record['codeScale'] <= 100 ? record['codeScale'] : VIEW_PREF_DEFAULTS.codeScale,
     };
   } catch {
     return VIEW_PREF_DEFAULTS;
