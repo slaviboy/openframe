@@ -28,12 +28,11 @@ import { type ReactNode, useState, useSyncExternalStore } from 'react';
 import { useDocumentRevision, useEditor, useEditorState } from '../../hooks/useEditor';
 import { formatNumber } from '../../primitives/math';
 import primitives from '../../primitives/primitives.module.css';
-import { Icon } from '../../icons/Icon';
-import { layerIcon } from '../../icons/layer-icons';
 import { AnnotationsSection } from './AnnotationsSection';
 import { CompareSection } from './CompareSection';
 import { DevAssetsPanel } from './DevAssetsPanel';
 import { PlaygroundSection } from './PlaygroundSection';
+import { InspectHeader } from './InspectHeader';
 import { InspectSection } from './InspectSection';
 import styles from './InspectPanel.module.css';
 
@@ -153,12 +152,7 @@ export function InspectPanel() {
 
   return (
     <div className={styles.panel} data-testid="inspect-panel">
-      <header className={styles.header}>
-        <Icon name={layerIcon(node)} size={16} />
-        <button type="button" className={styles.name} aria-label={`Copy layer name: ${node.name}`} onClick={() => void navigator.clipboard?.writeText(node.name).catch(() => undefined)}>
-          {node.name}
-        </button>
-      </header>
+      <InspectHeader node={node} />
 
       {canHaveDevStatus(node) && <DevStatusControl node={node} />}
 
