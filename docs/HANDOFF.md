@@ -517,3 +517,10 @@ Wiggle, Size jitter, Angular jitter and Rotation, and both end with Width profil
   line that is on screen rather than the straight one underneath it — a gap nothing had noticed.
 - **Also.** `docs/TESTING.md` records the trap that cost time here: a `vite preview` left running serves the
   build it was started with, and `playwright.config.ts` reuses it, so specs fail against a stale bundle.
+- **Phase B — the brush picker.** The `<select>` of names is now the reference's own control: a button the
+  width of the tab drawing the stroke that brush makes, with the name in its tooltip, which opens a
+  **Brushes** dialog beside the settings one (`right-start` flips it to the left of its own accord, which is
+  where the reference's sits). The list groups what the file has under *Stretch brushes* and *Scatter
+  brushes*, marks the one in use with a check, and draws a picture per brush — `brushStrokeOutlines` over a
+  straight chain, the same trick the width-profile pictures use, so a brush's picture and its stroke cannot
+  drift apart. The reference ships PNGs of its own 25 brushes; ours are the file's, made from a closed vector layer.

@@ -53,8 +53,16 @@ test('a closed vector layer becomes a brush, which paints another layer’s stro
   const advanced = page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' });
   await advanced.click();
   await page.getByRole('dialog', { name: 'Stroke settings' }).getByRole('radio', { name: 'Brush' }).check();
-  const brush = page.getByRole('combobox', { name: 'Brush' });
-  await expect(brush).not.toHaveValue('');
+  const brush = page.getByTestId('field-brush');
+  await expect(brush).not.toHaveAttribute('data-value', '');
+
+  // The control opens the Brushes list, which groups what the file has by kind and marks the one in use.
+  await brush.click();
+  const brushes = page.getByTestId('brush-list-modal');
+  await expect(brushes.getByRole('heading', { name: 'Brushes', exact: true })).toBeVisible();
+  await expect(brushes.getByRole('heading', { name: 'Scatter brushes' })).toBeVisible();
+  await brushes.getByRole('button').first().click();
+  await expect(brushes).toHaveCount(0);
 
   // The brush stays on the layer across a reload.
   await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
@@ -63,5 +71,5 @@ test('a closed vector layer becomes a brush, which paints another layer’s stro
   await page.getByRole('treeitem', { name: /Vector/ }).last().click();
   await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
   await expect(page.getByRole('dialog', { name: 'Stroke settings' }).getByRole('radio', { name: 'Brush' })).toBeChecked();
-  await expect(page.getByRole('combobox', { name: 'Brush' })).not.toHaveValue('');
+  await expect(page.getByTestId('field-brush')).not.toHaveAttribute('data-value', '');
 });

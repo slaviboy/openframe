@@ -160,3 +160,113 @@
   min-width: 0;
   height: 10px;
 }
+
+/*
+ * The brush a stroke is painted with: the reference gives the picture the whole width of the tab, with the
+ * chevron in its own 24px column, and keeps the brush's name in the tooltip rather than beside it.
+ */
+.brushTrigger {
+  display: flex;
+  align-items: center;
+  height: 40px;
+  margin: 0 var(--space-2) var(--space-1) var(--space-4);
+  padding: 0 0 0 var(--space-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-panel);
+  color: var(--fg-primary);
+  cursor: default;
+}
+
+.brushTrigger:hover {
+  background: var(--bg-control);
+}
+
+.brushPicture {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+  display: block;
+  overflow: hidden;
+  color: var(--fg-primary);
+}
+
+.brushGlyph {
+  width: 100%;
+  height: 100%;
+}
+
+/* The Brushes list: a dialog of its own beside the settings one, as tall as the reference's 510px. */
+.brushList {
+  position: fixed;
+  z-index: var(--z-menu);
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  max-height: min(510px, calc(100vh - 32px));
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-menu);
+  overflow: hidden;
+}
+
+.brushRows {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: var(--space-2);
+}
+
+/* A heading per kind, which stays at the top of the list while its own brushes are scrolled through. */
+.brushGroup {
+  position: sticky;
+  top: 0;
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  background: var(--bg-elevated);
+  color: var(--fg-secondary);
+  font-size: var(--text-sm);
+  font-weight: 400;
+}
+
+.brushRow[data-selected] .brushRowButton {
+  background: var(--bg-hover);
+}
+
+.brushRowButton {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  padding: var(--space-1) var(--space-2) var(--space-2) var(--space-1);
+  border: 0;
+  background: transparent;
+  color: var(--fg-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: default;
+}
+
+.brushRowButton:hover {
+  background: var(--bg-hover);
+}
+
+.brushRowLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The check mark's column, which the names line up after whether or not one is drawn. */
+.brushCheck {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  display: grid;
+  place-items: center;
+}

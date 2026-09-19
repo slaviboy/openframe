@@ -15,12 +15,13 @@
  * limitations under the License.
  */
 
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { DEFAULT_MITER_ANGLE, type DashCap, type SceneNode, type StrokeCap, type StrokeJoin } from '@/core/schema/document';
+import { DEFAULT_MITER_ANGLE, type BrushKind, type BrushNode, type DashCap, type SceneNode, type StrokeCap, type StrokeJoin } from '@/core/schema/document';
 import { DEFAULT_DYNAMIC_STROKE } from '@/core/vector/dynamic-stroke';
+import { brushStrokeOutlines } from '@/core/vector/brush';
 import { capOfEnd, openEnds, pathEnds } from '@/core/vector/vector-caps';
-import { profileOf, WIDTH_PROFILES } from '@/core/vector/vector-width';
+import { profileOf, WIDTH_PROFILES, type StrokeChain } from '@/core/vector/vector-width';
 import { applyBrush, localBrushes } from '@/editor/commands/brushes';
 import {
   canTakeEndPoints,
@@ -138,8 +139,9 @@ export function AdvancedStrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
     if (!anchor) return;
     const close = (e: globalThis.PointerEvent) => {
       if (rootRef.current?.contains(e.target as Node)) return;
-      // A menu the dialog opened is drawn outside it, and closing on it would take the dialog with it.
-      if (e.target instanceof Element && e.target.closest('[data-menu-root]')) return;
+      // A menu or the Brushes list the dialog opened is drawn outside it, and closing on one of those
+      // would take the dialog with it.
+      if (e.target instanceof Element && e.target.closest('[data-menu-root], [data-brush-list]')) return;
       // The button closes the dialog itself.
       if (e.clientX >= anchor.x && e.clientX <= anchor.x + anchor.width && e.clientY >= anchor.y && e.clientY <= anchor.y + anchor.height) return;
       setAnchor(null);
@@ -600,31 +602,194 @@ function DynamicTab({ nodes }: { nodes: GeometryNode[] }) {
 function BrushTab({ nodes }: { nodes: GeometryNode[] }) {
   const editor = useEditor();
   const brushes = localBrushes(editor.doc);
+  const current = brushes.find((brush) => brush.id === val(shared(nodes, (n) => n.brushId)));
   return (
     <>
-      <Row label="Brush">
-        <select
-          className={primitives.select}
-          aria-label="Brush"
-          value={val(shared(nodes, (n) => n.brushId ?? '')) ?? ''}
-          onChange={(e) =>
-            applyBrush(
-              editor,
-              nodes.map((n) => n.id),
-              e.target.value || undefined,
-            )
-          }
-        >
-          <option value="">No brush</option>
-          {brushes.map((brush) => (
-            <option key={brush.id} value={brush.id}>
-              {brush.name}
-            </option>
-          ))}
-        </select>
-      </Row>
+      <BrushPicker
+        brushes={brushes}
+        current={current}
+        onPick={(brush) =>
+          applyBrush(
+            editor,
+            nodes.map((n) => n.id),
+            brush.id,
+          )
+        }
+      />
+      <WidthProfileRow nodes={nodes} />
       <OwnRows nodes={nodes} />
     </>
+  );
+}
+
+/**
+ * The brush a stroke is painted with: a control of the whole tab's width drawing the stroke that brush
+ * makes, which opens the Brushes list. The reference gives the picture the control rather than naming the
+ * brush beside it, and keeps the name in the tooltip.
+ */
+function BrushPicker({ brushes, current, onPick }: { brushes: readonly BrushNode[]; current: BrushNode | undefined; onPick: (brush: BrushNode) => void }) {
+  const [anchor, setAnchor] = useState<Box | null>(null);
+  const { handlers, tooltip } = useHoverTooltip(current?.name ?? 'Brush', undefined, 'below');
+  return (
+    <>
+      <button
+        type="button"
+        className={styles.brushTrigger}
+        role="combobox"
+        aria-label="Brush"
+        aria-haspopup="dialog"
+        aria-expanded={anchor !== null}
+        aria-controls="brush-listbox"
+        data-value={current?.id ?? ''}
+        data-testid="field-brush"
+        {...handlers}
+        onClick={(e) => {
+          // The list goes beside the dialog, not beside the control inside it, which is how the reference
+          // places it: the two sit edge to edge.
+          const r = (e.currentTarget.closest('[role="dialog"]') ?? e.currentTarget).getBoundingClientRect();
+          setAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
+        }}
+      >
+        <span className={styles.brushPicture}>{current && <BrushStrokeGlyph brush={current} />}</span>
+        <Icon name="chevronDown" />
+      </button>
+      {tooltip}
+      {anchor && (
+        <BrushList
+          brushes={brushes}
+          current={current}
+          anchor={anchor}
+          onPick={(brush) => {
+            onPick(brush);
+            setAnchor(null);
+          }}
+          onClose={() => setAnchor(null)}
+        />
+      )}
+    </>
+  );
+}
+
+/** The two headings the reference groups its list under, in its order. */
+const BRUSH_GROUPS: readonly { readonly kind: BrushKind; readonly title: string }[] = [
+  { kind: 'STRETCH', title: 'Stretch brushes' },
+  { kind: 'SCATTER', title: 'Scatter brushes' },
+];
+
+/**
+ * The Brushes list: a dialog of its own beside the settings one, holding every brush the file has under a
+ * heading per kind, each row the check mark, the brush's name, and the stroke that brush makes.
+ */
+function BrushList({
+  brushes,
+  current,
+  anchor,
+  onPick,
+  onClose,
+}: {
+  brushes: readonly BrushNode[];
+  current: BrushNode | undefined;
+  anchor: Box;
+  onPick: (brush: BrushNode) => void;
+  onClose: () => void;
+}) {
+  const headingId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const el = rootRef.current;
+    if (!el) return;
+    const size = el.getBoundingClientRect();
+    // Beside the settings dialog rather than over the control, which is where the reference puts it; with
+    // the dialog against the right edge of the window, `right-start` flips it to the left of its own accord.
+    const at = placeFloating(anchor, { width: size.width, height: size.height }, { width: window.innerWidth, height: window.innerHeight }, 'right-start');
+    el.style.left = `${at.x}px`;
+    el.style.top = `${at.y}px`;
+    el.style.visibility = 'visible';
+  }, [anchor]);
+
+  useEffect(() => {
+    const close = (e: globalThis.PointerEvent) => {
+      if (rootRef.current?.contains(e.target as Node)) return;
+      // The control closes the list itself.
+      if (e.target instanceof Element && e.target.closest('[data-testid="field-brush"]')) return;
+      onClose();
+    };
+    const onKey = (e: globalThis.KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+    };
+    window.addEventListener('pointerdown', close, true);
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('pointerdown', close, true);
+      window.removeEventListener('keydown', onKey, true);
+    };
+  }, [onClose]);
+
+  return createPortal(
+    <div ref={rootRef} className={styles.brushList} role="dialog" aria-labelledby={headingId} data-testid="brush-list-modal" data-brush-list="" style={{ visibility: 'hidden' }}>
+      <header className={styles.header}>
+        <h2 id={headingId} className={styles.heading}>
+          Brushes
+        </h2>
+      </header>
+      <div className={styles.brushRows} role="grid" id="brush-listbox">
+        {BRUSH_GROUPS.map(({ kind, title }) => {
+          const group = brushes.filter((brush) => brush.brushKind === kind);
+          if (group.length === 0) return null;
+          return (
+            <Fragment key={kind}>
+              <h3 className={styles.brushGroup}>{title}</h3>
+              {group.map((brush) => (
+                <div key={brush.id} role="row" className={styles.brushRow} data-selected={brush.id === current?.id || undefined}>
+                  <div role="gridcell">
+                    <button type="button" className={styles.brushRowButton} aria-label={brush.name} onClick={() => onPick(brush)}>
+                      <span className={styles.brushRowLabel}>
+                        <span className={styles.brushCheck} aria-hidden="true">
+                          {brush.id === current?.id && <Icon name="check" size={16} />}
+                        </span>
+                        {brush.name}
+                      </span>
+                      <span className={styles.brushPicture}>
+                        <BrushStrokeGlyph brush={brush} />
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </Fragment>
+          );
+        })}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/**
+ * A brush drawn as the stroke it makes: its own shape laid along a straight stroke, the same way the canvas
+ * lays it along a path, so a brush's picture and its stroke cannot drift apart. The reference ships pictures.
+ */
+function BrushStrokeGlyph({ brush }: { brush: BrushNode }) {
+  const width = 200;
+  const height = 28;
+  const weight = 16;
+  // A straight stroke across the picture, which the brush is laid over exactly as it is on the canvas.
+  const points = [
+    { x: 0, y: height / 2 },
+    { x: width, y: height / 2 },
+  ];
+  const chain: StrokeChain = { points, lengths: [0, width], vertexPositions: [0, 1], closed: false };
+  const polygons = brushStrokeOutlines(chain, brush.vectorNetwork, brush.size, brush.brushKind, weight);
+  return (
+    <svg className={styles.brushGlyph} viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-hidden="true" focusable="false" preserveAspectRatio="xMidYMid meet">
+      {polygons.map((polygon, i) => (
+        <polygon key={i} points={polygon.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')} fill="currentColor" />
+      ))}
+    </svg>
   );
 }
 
