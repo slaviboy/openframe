@@ -1015,8 +1015,15 @@ const VectorPointSchema = z.object({ x: finite, y: finite });
 export const HandleMirroringSchema = z.enum(['NONE', 'ANGLE', 'ANGLE_AND_LENGTH']);
 export type HandleMirroring = z.infer<typeof HandleMirroringSchema>;
 
-/** A vertex: where it sits, and how its handles follow each other. */
-const VectorVertexSchema = z.object({ x: finite, y: finite, mirror: HandleMirroringSchema.optional(), cornerRadius: z.number().min(0).optional() });
+/** A vertex: where it sits, how its handles follow each other, and the cap it ends the path in when it is an open end. */
+const VectorVertexSchema = z.object({
+  x: finite,
+  y: finite,
+  mirror: HandleMirroringSchema.optional(),
+  cornerRadius: z.number().min(0).optional(),
+  /** The end point this vertex draws when only one segment reaches it; absent means the layer's `endpointCap`. */
+  cap: StrokeCapSchema.optional(),
+});
 
 /**
  * Vector network: vertices joined by straight or curved segments in any direction (branches
@@ -1045,7 +1052,7 @@ export const VectorNodeSchema = z.object({
   ...GeometryFields,
   type: z.literal('VECTOR'),
   vectorNetwork: VectorNetworkSchema,
-  /** Cap of the network's open ends; absent means NONE. */
+  /** The cap of every open end that carries none of its own (`cap` on the vertex); absent means NONE. */
   endpointCap: StrokeCapSchema.optional(),
   /**
    * Width points of a variable-width stroke (Variable width tool): each a position (0–1 of the path's

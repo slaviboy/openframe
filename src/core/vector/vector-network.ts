@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import type { HandleMirroring, Paint } from '../schema/document';
+import type { HandleMirroring, Paint, StrokeCap } from '../schema/document';
 import { roundNetworkCorners } from './vector-corners';
 import { flattenPath, type PathCommand } from '../geometry/corners';
 import { apply, applyLinear, type Matrix } from '../math/matrix';
@@ -38,6 +38,11 @@ export interface VectorVertex {
    * holds the sharp corner and its radius; the geometry is drawn with the corner rounded in.
    */
   readonly cornerRadius?: number | undefined;
+  /**
+   * The end point this vertex draws — a cap, or an arrowhead — when only one segment reaches it, so that
+   * each end of a path can end its own way. Absent means the layer's `endpointCap`.
+   */
+  readonly cap?: StrokeCap | undefined;
 }
 
 export interface VectorSegment {

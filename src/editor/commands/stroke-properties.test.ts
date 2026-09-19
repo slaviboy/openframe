@@ -16,12 +16,13 @@
  */
 
 import { beforeEach, describe, expect, test } from 'vitest';
-import { createEmptyDocument, keyOnTop, makeEllipse, makeRectangle } from '@/core/document/factory';
+import { createEmptyDocument, keyOnTop, makeEllipse, makeRectangle, makeVector } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
-import type { RectangleNode, SceneNode } from '@/core/schema/document';
+import type { RectangleNode, SceneNode, VectorNode } from '@/core/schema/document';
+import { straightSegment, type VectorNetwork } from '@/core/vector/vector-network';
 import { deserializeDocument, serializeDocument } from '@/core/serialize/serialize';
 import { Editor } from '../editor';
-import { setDashCap, setIndividualStrokeWeights, setStrokeDashes, setStrokeJoin, setStrokeMiterAngle } from './properties';
+import { setAllEndCaps, setDashCap, setEndCap, setIndividualStrokeWeights, setStrokeDashes, setStrokeJoin, setStrokeMiterAngle, setVertexCaps } from './properties';
 
 let editor: Editor;
 let rect: string;
@@ -79,5 +80,53 @@ describe('stroke properties', () => {
     expect('individualStrokeWeights' in get(rect)).toBe(false);
     editor.history.run('sides', (tx) => setIndividualStrokeWeights(tx, get(ellipse), { top: 2, right: 0, bottom: 0, left: 0 }));
     expect('individualStrokeWeights' in get(ellipse)).toBe(false);
+  });
+
+  describe('end points', () => {
+    /** An open path from (0, 0) to (40, 0) to (40, 40), whose ends are its first and last point. */
+    const path = (): VectorNetwork => ({
+      vertices: [
+        { x: 0, y: 0 },
+        { x: 40, y: 0 },
+        { x: 40, y: 40 },
+      ],
+      segments: [straightSegment(0, 1), straightSegment(1, 2)],
+      regions: [],
+    });
+    const addVector = (network: VectorNetwork) =>
+      editor.history.run('seed', (tx) => {
+        const id = editor.ids.next();
+        tx.create(makeVector({ id, parent: { id: editor.pageId, key: keyOnTop(editor.doc, editor.pageId) }, name: 'V', x: 0, y: 0, width: 40, height: 40 }, network));
+        return id;
+      });
+
+    test('a vector keeps a cap on the point each end stops at, and a line keeps its own two', () => {
+      const vector = addVector(path());
+      editor.history.run('caps', (tx) => {
+        setEndCap(tx, get(vector), 'startCap', 'CIRCLE_FILLED');
+        setEndCap(tx, get(vector), 'endCap', 'TRIANGLE_ARROW');
+      });
+      const network = get<VectorNode>(vector).vectorNetwork;
+      expect(network.vertices.map((v) => v.cap)).toEqual(['CIRCLE_FILLED', undefined, 'TRIANGLE_ARROW']);
+      // The caps survive a save and an open.
+      expect((deserializeDocument(serializeDocument(editor.doc)).getOrThrow(vector) as VectorNode).vectorNetwork.vertices[2]!.cap).toBe('TRIANGLE_ARROW');
+    });
+
+    test('a network that is not one open path takes the same end point on every end', () => {
+      const branching = path();
+      const vector = addVector({ ...branching, vertices: [...branching.vertices, { x: 40, y: -40 }], segments: [...branching.segments, straightSegment(1, 3)] });
+      editor.history.run('caps', (tx) => setEndCap(tx, get(vector), 'startCap', 'ROUND'));
+      expect(get<VectorNode>(vector).endpointCap).toBe('ROUND');
+      expect(get<VectorNode>(vector).vectorNetwork.vertices.every((v) => v.cap === undefined)).toBe(true);
+    });
+
+    test('the ends picked in vector edit mode take their own point, and a layer-wide one clears them', () => {
+      const vector = addVector(path());
+      editor.history.run('caps', (tx) => setVertexCaps(tx, get(vector), [2], 'DIAMOND_FILLED'));
+      expect(get<VectorNode>(vector).vectorNetwork.vertices[2]!.cap).toBe('DIAMOND_FILLED');
+      editor.history.run('caps', (tx) => setAllEndCaps(tx, get(vector), 'SQUARE'));
+      expect(get<VectorNode>(vector)).toMatchObject({ endpointCap: 'SQUARE' });
+      expect(get<VectorNode>(vector).vectorNetwork.vertices.every((v) => v.cap === undefined)).toBe(true);
+    });
   });
 });

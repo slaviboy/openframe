@@ -18,10 +18,11 @@
 import { createRequire } from 'node:module';
 import type { CanvasKit } from 'canvaskit-wasm';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { BLACK, createEmptyDocument, keyOnTop, makeRectangle, solid } from '@/core/document/factory';
+import { BLACK, createEmptyDocument, keyOnTop, makeRectangle, makeVector, solid } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
 import { SceneIndex } from '@/core/scene/scene-index';
-import type { Node, RectangleNode } from '@/core/schema/document';
+import { straightSegment, type VectorNetwork } from '@/core/vector/vector-network';
+import type { Node, RectangleNode, StrokeCap, VectorNode } from '@/core/schema/document';
 import { SceneRenderer } from './scene-renderer';
 
 const require = createRequire(import.meta.url);
@@ -79,6 +80,84 @@ describe('stroke styles', () => {
     expect(top(40, 25)).toBe(false);
     expect(top(40, 58)).toBe(false);
     expect(top(21, 40)).toBe(false);
+  });
+});
+
+describe('end points on a vector path', () => {
+  /** Renders a vector layer whose path runs from (20, 40) right to (60, 40), with the given overrides. */
+  function renderPath(patch: Partial<VectorNode>, network?: VectorNetwork) {
+    const ids = new IdGenerator('k');
+    const store = createEmptyDocument({ name: 'K', now: 'n', appVersion: 't', ids });
+    const page = store.pages()[0]!;
+    const path = network ?? {
+      vertices: [
+        { x: 0, y: 0 },
+        { x: 40, y: 0 },
+      ],
+      segments: [straightSegment(0, 1)],
+      regions: [],
+    };
+    const vector = makeVector({ id: ids.next(), parent: { id: page, key: keyOnTop(store, page) }, name: 'V', x: 20, y: 40, width: 40, height: 0 }, path);
+    store.applyOp({ kind: 'create', node: { ...vector, strokeWeight: 4, ...patch } as Node });
+    const surface = ck.MakeSurface(W, H)!;
+    const renderer = new SceneRenderer(ck);
+    renderer.render(surface.getCanvas(), store, new SceneIndex(store), page, { x: 0, y: 0, zoom: 1, width: W, height: H, dpr: 1 });
+    const img = surface.makeImageSnapshot();
+    const pixels = img.readPixels(0, 0, { width: W, height: H, colorType: ck.ColorType.RGBA_8888, alphaType: ck.AlphaType.Unpremul, colorSpace: ck.ColorSpace.SRGB }) as Uint8Array;
+    img.delete();
+    surface.delete();
+    renderer.dispose();
+    return (x: number, y: number) => pixels[(y * W + x) * 4]! < 100;
+  }
+
+  /** The cap of the path's end (the point at (60, 40)), as the Start point and End point controls set it. */
+  const withEndCap = (cap: StrokeCap, patch: Partial<VectorNode> = {}) =>
+    renderPath(patch, {
+      vertices: [
+        { x: 0, y: 0 },
+        { x: 40, y: 0, cap },
+      ],
+      segments: [straightSegment(0, 1)],
+      regions: [],
+    });
+
+  test('an arrowhead at the end of a path spreads past the stroke, and points the way the path goes', () => {
+    const plain = renderPath({});
+    const arrow = withEndCap('TRIANGLE_ARROW');
+    // The stroke alone is 4 wide, so nothing is drawn 6 above the path; the arrowhead spreads that far.
+    expect(plain(48, 34)).toBe(false);
+    expect(arrow(48, 34)).toBe(true);
+    // The head is behind the path's end, not beside it: the far side of the tip stays empty.
+    expect(arrow(64, 40)).toBe(false);
+    // The other end carries no cap of its own, so it is left flat.
+    expect(arrow(16, 40)).toBe(false);
+  });
+
+  test('each end draws its own point, and a layer-wide cap draws the ends that carry none', () => {
+    const round = renderPath({ endpointCap: 'ROUND' });
+    expect(round(61, 40)).toBe(true);
+    expect(round(19, 40)).toBe(true);
+    // A point of its own at one end leaves the other on the layer's cap.
+    const mixed = withEndCap('NONE', { endpointCap: 'ROUND' });
+    expect(mixed(61, 40)).toBe(false);
+    expect(mixed(19, 40)).toBe(true);
+  });
+
+  test('a dashed stroke keeps its dashes’ own cap rather than an arrowhead', () => {
+    const dashed = withEndCap('TRIANGLE_ARROW', { strokeDashes: [4, 4] });
+    expect(dashed(48, 34)).toBe(false);
+  });
+
+  test('outlining the stroke takes the end points in, so Outline stroke and an SVG export keep them', () => {
+    const ids = new IdGenerator('k');
+    const node = makeVector({ id: ids.next(), parent: { id: 'p', key: 'a' }, name: 'V', x: 0, y: 0, width: 40, height: 0 }, { vertices: [{ x: 0, y: 0 }, { x: 40, y: 0, cap: 'TRIANGLE_ARROW' }], segments: [straightSegment(0, 1)], regions: [] });
+    const renderer = new SceneRenderer(ck);
+    const outline = renderer.strokeOutline({ ...node, strokeWeight: 4 } as VectorNode)!;
+    renderer.dispose();
+    // The stroke alone is 4 wide; the arrowhead is 16 across, so the outline spreads 8 either side of it.
+    const ys = outline.flatMap((c) => (c.op === 'Z' ? [] : [c.y]));
+    expect(Math.max(...ys)).toBeCloseTo(8, 1);
+    expect(Math.min(...ys)).toBeCloseTo(-8, 1);
   });
 });
 

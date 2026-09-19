@@ -217,7 +217,7 @@ import {
   setCornerRadius,
   setCornerSmoothing,
   setInnerRadius,
-  setLineCap,
+  setEndCap,
   setOpacity,
   setPointCount,
   setPaints,
@@ -3743,7 +3743,7 @@ function EndpointRow({ nodes }: { nodes: GeometryNode[] }) {
             label={end === 'startCap' ? 'Start point' : 'End point'}
             flipped={end === 'endCap'}
             value={value === MIXED ? null : (val(value) ?? null)}
-            onChange={(cap) => editor.history.run('Change end point', (tx) => nodes.forEach((n) => setLineCap(tx, n, end, cap)))}
+            onChange={(cap) => editor.history.run('Change end point', (tx) => nodes.forEach((n) => setEndCap(tx, n, end, cap)))}
           />
         );
       })}

@@ -459,3 +459,24 @@ frame of a pan on that board took **1548 ms** — at 6%, 5%, 3% and 2% alike. Zo
   under the old cliff, which is why none of this showed up in the suite.
 
 Numbers and the method are in `docs/PERFORMANCE.md`; the renderer's side is in `docs/RENDERING.md`.
+
+## The Stroke settings dialog, from the user's capture (2026-09-19)
+
+The user supplied the markup of **Advanced stroke settings** and its three menus. It is a titled dialog —
+`Stroke settings`, with a close button — holding a **Basic / Dynamic / Brush** segmented control and, in
+the Basic tab, labelled rows: **Style**, **Width profile** (with *Flip width points*), a divider, **End
+points**, a divider, **Join** and **Miter angle**. The Dynamic and Brush tabs are to follow, from their own
+markup. The pass is being built in phases, each its own commit.
+
+- **Phase 1 — an open end of a path draws its own end point.** The reference's End points row is offered
+  for any open path, which needed the renderer to draw the ends: a cap now sits on the *point* the path
+  stops at (`cap` on the vertex, `src/core/vector/vector-caps.ts`), with the layer's `endpointCap` drawing
+  the ends that carry none — which is how the documentation describes it, since an end is set per point in
+  vector edit mode. `openEnds` gives each end and the direction the path leaves it in, and `pathEnds` the
+  two ends of a path that doesn't branch, so Start point and End point know which is which. The renderer
+  cuts the stroke off flat and draws each end's own artwork (`drawCapAt`) when the ends differ or draw a
+  marker, keeps the stroke's own cap when they are alike, stops a triangle's path at the head's base
+  (`insetEnds`, as a line already did), and takes the ends into the outline (`withEndCaps`) so *Outline
+  stroke* and the SVG export keep them. A dashed stroke keeps its dashes' cap; a brush or a width profile
+  ends in the shape it is drawn as, which is what the reference's own support table says. Flattening a
+  line now carries *both* its ends across, on its two points, rather than only the end one.

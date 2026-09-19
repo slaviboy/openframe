@@ -21,7 +21,7 @@ import { IdGenerator } from '@/core/ids/ids';
 import { hitTestDeepest } from '@/core/scene/hit-test';
 import type { LineNode, Node, PolygonNode, StarNode } from '@/core/schema/document';
 import { BUILTIN_COMMANDS } from '../commands/builtin';
-import { setLineCap, setPointCount, setSize } from '../commands/properties';
+import { setEndCap, setPointCount, setSize } from '../commands/properties';
 import { Editor } from '../editor';
 import { ToolManager } from './tool-manager';
 import type { PointerInfo } from './types';
@@ -143,7 +143,7 @@ describe('line and arrow tools', () => {
     const line = only<LineNode>();
     editor.history.run('edit', (tx) => {
       setSize(tx, line, 'height', 40);
-      setLineCap(tx, line, 'startCap', 'CIRCLE_FILLED');
+      setEndCap(tx, line, 'startCap', 'CIRCLE_FILLED');
     });
     const after = editor.doc.getOrThrow(line.id) as LineNode;
     expect(after.size.height).toBe(0);

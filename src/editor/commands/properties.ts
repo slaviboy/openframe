@@ -37,6 +37,7 @@ import {
   type StrokeCap,
   type StrokeJoin,
 } from '@/core/schema/document';
+import { pathEnds } from '@/core/vector/vector-caps';
 import { matrixRotationDegrees, roundTransform, toTransform } from '../interactions/transform';
 
 export const MIXED = Symbol('mixed');
@@ -178,8 +179,46 @@ export function setInnerRadius(tx: Transaction, node: SceneNode, percent: number
   tx.set(node.id, 'innerRadius', Math.min(1, Math.max(0, percent / 100)));
 }
 
-export function setLineCap(tx: Transaction, node: SceneNode, end: 'startCap' | 'endCap', cap: StrokeCap): void {
-  if (node.type === 'LINE') tx.set(node.id, end, cap);
+/**
+ * The end point one end of a path draws. A line has its own two ends; a vector layer keeps the cap on the
+ * point the path stops at, so each end of it can end its own way — which is what the reference sets from the
+ * Start point and End point controls, and per point in vector edit mode.
+ */
+export function setEndCap(tx: Transaction, node: SceneNode, end: 'startCap' | 'endCap', cap: StrokeCap): void {
+  if (node.type === 'LINE') {
+    tx.set(node.id, end, cap);
+    return;
+  }
+  if (node.type !== 'VECTOR') return;
+  const network = (tx.store.getOrThrow(node.id) as typeof node).vectorNetwork;
+  const ends = pathEnds(network);
+  const vertex = end === 'startCap' ? ends?.start.vertex : ends?.end.vertex;
+  // A network that is not one open path has no start and end of its own: every end takes the same cap.
+  if (vertex === undefined) {
+    setAllEndCaps(tx, node, cap);
+    return;
+  }
+  setVertexCaps(tx, node, [vertex], cap);
+}
+
+/** The end point every open end of a vector layer draws, clearing the ones that had their own. */
+export function setAllEndCaps(tx: Transaction, node: SceneNode, cap: StrokeCap): void {
+  if (node.type !== 'VECTOR') return;
+  const network = (tx.store.getOrThrow(node.id) as typeof node).vectorNetwork;
+  tx.set(node.id, 'endpointCap', cap === 'NONE' ? undefined : cap);
+  if (network.vertices.some((vertex) => vertex.cap !== undefined))
+    tx.set(node.id, 'vectorNetwork', { ...network, vertices: network.vertices.map(({ cap: _cap, ...vertex }) => vertex) });
+}
+
+/** The end point the named points of a vector layer draw — the ends picked in vector edit mode. */
+export function setVertexCaps(tx: Transaction, node: SceneNode, vertices: readonly number[], cap: StrokeCap): void {
+  if (node.type !== 'VECTOR' || vertices.length === 0) return;
+  const network = (tx.store.getOrThrow(node.id) as typeof node).vectorNetwork;
+  const chosen = new Set(vertices);
+  tx.set(node.id, 'vectorNetwork', {
+    ...network,
+    vertices: network.vertices.map((vertex, i) => (chosen.has(i) ? { ...vertex, cap } : vertex)),
+  });
 }
 
 /** Replaces a layer's effects (stored only when there are any). */

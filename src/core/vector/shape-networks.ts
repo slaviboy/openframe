@@ -98,7 +98,15 @@ export function shapeNetwork(node: SceneNode): VectorNetwork | null {
     case 'VECTOR':
       return node.vectorNetwork;
     case 'LINE':
-      return { vertices: [{ x: 0, y: 0 }, { x: w, y: 0 }], segments: [straightSegment(0, 1)], regions: [] };
+      // A line's two end points are kept on the points they belong to, so each end still ends its own way.
+      return {
+        vertices: [
+          { x: 0, y: 0, ...(node.startCap === 'NONE' ? {} : { cap: node.startCap }) },
+          { x: w, y: 0, ...(node.endCap === 'NONE' ? {} : { cap: node.endCap }) },
+        ],
+        segments: [straightSegment(0, 1)],
+        regions: [],
+      };
     case 'ELLIPSE':
       return commandsToNetwork(node.arcData ? arcCommands(w, h, node.arcData) : ellipseCommands(w, h));
     case 'FRAME':

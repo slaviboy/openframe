@@ -28,6 +28,7 @@ import { distanceToSegment, lineCapSize, pointInPolygon, polygonPoints, starPoin
 import { flattenPath, rectangleCorners, resolveCornerRadii, roundedPolygon } from '../geometry/corners';
 import { networkOutlines } from '../vector/vector-network';
 import { strokeChain, variableWidthOutline } from '../vector/vector-width';
+import { capOfEnd, isMarkerCap, openEnds } from '../vector/vector-caps';
 import { hasGeometry, isSceneNode, type Node, type SceneNode, type StrokeCap } from '../schema/document';
 
 export const matrixOf = (t: readonly number[]): Matrix => ({ a: t[0]!, b: t[1]!, c: t[2]!, d: t[3]!, e: t[4]!, f: t[5]! });
@@ -39,6 +40,11 @@ export function strokeOutset(node: Node): number {
     const marker = (cap: StrokeCap) => cap !== 'NONE' && cap !== 'ROUND' && cap !== 'SQUARE';
     const half = node.strokeWeight / 2;
     return marker(node.startCap) || marker(node.endCap) ? half + lineCapSize(node.strokeWeight) / 2 : half;
+  }
+  // An end point drawn as its own artwork — an arrowhead, a circle, a diamond — reaches past the path's end.
+  if (node.type === 'VECTOR' && !node.strokeDashes && !node.strokeWidths?.length) {
+    const marked = openEnds(node.vectorNetwork).some((end) => isMarkerCap(capOfEnd(node.vectorNetwork.vertices[end.vertex], node.endpointCap)));
+    if (marked) return node.strokeWeight / 2 + lineCapSize(node.strokeWeight) / 2;
   }
   const individual = 'individualStrokeWeights' in node ? node.individualStrokeWeights : undefined;
   // A stroke whose width varies reaches as far as its widest point.
@@ -67,7 +73,7 @@ interface Entry {
 }
 
 /** Fields whose change affects world transforms or bounds of a node's subtree. */
-const GEOMETRY_FIELDS: ReadonlySet<string> = new Set(['transform', 'size', 'strokes', 'strokeWeight', 'strokeAlign', 'startCap', 'endCap', 'individualStrokeWeights', 'effects']);
+const GEOMETRY_FIELDS: ReadonlySet<string> = new Set(['transform', 'size', 'strokes', 'strokeWeight', 'strokeAlign', 'startCap', 'endCap', 'endpointCap', 'individualStrokeWeights', 'effects']);
 
 /**
  * Derived per-page geometry: world transforms, world bounds, and a spatial index for

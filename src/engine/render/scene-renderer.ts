@@ -25,6 +25,8 @@ import { maskRuns } from '@/core/scene/masks';
 import { arcCommands } from '@/core/geometry/arc';
 import { strokeChain, variableWidthOutline } from '@/core/vector/vector-width';
 import { networkStrokePath, regionFillPath, type VectorNetwork } from '@/core/vector/vector-network';
+import { capOfEnd, isMarkerCap, openEnds, type OpenEnd } from '@/core/vector/vector-caps';
+import type { Vec2 } from '@/core/math/vec';
 import type { OffsetJoin, ShapeFace } from '@/core/vector/geometry-service';
 import { dynamicStrokePath, hasDynamicStroke } from '@/core/vector/dynamic-stroke';
 import { brushStrokeOutlines, isBrush } from '@/core/vector/brush';
@@ -1501,11 +1503,23 @@ export class SceneRenderer {
       }
     }
     const dashes = node.strokeDashes && node.strokeDashes.some((d) => d > 0) ? node.strokeDashes : null;
+    // A vector's open ends are outlined the way they are drawn: the ends that draw their own artwork cut the
+    // path off flat and are taken into the outline below, and a triangle's tip stops the path at its base.
+    const ends = node.type === 'VECTOR' ? this.vectorEnds(node) : [];
+    const plainEnd = ends.every((end) => end.cap === (ends[0]?.cap ?? 'NONE') && !isMarkerCap(end.cap)) ? (ends[0]?.cap ?? 'NONE') : null;
+    const tips = ends.filter((end) => end.cap === 'TRIANGLE_ARROW');
+    if (tips.length > 0) {
+      const inseted = this.insetEnds(centerline, tips, lineCapSize(node.strokeWeight) * COS30);
+      if (inseted) {
+        if (centerline !== area) centerline.delete();
+        centerline = inseted;
+      }
+    }
     // Dashed strokes start and end with a half-length dash, as drawn.
     const dashed = dashes ? this.dashedPath(centerline, dashes) : null;
     const aligned = node.strokeAlign !== 'CENTER' && area !== null && node.type !== 'LINE';
     const angle = node.strokeMiterAngle ?? DEFAULT_MITER_ANGLE;
-    const endCap = node.type === 'VECTOR' && !dashes ? node.endpointCap : node.strokeCap;
+    const endCap = node.type === 'VECTOR' && !dashes ? (plainEnd ?? 'NONE') : node.strokeCap;
     let outline = (dashed ?? centerline).makeStroked({
       width: aligned ? node.strokeWeight * 2 : node.strokeWeight,
       join: node.strokeJoin === 'ROUND' ? ck.StrokeJoin.Round : node.strokeJoin === 'BEVEL' ? ck.StrokeJoin.Bevel : ck.StrokeJoin.Miter,
@@ -1525,8 +1539,8 @@ export class SceneRenderer {
     outline?.delete();
     release();
     if (!simplified) return null;
-    // A line's end markers are part of the ink it draws, so they go into the outline with it.
-    const withMarkers = node.type === 'LINE' ? this.withCaps(simplified, node) : simplified;
+    // End markers are part of the ink a stroke draws, so they go into the outline with it.
+    const withMarkers = node.type === 'LINE' ? this.withCaps(simplified, node) : plainEnd === null ? this.withEndCaps(simplified, ends, node.strokeWeight) : simplified;
     if (withMarkers !== simplified) simplified.delete();
     if (!withMarkers) return null;
     const commands = this.commandsOf(withMarkers);
@@ -1546,6 +1560,40 @@ export class SceneRenderer {
       if (!marker || !result) continue;
       const merged: Path | null = this.ck.Path.MakeFromOp(result, marker, this.ck.PathOp.Union);
       marker.delete();
+      if (result !== stroke) result.delete();
+      result = merged;
+    }
+    return result;
+  }
+
+  /**
+   * A vector's stroke with the end points of its open ends taken in, each turned to face the way the path
+   * leaves it; the path it is given is left for the caller to delete.
+   */
+  private withEndCaps(stroke: Path, ends: readonly (OpenEnd & { readonly cap: StrokeCap })[], weight: number): Path | null {
+    const ck = this.ck;
+    const size = lineCapSize(weight);
+    // The stroke is cut off flat at every end here, so a round or square end is an area of its own too — the
+    // same one `drawCap` paints — while `capPath` leaves those to the stroke's own cap.
+    const areaOf = (cap: StrokeCap): Path | null =>
+      cap === 'ROUND'
+        ? new ck.PathBuilder().addOval(ck.LTRBRect(-weight / 2, -weight / 2, weight / 2, weight / 2)).detachAndDelete()
+        : cap === 'SQUARE'
+          ? new ck.PathBuilder().addRect(ck.LTRBRect(0, -weight / 2, weight / 2, weight / 2)).detachAndDelete()
+          : this.capPath(cap, 0, 1, weight, size);
+    let result: Path | null = stroke;
+    for (const end of ends) {
+      const marker = result ? areaOf(end.cap) : null;
+      if (!marker || !result) continue;
+      // The marker is drawn along +x from the origin, so it is turned and carried onto the end it belongs to.
+      const cos = Math.cos(end.angle);
+      const sin = Math.sin(end.angle);
+      const placed = new this.ck.PathBuilder();
+      placed.addPath(marker, cos, -sin, end.point.x, sin, cos, end.point.y);
+      marker.delete();
+      const turned = placed.detachAndDelete();
+      const merged: Path | null = this.ck.Path.MakeFromOp(result, turned, this.ck.PathOp.Union);
+      turned.delete();
       if (result !== stroke) result.delete();
       result = merged;
     }
@@ -1860,9 +1908,16 @@ export class SceneRenderer {
     } else if (node.strokeWeight > 0 && node.vectorNetwork.segments.length > 0) {
       // A dynamic stroke bumps the path before it is stroked; it follows the path, so it is the same on every draw.
       const commands = networkStrokePath(node.vectorNetwork);
-      const strokePath = this.pathFrom(hasDynamicStroke(node.dynamicStroke) ? dynamicStrokePath(commands, node.dynamicStroke) : commands);
+      const full = this.pathFrom(hasDynamicStroke(node.dynamicStroke) ? dynamicStrokePath(commands, node.dynamicStroke) : commands);
+      const ends = this.vectorEnds(node);
+      // Every end alike, and none of them drawn as its own artwork: the stroke's own cap draws them all.
+      const plain = ends.every((end) => end.cap === (ends[0]?.cap ?? 'NONE') && !isMarkerCap(end.cap)) ? (ends[0]?.cap ?? 'NONE') : null;
+      const size = lineCapSize(node.strokeWeight);
+      // A triangle's flat end would poke out of its tip, so the path stops at the triangle's base.
+      const tips = ends.filter((end) => end.cap === 'TRIANGLE_ARROW');
+      const strokePath = (tips.length > 0 ? this.insetEnds(full, tips, size * COS30) : null) ?? full;
       this.applyStrokeStyle(node);
-      const cap = node.endpointCap === 'ROUND' ? this.ck.StrokeCap.Round : node.endpointCap === 'SQUARE' ? this.ck.StrokeCap.Square : this.ck.StrokeCap.Butt;
+      const cap = plain === 'ROUND' ? this.ck.StrokeCap.Round : plain === 'SQUARE' ? this.ck.StrokeCap.Square : this.ck.StrokeCap.Butt;
       for (const paint of node.strokes) {
         if (!paint.visible || paint.opacity <= 0) continue;
         this.configurePaint(this.strokePaint, paint, node.size);
@@ -1878,9 +1933,18 @@ export class SceneRenderer {
         }
         canvas.drawPath(strokePath, this.strokePaint);
         canvas.restore();
+        // End points are part of the ink the stroke draws, and are always solid.
+        if (plain === null) {
+          this.configurePaint(this.fillPaint, paint, node.size);
+          this.resetStrokeStyle();
+          this.strokePaint.setStrokeWidth(node.strokeWeight);
+          for (const end of ends) this.drawCapAt(canvas, end.cap, end.point, end.angle, node.strokeWeight, size);
+          this.applyStrokeStyle(node);
+        }
       }
       this.resetStrokeStyle();
-      strokePath.delete();
+      if (strokePath !== full) strokePath.delete();
+      full.delete();
     }
     fillPath?.delete();
   }
@@ -1961,6 +2025,53 @@ export class SceneRenderer {
       case 'DIAMOND_FILLED':
         return new ck.PathBuilder().addPolygon([x - size / 2, 0, x, -size / 2, x + size / 2, 0, x, size / 2], true).detachAndDelete();
     }
+  }
+
+  /**
+   * The open ends of a vector layer's path, each with the end point it draws. None while the ends are not
+   * drawn as end points: a dashed stroke keeps its dashes' own cap, and a stroke drawn as an area — a brush,
+   * or a width that varies — ends in the shape it tapers to, which is why the reference's own table says a
+   * width profile takes an arrowhead off.
+   */
+  private vectorEnds(node: VectorNode): (OpenEnd & { readonly cap: StrokeCap })[] {
+    if (node.strokeDashes || node.strokeWidths?.length || node.brushId !== undefined) return [];
+    return openEnds(node.vectorNetwork).map((end) => ({ ...end, cap: capOfEnd(node.vectorNetwork.vertices[end.vertex], node.endpointCap) }));
+  }
+
+  /** The path with every contour that stops at one of these ends shortened there by `inset`; null when nothing is left. */
+  private insetEnds(path: Path, ends: readonly OpenEnd[], inset: number): Path | null {
+    const at = (point: Float32Array | number[], end: OpenEnd) => Math.hypot(point[0]! - end.point.x, point[1]! - end.point.y) < 0.01;
+    const builder = new this.ck.PathBuilder();
+    const iterator = new this.ck.ContourMeasureIter(path, false, 1);
+    let drawn = false;
+    for (let contour = iterator.next(); contour; contour = iterator.next()) {
+      const length = contour.length();
+      const cut = Math.min(inset, length / 2);
+      const from = ends.some((end) => at(contour.getPosTan(0), end)) ? cut : 0;
+      const to = length - (ends.some((end) => at(contour.getPosTan(length), end)) ? cut : 0);
+      if (length > 0 && to > from) {
+        const segment = contour.getSegment(from, to, true);
+        builder.addPath(segment);
+        segment.delete();
+        drawn = true;
+      }
+      contour.delete();
+    }
+    iterator.delete();
+    const inseted = builder.detachAndDelete();
+    if (drawn) return inseted;
+    inseted.delete();
+    return null;
+  }
+
+  /** Draws an end point where a path stops, turned to face the way the path leaves it. */
+  private drawCapAt(canvas: Canvas, cap: StrokeCap, point: Vec2, angle: number, weight: number, size: number): void {
+    if (cap === 'NONE') return;
+    canvas.save();
+    canvas.translate(point.x, point.y);
+    canvas.rotate((angle * 180) / Math.PI, 0, 0);
+    this.drawCap(canvas, cap, 0, 1, weight, size);
+    canvas.restore();
   }
 
   /** Draws a line end marker at (x, 0); `dir` is the outward direction along the line (±1). */

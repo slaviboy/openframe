@@ -103,7 +103,7 @@ function appearanceOf(node: SceneNode): Partial<VectorNode> {
     out['strokeWeight'] = node.strokeWeight;
     out['strokeAlign'] = node.type === 'LINE' ? 'CENTER' : node.strokeAlign;
     for (const field of ['strokeDashes', 'strokeCap', 'strokeJoin', 'strokeMiterAngle'] as const) if (node[field] !== undefined) out[field] = node[field];
-    if (node.type === 'LINE' && node.endCap !== 'NONE') out['endpointCap'] = node.endCap;
+    // A line's own two end points come across on its points, in `shapeNetwork`, so each end keeps its own.
   }
   return out as Partial<VectorNode>;
 }
