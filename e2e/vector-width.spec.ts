@@ -107,3 +107,25 @@ test('a width profile shapes the stroke, and the tapered stroke outlines as it i
   expect(height).toBeGreaterThan(0);
   expect(height).toBeLessThanOrEqual(21);
 });
+
+test('Edit width profile, in the Stroke settings dialog, opens the points with the Variable width tool', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('p');
+  await page.mouse.click(box.x + 420, box.y + 300);
+  await page.mouse.click(box.x + 560, box.y + 380);
+  await page.mouse.click(box.x + 700, box.y + 280);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.getByRole('treeitem', { name: /Vector 1/ }).click();
+
+  await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
+  await page.getByRole('dialog', { name: 'Stroke settings' }).getByRole('button', { name: 'Width profile' }).click();
+  await page.getByRole('menu', { name: 'Width profile' }).getByRole('menuitemcheckbox', { name: 'Edit width profile' }).click();
+
+  // The layer's points are open with the Variable width tool in hand, which is what the option is for.
+  await expect(page.getByRole('toolbar', { name: 'Vector editing' })).toBeVisible();
+  await expect(page.getByRole('toolbar', { name: 'Vector editing' }).getByRole('button', { name: 'More' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByTestId('field-width-profile')).toBeVisible();
+});
