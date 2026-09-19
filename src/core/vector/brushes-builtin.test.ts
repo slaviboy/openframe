@@ -19,7 +19,8 @@ import { describe, expect, test } from 'vitest';
 import { isId } from '../ids/ids';
 import type { Node } from '../schema/document';
 import { brushStrokeOutlines } from './brush';
-import { brushById, BUILTIN_BRUSHES, isBuiltinBrush } from './brushes-builtin';
+import { brushById, BUILTIN_BRUSHES, isBuiltinBrush, settingsOfBrush } from './brushes-builtin';
+import { REFERENCE_BRUSHES } from './brushes-reference';
 import { strokeChain } from './vector-width';
 
 /** A straight 100-unit path, the stroke a brush is laid along. */
@@ -33,9 +34,55 @@ const chain = strokeChain({
 })!;
 
 describe('the brushes every file has', () => {
-  test('there are shapes of both kinds, each named and closed', () => {
-    expect(BUILTIN_BRUSHES.filter((brush) => brush.brushKind === 'STRETCH').length).toBeGreaterThan(2);
-    expect(BUILTIN_BRUSHES.filter((brush) => brush.brushKind === 'SCATTER').length).toBeGreaterThan(2);
+  test('the reference’s own twenty-five, in its order and under its two headings', () => {
+    // The names and the order are the capture's; only the shapes behind them are traced from its pictures.
+    expect(BUILTIN_BRUSHES.map((brush) => brush.name)).toEqual([
+      'Heist',
+      'Blockbuster',
+      'Grindhouse',
+      'Biopic',
+      'Spaghetti Western',
+      'Slasher',
+      'Hardboiled',
+      'Vérité',
+      'Epic',
+      'Screwball',
+      'Rom-com',
+      'Noir',
+      'Propaganda',
+      'Melodrama',
+      'New Wave',
+      'Bubblegum',
+      'Witch house',
+      'Shoegaze',
+      'Honky-tonk',
+      'Screamo',
+      'Drone',
+      'Doo-wop',
+      'Spoken word',
+      'Vaporwave',
+      'Oi!',
+    ]);
+    expect(BUILTIN_BRUSHES.slice(0, 15).every((brush) => brush.brushKind === 'STRETCH')).toBe(true);
+    expect(BUILTIN_BRUSHES.slice(15).every((brush) => brush.brushKind === 'SCATTER')).toBe(true);
+  });
+
+  test('each shape is closed, and a scatter brush carries what its picture was scattered with', () => {
+    expect(BUILTIN_BRUSHES.filter((brush) => brush.brushKind === 'STRETCH').length).toBe(15);
+    expect(BUILTIN_BRUSHES.filter((brush) => brush.brushKind === 'SCATTER').length).toBe(10);
+    for (const brush of REFERENCE_BRUSHES) {
+      if (brush.kind === 'STRETCH') {
+        expect(brush.settings).toBeUndefined();
+        continue;
+      }
+      const settings = brush.settings!;
+      expect(settings.gap).toBeGreaterThanOrEqual(0);
+      expect(settings.wiggle).toBeLessThanOrEqual(100);
+      expect(settings.sizeJitter).toBeLessThanOrEqual(100);
+      expect(settings.angularJitter).toBeLessThanOrEqual(360);
+      // A brush brings its own numbers when it is applied, which is what changes the tab's values.
+      expect(settingsOfBrush(brush.id)).toEqual(settings);
+    }
     for (const brush of BUILTIN_BRUSHES) {
       expect(brush.name).not.toBe('');
       expect(brush.size.width).toBeGreaterThan(0);

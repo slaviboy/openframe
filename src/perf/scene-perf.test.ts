@@ -31,6 +31,7 @@ import { IdGenerator } from '@/core/ids/ids';
 import { hitTestDeepest, marqueeSelect } from '@/core/scene/hit-test';
 import { SceneIndex } from '@/core/scene/scene-index';
 import { SceneRenderer } from '@/engine/render/scene-renderer';
+import { networkStrokePath, straightSegment } from '@/core/vector/vector-network';
 
 const require = createRequire(import.meta.url);
 const FRAMES = 100;
@@ -155,5 +156,22 @@ describe('10,000-node scene', () => {
     expect(stats.culled).toBeGreaterThan(90);
     expect(fullStats.drawn).toBe(FRAMES + FRAMES * RECTS_PER_FRAME);
     expect(renderMs).toBeLessThan(250);
+  });
+
+  test('a path of thousands of points is walked in one pass, not once per point', () => {
+    // The brushes the reference ships are networks of thousands of points, and the width tool, the eraser
+    // and a long pencil stroke all make them too. Walking one used to look down every segment at every
+    // step, which is the square of the points and was a fifth of a second on a brush.
+    const points = 4000;
+    const network = {
+      vertices: Array.from({ length: points }, (_, i) => ({ x: Math.cos((i / points) * Math.PI * 2) * 500, y: Math.sin((i / points) * Math.PI * 2) * 500 })),
+      segments: Array.from({ length: points }, (_, i) => straightSegment(i, (i + 1) % points)),
+      regions: [],
+    };
+    let commands: unknown[] = [];
+    const walkMs = time(() => (commands = networkStrokePath(network)));
+    console.info(`perf(path): ${points} points walked in ${walkMs.toFixed(1)}ms`);
+    expect(commands).toHaveLength(points + 2);
+    expect(walkMs).toBeLessThan(50);
   });
 });

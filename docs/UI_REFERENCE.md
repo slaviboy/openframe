@@ -675,13 +675,27 @@ closed vector layer, with nothing to carry. What each setting does to the drawin
 shape's length, a wiggle as a share of the stroke's weight, size and angle given away to a repeatable
 noise of the copy's index, as `dynamic-stroke.ts` already does — is ours.
 
-**Deviations.** the reference's own 25 brushes are its artwork, so the list holds eight of ours — Leaf, Wedge,
-Chisel and Ribbon to stretch, Dot, Dash, Triangle and Petal to scatter — and then whatever the file itself
+**The brushes themselves.** The list holds the reference's own twenty-five, by its names and in its order:
+*Heist, Blockbuster, Grindhouse, Biopic, Spaghetti Western, Slasher, Hardboiled, Vérité, Epic, Screwball,
+Rom-com, Noir, Propaganda, Melodrama, New Wave* to stretch, and *Bubblegum, Witch house, Shoegaze,
+Honky-tonk, Screamo, Drone, Doo-wop, Spoken word, Vaporwave, Oi!* to scatter — then whatever the file itself
 holds, under the same two headings. They are not layers in the file: `BUILTIN_BRUSHES` is the same in every
 file, takes up no room in what is saved, and `brushById` looks there before the document, so a layer that
 names one still finds it after a save and an open. Their ids sit in the `0` replica, which is the root's and
-which no editing session takes. Because there is always a brush to apply, the Brush tab is never disabled —
-it was, until the brushes shipped, which was the one thing in the tab the reference does not do.
+which no editing session takes. Because there is always a brush to apply, the Brush tab is never disabled.
+
+**What was traced, and how.** The capture holds each brush as a 756 × 108 picture of the stroke it makes and
+nothing of the reference's vector shapes, so `scripts/extract-reference-brushes.mjs` (`npm run brushes:reference`) reads the
+shapes back out of the pictures and writes `src/core/vector/brushes-reference.ts`: the alpha is thresholded, the
+components are traced as loops of pixel corners — the outer one and every hole, wound so a non-zero fill
+leaves the grain open — and simplified. A **stretch** brush is the whole picture, so laid along a straight
+path at the weight it was drawn at, ours is that picture. A **scatter** brush is a spray, and a spray is
+scattered anew every time it is drawn, in the reference too: what is reproduced is the mark and the spread, not
+where each speck fell. Where its marks stay apart the mark is the speck of the middling size and Gap,
+Wiggle, Size jitter and Angular jitter are measured from where the specks fell, how far they strayed across
+the band, how much their sizes varied and how much they turned; where they overlap into a band the mark is a
+slice of that band, levelled onto a straight axis so it does not step away from the path, and only its own
+thickness varies. Rotation stays 0: no picture can tell a mark's own turn from the path's.
 
 Hovering a brush to preview it on the selection, which the documentation describes (and describes for
 stroke positions too), is not built: nothing in the editor previews on hover yet, and the matrix says so.

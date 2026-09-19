@@ -93,9 +93,21 @@ export function networkStrokePath(source: VectorNetwork): PathCommand[] {
   const network = roundNetworkCorners(source);
   const used = new Array<boolean>(network.segments.length).fill(false);
   const commands: PathCommand[] = [];
-  const next = (vertex: number) => network.segments.findIndex((s, i) => !used[i] && (s.start === vertex || s.end === vertex));
+  // Which segments each point joins, and how many: walked once rather than scanned for. A brush of the
+  // reference's own is a network of thousands of points, and looking down every segment at every step of
+  // the walk would be the square of that.
+  const joining: number[][] = network.vertices.map(() => []);
+  network.segments.forEach((segment, index) => {
+    joining[segment.start]?.push(index);
+    if (segment.end !== segment.start) joining[segment.end]?.push(index);
+  });
+  const degree = network.vertices.map((_, v) => (joining[v] ?? []).length);
+  /** The lowest-numbered segment at this point that has not been walked yet, or -1. */
+  const next = (vertex: number) => {
+    for (const index of joining[vertex] ?? []) if (!used[index]) return index;
+    return -1;
+  };
   // Start chains at vertices with an odd number of segments (open ends) so open paths draw in one piece.
-  const degree = network.vertices.map((_, v) => network.segments.filter((s) => s.start === v || s.end === v).length);
   const order = [...network.segments.keys()].sort((a, b) => (degree[network.segments[b]!.start]! % 2) - (degree[network.segments[a]!.start]! % 2));
   for (const first of order) {
     if (used[first]) continue;

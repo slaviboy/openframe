@@ -24,7 +24,7 @@ import { isBrush as isBrushNode } from '@/core/vector/brush';
 import type { Editor } from '../editor';
 
 export { isBrush } from '@/core/vector/brush';
-import { brushById, BUILTIN_BRUSHES } from '@/core/vector/brushes-builtin';
+import { brushById, BUILTIN_BRUSHES, settingsOfBrush } from '@/core/vector/brushes-builtin';
 
 /** The file's own brushes, in the order they were made. */
 export function localBrushes(store: DocumentStore): BrushNode[] {
@@ -83,10 +83,15 @@ export function createBrush(editor: Editor, id: Id, kind: BrushKind, name?: stri
   return brushId;
 }
 
-/** Paints a layer's stroke with a brush, or with none. */
+/**
+ * Paints a layer's stroke with a brush, or with none. A brush brings what it is laid down with — the
+ * reference's own scatter brushes each carry the spread measured from their picture — so the Brush tab's
+ * numbers change with the brush, and go again when the brush does.
+ */
 export function setLayerBrush(tx: Transaction, node: SceneNode, brushId: Id | undefined): void {
   if (!hasGeometry(node)) return;
   tx.set(node.id, 'brushId', brushId);
+  tx.set(node.id, 'brushSettings', brushId === undefined ? undefined : settingsOfBrush(brushId));
 }
 
 /** Applies a brush to layers, as one undo step. */

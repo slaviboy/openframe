@@ -15,121 +15,77 @@
  * limitations under the License.
  */
 
-import type { PathCommand } from '../geometry/corners';
 import { ROOT_ID, type Id } from '../ids/ids';
-import type { BrushKind, BrushNode, Node, Size } from '../schema/document';
-import { commandsToNetwork, ellipseCommands, polygonCommands } from './shape-networks';
+import type { BrushNode, BrushSettings, Node } from '../schema/document';
+import { REFERENCE_BRUSHES, type ReferenceBrush } from './brushes-reference';
+import { straightSegment, type VectorNetwork } from './vector-network';
 
 /**
- * The brushes every file starts with. The reference ships twenty-five of its own, which are its artwork, so
- * these are ours: four shapes to lay along a stroke and four to scatter down it, each named for what it is.
- * They are not layers in the file — they are the same in every file, cannot be renamed or thrown away, and
- * take up no room in what is saved — so `brushById` looks here before it looks in the document.
+ * The brushes every file has: the reference's own twenty-five, in its order and under its two headings.
+ * Their names and kinds are the capture's; the shape each paints was traced from the capture's picture of
+ * the stroke it makes, since nothing in the capture holds the reference's vector shapes (see
+ * `scripts/extract-reference-brushes.mjs` and docs/UI_REFERENCE.md).
+ *
+ * They are not layers in the file — the same in every file, nothing added to what is saved — so `brushById`
+ * looks here before it looks in the document. Their ids sit in the `0` replica, which is the root's own and
+ * which no editing session ever takes, so one can never be taken for a brush made in a file.
  */
 
-/**
- * Ids in the `0` replica, which is the document root's own and no editing session ever takes, so one of
- * these can never be taken for a brush made in a file — and a file that names one keeps naming it after a
- * save and an open.
- */
-const shape = (index: number, name: string, brushKind: BrushKind, size: Size, commands: readonly PathCommand[]): BrushNode => ({
-  id: `0:${index}`,
-  type: 'BRUSH',
-  name,
-  parent: { id: ROOT_ID, key: `brush-builtin-${index}` },
-  visible: true,
-  locked: false,
-  brushKind,
-  vectorNetwork: commandsToNetwork(commands) as BrushNode['vectorNetwork'],
-  size,
-});
+/** A brush's shape, built from its flat loops the first time it is asked for and kept after that. */
+const networks = new Map<string, VectorNetwork>();
 
-/** A closed shape from its own points and curves; x runs along the stroke, y across it. */
-const closed = (commands: readonly PathCommand[]): PathCommand[] => [...commands, { op: 'Z' }];
+function networkOf(brush: ReferenceBrush): VectorNetwork {
+  const held = networks.get(brush.id);
+  if (held) return held;
+  const vertices: { x: number; y: number }[] = [];
+  const segments: ReturnType<typeof straightSegment>[] = [];
+  for (const loop of brush.polygons) {
+    const first = vertices.length;
+    for (let i = 0; i < loop.length; i += 2) vertices.push({ x: loop[i]!, y: loop[i + 1]! });
+    for (let i = first; i < vertices.length; i++) segments.push(straightSegment(i, i + 1 < vertices.length ? i + 1 : first));
+  }
+  const network: VectorNetwork = { vertices, segments, regions: [] };
+  networks.set(brush.id, network);
+  return network;
+}
 
-export const BUILTIN_BRUSHES: readonly BrushNode[] = [
-  // Laid over the whole stroke: the shape's own length becomes the path's, so its outline is the stroke's.
-  shape(
-    1,
-    'Leaf',
-    'STRETCH',
-    { width: 100, height: 20 },
-    closed([
-      { op: 'M', x: 0, y: 10 },
-      { op: 'C', x1: 25, y1: 0, x2: 75, y2: 0, x: 100, y: 10 },
-      { op: 'C', x1: 75, y1: 20, x2: 25, y2: 20, x: 0, y: 10 },
-    ]),
-  ),
-  shape(
-    2,
-    'Wedge',
-    'STRETCH',
-    { width: 100, height: 20 },
-    closed([
-      { op: 'M', x: 0, y: 0 },
-      { op: 'L', x: 100, y: 8.5 },
-      { op: 'L', x: 100, y: 11.5 },
-      { op: 'L', x: 0, y: 20 },
-    ]),
-  ),
-  shape(
-    3,
-    'Chisel',
-    'STRETCH',
-    { width: 100, height: 20 },
-    closed([
-      { op: 'M', x: 7, y: 0 },
-      { op: 'L', x: 100, y: 0 },
-      { op: 'L', x: 93, y: 20 },
-      { op: 'L', x: 0, y: 20 },
-    ]),
-  ),
-  shape(
-    4,
-    'Ribbon',
-    'STRETCH',
-    { width: 100, height: 20 },
-    closed([
-      { op: 'M', x: 0, y: 0 },
-      { op: 'C', x1: 30, y1: 7, x2: 70, y2: 7, x: 100, y: 0 },
-      { op: 'L', x: 100, y: 20 },
-      { op: 'C', x1: 70, y1: 13, x2: 30, y2: 13, x: 0, y: 20 },
-    ]),
-  ),
-  // Repeated down the stroke, a gap apart, each copy turned to the way the path goes.
-  shape(5, 'Dot', 'SCATTER', { width: 20, height: 20 }, ellipseCommands(20, 20)),
-  shape(6, 'Dash', 'SCATTER', { width: 28, height: 8 }, ellipseCommands(28, 8)),
-  shape(
-    7,
-    'Triangle',
-    'SCATTER',
-    { width: 20, height: 20 },
-    polygonCommands([
-      { x: 10, y: 0 },
-      { x: 20, y: 20 },
-      { x: 0, y: 20 },
-    ]),
-  ),
-  shape(
-    8,
-    'Petal',
-    'SCATTER',
-    { width: 16, height: 20 },
-    closed([
-      { op: 'M', x: 8, y: 0 },
-      { op: 'C', x1: 16, y1: 6, x2: 16, y2: 14, x: 8, y: 20 },
-      { op: 'C', x1: 0, y1: 14, x2: 0, y2: 6, x: 8, y: 0 },
-    ]),
-  ),
-];
+/** One of the reference's brushes as a brush of ours, built once. */
+const nodes = new Map<string, BrushNode>();
+
+function brushOf(brush: ReferenceBrush): BrushNode {
+  const held = nodes.get(brush.id);
+  if (held) return held;
+  const node: BrushNode = {
+    id: brush.id,
+    type: 'BRUSH',
+    name: brush.name,
+    parent: { id: ROOT_ID, key: `brush-builtin-${brush.id}` },
+    visible: true,
+    locked: false,
+    brushKind: brush.kind,
+    vectorNetwork: networkOf(brush) as BrushNode['vectorNetwork'],
+    size: brush.size,
+  };
+  nodes.set(brush.id, node);
+  return node;
+}
+
+export const BUILTIN_BRUSHES: readonly BrushNode[] = REFERENCE_BRUSHES.map(brushOf);
 
 /** Whether a brush is one of the ones every file has, rather than one made in this file. */
-export const isBuiltinBrush = (id: Id): boolean => BUILTIN_BRUSHES.some((brush) => brush.id === id);
+export const isBuiltinBrush = (id: Id): boolean => REFERENCE_BRUSHES.some((brush) => brush.id === id);
 
 /** The brush an id names: one every file has, or one this file holds. */
 export function brushById(store: { get(id: Id): Node | undefined }, id: Id): BrushNode | undefined {
-  const builtin = BUILTIN_BRUSHES.find((brush) => brush.id === id);
-  if (builtin) return builtin;
+  const builtin = REFERENCE_BRUSHES.find((brush) => brush.id === id);
+  if (builtin) return brushOf(builtin);
   const node = store.get(id);
   return node?.type === 'BRUSH' ? node : undefined;
 }
+
+/**
+ * What a brush is laid down with when it is applied: a scatter brush of the reference's own carries the
+ * spread measured from its picture, so picking one brings its own numbers to the Brush tab. A brush made in
+ * a file, and every stretch brush, takes the defaults.
+ */
+export const settingsOfBrush = (id: Id): BrushSettings | undefined => REFERENCE_BRUSHES.find((brush) => brush.id === id)?.settings;

@@ -29,7 +29,7 @@ import { capOfEnd, isMarkerCap, openEnds, type OpenEnd } from '@/core/vector/vec
 import type { Vec2 } from '@/core/math/vec';
 import type { OffsetJoin, ShapeFace } from '@/core/vector/geometry-service';
 import { bumpedEnds, dynamicStrokePath, hasDynamicStroke } from '@/core/vector/dynamic-stroke';
-import { brushStrokeOutlines, isBrush } from '@/core/vector/brush';
+import { brushStrokeGroups, isBrush } from '@/core/vector/brush';
 import { brushById } from '@/core/vector/brushes-builtin';
 import { pathRunFor } from '@/core/vector/text-path';
 import { repeatMatrices, repeats } from '@/core/geometry/repeat';
@@ -1883,19 +1883,23 @@ export class SceneRenderer {
     const brush = node.brushId === undefined ? undefined : brushById(store, node.brushId);
     const brushChain = isBrush(brush) && node.strokeWeight > 0 ? strokeChain(node.vectorNetwork) : null;
     if (isBrush(brush) && brushChain) {
-      const builder = new this.ck.PathBuilder();
-      for (const polygon of brushStrokeOutlines(brushChain, brush.vectorNetwork, brush.size, brush.brushKind, node.strokeWeight, { settings: node.brushSettings, widths: node.strokeWidths }))
-        builder.addPolygon(
-          polygon.flatMap((q) => [q.x, q.y]),
-          true,
-        );
-      const outline = builder.detachAndDelete();
+      // Each group is filled as its own path: a hole in one copy of the shape would otherwise cancel the
+      // ink of the copy beside it and cut a slit through the stroke.
+      const groups = brushStrokeGroups(brushChain, brush.vectorNetwork, brush.size, brush.brushKind, node.strokeWeight, { settings: node.brushSettings, widths: node.strokeWidths }).map((polygons) => {
+        const builder = new this.ck.PathBuilder();
+        for (const polygon of polygons)
+          builder.addPolygon(
+            polygon.flatMap((q) => [q.x, q.y]),
+            true,
+          );
+        return builder.detachAndDelete();
+      });
       for (const paint of node.strokes) {
         if (!paint.visible || paint.opacity <= 0) continue;
         this.configurePaint(this.fillPaint, paint, node.size);
-        canvas.drawPath(outline, this.fillPaint);
+        for (const outline of groups) canvas.drawPath(outline, this.fillPaint);
       }
-      outline.delete();
+      for (const outline of groups) outline.delete();
     } else if (widths && chain) {
       // A variable-width stroke is its outline, filled with the stroke paints.
       const builder = new this.ck.PathBuilder();

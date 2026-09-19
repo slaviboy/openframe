@@ -153,8 +153,14 @@ test('a file starts with brushes of both kinds, which a stroke can be painted wi
   const brushes = page.getByTestId('brush-list-modal');
   await expect(brushes.getByRole('heading', { name: 'Stretch brushes' })).toBeVisible();
   await expect(brushes.getByRole('heading', { name: 'Scatter brushes' })).toBeVisible();
-  await brushes.getByRole('button', { name: 'Dot' }).click();
-  await expect(page.getByTestId('field-brush-gap')).toHaveValue('25%');
+  // The reference's own list, by its own names.
+  await expect(brushes.getByRole('button', { name: 'Noir', exact: true })).toBeVisible();
+  await expect(brushes.getByRole('button', { name: 'Vaporwave', exact: true })).toBeVisible();
+  // Picking one brings that brush's own numbers to the tab: the reference's scatter brushes each carry the
+  // spread measured from their own picture.
+  await brushes.getByRole('button', { name: 'Bubblegum', exact: true }).click();
+  const gap = await page.getByTestId('field-brush-gap').inputValue();
+  expect(gap).toMatch(/^\d+%$/);
 
   // The brush is kept by name, so it is still there when the file is opened again.
   await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
@@ -164,5 +170,5 @@ test('a file starts with brushes of both kinds, which a stroke can be painted wi
   await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
   await expect(page.getByRole('dialog', { name: 'Stroke settings' }).getByRole('radio', { name: 'Brush' })).toBeChecked();
   await page.getByTestId('field-brush').click();
-  await expect(page.getByTestId('brush-list-modal').getByRole('button', { name: 'Dot' })).toBeVisible();
+  await expect(page.getByTestId('brush-list-modal').getByRole('button', { name: 'Bubblegum', exact: true })).toBeVisible();
 });

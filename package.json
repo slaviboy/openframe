@@ -15,6 +15,7 @@
     "typecheck": "tsc -p tsconfig.core.json && tsc -p tsconfig.app.json && tsc -p tsconfig.test.json && tsc -p tsconfig.sw.json && tsc -p tsconfig.node.json",
     "icons": "node scripts/generate-icons.mjs",
     "icons:reference": "node scripts/extract-reference-icons.mjs",
+    "brushes:reference": "node scripts/extract-reference-brushes.mjs",
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",

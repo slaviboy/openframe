@@ -849,11 +849,16 @@ function BrushList({
 /**
  * A brush drawn as the stroke it makes: its own shape laid along a straight stroke, the same way the canvas
  * lays it along a path, so a brush's picture and its stroke cannot drift apart. The reference ships pictures.
+ *
+ * One path rather than a shape per loop, worked out once per brush and kept: the reference's own brushes
+ * carry their grain as hundreds of loops and a spray lays that grain down again every few units, so a
+ * picture drawn as its own elements would be tens of thousands of them, and the list draws twenty-five.
  */
-function BrushStrokeGlyph({ brush }: { brush: BrushNode }) {
-  const width = 200;
-  const height = 28;
-  const weight = 16;
+const pictures = new Map<string, string>();
+
+function brushPicture(brush: BrushNode, width: number, height: number, weight: number): string {
+  const held = pictures.get(brush.id);
+  if (held !== undefined) return held;
   // A straight stroke across the picture, which the brush is laid over exactly as it is on the canvas.
   const points = [
     { x: 0, y: height / 2 },
@@ -861,11 +866,17 @@ function BrushStrokeGlyph({ brush }: { brush: BrushNode }) {
   ];
   const chain: StrokeChain = { points, lengths: [0, width], vertexPositions: [0, 1], closed: false };
   const polygons = brushStrokeOutlines(chain, brush.vectorNetwork, brush.size, brush.brushKind, weight);
+  const drawing = polygons.map((polygon) => `M${polygon.map((p) => `${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join('L')}Z`).join('');
+  pictures.set(brush.id, drawing);
+  return drawing;
+}
+
+function BrushStrokeGlyph({ brush }: { brush: BrushNode }) {
+  const width = 200;
+  const height = 28;
   return (
     <svg className={styles.brushGlyph} viewBox={`0 0 ${width} ${height}`} width={width} height={height} aria-hidden="true" focusable="false" preserveAspectRatio="xMidYMid meet">
-      {polygons.map((polygon, i) => (
-        <polygon key={i} points={polygon.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(' ')} fill="currentColor" />
-      ))}
+      <path d={brushPicture(brush, width, height, 16)} fill="currentColor" />
     </svg>
   );
 }

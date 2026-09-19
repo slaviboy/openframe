@@ -542,3 +542,18 @@ Wiggle, Size jitter, Angular jitter and Rotation, and both end with Width profil
   nothing added to what is saved, ids in the root's own `0` replica, and `brushById` looks at them before
   the document — so the three places a brush is read (the renderer, `applyBrush`, the list) go through it
   and a layer that names one still finds it after a save and an open.
+- **The reference's own twenty-five brushes.** The eight I drew are gone: the list is the reference's own, by its
+  names and in its order. The capture holds each brush as a 756 × 108 picture of the stroke it makes and
+  nothing of its vector shapes, so `scripts/extract-reference-brushes.mjs` (`npm run brushes:reference`, beside the
+  icons one) reads the shapes back out of the pictures — thresholded, traced as loops of pixel corners with
+  their holes wound the other way, simplified — and writes `src/core/vector/brushes-reference.ts` (generated,
+  committed, 26k points). A stretch brush is the whole picture; a spray is a mark and a spread, measured
+  from where its specks fell, and a brush that overlaps into a band is a slice of that band levelled onto a
+  straight axis. `docs/UI_REFERENCE.md` records what is exact and what is read off a picture.
+  - Picking a brush brings its own numbers to the tab, which is what the captures show (`settingsOfBrush`).
+  - Four things had to give for the reference's brushes to be drawable at all: a copy steps by the size it
+    was actually laid at (so a size jitter cannot open a slit), copies go down in two batches (so a hole in
+    one cannot cancel the ink of its neighbour), a shape is walked and simplified for the size it is being
+    drawn rather than at one unit always, and `networkStrokePath` stopped looking down every segment at
+    every step — that walk was the square of the points, a fifth of a second on a brush of 3,000 of them,
+    and `src/perf/scene-perf.test.ts` now guards it.
