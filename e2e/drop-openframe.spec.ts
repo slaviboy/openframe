@@ -19,11 +19,12 @@ import { readFileSync } from 'node:fs';
 import { expect, test } from './fixtures';
 
 /**
- * An Openframe file dropped on the canvas opens, the way one chosen from the File menu does. The canvas
- * used to collect only the images, videos and SVGs of a drag, so a dropped .openframe was thrown away
- * before anything could look at it — even though the code behind the drop already knew how to open one.
+ * An Openframe file dropped on the canvas opens, the way one chosen from the File menu does — after
+ * asking, since a drop is easy to do by accident. The canvas used to collect only the images, videos and
+ * SVGs of a drag, so a dropped .openframe was thrown away before anything could look at it, even though
+ * the code behind the drop already knew how to open one.
  */
-test('dropping an Openframe file on the canvas opens it', async ({ page }) => {
+test('dropping an Openframe file shows what a drop does, asks, then opens it', async ({ page }) => {
   const file = [...readFileSync('reference/app/sample-large.openframe')];
 
   await page.goto('/');
@@ -38,18 +39,40 @@ test('dropping an Openframe file on the canvas opens it', async ({ page }) => {
   await page.mouse.up();
   await expect(page.getByRole('treeitem', { name: /Rectangle 1/ })).toBeVisible();
 
-  await page.evaluate(
-    ({ bytes, x, y }) => {
-      const data = new DataTransfer();
-      data.items.add(new File([new Uint8Array(bytes)], 'sample-large.openframe', { type: 'application/octet-stream' }));
-      const target = document.querySelector('[data-testid="canvas"]')!;
-      target.dispatchEvent(new DragEvent('dragover', { dataTransfer: data, clientX: x, clientY: y, bubbles: true, cancelable: true }));
-      target.dispatchEvent(new DragEvent('drop', { dataTransfer: data, clientX: x, clientY: y, bubbles: true, cancelable: true }));
-    },
-    { bytes: file, x: box.x + 600, y: box.y + 320 },
-  );
+  /** Drags the file over the canvas, and drops it when asked to. */
+  const drag = (drop: boolean) =>
+    page.evaluate(
+      ({ bytes, x, y, drop }) => {
+        const data = new DataTransfer();
+        data.items.add(new File([new Uint8Array(bytes)], 'sample-large.openframe', { type: 'application/octet-stream' }));
+        const target = document.querySelector('[data-testid="canvas"]')!;
+        const event = (type: string) => new DragEvent(type, { dataTransfer: data, clientX: x, clientY: y, bubbles: true, cancelable: true });
+        target.dispatchEvent(event('dragover'));
+        if (drop) target.dispatchEvent(event('drop'));
+      },
+      { bytes: file, x: box.x + 600, y: box.y + 320, drop },
+    );
 
-  // The dropped file is open: its own layers are here, and ours is not.
+  // Dragging over the canvas says what a drop will do, and stops saying it when the drag leaves.
+  await drag(false);
+  const overlay = page.getByTestId('drop-overlay');
+  await expect(overlay).toBeVisible();
+  await expect(overlay).toContainText('Drop to add to this file');
+  await page.evaluate(() => document.querySelector('[data-testid="canvas"]')!.dispatchEvent(new DragEvent('dragleave', { bubbles: true })));
+  await expect(overlay).toBeHidden();
+
+  // Dropping asks before it takes the editor anywhere, and Cancel leaves the file alone.
+  await drag(true);
+  const dialog = page.getByRole('dialog', { name: /Open sample-large\.openframe/ });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('stays in Files');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('treeitem', { name: /Rectangle 1/ })).toBeVisible();
+
+  // Dropping again and opening it: its own layers are here, and ours is not.
+  await drag(true);
+  await page.getByRole('dialog', { name: /Open sample-large\.openframe/ }).getByRole('button', { name: 'Open' }).click();
   await expect(page.getByRole('treeitem', { name: /Sample Page/ })).toBeVisible({ timeout: 30_000 });
   await expect(page.getByRole('treeitem', { name: /Rectangle 1/ })).toHaveCount(0);
 });

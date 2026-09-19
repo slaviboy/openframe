@@ -43,6 +43,7 @@ import { LayoutValuePopover } from './canvas/LayoutValuePopover';
 import { spellingEntries } from './menus/spelling-menu';
 import { EmojiSuggestions } from './canvas/EmojiSuggestions';
 import { MissingFontsDialog } from './dialogs/MissingFontsDialog';
+import { OpenDroppedFileDialog } from './dialogs/OpenDroppedFileDialog';
 import { clipboardCommands } from './clipboard/clipboard-commands';
 import { ClipboardController } from './clipboard/clipboard-controller';
 import { KeyboardController } from './keyboard/keyboard-controller';
@@ -135,6 +136,7 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
   const openInput = useRef<HTMLInputElement>(null);
   const [filesOpen, setFilesOpen] = useState(false);
   // Opening an .openframe file makes it a new local file and reloads into it.
+  const [droppedPackage, setDroppedPackage] = useState<File | null>(null);
   const openPackage = useCallback(
     async (file: File) => {
       try {
@@ -269,7 +271,22 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
     },
     [editor, openPackage],
   );
-  const dropFiles = useCallback((files: File[], world: Vec2) => void placeFiles(files, world), [placeFiles]);
+  /**
+   * A drop on the canvas. An Openframe file is asked about first — a drop is easy to do by accident, and
+   * opening one takes the editor to another file — while images, SVGs and videos are placed where they
+   * were dropped, which is what dropping them plainly means.
+   */
+  const dropFiles = useCallback(
+    (files: File[], world: Vec2) => {
+      const packageFile = files.find(isPackageFile);
+      if (packageFile) {
+        setDroppedPackage(packageFile);
+        return;
+      }
+      void placeFiles(files, world);
+    },
+    [placeFiles],
+  );
 
   useEffect(() => {
     uiModeRef.current = uiMode;
@@ -468,6 +485,18 @@ function ReadyApp({ session, theme }: { session: AppSession; theme: 'light' | 'd
         {editorState.flowRename && <FlowRenamePopover />}
         {editorState.textEdit && <EmojiSuggestions />}
         {editorState.dialog === 'missingFonts' && <MissingFontsDialog editor={editor} onClose={closeDialog} />}
+        {droppedPackage && (
+          <OpenDroppedFileDialog
+            name={droppedPackage.name}
+            current={editor.doc.meta.name || 'This file'}
+            onOpen={() => {
+              const file = droppedPackage;
+              setDroppedPackage(null);
+              void openPackage(file);
+            }}
+            onClose={() => setDroppedPackage(null)}
+          />
+        )}
       </EditorShell>
       {contextMenu && (
         <Menu

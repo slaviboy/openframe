@@ -125,6 +125,8 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
   const pixelPreviewRef = useRef(pixelPreview);
   const layoutGuidesRef = useRef(layoutGuides);
   const containerRef = useRef<HTMLDivElement>(null);
+  /** A file is being dragged over the canvas: what will happen to it, so the overlay can say. */
+  const [dragging, setDragging] = useState<'file' | null>(null);
   const sceneRef = useRef<HTMLCanvasElement>(null);
   const overlayRef = useRef<HTMLCanvasElement>(null);
   const textInputRef = useRef<HTMLTextAreaElement>(null);
@@ -151,8 +153,17 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
       if (!e.dataTransfer?.types.includes('Files') && !e.dataTransfer?.types.includes(COMPONENT_DRAG_TYPE)) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
+      // A drag carries no file names until it is dropped, so the overlay says what a drop does, not what
+      // the file is. A component dragged from Assets draws its own preview and does not want one.
+      if (e.dataTransfer.types.includes('Files')) setDragging('file');
+    };
+    // `dragleave` fires for every child the pointer crosses, so the one that means "gone" is the one with
+    // nothing underneath it any more.
+    const onDragLeave = (e: DragEvent) => {
+      if (e.relatedTarget === null || !container.contains(e.relatedTarget as Node)) setDragging(null);
     };
     const onDrop = (e: DragEvent) => {
+      setDragging(null);
       // A component dragged from the Assets tab becomes an instance at the drop point. Holding ⌥ (Alt) swaps
       // the instance under the pointer instead, and ⌥⌘ (Alt+Ctrl) an instance nested in a frame or component.
       const componentId = e.dataTransfer?.getData(COMPONENT_DRAG_TYPE);
@@ -173,9 +184,11 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
       dropRef.current?.(files, screenToWorld(editor.state.viewport, { x: e.clientX - rect.left, y: e.clientY - rect.top }));
     };
     container.addEventListener('dragover', onDragOver);
+    container.addEventListener('dragleave', onDragLeave);
     container.addEventListener('drop', onDrop);
     return () => {
       container.removeEventListener('dragover', onDragOver);
+      container.removeEventListener('dragleave', onDragLeave);
       container.removeEventListener('drop', onDrop);
     };
   }, [editor]);
@@ -892,6 +905,25 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
         spellCheck={false}
         tabIndex={-1}
       />
+      {dragging && (
+        // The canvas runs the full width of the window with the panels over it, so the overlay is held
+        // inside the part of it that can actually be seen.
+        <div
+          className={styles.dropOverlay}
+          role="status"
+          aria-live="polite"
+          data-testid="drop-overlay"
+          style={{
+            left: editor.canvasInsets.left + 8,
+            right: editor.canvasInsets.right + 8,
+            top: editor.canvasInsets.top + 8,
+            bottom: editor.canvasInsets.bottom + 8,
+          }}
+        >
+          <span className={styles.dropLabel}>Drop to add to this file</span>
+          <span className={styles.dropHint}>An Openframe file asks first; images, videos and SVGs land where you drop them</span>
+        </div>
+      )}
       {status.kind === 'error' && (
         <div className={styles.message} role="alert">
           {status.message}
