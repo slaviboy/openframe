@@ -18,6 +18,12 @@ npm run test:e2e                  # builds, serves dist/, runs all browsers
 npx playwright test --project=chromium e2e/foundation.spec.ts
 ```
 
+**A preview server left running serves the build it was started with.** `playwright.config.ts` reuses a
+server already on the port outside CI, and the E2E suite runs against `dist/`, not the sources — so a
+`vite preview` started by hand (or left over from an interrupted run) will keep answering with the *old*
+bundle and fail the specs for work that is in fact correct. Before running the suite after a source change,
+`lsof -ti :4173` and stop anything holding it.
+
 ## Guards active in every E2E test
 
 These guards live in [`e2e/fixtures.ts`](../e2e/fixtures.ts). Specs must import `test` and `expect` from `./fixtures`.

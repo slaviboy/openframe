@@ -315,9 +315,40 @@ const FILLED: Record<FilledName, { readonly viewBox: 16 | 24 | 200; readonly bod
       </>
     ),
   },
+  // An angle: the Miter angle field's glyph, which the reference draws again beside a scatter brush's Rotation.
   miterAngle: {
     viewBox: 24,
     body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M9 8.5a.5.5 0 0 0-1 0v7a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 0-1H13a4 4 0 0 0-4-4zM9 12v3h3a3 3 0 0 0-3-3" />,
+  },
+  // The Dynamic tab's three fields. Its Wiggle is the glyph the reference draws again for a scatter brush's.
+  strokeFrequency: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        d="M17.5 14a.5.5 0 0 1 .5.5v.068a3.432 3.432 0 0 1-6.286 1.904l-.26-.389A2.431 2.431 0 0 0 7 17.432v.068a.5.5 0 0 1-1 0v-.068a3.432 3.432 0 0 1 6.286-1.904l.26.389A2.432 2.432 0 0 0 17 14.568V14.5a.5.5 0 0 1 .5-.5m-2.354-7.854a.5.5 0 0 1 .707 0l2 2a.5.5 0 0 1 0 .707l-2 2a.5.5 0 0 1-.707-.707L16.293 9H7.707l1.147 1.146a.5.5 0 0 1-.708.707l-2-2a.5.5 0 0 1 0-.707l2-2a.5.5 0 1 1 .708.707L7.707 8h8.586l-1.146-1.147a.5.5 0 0 1 0-.707"
+      />
+    ),
+  },
+  strokeWiggle: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M12.078 8.197a.424.424 0 0 0-.19-.557A5.4 5.4 0 0 0 9.5 7.086a5.4 5.4 0 0 0-2.388.554.424.424 0 0 0-.19.557c.11.25.415.341.662.225A4.5 4.5 0 0 1 9.5 7.995c.685 0 1.335.153 1.916.427.246.116.551.024.662-.225m4.998 7.597a.424.424 0 0 1-.19.557c-.72.354-1.53.553-2.386.553s-1.666-.199-2.386-.553a.424.424 0 0 1-.19-.557c.11-.249.415-.341.662-.225.58.273 1.23.426 1.914.426s1.333-.152 1.914-.426c.247-.116.551-.024.662.225M7 13.43a2.431 2.431 0 0 1 4.454-1.348l.26.39A3.431 3.431 0 0 0 18 10.566v-.069a.5.5 0 0 0-1 0v.069a2.431 2.431 0 0 1-4.454 1.348l-.26-.389A3.431 3.431 0 0 0 6 13.429v.069a.5.5 0 1 0 1 0z"
+      />
+    ),
+  },
+  strokeSmoothen: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        d="M17.5 6a.5.5 0 0 1 0 1C11.701 7 7 11.701 7 17.5a.5.5 0 0 1-1 0v-5a.5.5 0 0 1 1 0v.31A11.54 11.54 0 0 1 12.81 7h-.31a.5.5 0 0 1 0-1zm-11 3a.5.5 0 0 1 .5.5v1a.5.5 0 0 1-1 0v-1a.5.5 0 0 1 .5-.5m1-3a.5.5 0 0 1 .1.99l-.2.02a.5.5 0 0 0-.39.39l-.02.2A.5.5 0 0 1 6 7.5 1.5 1.5 0 0 1 7.5 6m3 0a.5.5 0 0 1 0 1h-1a.5.5 0 0 1 0-1z"
+      />
+    ),
   },
   flipWidthPoints: {
     viewBox: 24,
@@ -1166,6 +1197,9 @@ type FilledName =
   | 'joinRound'
   | 'miterAngle'
   | 'flipWidthPoints'
+  | 'strokeFrequency'
+  | 'strokeWiggle'
+  | 'strokeSmoothen'
   | 'vectorMove'
   | 'vectorPaint'
   | 'lasso'

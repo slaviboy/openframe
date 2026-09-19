@@ -100,29 +100,53 @@ export function hasDynamicStroke(dynamic: DynamicStroke | undefined): dynamic is
 }
 
 /**
+ * Where each end of an open path lands once the path is bumped, and which way the bumped path leaves it:
+ * `from` is the end as the layer holds it, so a cap kept on a vertex can be drawn where the ink actually
+ * stops. The subpaths are walked in the order `dynamicStrokePath` walks them, so the two answer alike.
+ */
+export function bumpedEnds(commands: readonly PathCommand[], dynamic: DynamicStroke): { from: Vec2; point: Vec2; angle: number }[] {
+  const out: { from: Vec2; point: Vec2; angle: number }[] = [];
+  for (const subpath of samples(commands)) {
+    const { points, closed } = subpath;
+    if (closed || points.length < 2) continue;
+    const moved = bumpPoints(points, dynamic);
+    const last = points.length - 1;
+    // Each end points away from the point beside it, along the bumped path.
+    out.push({ from: points[0]!, point: moved[0]!, angle: Math.atan2(moved[0]!.y - moved[1]!.y, moved[0]!.x - moved[1]!.x) });
+    out.push({ from: points[last]!, point: moved[last]!, angle: Math.atan2(moved[last]!.y - moved[last - 1]!.y, moved[last]!.x - moved[last - 1]!.x) });
+  }
+  return out;
+}
+
+/** The sideways offsets a dynamic stroke gives a sampled subpath. */
+function bumpPoints(points: readonly Vec2[], dynamic: DynamicStroke): Vec2[] {
+  const amplitude = (dynamic.wiggle / 100) * MAX_WIGGLE;
+  let distance = 0;
+  return points.map((point, i) => {
+    if (i > 0) distance += Math.hypot(point.x - points[i - 1]!.x, point.y - points[i - 1]!.y);
+    const before = points[Math.max(0, i - 1)]!;
+    const after = points[Math.min(points.length - 1, i + 1)]!;
+    const dx = after.x - before.x;
+    const dy = after.y - before.y;
+    const length = Math.hypot(dx, dy);
+    if (length === 0) return point;
+    // The normal of the path here, times the offset at this distance along it.
+    const offset = offsetAt(distance, dynamic.frequency, dynamic.smoothen) * amplitude;
+    return { x: point.x + (-dy / length) * offset, y: point.y + (dx / length) * offset };
+  });
+}
+
+/**
  * A path given a hand-drawn, bumpy look: each point moves sideways (along the path's normal) by an offset that follows
  * the path's length, so the same path always bumps the same way. Frequency sets how many bumps there are, Wiggle how
  * far they go, and Smoothen how rounded rather than jagged they are.
  */
 export function dynamicStrokePath(commands: readonly PathCommand[], dynamic: DynamicStroke): PathCommand[] {
   if (!hasDynamicStroke(dynamic)) return [...commands];
-  const amplitude = (dynamic.wiggle / 100) * MAX_WIGGLE;
   const out: PathCommand[] = [];
   for (const subpath of samples(commands)) {
     const { points, closed } = subpath;
-    let distance = 0;
-    const moved: Vec2[] = points.map((point, i) => {
-      if (i > 0) distance += Math.hypot(point.x - points[i - 1]!.x, point.y - points[i - 1]!.y);
-      const before = points[Math.max(0, i - 1)]!;
-      const after = points[Math.min(points.length - 1, i + 1)]!;
-      const dx = after.x - before.x;
-      const dy = after.y - before.y;
-      const length = Math.hypot(dx, dy);
-      if (length === 0) return point;
-      // The normal of the path here, times the offset at this distance along it.
-      const offset = offsetAt(distance, dynamic.frequency, dynamic.smoothen) * amplitude;
-      return { x: point.x + (-dy / length) * offset, y: point.y + (dx / length) * offset };
-    });
+    const moved: Vec2[] = bumpPoints(points, dynamic);
     // A closed path meets itself again, so its last point takes the first one's offset.
     if (closed && moved.length > 1) moved[moved.length - 1] = { ...moved[0]! };
     out.push({ op: 'M', x: moved[0]!.x, y: moved[0]!.y });

@@ -148,6 +148,26 @@ describe('end points on a vector path', () => {
     expect(dashed(48, 34)).toBe(false);
   });
 
+  test('an end point on a dynamic stroke goes where the bumped path stops', () => {
+    const network: VectorNetwork = {
+      vertices: [
+        { x: 0, y: 0 },
+        { x: 40, y: 0, cap: 'CIRCLE_FILLED' },
+      ],
+      segments: [straightSegment(0, 1)],
+      regions: [],
+    };
+    // A wiggle wide enough to carry the end clear of where its point sits.
+    const bumpy = renderPath({ strokeWeight: 2, dynamicStroke: { frequency: 60, wiggle: 100, smoothen: 0 } }, network);
+    const at = renderPath({ strokeWeight: 2 }, network);
+    // The plain stroke ends in a circle over its last point; the bumped one has carried that circle away.
+    expect(at(60, 40)).toBe(true);
+    expect(bumpy(60, 40)).toBe(false);
+    // And the circle is somewhere along the line the bump drew, above or below where the point was.
+    const column = Array.from({ length: 25 }, (_, i) => 28 + i);
+    expect(column.some((y) => bumpy(60, y))).toBe(true);
+  });
+
   test('outlining the stroke takes the end points in, so Outline stroke and an SVG export keep them', () => {
     const ids = new IdGenerator('k');
     const node = makeVector({ id: ids.next(), parent: { id: 'p', key: 'a' }, name: 'V', x: 0, y: 0, width: 40, height: 0 }, { vertices: [{ x: 0, y: 0 }, { x: 40, y: 0, cap: 'TRIANGLE_ARROW' }], segments: [straightSegment(0, 1)], regions: [] });

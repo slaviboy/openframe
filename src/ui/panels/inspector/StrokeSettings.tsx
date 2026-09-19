@@ -53,7 +53,7 @@ import { placeFloating, type Box } from '../../primitives/position';
 import iconSelect from '../../primitives/IconSelect.module.css';
 import primitives from '../../primitives/primitives.module.css';
 import { EndpointSelect } from './EndpointSelect';
-import { MotionField, SliderRow, val } from './fields';
+import { MotionField, val } from './fields';
 import inspector from './Inspector.module.css';
 import styles from './StrokeSettings.module.css';
 
@@ -564,11 +564,33 @@ function DynamicTab({ nodes }: { nodes: GeometryNode[] }) {
     ) ?? DEFAULT_DYNAMIC_STROKE;
   const change = (patch: Partial<typeof dynamic>) =>
     gesture.change((tx) => nodes.forEach((n) => setDynamicStroke(tx, tx.store.getOrThrow(n.id) as GeometryNode, { ...dynamic, ...patch })));
+  /** The three settings, each a share of what it can be, scrubbed from its own glyph as the reference's are. */
+  const fields = [
+    { label: 'Frequency', icon: 'strokeFrequency', value: dynamic.frequency, write: (v: number) => change({ frequency: v }) },
+    { label: 'Wiggle', icon: 'strokeWiggle', value: dynamic.wiggle, write: (v: number) => change({ wiggle: v }) },
+    { label: 'Smoothen', icon: 'strokeSmoothen', value: dynamic.smoothen, write: (v: number) => change({ smoothen: v }) },
+  ] as const;
   return (
     <>
-      <SliderRow label="Frequency" min={0} max={100} value={dynamic.frequency} gesture={gesture} onChange={(v) => change({ frequency: v })} />
-      <SliderRow label="Wiggle" min={0} max={100} value={dynamic.wiggle} gesture={gesture} onChange={(v) => change({ wiggle: v })} />
-      <SliderRow label="Smoothen" min={0} max={100} value={dynamic.smoothen} gesture={gesture} onChange={(v) => change({ smoothen: v })} />
+      {fields.map((field) => (
+        <Row key={field.label} label={field.label}>
+          <NumberField
+            label={<Icon name={field.icon} />}
+            ariaLabel={field.label}
+            testId={`field-${field.label.toLowerCase()}`}
+            suffix="%"
+            min={0}
+            max={100}
+            decimals={0}
+            value={field.value}
+            onGestureStart={gesture.start}
+            onGestureEnd={gesture.end}
+            onChange={field.write}
+          />
+        </Row>
+      ))}
+      <Divider />
+      <EndPointsRow nodes={nodes} />
       <OwnRows nodes={nodes} />
     </>
   );

@@ -164,3 +164,39 @@ test('a path drawn with the Pen ends its two ends its own way, and a width profi
   await dialog.getByRole('button', { name: 'Flip width points' }).click();
   await expect(page.getByTestId('field-width-profile')).toHaveAttribute('data-value', '');
 });
+
+test('the Dynamic tab is three fields and the path’s end points, which a hand-drawn stroke keeps', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('toolbar', { name: 'Tools' })).toBeVisible();
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  await page.keyboard.press('p');
+  await page.mouse.click(box.x + 420, box.y + 300);
+  await page.mouse.click(box.x + 560, box.y + 380);
+  await page.mouse.click(box.x + 700, box.y + 280);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.getByRole('treeitem', { name: /Vector 1/ }).click();
+
+  await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Stroke settings' });
+  await dialog.getByRole('radio', { name: 'Dynamic' }).check();
+
+  // The three settings are scrubbable shares, as the reference draws them, not sliders.
+  await expect(page.getByTestId('field-frequency')).toHaveValue('50%');
+  await page.getByTestId('field-wiggle').fill('70');
+  await page.getByTestId('field-wiggle').press('Enter');
+  await expect(page.getByTestId('field-wiggle')).toHaveValue('70%');
+
+  // A hand-drawn stroke still ends its ends its own way: the tab carries the End points row.
+  await dialog.getByRole('button', { name: 'End point' }).click();
+  await page.getByRole('menu', { name: 'End point' }).getByRole('menuitemcheckbox', { name: 'Triangle arrow' }).click();
+  await expect(dialog.getByRole('button', { name: 'End point' })).toHaveAttribute('data-value', 'TRIANGLE_ARROW');
+
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+  await page.reload();
+  await page.getByRole('treeitem', { name: /Vector 1/ }).click();
+  await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
+  await expect(page.getByRole('dialog', { name: 'Stroke settings' }).getByRole('radio', { name: 'Dynamic' })).toBeChecked();
+  await expect(page.getByTestId('field-wiggle')).toHaveValue('70%');
+  await expect(page.getByRole('dialog', { name: 'Stroke settings' }).getByRole('button', { name: 'End point' })).toHaveAttribute('data-value', 'TRIANGLE_ARROW');
+});

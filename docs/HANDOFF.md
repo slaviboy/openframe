@@ -500,3 +500,20 @@ markup. The pass is being built in phases, each its own commit.
   its three drags, which serialized megabytes of JSON three times and left the test hanging off its 30s
   timeout — it failed on all three browsers under a full run and passed on its own. The bytes now cross once,
   as base64, and the test runs in 1.5s instead of 15.7s.
+
+## The Dynamic and Brush tabs, from their own captures (2026-09-19)
+
+The user supplied the Dynamic tab, the Brush tab and two saved pages — `reference/app/brushes_streched.html`
+and `brushes_scatered.html` — which hold the Brushes list and the Brush tab as it stands for each kind of
+brush. The tab is not one tab: a **stretch** brush carries Direction, a **scatter** brush carries Gap,
+Wiggle, Size jitter, Angular jitter and Rotation, and both end with Width profile.
+
+- **Phase A — the Dynamic tab.** Three scrubbable shares (`%`), each scrubbed from its own glyph as the
+  Miter angle field is, in place of the sliders we had; then a divider and the same End points row the Basic
+  tab draws. A dynamic stroke bumps the path away from its own points, so an end point kept on a vertex sat
+  off the line: `bumpedEnds` in `src/core/vector/dynamic-stroke.ts` walks the subpaths the bump walks and
+  says where each end landed and which way the bumped path leaves it, and `vectorEnds` draws there. The
+  same bump now shapes `strokeOutline`'s centreline, so *Outline stroke* and the SVG export give back the
+  line that is on screen rather than the straight one underneath it — a gap nothing had noticed.
+- **Also.** `docs/TESTING.md` records the trap that cost time here: a `vite preview` left running serves the
+  build it was started with, and `playwright.config.ts` reuses it, so specs fail against a stale bundle.

@@ -28,7 +28,7 @@ import { networkStrokePath, regionFillPath, type VectorNetwork } from '@/core/ve
 import { capOfEnd, isMarkerCap, openEnds, type OpenEnd } from '@/core/vector/vector-caps';
 import type { Vec2 } from '@/core/math/vec';
 import type { OffsetJoin, ShapeFace } from '@/core/vector/geometry-service';
-import { dynamicStrokePath, hasDynamicStroke } from '@/core/vector/dynamic-stroke';
+import { bumpedEnds, dynamicStrokePath, hasDynamicStroke } from '@/core/vector/dynamic-stroke';
 import { brushStrokeOutlines, isBrush } from '@/core/vector/brush';
 import { pathRunFor } from '@/core/vector/text-path';
 import { repeatMatrices, repeats } from '@/core/geometry/repeat';
@@ -1474,7 +1474,10 @@ export class SceneRenderer {
       centerline = node.size.width > 0 ? new ck.PathBuilder().moveTo(0, 0).lineTo(node.size.width, 0).detachAndDelete() : null;
     } else if (node.type === 'VECTOR') {
       area = this.vectorFillPath(node);
-      centerline = node.vectorNetwork.segments.length > 0 ? this.pathFrom(networkStrokePath(node.vectorNetwork)) : null;
+      // The outline follows the stroke as it is drawn, bumps and all, so Outline stroke and the SVG export
+      // give back the line that is on screen rather than the straight one underneath it.
+      const commands = node.vectorNetwork.segments.length > 0 ? networkStrokePath(node.vectorNetwork) : null;
+      centerline = commands ? this.pathFrom(hasDynamicStroke(node.dynamicStroke) ? dynamicStrokePath(commands, node.dynamicStroke) : commands) : null;
     } else {
       area = this.shapePath(node);
       if (!area) {
@@ -2035,7 +2038,14 @@ export class SceneRenderer {
    */
   private vectorEnds(node: VectorNode): (OpenEnd & { readonly cap: StrokeCap })[] {
     if (node.strokeDashes || node.strokeWidths?.length || node.brushId !== undefined) return [];
-    return openEnds(node.vectorNetwork).map((end) => ({ ...end, cap: capOfEnd(node.vectorNetwork.vertices[end.vertex], node.endpointCap) }));
+    const ends = openEnds(node.vectorNetwork).map((end) => ({ ...end, cap: capOfEnd(node.vectorNetwork.vertices[end.vertex], node.endpointCap) }));
+    if (!hasDynamicStroke(node.dynamicStroke)) return ends;
+    // A dynamic stroke bumps the path away from its own points, so an end point goes where the ink stops.
+    const bumped = bumpedEnds(networkStrokePath(node.vectorNetwork), node.dynamicStroke);
+    return ends.map((end) => {
+      const moved = bumped.find((b) => Math.hypot(b.from.x - end.point.x, b.from.y - end.point.y) < 0.01);
+      return moved ? { ...end, point: moved.point, angle: moved.angle } : end;
+    });
   }
 
   /** The path with every contour that stops at one of these ends shortened there by `inset`; null when nothing is left. */

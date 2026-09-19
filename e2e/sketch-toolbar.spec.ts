@@ -91,11 +91,11 @@ test('the Brush paints a dynamic stroke, which the Stroke section adjusts', asyn
   await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
   const dialog = page.getByRole('dialog', { name: 'Stroke settings' });
   await expect(dialog.getByRole('radio', { name: 'Dynamic' })).toBeChecked();
-  await expect(page.getByRole('slider', { name: 'Wiggle slider' })).toHaveValue('80');
+  await expect(page.getByTestId('field-wiggle')).toHaveValue('80%');
 
   // Back on Basic the stroke is plain again, and it stays that way after a reload.
   await dialog.getByRole('radio', { name: 'Basic' }).check();
-  await expect(page.getByRole('slider', { name: 'Wiggle slider' })).toHaveCount(0);
+  await expect(page.getByTestId('field-wiggle')).toHaveCount(0);
   await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
   await page.reload();
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');

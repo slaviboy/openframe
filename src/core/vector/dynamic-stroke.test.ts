@@ -17,7 +17,7 @@
 
 import { describe, expect, test } from 'vitest';
 import type { PathCommand } from '../geometry/corners';
-import { dynamicStrokePath, hasDynamicStroke } from './dynamic-stroke';
+import { bumpedEnds, dynamicStrokePath, hasDynamicStroke } from './dynamic-stroke';
 
 /** A straight line along x, 200 units long. */
 const line: PathCommand[] = [
@@ -81,5 +81,35 @@ describe('a dynamic stroke', () => {
     const points = bumpy.filter((c): c is Extract<PathCommand, { x: number }> => c.op === 'M' || c.op === 'L');
     expect(points.at(-1)!.x).toBeCloseTo(points[0]!.x, 6);
     expect(points.at(-1)!.y).toBeCloseTo(points[0]!.y, 6);
+  });
+});
+
+describe('the ends of a bumped path', () => {
+  const dynamic = { frequency: 50, wiggle: 100, smoothen: 50 };
+
+  test('an end reports where the ink stops, not where the point is', () => {
+    const ends = bumpedEnds(line, dynamic);
+    expect(ends).toHaveLength(2);
+    // Each end answers for the point it came from, and has been carried sideways with the rest of the path.
+    expect(ends.map((end) => end.from)).toEqual([
+      { x: 0, y: 0 },
+      { x: 200, y: 0 },
+    ]);
+    expect(ends.some((end) => Math.abs(end.point.y) > 0.5)).toBe(true);
+    // The path is drawn from the same points, so the ends sit on it.
+    const drawn = dynamicStrokePath(line, dynamic);
+    const first = drawn[0]!;
+    expect(first.op === 'M' && Math.hypot(first.x - ends[0]!.point.x, first.y - ends[0]!.point.y)).toBeLessThan(0.001);
+  });
+
+  test('an end points away from the path, along the way the bumped line leaves it', () => {
+    const [start, end] = bumpedEnds(line, { frequency: 50, wiggle: 0, smoothen: 50 });
+    // Without wiggle the line is straight: its start points back along x, its end forward.
+    expect(start!.angle).toBeCloseTo(Math.PI);
+    expect(end!.angle).toBeCloseTo(0);
+  });
+
+  test('a closed path has no ends to carry', () => {
+    expect(bumpedEnds(square, dynamic)).toEqual([]);
   });
 });
