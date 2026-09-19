@@ -15,12 +15,9 @@
  * limitations under the License.
  */
 
-import { useState } from 'react';
 import type { StrokeCap } from '@/core/schema/document';
 import { Icon, type IconName } from '../../icons/Icon';
-import { Menu, type MenuEntry } from '../../primitives/Menu';
-import type { Box } from '../../primitives/position';
-import primitives from '../../primitives/primitives.module.css';
+import { IconSelect, type SelectOption } from '../../primitives/IconSelect';
 import styles from './EndpointSelect.module.css';
 
 /**
@@ -42,42 +39,49 @@ export const CAP_OPTIONS: readonly { readonly cap: StrokeCap; readonly label: st
 const optionFor = (cap: StrokeCap) => CAP_OPTIONS.find((option) => option.cap === cap);
 
 /**
- * One of the Stroke section's Start point / End point controls. The reference draws each option beside a
- * picture of the end it makes, which a native `<select>` cannot do, so this is a button and a menu —
- * recorded in docs/UI_REFERENCE.md. `null` is a mixed selection, which shows but is never an option.
+ * One of the Start point / End point controls — in the Stroke section beside the stroke's own row, and in
+ * the Stroke settings dialog. The reference draws each option beside a picture of the end it makes, which a
+ * native `<select>` cannot do, so this is the shared drawn select — recorded in docs/UI_REFERENCE.md.
+ * `null` is a mixed selection, which shows but is never an option.
  */
-export function EndpointSelect({ label, value, flipped = false, onChange }: { label: string; value: StrokeCap | null; flipped?: boolean; onChange: (cap: StrokeCap) => void }) {
-  const [anchor, setAnchor] = useState<Box | null>(null);
+export function EndpointSelect({
+  label,
+  value,
+  flipped = false,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  value: StrokeCap | null;
+  flipped?: boolean;
+  disabled?: boolean;
+  onChange: (cap: StrokeCap) => void;
+}) {
   const current = value === null ? undefined : optionFor(value);
-  const entries: MenuEntry[] = CAP_OPTIONS.flatMap((option) => {
-    const item: MenuEntry = { kind: 'item', id: option.cap, label: option.label, icon: option.icon, checked: option.cap === value, onSelect: () => onChange(option.cap) };
-    return option.startsGroup === true ? [{ kind: 'separator', id: `${option.cap}-separator` } as MenuEntry, item] : [item];
-  });
+  const options: SelectOption<StrokeCap>[] = CAP_OPTIONS.map((option) => ({
+    value: option.cap,
+    label: option.label,
+    icon: option.icon,
+    ...(option.startsGroup === true ? { startsGroup: true } : {}),
+  }));
   return (
-    <>
-      <button
-        type="button"
-        className={`${primitives.select} ${styles.trigger}`}
-        aria-haspopup="listbox"
-        aria-expanded={anchor !== null}
-        aria-label={label}
-        data-value={value ?? ''}
-        onClick={(e) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          setAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
-        }}
-      >
-        {/* The reference draws the end across the whole control, clipping the 200-wide picture rather than
-            scaling it, and mirrors the whole thing for the End point. */}
-        {current ? (
+    <IconSelect
+      label={label}
+      value={value}
+      options={options}
+      {...(disabled === undefined ? {} : { disabled })}
+      onChange={onChange}
+      trigger={
+        /* The reference draws the end across the whole control, clipping the 200-wide picture rather than
+           scaling it, and mirrors the whole thing for the End point. */
+        current ? (
           <span className={flipped ? `${styles.glyph} ${styles.flipped}` : styles.glyph}>
             <Icon name={current.long} />
           </span>
         ) : (
           <span className={styles.name}>Mixed</span>
-        )}
-      </button>
-      {anchor && <Menu label={label} entries={entries} anchor={anchor} placement="bottom-start" onClose={() => setAnchor(null)} />}
-    </>
+        )
+      }
+    />
   );
 }

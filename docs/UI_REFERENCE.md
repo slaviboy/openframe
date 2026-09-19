@@ -554,7 +554,9 @@ stroke style and dashes, join and miter angle, path trim, a brush, a dynamic str
 **Advanced stroke settings**, which is also the list `apply-and-adjust-stroke-properties.html` gives. Ours
 rendered all of it inline, in Design mode too; it is now a dialog behind the reference's own glyph.
 
-**The endpoint triggers.** The reference does not name the end beside a small picture. It draws the end
+**The endpoint triggers** are offered for any path with two ends — a line, or an open path drawn with the
+Pen — and the Stroke settings dialog has its own row for them. The reference does not name the end beside a
+small picture. It draws the end
 across the whole control: `endpoints--longIcon` is `width:100%; overflow:hidden` around a **200 × 24**
 SVG, so the drawing is *clipped* by the control rather than scaled into it, and the End point is the same
 drawing under `endpoints--ui3EndpointFlipped` (`transform:scaleX(-1)`).
@@ -583,11 +585,56 @@ with the line run out to the full width, and the captured dash strip for the thr
 a native `<select>` cannot draw the endpoint; `data-value` carries the chosen cap so it can still be
 asserted. The reference's list is `min-width:271px`; ours uses the shared menu's width.
 
+### The Stroke settings dialog
+
+From the user's own capture of **Advanced stroke settings** and its three menus (2026-09-19). The dialog is
+`width: 15rem` with `role="dialog"` labelled by an `<h2>` reading **Stroke settings**, a close button in
+its top-right corner, and a segmented control — *Stroke Type*, a `radiogroup` whose legend is
+screen-reader-only — holding **Basic**, **Dynamic** and **Brush**. The Basic tab's rows, in order:
+
+| Row | Control | Values |
+| --- | --- | --- |
+| Style | a select drawing a glyph, the name, and the chevron | `LINE` Solid, `SIMPLE_DASH` Dashed, separator, `CUSTOM_DASH` Custom |
+| Width profile | a select of pictures alone, then a 24px *Flip width points* button | `UNIFORM`, `WEDGE`, `TAPER`, `QUARTER_TAPER`, `EYE`, `MIRRORED_TAPER`, separator, `EDIT` *Edit width profile* |
+| — | `<hr>` | |
+| End points | two selects (`data-testid="end-point-settings-row"`), the End point mirrored | the eight caps of the list above |
+| — | `<hr>` | |
+| Join | a segmented `radiogroup` of three glyphs | `MITER`, `BEVEL`, `ROUND` |
+| Miter angle | a scrubbable field with a glyph inside it on the left | `28.96°` by default |
+
+Rows are a label column and the controls — `ui3LabelOneInputRow`, its two-input sibling, and
+`advancedStrokeRow` for the one that ends in an icon. The stroke's type is what the segmented control sets:
+Basic clears the dynamic stroke and the brush, Dynamic gives the layer one (which centres the stroke), and
+Brush paints it with the first brush there is. Brush is disabled with no brushes to pick, since ours are
+made from a closed vector layer rather than shipped.
+
+**Measured.** Every glyph in the dialog is the reference's own path data, copied verbatim: the two style
+glyphs, the three joins (each drawn with the path into the corner in the tertiary icon colour, which we
+draw at 40% as the endpoints already do), the miter angle, and Flip width points. So are the row order, the
+option values and their labels.
+
+**Derived.** The six width-profile pictures are PNGs in the reference, so ours are drawn from the profile's
+own widths — the picture and what is laid on the path cannot drift apart — and the shapes behind those
+names are ours (see `docs/HANDOFF.md`). The Dashed and Custom rows are the documentation's, not the
+capture's: Dashed shows Dash and Gap, Custom a `Dashes` field taking `dash, gap, dash, gap…` verbatim from
+`apply-and-adjust-stroke-properties.html`, and both then show Dash cap. The Dynamic and Brush tabs keep the
+controls we had, pending their own markup.
+
+**Deviations.** Path trim (ours, which Motion animates) and the per-side weights stay in the dialog below a
+last divider; the reference has no trim at all and keeps the sides in the Stroke row itself. The Style,
+Width profile and End point triggers are `button`s with `aria-haspopup="listbox"` rather than `combobox`es,
+because a native `<select>` cannot draw its value — `data-value` carries the chosen one, as `EndpointSelect`
+already recorded — and they share `IconSelect`. The styles are read back from the dashes (none, one dash and
+one gap, or a longer pattern) rather than stored as a flag, so a two-length pattern typed into Custom reads
+as Dashed when the dialog is opened again.
+
+**What the controls refuse.** A width profile cannot be laid on a branching network or on a dashed,
+dynamic or brushed stroke, which the documentation names, and only a vector layer carries width points at
+all. End points need an open end that is drawn as a cap: a stroke drawn as an area — a brush, or a width
+that varies — ends in the shape it tapers to, which is why the reference's support table says a width
+profile removes an arrowhead.
+
 ### Still open on the pen tool
 
-- The endpoints are offered for lines alone. The documentation puts them in the sidebar for any open path
-  with two ends and in Advanced stroke settings for one with more, set per point in vector edit mode —
-  which needs a cap on each vector point, and arrowheads drawn on the open ends of a vector network. The
-  renderer only caps them round, square or flat today.
 - Corner radius rounds a point where two straight lines meet, which is the corner the documentation
   describes. A point with a Bézier on either side stays sharp.

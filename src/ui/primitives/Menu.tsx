@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon, type IconName } from '../icons/Icon';
 import styles from './Menu.module.css';
@@ -28,6 +28,8 @@ export type MenuEntry =
       readonly label: string;
       /** Drawn before the label — the reference's endpoint list names each option beside its picture. */
       readonly icon?: IconName;
+      /** Drawn instead of the label, where the reference draws the option rather than naming it (a width profile). */
+      readonly content?: ReactNode;
       readonly shortcut?: string;
       readonly checked?: boolean;
       readonly disabled?: boolean;
@@ -220,7 +222,17 @@ function MenuList({ label, entries, anchor, placement, onCloseAll, onCloseSelf, 
                 {entry.kind === 'item' && entry.checked ? '✓' : ''}
               </span>
               {entry.kind === 'item' && entry.icon !== undefined && <Icon name={entry.icon} size={24} className={styles.entryIcon} />}
-              <span className={styles.label}>{entry.label}</span>
+              <span className={styles.label}>
+                {/* An option drawn rather than named keeps its name for a screen reader and for testing. */}
+                {entry.kind === 'item' && entry.content !== undefined ? (
+                  <>
+                    <span className="visually-hidden">{entry.label}</span>
+                    {entry.content}
+                  </>
+                ) : (
+                  entry.label
+                )}
+              </span>
               {entry.kind === 'item' && entry.shortcut && <span className={styles.shortcut}>{entry.shortcut}</span>}
               {entry.kind === 'submenu' && <Icon name="caretRight" size={16} className={styles.chevron} />}
             </div>

@@ -48,12 +48,12 @@ test('a closed vector layer becomes a brush, which paints another layer’s stro
   const sketch = page.getByRole('treeitem', { name: /Vector/ }).last();
   await expect(sketch).toBeVisible();
 
-  // The brush a stroke is painted with lives behind Advanced stroke settings, where the reference keeps it.
+  // A brush is one of the three kinds of stroke the Stroke settings dialog offers, where the reference
+  // keeps it; picking Brush paints the stroke with the first one there is.
   const advanced = page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' });
   await advanced.click();
+  await page.getByRole('dialog', { name: 'Stroke settings' }).getByRole('radio', { name: 'Brush' }).check();
   const brush = page.getByRole('combobox', { name: 'Brush' });
-  await expect(brush).toHaveValue('');
-  await brush.selectOption({ index: 1 });
   await expect(brush).not.toHaveValue('');
 
   // The brush stays on the layer across a reload.
@@ -62,5 +62,6 @@ test('a closed vector layer becomes a brush, which paints another layer’s stro
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
   await page.getByRole('treeitem', { name: /Vector/ }).last().click();
   await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
+  await expect(page.getByRole('dialog', { name: 'Stroke settings' }).getByRole('radio', { name: 'Brush' })).toBeChecked();
   await expect(page.getByRole('combobox', { name: 'Brush' })).not.toHaveValue('');
 });

@@ -489,3 +489,14 @@ markup. The pass is being built in phases, each its own commit.
   `src/editor/commands/properties.ts`) lay one down and read it back the other way, and
   `canTakeWidthProfile` says when it can be laid at all — the documentation rules out a branching network
   and a dynamic or dashed stroke, and a brush leaves no width to vary.
+- **Phase 3 — the dialog.** `src/ui/panels/inspector/StrokeSettings.tsx` is the dialog, out of `Inspector.tsx`
+  along with the `val`, `SliderRow` and `MotionField` helpers both need (`fields.tsx`). Its anatomy, what is
+  measured in it and what is derived are in `docs/UI_REFERENCE.md`. The select that draws its value rather
+  than naming it is now shared (`src/ui/primitives/IconSelect.tsx`), with `EndpointSelect` built on it and
+  `MenuEntry.content` for an option drawn as a picture — which keeps its label for a screen reader and for
+  testing. The Stroke section's own End points row is offered for any path with two ends, not lines alone,
+  and goes quiet on a stroke that is drawn as an area (`canTakeEndPoints`).
+- **Also.** `e2e/drop-openframe.spec.ts` handed the 1.6 MB file to the page as an array of bytes for each of
+  its three drags, which serialized megabytes of JSON three times and left the test hanging off its 30s
+  timeout — it failed on all three browsers under a full run and passed on its own. The bytes now cross once,
+  as base64, and the test runs in 1.5s instead of 15.7s.

@@ -25,7 +25,9 @@ import { expect, test } from './fixtures';
  * the code behind the drop already knew how to open one.
  */
 test('dropping an Openframe file shows what a drop does, asks, then opens it', async ({ page }) => {
-  const file = [...readFileSync('reference/app/sample-large.openframe')];
+  // Base64, and handed to the page once: the file is 1.6 MB, and sending it as an array of bytes for each
+  // drag serialized megabytes of JSON three times, which is what left this test hanging off its timeout.
+  const file = readFileSync('reference/app/sample-large.openframe').toString('base64');
 
   await page.goto('/');
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
@@ -39,18 +41,26 @@ test('dropping an Openframe file shows what a drop does, asks, then opens it', a
   await page.mouse.up();
   await expect(page.getByRole('treeitem', { name: /Rectangle 1/ })).toBeVisible();
 
+  // The bytes cross into the page once and are kept there, as the file each drag carries.
+  await page.evaluate((base64) => {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    (window as unknown as { dropped: File }).dropped = new File([bytes], 'sample-large.openframe', { type: 'application/octet-stream' });
+  }, file);
+
   /** Drags the file over the canvas, and drops it when asked to. */
   const drag = (drop: boolean) =>
     page.evaluate(
-      ({ bytes, x, y, drop }) => {
+      ({ x, y, drop }) => {
         const data = new DataTransfer();
-        data.items.add(new File([new Uint8Array(bytes)], 'sample-large.openframe', { type: 'application/octet-stream' }));
+        data.items.add((window as unknown as { dropped: File }).dropped);
         const target = document.querySelector('[data-testid="canvas"]')!;
         const event = (type: string) => new DragEvent(type, { dataTransfer: data, clientX: x, clientY: y, bubbles: true, cancelable: true });
         target.dispatchEvent(event('dragover'));
         if (drop) target.dispatchEvent(event('drop'));
       },
-      { bytes: file, x: box.x + 600, y: box.y + 320, drop },
+      { x: box.x + 600, y: box.y + 320, drop },
     );
 
   // Dragging over the canvas says what a drop will do, and stops saying it when the drag leaves.

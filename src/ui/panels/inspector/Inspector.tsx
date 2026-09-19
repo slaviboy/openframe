@@ -15,8 +15,7 @@
  * limitations under the License.
  */
 
-import { Fragment, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { Fragment, useRef, useState, type ReactNode } from 'react';
 import { selectionColors, showsSelectionColors, updateSelectionColor, type ColorPaint, type PaintUsage, type SelectionColor } from '@/core/color/selection-colors';
 import { addStop, convertPaint, PAINT_TYPE_LABELS, removeStop, reverseStops, updateStop, type PaintType } from '@/core/color/paints';
 import { VideoSettings } from './VideoSettings';
@@ -40,16 +39,12 @@ import {
   type TextureEffect,
 } from '@/core/effects/effects';
 import { moveItem } from '@/core/collections/move-item';
-import { DEFAULT_DYNAMIC_STROKE } from '@/core/vector/dynamic-stroke';
-import { applyBrush, localBrushes } from '@/editor/commands/brushes';
 import { addRepeatTransform, applyTransforms, removeRepeatTransform, setRepeatTransform } from '@/editor/commands/transforms';
 import {
   addKeyframe,
   animationOf,
   applyMotionPreset,
-  deleteKeyframe,
   easingVariables,
-  hasKeyframe,
   isAnimated,
   removeAnimatedProperty,
   resolvedAnimation,
@@ -143,17 +138,16 @@ import { matrixOf } from '@/core/scene/scene-index';
 import { moveVertices } from '@/core/vector/vector-edit';
 import { roundableVertex } from '@/core/vector/vector-corners';
 import { pointsBounds } from '@/core/vector/vector-transform-points';
-import { placeFloating, type Box } from '../../primitives/position';
+import { AdvancedStrokeSettings } from './StrokeSettings';
+import { MotionField, SliderRow, val } from './fields';
+import { capOfEnd, pathEnds } from '@/core/vector/vector-caps';
 import { refitVector } from '@/editor/tools/vector-draw';
 import {
-  DEFAULT_MITER_ANGLE,
   hasGeometry,
   isGradientPaint,
-  type DashCap,
   type Effect,
   type EffectType,
   type ShadowEffect,
-  type StrokeJoin,
   type BlendMode,
   isSceneNode,
   type Constraint,
@@ -163,6 +157,7 @@ import {
   type Paint,
   type SceneNode,
   type StrokeAlign,
+  type StrokeCap,
 } from '@/core/schema/document';
 
 const PAINT_TYPES: readonly PaintType[] = ['SOLID', 'GRADIENT_LINEAR', 'GRADIENT_RADIAL', 'GRADIENT_ANGULAR', 'GRADIENT_DIAMOND', 'IMAGE', 'VIDEO', 'PATTERN'];
@@ -220,22 +215,16 @@ import {
   setEndCap,
   setOpacity,
   setPointCount,
+  canTakeEndPoints,
   setPaints,
   setPosition,
   setRotation,
   setSize,
-  setDashCap,
   setEffects,
-  setIndividualStrokeWeights,
   setStrokeAlign,
-  setStrokeDashes,
-  setStrokeJoin,
-  setStrokeMiterAngle,
   setWidthProfile,
-  setDynamicStroke,
   setStrokeWeight,
   shared,
-  type Mixed,
   type PaintField,
 } from '@/editor/commands/properties';
 import { ANCHOR_LABELS, SCALE_ANCHORS, scaleLayersInTx } from '@/editor/commands/scale';
@@ -254,7 +243,6 @@ import primitives from '../../primitives/primitives.module.css';
 import { EndpointSelect } from './EndpointSelect';
 import styles from './Inspector.module.css';
 
-const val = <T,>(v: Mixed<T> | undefined): T | undefined => (v === MIXED ? undefined : v);
 
 const TYPE_LABELS: Record<SceneNode['type'], string> = {
   FRAME: 'Frame',
@@ -1002,77 +990,6 @@ function AlignRow() {
       />
       {anchor && <Menu label="More alignment actions" entries={entries} anchor={anchor} placement="bottom-start" onClose={() => setAnchor(null)} />}
     </div>
-  );
-}
-
-/** A property as a slider with its value, for Draw mode: dragging changes it, and the number says where it landed. */
-function SliderRow({
-  label,
-  min,
-  max,
-  value,
-  gesture,
-  onChange,
-}: {
-  label: string;
-  min: number;
-  max: number;
-  value: number | undefined;
-  gesture: { start: () => void; end: () => void };
-  onChange: (value: number) => void;
-}) {
-  return (
-    <div className={gradientStyles.adjustRow}>
-      <span aria-hidden="true">{label}</span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={1}
-        aria-label={`${label} slider`}
-        value={value ?? min}
-        onPointerDown={gesture.start}
-        onPointerUp={gesture.end}
-        onPointerCancel={gesture.end}
-        onBlur={gesture.end}
-        onChange={(e) => onChange(Number(e.target.value))}
-      />
-      <output>{value === undefined ? '–' : Math.round(value)}</output>
-    </div>
-  );
-}
-
-/**
- * Motion: the diamond beside a property that can be animated. It adds a keyframe at the playhead for what the layers
- * are now, and takes one away where there already is one.
- */
-function KeyframeButton({ nodes, property }: { nodes: readonly SceneNode[]; property: AnimatedProperty }) {
-  const editor = useEditor();
-  const time = useEditorState((s) => s.motion.time);
-  useDocumentRevision();
-  const ids = nodes.map((n) => n.id);
-  const at = ids.length > 0 && ids.every((id) => hasKeyframe(editor, id, property, time));
-  const animated = ids.some((id) => isAnimated(editor, id, property));
-  return (
-    <IconButton
-      icon="keyframe"
-      label={`${at ? 'Delete' : 'Add'} ${ANIMATED_PROPERTY_LABELS[property].toLowerCase()} keyframe`}
-      tooltip={at ? 'Delete keyframe' : 'Add keyframe'}
-      pressed={at}
-      data-animated={animated || undefined}
-      onClick={() => (at ? deleteKeyframe(editor, ids, property, time) : addKeyframe(editor, ids, property, time))}
-    />
-  );
-}
-
-/** A field with its keyframe diamond beside it while Motion is on; the plain field otherwise. */
-function MotionField({ nodes, property, motion, children }: { nodes: readonly SceneNode[]; property: AnimatedProperty; motion: boolean; children: ReactNode }) {
-  if (!motion) return <>{children}</>;
-  return (
-    <span className={styles.motionRow}>
-      {children}
-      <KeyframeButton nodes={nodes} property={property} />
-    </span>
   );
 }
 
@@ -3710,386 +3627,44 @@ const CORNERS: readonly (readonly [keyof CornerRadii, string])[] = [
 ];
 const CORNER_NAMES: Record<keyof CornerRadii, string> = { topLeft: 'Top left', topRight: 'Top right', bottomLeft: 'Bottom left', bottomRight: 'Bottom right' };
 
-const STROKE_SIDES = ['top', 'right', 'bottom', 'left'] as const;
-type StrokeSide = (typeof STROKE_SIDES)[number];
-type SideMode = 'all' | StrokeSide | 'custom';
-const SIDE_LABELS: Record<StrokeSide, string> = { top: 'Top', right: 'Right', bottom: 'Bottom', left: 'Left' };
-
-const sideWeights = (n: GeometryNode) => ('individualStrokeWeights' in n && n.individualStrokeWeights) || { top: n.strokeWeight, right: n.strokeWeight, bottom: n.strokeWeight, left: n.strokeWeight };
-
-function sideMode(n: GeometryNode): SideMode {
-  const individual = 'individualStrokeWeights' in n ? n.individualStrokeWeights : undefined;
-  if (!individual) return 'all';
-  const nonzero = STROKE_SIDES.filter((side) => individual[side] > 0);
-  return nonzero.length === 1 ? nonzero[0]! : 'custom';
-}
-
-/** Stroke style (solid/dashed, dash, gap, dash cap), join and miter angle, and per-side weights for frames and rectangles. */
 /**
  * The Stroke section's Start point and End point, on the reference's own row. The documentation puts them
- * here for a path with two ends, and in Advanced stroke settings for one with more; ours are offered for
- * lines, since arrowheads on the open ends of a vector network are not drawn yet (see FEATURE_MATRIX).
+ * here for a path with two ends — a line, or an open vector path — and in the Stroke settings dialog for
+ * one with more, where they are also set per point in vector edit mode.
  */
 function EndpointRow({ nodes }: { nodes: GeometryNode[] }) {
   const editor = useEditor();
-  if (!nodes.every((n) => n.type === 'LINE')) return null;
+  const ends = shared(
+    nodes,
+    twoEndsOf,
+    (a, b) => a?.start === b?.start && a?.end === b?.end,
+  );
+  if (nodes.length === 0 || nodes.some((n) => twoEndsOf(n) === null)) return null;
+  // A stroke drawn as an area — a brush, or a width that varies — ends in the shape it is drawn as.
+  const editable = nodes.every(canTakeEndPoints);
+  const both = val(ends) ?? null;
   return (
     <div className={styles.strokeRow}>
-      {(['startCap', 'endCap'] as const).map((end) => {
-        const value = shared(nodes, (n) => (n.type === 'LINE' ? n[end] : 'NONE'));
-        return (
-          <EndpointSelect
-            key={end}
-            label={end === 'startCap' ? 'Start point' : 'End point'}
-            flipped={end === 'endCap'}
-            value={value === MIXED ? null : (val(value) ?? null)}
-            onChange={(cap) => editor.history.run('Change end point', (tx) => nodes.forEach((n) => setEndCap(tx, n, end, cap)))}
-          />
-        );
-      })}
-    </div>
-  );
-}
-
-/**
- * Advanced stroke settings: the reference keeps everything but where the stroke goes and how thick it is
- * behind this button — the stroke's style and dashes, its join and miter angle, path trim, a brush, and a
- * dynamic stroke. The documentation lists the same set.
- */
-function AdvancedStrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
-  const [anchor, setAnchor] = useState<Box | null>(null);
-  const rootRef = useRef<HTMLDivElement>(null);
-
-  useLayoutEffect(() => {
-    const el = rootRef.current;
-    if (!anchor || !el) return;
-    const size = el.getBoundingClientRect();
-    const at = placeFloating(anchor, { width: size.width, height: size.height }, { width: window.innerWidth, height: window.innerHeight }, 'bottom-start');
-    el.style.left = `${at.x}px`;
-    el.style.top = `${at.y}px`;
-    el.style.visibility = 'visible';
-  }, [anchor]);
-
-  useEffect(() => {
-    if (!anchor) return;
-    const close = (e: globalThis.PointerEvent) => {
-      if (rootRef.current?.contains(e.target as Node)) return;
-      // The button closes the dialog itself.
-      if (e.clientX >= anchor.x && e.clientX <= anchor.x + anchor.width && e.clientY >= anchor.y && e.clientY <= anchor.y + anchor.height) return;
-      setAnchor(null);
-    };
-    const onKey = (e: globalThis.KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      e.preventDefault();
-      e.stopPropagation();
-      setAnchor(null);
-    };
-    window.addEventListener('pointerdown', close, true);
-    window.addEventListener('keydown', onKey, true);
-    return () => {
-      window.removeEventListener('pointerdown', close, true);
-      window.removeEventListener('keydown', onKey, true);
-    };
-  }, [anchor]);
-
-  return (
-    <>
-      <IconButton
-        icon="advancedStroke"
-        label="Advanced stroke settings"
-        aria-haspopup="dialog"
-        aria-expanded={anchor !== null}
-        onClick={(e) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          setAnchor((open) => (open ? null : { x: r.x, y: r.y, width: r.width, height: r.height }));
-        }}
-      />
-      {anchor &&
-        createPortal(
-          <div ref={rootRef} className={styles.advancedStroke} role="dialog" aria-label="Advanced stroke settings" style={{ visibility: 'hidden' }}>
-            <StrokeSettings nodes={nodes} />
-          </div>,
-          document.body,
-        )}
-    </>
-  );
-}
-
-function StrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
-  const editor = useEditor();
-  const dashGesture = useGesture('Change dashes');
-  const miterGesture = useGesture('Change miter angle');
-  const sidesGesture = useGesture('Change stroke weight');
-  const run = (label: string, apply: (tx: Parameters<Parameters<typeof editor.history.run>[1]>[0], node: GeometryNode) => void) =>
-    editor.history.run(label, (tx) => nodes.forEach((n) => apply(tx, tx.store.getOrThrow(n.id) as GeometryNode)));
-
-  const brushes = localBrushes(editor.doc);
-  const dynamicGesture = useGesture('Change dynamic stroke');
-  const dynamic = val(
-    shared(
-      nodes,
-      (n) => n.dynamicStroke,
-      (a, b) => a?.frequency === b?.frequency && a?.wiggle === b?.wiggle && a?.smoothen === b?.smoothen,
-    ),
-  );
-  const style = shared(nodes, (n) => (n.strokeDashes ? 'dashed' : 'solid'));
-  const join = shared(nodes, (n) => n.strokeJoin ?? 'MITER');
-  const dashes = style === 'dashed' ? nodes[0]!.strokeDashes : undefined;
-  const boxes = nodes.every((n) => n.type === 'FRAME' || n.type === 'RECTANGLE');
-  const mode = shared(nodes, sideMode);
-
-  // Path trim: how much of the path the stroke is drawn along. Like the reference, only a centered stroke can be trimmed.
-  const trimGesture = useGesture('Change path trim');
-  const centered = nodes.every((n) => n.strokeAlign === 'CENTER');
-  const trimMotion = useEditorState((s) => s.mode) === 'motion';
-  const trimTime = useEditorState((s) => s.motion.time);
-  const trimAuto = useEditorState((s) => s.motion.autoKeyframe);
-  const trimPercent = (key: 'strokeTrimStart' | 'strokeTrimEnd', whole: number) => {
-    const share = val(shared(nodes, (n) => n[key] ?? whole));
-    return share === undefined ? undefined : share * 100;
-  };
-  const editTrim = (key: 'strokeTrimStart' | 'strokeTrimEnd', property: AnimatedProperty, percent: number, whole: number) => {
-    const share = Math.min(1, Math.max(0, percent / 100));
-    // In Motion, editing a trim that is animated records a keyframe at the playhead instead of moving the stroke.
-    const ids = nodes.map((n) => n.id);
-    const animated = ids.length > 0 && ids.every((id) => isAnimated(editor, id, property));
-    if (trimMotion && (animated || (trimAuto && ids.length > 0))) addKeyframe(editor, ids, property, trimTime, share);
-    else trimGesture.change((tx) => nodes.forEach((n) => tx.set(n.id, key, share === whole ? undefined : share)));
-  };
-  /** A trim field's gesture handlers, left off in Motion: a keyframe write can't start while a gesture holds the file. */
-  const trimGestureProps = trimMotion ? {} : { onGestureStart: trimGesture.start, onGestureEnd: trimGesture.end };
-
-  const editDashes = (index: 0 | 1, value: number) =>
-    dashGesture.change((tx) =>
-      nodes.forEach((n) => {
-        const current = (tx.store.getOrThrow(n.id) as GeometryNode).strokeDashes ?? [10, 10];
-        const next = [current[0] ?? 10, current[1] ?? 10];
-        next[index] = value;
-        setStrokeDashes(tx, n, next);
-      }),
-    );
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 }}>
-      <div className={styles.grid2}>
-        <select
-          className={primitives.select}
-          aria-label="Stroke style"
-          value={val(style) ?? ''}
-          onChange={(e) => run('Change stroke style', (tx, n) => setStrokeDashes(tx, n, e.target.value === 'dashed' ? [10, 10] : undefined))}
-        >
-          {style === MIXED && <option value="">Mixed</option>}
-          <option value="solid">Solid</option>
-          <option value="dashed">Dashed</option>
-        </select>
-        <select
-          className={primitives.select}
-          aria-label="Stroke join"
-          value={val(join) ?? ''}
-          onChange={(e) => run('Change stroke join', (tx, n) => setStrokeJoin(tx, n, e.target.value as StrokeJoin))}
-        >
-          {join === MIXED && <option value="">Mixed</option>}
-          <option value="MITER">Miter</option>
-          <option value="BEVEL">Bevel</option>
-          <option value="ROUND">Round</option>
-        </select>
-      </div>
-      {dashes && (
-        <div className={styles.grid2}>
-          <NumberField
-            label="Dash"
-            ariaLabel="Dash length"
-            testId="field-dash"
-            min={0}
-            value={dashes[0]}
-            onGestureStart={dashGesture.start}
-            onGestureEnd={dashGesture.end}
-            onChange={(v) => editDashes(0, v)}
-          />
-          <NumberField
-            label="Gap"
-            ariaLabel="Gap length"
-            testId="field-gap"
-            min={0}
-            value={dashes[1]}
-            onGestureStart={dashGesture.start}
-            onGestureEnd={dashGesture.end}
-            onChange={(v) => editDashes(1, v)}
-          />
-          <select
-            className={primitives.select}
-            aria-label="Dash cap"
-            value={val(shared(nodes, (n) => n.strokeCap ?? 'NONE')) ?? ''}
-            onChange={(e) => run('Change dash cap', (tx, n) => setDashCap(tx, n, e.target.value as DashCap))}
-          >
-            <option value="NONE">None</option>
-            <option value="ROUND">Round</option>
-            <option value="SQUARE">Square</option>
-          </select>
-        </div>
-      )}
-      {/* Path trim draws only a share of the path, for a stroke that draws itself on or erases itself away. */}
-      {centered && (
-        <div className={styles.grid2}>
-          <MotionField nodes={nodes} property="trimStart" motion={trimMotion}>
-            <NumberField
-              label="Trim"
-              ariaLabel="Path trim start"
-              testId="field-trim-start"
-              min={0}
-              max={100}
-              decimals={0}
-              suffix="%"
-              value={trimPercent('strokeTrimStart', 0)}
-              {...trimGestureProps}
-              onChange={(v) => editTrim('strokeTrimStart', 'trimStart', v, 0)}
-            />
-          </MotionField>
-          <MotionField nodes={nodes} property="trimEnd" motion={trimMotion}>
-            <NumberField
-              label="End"
-              ariaLabel="Path trim end"
-              testId="field-trim-end"
-              min={0}
-              max={100}
-              decimals={0}
-              suffix="%"
-              value={trimPercent('strokeTrimEnd', 1)}
-              {...trimGestureProps}
-              onChange={(v) => editTrim('strokeTrimEnd', 'trimEnd', v, 1)}
-            />
-          </MotionField>
-        </div>
-      )}
-      {/* A custom brush paints the stroke with its own shape; brushes are made from a closed vector layer. */}
-      {brushes.length > 0 && (
-        <select
-          className={primitives.select}
-          aria-label="Brush"
-          value={val(shared(nodes, (n) => n.brushId ?? '')) ?? ''}
-          onChange={(e) =>
-            applyBrush(
-              editor,
-              nodes.map((n) => n.id),
-              e.target.value || undefined,
-            )
-          }
-        >
-          <option value="">No brush</option>
-          {brushes.map((brush) => (
-            <option key={brush.id} value={brush.id}>
-              {brush.name}
-            </option>
-          ))}
-        </select>
-      )}
-      {/* Dynamic stroke: the hand-drawn look. It is drawn down the middle of the path, so it centers the stroke. */}
-      <label className={styles.checkbox}>
-        <input
-          type="checkbox"
-          checked={dynamic !== undefined}
-          onChange={(e) =>
-            run(e.target.checked ? 'Add dynamic stroke' : 'Remove dynamic stroke', (tx, n) => setDynamicStroke(tx, n, e.target.checked ? (dynamic ?? DEFAULT_DYNAMIC_STROKE) : undefined))
-          }
+      {(['startCap', 'endCap'] as const).map((end) => (
+        <EndpointSelect
+          key={end}
+          label={end === 'startCap' ? 'Start point' : 'End point'}
+          flipped={end === 'endCap'}
+          value={end === 'startCap' ? (both?.start ?? null) : (both?.end ?? null)}
+          disabled={!editable}
+          onChange={(cap) => editor.history.run('Change end point', (tx) => nodes.forEach((n) => setEndCap(tx, tx.store.getOrThrow(n.id) as GeometryNode, end, cap)))}
         />
-        Dynamic stroke
-      </label>
-      {dynamic && (
-        <>
-          <SliderRow
-            label="Frequency"
-            min={0}
-            max={100}
-            value={dynamic.frequency}
-            gesture={dynamicGesture}
-            onChange={(v) => dynamicGesture.change((tx) => nodes.forEach((n) => setDynamicStroke(tx, tx.store.getOrThrow(n.id) as GeometryNode, { ...dynamic, frequency: v })))}
-          />
-          <SliderRow
-            label="Wiggle"
-            min={0}
-            max={100}
-            value={dynamic.wiggle}
-            gesture={dynamicGesture}
-            onChange={(v) => dynamicGesture.change((tx) => nodes.forEach((n) => setDynamicStroke(tx, tx.store.getOrThrow(n.id) as GeometryNode, { ...dynamic, wiggle: v })))}
-          />
-          <SliderRow
-            label="Smoothen"
-            min={0}
-            max={100}
-            value={dynamic.smoothen}
-            gesture={dynamicGesture}
-            onChange={(v) => dynamicGesture.change((tx) => nodes.forEach((n) => setDynamicStroke(tx, tx.store.getOrThrow(n.id) as GeometryNode, { ...dynamic, smoothen: v })))}
-          />
-        </>
-      )}
-      {join === 'MITER' && (
-        <div className={styles.grid2}>
-          <NumberField
-            label="∠"
-            ariaLabel="Miter angle"
-            testId="field-miter"
-            suffix="°"
-            min={0}
-            max={180}
-            value={val(shared(nodes, (n) => n.strokeMiterAngle ?? DEFAULT_MITER_ANGLE))}
-            onGestureStart={miterGesture.start}
-            onGestureEnd={miterGesture.end}
-            onChange={(v) => miterGesture.change((tx) => nodes.forEach((n) => setStrokeMiterAngle(tx, n, v)))}
-          />
-        </div>
-      )}
-      {boxes && (
-        <select
-          className={primitives.select}
-          aria-label="Stroke sides"
-          value={val(mode) ?? ''}
-          onChange={(e) => {
-            const next = e.target.value as SideMode;
-            run('Change stroke sides', (tx, n) => {
-              const current = sideWeights(n);
-              const weight = Math.max(current.top, current.right, current.bottom, current.left) || n.strokeWeight || 1;
-              if (next === 'all') {
-                setIndividualStrokeWeights(tx, n, undefined);
-                setStrokeWeight(tx, n, weight);
-              } else if (next !== 'custom') {
-                setIndividualStrokeWeights(tx, n, { top: 0, right: 0, bottom: 0, left: 0, [next]: weight });
-              }
-            });
-          }}
-        >
-          {mode === MIXED && <option value="">Mixed</option>}
-          <option value="all">All sides</option>
-          {STROKE_SIDES.map((side) => (
-            <option key={side} value={side}>
-              {SIDE_LABELS[side]}
-            </option>
-          ))}
-          {mode === 'custom' && (
-            <option value="custom" disabled>
-              Custom
-            </option>
-          )}
-        </select>
-      )}
-      {boxes && mode !== 'all' && (
-        <div className={styles.grid2}>
-          {STROKE_SIDES.map((side) => (
-            <NumberField
-              key={side}
-              label={SIDE_LABELS[side][0]!}
-              ariaLabel={`${SIDE_LABELS[side]} stroke weight`}
-              testId={`field-stroke-${side}`}
-              min={0}
-              value={val(shared(nodes, (n) => sideWeights(n)[side]))}
-              onGestureStart={sidesGesture.start}
-              onGestureEnd={sidesGesture.end}
-              onChange={(v) => sidesGesture.change((tx) => nodes.forEach((n) => setIndividualStrokeWeights(tx, n, { ...sideWeights(tx.store.getOrThrow(n.id) as GeometryNode), [side]: v })))}
-            />
-          ))}
-        </div>
-      )}
+      ))}
     </div>
   );
+}
+
+/** The caps of a path with exactly two ends — a line, or a vector path that neither branches nor closes. */
+function twoEndsOf(node: GeometryNode): { readonly start: StrokeCap; readonly end: StrokeCap } | null {
+  if (node.type === 'LINE') return { start: node.startCap, end: node.endCap };
+  if (node.type !== 'VECTOR') return null;
+  const ends = pathEnds(node.vectorNetwork);
+  return ends ? { start: capOfEnd(node.vectorNetwork.vertices[ends.start.vertex], node.endpointCap), end: capOfEnd(node.vectorNetwork.vertices[ends.end.vertex], node.endpointCap) } : null;
 }
 
 const SCALE_PRESETS = [0.5, 0.75, 1.5, 2, 3, 4];

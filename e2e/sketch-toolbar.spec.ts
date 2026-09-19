@@ -43,7 +43,7 @@ test('the Pencil draws with the stroke its toolbar sets, and ⌘-click samples o
   await expect(page.getByTestId('field-stroke-weight')).toHaveValue('8');
   // The stroke's style lives behind Advanced stroke settings, where the reference keeps it.
   await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
-  await expect(page.getByRole('combobox', { name: 'Stroke style', exact: true })).toHaveValue('dashed');
+  await expect(page.getByTestId('field-stroke-style')).toHaveAttribute('data-value', 'dashed');
   await page.keyboard.press('Escape');
 
   // A thinner, solid stroke for the next one.
@@ -86,20 +86,20 @@ test('the Brush paints a dynamic stroke, which the Stroke section adjusts', asyn
   await page.mouse.up();
   await expect(page.getByRole('treeitem', { name: /Vector 1/ })).toBeVisible();
 
-  // Its stroke is dynamic, with the wiggle the brush was set to. Dynamic stroke lives behind Advanced
-  // stroke settings, where the reference keeps it.
+  // Its stroke is dynamic, with the wiggle the brush was set to. The stroke's type is the Stroke settings
+  // dialog's own control, where the reference keeps it.
   await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
-  const dynamic = page.getByRole('checkbox', { name: 'Dynamic stroke' });
-  await expect(dynamic).toBeChecked();
+  const dialog = page.getByRole('dialog', { name: 'Stroke settings' });
+  await expect(dialog.getByRole('radio', { name: 'Dynamic' })).toBeChecked();
   await expect(page.getByRole('slider', { name: 'Wiggle slider' })).toHaveValue('80');
 
-  // Turning it off in the Stroke section leaves a plain stroke, and it stays off after a reload.
-  await dynamic.uncheck();
+  // Back on Basic the stroke is plain again, and it stays that way after a reload.
+  await dialog.getByRole('radio', { name: 'Basic' }).check();
   await expect(page.getByRole('slider', { name: 'Wiggle slider' })).toHaveCount(0);
   await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
   await page.reload();
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
   await page.getByRole('treeitem', { name: /Vector 1/ }).click();
   await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
-  await expect(page.getByRole('checkbox', { name: 'Dynamic stroke' })).not.toBeChecked();
+  await expect(page.getByRole('dialog', { name: 'Stroke settings' }).getByRole('radio', { name: 'Basic' })).toBeChecked();
 });

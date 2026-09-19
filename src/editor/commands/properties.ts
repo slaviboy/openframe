@@ -37,7 +37,7 @@ import {
   type StrokeCap,
   type StrokeJoin,
 } from '@/core/schema/document';
-import { pathEnds } from '@/core/vector/vector-caps';
+import { openEnds, pathEnds } from '@/core/vector/vector-caps';
 import { flipWidthPoints, profileWidthPoints, strokeChain } from '@/core/vector/vector-width';
 import { matrixRotationDegrees, roundTransform, toTransform } from '../interactions/transform';
 
@@ -274,6 +274,18 @@ export function setStrokeMiterAngle(tx: Transaction, node: SceneNode, degrees: n
   if (!hasGeometry(node)) return;
   const angle = Math.min(180, Math.max(0, Math.round(degrees * 100) / 100));
   tx.set(node.id, 'strokeMiterAngle', angle === DEFAULT_MITER_ANGLE ? undefined : angle);
+}
+
+/**
+ * Whether a path's ends can be given end points. A line always has its two; a vector path needs an open end,
+ * and a stroke drawn as an area — a brush, or a width that varies — ends in the shape it is drawn as, which
+ * is why the reference's table says a width profile takes an arrowhead off. A dashed stroke ends its dashes
+ * with their own cap.
+ */
+export function canTakeEndPoints(node: SceneNode): boolean {
+  if (node.type === 'LINE') return true;
+  if (node.type !== 'VECTOR') return false;
+  return !node.strokeDashes && !node.strokeWidths?.length && node.brushId === undefined && openEnds(node.vectorNetwork).length > 0;
 }
 
 /**

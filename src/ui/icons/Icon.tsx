@@ -251,6 +251,85 @@ const FILLED: Record<FilledName, { readonly viewBox: 16 | 24 | 200; readonly bod
       />
     ),
   },
+  // The Stroke settings dialog's own glyphs, verbatim from the reference: the two stroke styles it names
+  // beside their pictures, the three joins of its segmented group, the miter angle beside its field, and
+  // Flip width points. Each join draws the corner in the icon colour and the path into it in the faint
+  // tertiary one, which we draw at 40% as the endpoints already do.
+  strokeStyleSolid: {
+    viewBox: 24,
+    body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M5 11.5a.5.5 0 0 1 .5-.5h13a.5.5 0 0 1 0 1h-13a.5.5 0 0 1-.5-.5" />,
+  },
+  strokeStyleDashed: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M5 11.5a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5m5.5 0a.5.5 0 0 1 .5-.5h2a.5.5 0 0 1 0 1h-2a.5.5 0 0 1-.5-.5m6-.5a.5.5 0 0 0 0 1h2a.5.5 0 0 0 0-1z"
+      />
+    ),
+  },
+  joinMiter: {
+    viewBox: 24,
+    body: (
+      <>
+        <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M6.5 6a.5.5 0 0 0 0 1H17v10.5a.5.5 0 0 0 1 0v-11a.5.5 0 0 0-.5-.5z" />
+        <path
+          fill="currentColor"
+          opacity={0.4}
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M11 16.429V17.5a.5.5 0 0 0 1 0v-1.071a.5.5 0 0 0-1 0M11 13v.571a.5.5 0 0 0 1 0V12.5a.5.5 0 0 0-.4-.49l-.1-.01h-1.071a.5.5 0 0 0 0 1zm-3.328-.99-.1-.01H6.5a.5.5 0 0 0 0 1h1.071l.1-.01a.5.5 0 0 0 0-.98"
+        />
+      </>
+    ),
+  },
+  joinBevel: {
+    viewBox: 24,
+    body: (
+      <>
+        <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M6.5 6a.5.5 0 0 0 0 1h5.793L17 11.707V17.5a.5.5 0 0 0 1 0v-6a.5.5 0 0 0-.146-.354l-5-5A.5.5 0 0 0 12.5 6z" />
+        <path
+          fill="currentColor"
+          opacity={0.4}
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M11 16.429V17.5a.5.5 0 0 0 1 0v-1.071a.5.5 0 0 0-1 0M11 13v.571a.5.5 0 0 0 1 0V12.5a.5.5 0 0 0-.4-.49l-.1-.01h-1.071a.5.5 0 0 0 0 1zm-3.328-.99-.1-.01H6.5a.5.5 0 0 0 0 1h1.071l.1-.01a.5.5 0 0 0 0-.98"
+        />
+      </>
+    ),
+  },
+  joinRound: {
+    viewBox: 24,
+    body: (
+      <>
+        <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M6.5 6a.5.5 0 0 0 0 1h5a5.5 5.5 0 0 1 5.5 5.5v5a.5.5 0 0 0 1 0v-5A6.5 6.5 0 0 0 11.5 6z" />
+        <path
+          fill="currentColor"
+          opacity={0.4}
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M11 16.429V17.5a.5.5 0 0 0 1 0v-1.071a.5.5 0 0 0-1 0M11 13v.571a.5.5 0 0 0 1 0V12.5a.5.5 0 0 0-.4-.49l-.1-.01h-1.071a.5.5 0 0 0 0 1zm-3.328-.99-.1-.01H6.5a.5.5 0 0 0 0 1h1.071l.1-.01a.5.5 0 0 0 0-.98"
+        />
+      </>
+    ),
+  },
+  miterAngle: {
+    viewBox: 24,
+    body: <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M9 8.5a.5.5 0 0 0-1 0v7a.5.5 0 0 0 .5.5h7a.5.5 0 0 0 0-1H13a4 4 0 0 0-4-4zM9 12v3h3a3 3 0 0 0-3-3" />,
+  },
+  flipWidthPoints: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M12.5 6.5a.5.5 0 0 0-1 0v11a.5.5 0 0 0 1 0zM6 9.104a.75.75 0 0 1 1.28-.53L10 11.292a1 1 0 0 1 0 1.414l-2.72 2.72a.75.75 0 0 1-1.28-.53zm1 .603v4.586L9.293 12zm11-.603a.75.75 0 0 0-1.28-.53L14 11.292a1 1 0 0 0 0 1.414l2.72 2.72a.75.75 0 0 0 1.28-.53zm-1 .603v4.586L14.707 12z"
+      />
+    ),
+  },
   // The vector editing toolbelt's own glyphs, verbatim from the reference. Its Move is not the toolbar's:
   // it is a smaller cursor between two handles, for dragging points rather than layers. Variable width and
   // Shape builder keep ours, since the reference draws them only inside its More menu, which is closed in
@@ -1080,6 +1159,13 @@ type FilledName =
   | 'capCircleArrowLong'
   | 'capDiamondArrowLong'
   | 'advancedStroke'
+  | 'strokeStyleSolid'
+  | 'strokeStyleDashed'
+  | 'joinMiter'
+  | 'joinBevel'
+  | 'joinRound'
+  | 'miterAngle'
+  | 'flipWidthPoints'
   | 'vectorMove'
   | 'vectorPaint'
   | 'lasso'
