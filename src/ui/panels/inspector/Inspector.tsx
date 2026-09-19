@@ -137,7 +137,7 @@ import { swapInstanceFor } from '@/editor/commands/swap-instance';
 import { canResetOverrides, overrideLabel, resetSelectedOverride, resetSelectedOverrides, selectionOverriddenFields } from '@/editor/commands/reset-overrides';
 import { eraserShape, eraserWeight, vectorEditPaint } from '@/editor/interactions/vector-edit';
 import { mirroringOf, setMirroring } from '@/core/vector/vector-bend';
-import { profileOf, profileWidthPoints, WIDTH_PROFILES } from '@/core/vector/vector-width';
+import { profileOf, WIDTH_PROFILES } from '@/core/vector/vector-width';
 import { invert, apply, applyLinear } from '@/core/math/matrix';
 import { matrixOf } from '@/core/scene/scene-index';
 import { moveVertices } from '@/core/vector/vector-edit';
@@ -231,6 +231,7 @@ import {
   setStrokeDashes,
   setStrokeJoin,
   setStrokeMiterAngle,
+  setWidthProfile,
   setDynamicStroke,
   setStrokeWeight,
   shared,
@@ -2739,8 +2740,7 @@ function WidthProfileSection() {
         value={current ?? ''}
         onKeyDown={(e) => e.stopPropagation()}
         onChange={(e) => {
-          const points = profileWidthPoints(e.target.value, node.strokeWeight);
-          editor.history.run('Change width profile', (tx) => tx.set(node.id, 'strokeWidths', points.length > 0 ? points : undefined));
+          editor.history.run('Change width profile', (tx) => setWidthProfile(tx, node, e.target.value));
           // The points a profile laid down are not the ones that were selected before it.
           editor.state.setVectorEdit({ ...state, widthPoints: [] });
         }}

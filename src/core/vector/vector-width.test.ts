@@ -17,7 +17,7 @@
 
 import { describe, expect, test } from 'vitest';
 import { straightSegment, type VectorNetwork } from './vector-network';
-import { addWidthPoint, chainPointAt, nearestOnChain, profileOf, profileWidthPoints, snapPosition, strokeChain, variableWidthOutline, widthAt, WIDTH_PROFILES } from './vector-width';
+import { addWidthPoint, chainPointAt, flipWidthPoints, nearestOnChain, profileOf, profileWidthPoints, snapPosition, strokeChain, variableWidthOutline, widthAt, WIDTH_PROFILES } from './vector-width';
 
 const line: VectorNetwork = {
   vertices: [
@@ -129,20 +129,31 @@ describe('variable width strokes', () => {
 
 describe('width profiles', () => {
   test('a profile lays down its points at the stroke’s own weight, and is read back', () => {
-    const points = profileWidthPoints('taper-end', 10);
+    const points = profileWidthPoints('QUARTER_TAPER', 10);
     expect(points).toEqual([
       { position: 0, width: 10 },
-      { position: 1, width: 0.5 },
+      { position: 0.75, width: 10 },
+      { position: 1, width: 0.2 },
     ]);
-    expect(profileOf(points, 10)).toBe('taper-end');
+    expect(profileOf(points, 10)).toBe('QUARTER_TAPER');
     // At another weight the same shape is laid down again, so the profile keeps its look.
-    expect(profileOf(profileWidthPoints('taper-end', 4), 4)).toBe('taper-end');
+    expect(profileOf(profileWidthPoints('QUARTER_TAPER', 4), 4)).toBe('QUARTER_TAPER');
   });
 
   test('no points at all is the uniform profile, and points of one’s own match none', () => {
-    expect(profileOf([], 10)).toBe('uniform');
-    expect(profileWidthPoints('uniform', 10)).toEqual([]);
+    expect(profileOf([], 10)).toBe('UNIFORM');
+    expect(profileWidthPoints('UNIFORM', 10)).toEqual([]);
     expect(profileOf([{ position: 0.3, width: 7 }], 10)).toBeNull();
+  });
+
+  test('flipping the width points reads the profile back along the path the other way', () => {
+    const wedge = profileWidthPoints('WEDGE', 10);
+    const flipped = flipWidthPoints(wedge);
+    // The wedge starts at full width and ends at a point; flipped, it starts at the point.
+    expect(flipped.map((p) => p.position)).toEqual([0, 0.5, 1]);
+    expect(flipped[0]!.width).toBeCloseTo(0.2);
+    expect(flipped[2]!.width).toBe(10);
+    expect(flipWidthPoints(flipped)).toEqual(wedge);
   });
 
   test('every profile can be laid down and read back at a weight', () => {

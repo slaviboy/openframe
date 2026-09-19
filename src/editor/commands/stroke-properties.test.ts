@@ -22,7 +22,19 @@ import type { RectangleNode, SceneNode, VectorNode } from '@/core/schema/documen
 import { straightSegment, type VectorNetwork } from '@/core/vector/vector-network';
 import { deserializeDocument, serializeDocument } from '@/core/serialize/serialize';
 import { Editor } from '../editor';
-import { setAllEndCaps, setDashCap, setEndCap, setIndividualStrokeWeights, setStrokeDashes, setStrokeJoin, setStrokeMiterAngle, setVertexCaps } from './properties';
+import {
+  canTakeWidthProfile,
+  flipStrokeWidths,
+  setAllEndCaps,
+  setDashCap,
+  setEndCap,
+  setIndividualStrokeWeights,
+  setStrokeDashes,
+  setStrokeJoin,
+  setStrokeMiterAngle,
+  setVertexCaps,
+  setWidthProfile,
+} from './properties';
 
 let editor: Editor;
 let rect: string;
@@ -118,6 +130,35 @@ describe('stroke properties', () => {
       editor.history.run('caps', (tx) => setEndCap(tx, get(vector), 'startCap', 'ROUND'));
       expect(get<VectorNode>(vector).endpointCap).toBe('ROUND');
       expect(get<VectorNode>(vector).vectorNetwork.vertices.every((v) => v.cap === undefined)).toBe(true);
+    });
+
+    test('a width profile is laid down as shares of the weight, and takes the end points off with it', () => {
+      const vector = addVector(path());
+      editor.history.run('caps', (tx) => setEndCap(tx, get(vector), 'endCap', 'TRIANGLE_ARROW'));
+      expect(canTakeWidthProfile(get(vector))).toBe(true);
+      editor.history.run('profile', (tx) => setWidthProfile(tx, get(vector), 'WEDGE'));
+      const points = get<VectorNode>(vector).strokeWidths!;
+      expect(points[0]!.width).toBe(get<VectorNode>(vector).strokeWeight);
+      expect(points[points.length - 1]!.width).toBeLessThan(points[0]!.width);
+      expect(get<VectorNode>(vector).vectorNetwork.vertices.every((v) => v.cap === undefined)).toBe(true);
+
+      // Flipping reads the same widths back along the path the other way, and the uniform profile clears them.
+      editor.history.run('flip', (tx) => flipStrokeWidths(tx, get(vector)));
+      const flipped = get<VectorNode>(vector).strokeWidths!;
+      expect(flipped[0]!.width).toBeLessThan(flipped[flipped.length - 1]!.width);
+      editor.history.run('profile', (tx) => setWidthProfile(tx, get(vector), 'UNIFORM'));
+      expect(get<VectorNode>(vector).strokeWidths).toBeUndefined();
+    });
+
+    test('a dashed, dynamic or branching stroke takes no width profile', () => {
+      const vector = addVector(path());
+      editor.history.run('dash', (tx) => setStrokeDashes(tx, get(vector), [4, 4]));
+      expect(canTakeWidthProfile(get(vector))).toBe(false);
+      editor.history.run('profile', (tx) => setWidthProfile(tx, get(vector), 'WEDGE'));
+      expect(get<VectorNode>(vector).strokeWidths).toBeUndefined();
+      const branching = path();
+      const forked = addVector({ ...branching, vertices: [...branching.vertices, { x: 40, y: -40 }], segments: [...branching.segments, straightSegment(1, 3)] });
+      expect(canTakeWidthProfile(get(forked))).toBe(false);
     });
 
     test('the ends picked in vector edit mode take their own point, and a layer-wide one clears them', () => {

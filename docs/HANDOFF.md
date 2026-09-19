@@ -480,3 +480,12 @@ markup. The pass is being built in phases, each its own commit.
   stroke* and the SVG export keep them. A dashed stroke keeps its dashes' cap; a brush or a width profile
   ends in the shape it is drawn as, which is what the reference's own support table says. Flattening a
   line now carries *both* its ends across, on its two points, rather than only the end one.
+- **Phase 2 — the width profiles the reference offers.** `WIDTH_PROFILES` now holds the reference's own six
+  and its own names — `UNIFORM`, `WEDGE`, `TAPER`, `QUARTER_TAPER`, `EYE`, `MIRRORED_TAPER` — instead of the
+  six of ours it had. The reference draws each as a picture and never says what it is made of, so the
+  shapes themselves are derived: a wedge runs straight from full width to a point, a taper falls away in a
+  curve, a quarter taper holds its width until the last quarter, an eye is pointed at both ends, and a
+  mirrored taper is a taper at either end. `setWidthProfile` and `flipStrokeWidths` (in
+  `src/editor/commands/properties.ts`) lay one down and read it back the other way, and
+  `canTakeWidthProfile` says when it can be laid at all — the documentation rules out a branching network
+  and a dynamic or dashed stroke, and a brush leaves no width to vary.

@@ -24,56 +24,73 @@ export interface WidthPoint {
   readonly width: number;
 }
 
+/** The shape a stroke's width takes along its length: the width at a position, as a share of the stroke's weight. */
+export interface WidthProfile {
+  readonly id: string;
+  readonly label: string;
+  readonly shape: readonly (readonly [number, number])[];
+}
+
 /**
- * The shapes a stroke's width can be given along its length. Each is a list of the width at a position, as a
- * share of the stroke's own weight, so a profile keeps its shape whatever the weight is set to.
+ * The shapes a stroke's width can be given along its length, in the reference's own order and by its own
+ * names. Each is a list of the width at a position, as a share of the stroke's own weight, so a profile
+ * keeps its shape whatever the weight is set to. The reference draws each as a picture and never says what
+ * it is made of, so the shapes themselves are ours: a wedge runs straight from full width to a point, a
+ * taper falls away from full width in a curve, a quarter taper holds its width until the last quarter, an
+ * eye is pointed at both ends and widest in the middle, and a mirrored taper is a taper at either end.
  */
-export const WIDTH_PROFILES: readonly { readonly id: string; readonly label: string; readonly shape: readonly (readonly [number, number])[] }[] = [
-  { id: 'uniform', label: 'Uniform', shape: [] },
+export const WIDTH_PROFILES: readonly WidthProfile[] = [
+  { id: 'UNIFORM', label: 'Uniform', shape: [] },
   {
-    id: 'taper-end',
-    label: 'Taper to the end',
+    id: 'WEDGE',
+    label: 'Wedge',
     shape: [
       [0, 1],
-      [1, 0.05],
+      [0.5, 0.5],
+      [1, 0.02],
     ],
   },
   {
-    id: 'taper-start',
-    label: 'Taper from the start',
+    id: 'TAPER',
+    label: 'Taper',
     shape: [
-      [0, 0.05],
-      [1, 1],
+      [0, 1],
+      [0.5, 0.8],
+      [1, 0.02],
     ],
   },
   {
-    id: 'taper-both',
-    label: 'Taper at both ends',
+    id: 'QUARTER_TAPER',
+    label: 'Quarter taper',
     shape: [
-      [0, 0.05],
+      [0, 1],
+      [0.75, 1],
+      [1, 0.02],
+    ],
+  },
+  {
+    id: 'EYE',
+    label: 'Eye',
+    shape: [
+      [0, 0.02],
       [0.5, 1],
-      [1, 0.05],
+      [1, 0.02],
     ],
   },
   {
-    id: 'bulge',
-    label: 'Wide in the middle',
+    id: 'MIRRORED_TAPER',
+    label: 'Mirrored taper',
     shape: [
-      [0, 0.4],
-      [0.5, 1.4],
-      [1, 0.4],
-    ],
-  },
-  {
-    id: 'waist',
-    label: 'Narrow in the middle',
-    shape: [
-      [0, 1],
-      [0.5, 0.3],
-      [1, 1],
+      [0, 0.02],
+      [0.25, 1],
+      [0.75, 1],
+      [1, 0.02],
     ],
   },
 ];
+
+/** The uniform profile: the one a stroke has while its width does not vary. */
+export const UNIFORM_PROFILE = 'UNIFORM';
 
 /** The width points a profile lays down for a stroke of `weight`; the uniform profile lays down none. */
 export function profileWidthPoints(profileId: string, weight: number): WidthPoint[] {
@@ -82,9 +99,17 @@ export function profileWidthPoints(profileId: string, weight: number): WidthPoin
   return profile.shape.map(([position, share]) => ({ position, width: Math.round(weight * share * 100) / 100 }));
 }
 
+/**
+ * The width points read back along the path the other way, which is what Flip width points does: a taper
+ * that fell away to the end falls away from the start instead.
+ */
+export function flipWidthPoints(points: readonly WidthPoint[]): WidthPoint[] {
+  return points.map((point) => ({ ...point, position: Math.round((1 - point.position) * 1000) / 1000 })).sort((a, b) => a.position - b.position);
+}
+
 /** Which profile a stroke's width points were laid down from, or null when they match none of them. */
 export function profileOf(points: readonly WidthPoint[], weight: number): string | null {
-  if (points.length === 0) return 'uniform';
+  if (points.length === 0) return UNIFORM_PROFILE;
   const near = (a: number, b: number) => Math.abs(a - b) < 0.02;
   const match = WIDTH_PROFILES.find(
     (profile) => profile.shape.length === points.length && profile.shape.every(([position, share], i) => near(position, points[i]!.position) && near(share * weight, points[i]!.width)),

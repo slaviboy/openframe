@@ -38,6 +38,7 @@ import {
   type StrokeJoin,
 } from '@/core/schema/document';
 import { pathEnds } from '@/core/vector/vector-caps';
+import { flipWidthPoints, profileWidthPoints, strokeChain } from '@/core/vector/vector-width';
 import { matrixRotationDegrees, roundTransform, toTransform } from '../interactions/transform';
 
 export const MIXED = Symbol('mixed');
@@ -273,6 +274,35 @@ export function setStrokeMiterAngle(tx: Transaction, node: SceneNode, degrees: n
   if (!hasGeometry(node)) return;
   const angle = Math.min(180, Math.max(0, Math.round(degrees * 100) / 100));
   tx.set(node.id, 'strokeMiterAngle', angle === DEFAULT_MITER_ANGLE ? undefined : angle);
+}
+
+/**
+ * Whether a stroke can be given a width profile. The documentation names what cannot: a vector network whose
+ * path branches, and a dynamic or dashed stroke. A brush paints the stroke as its own shape, which leaves no
+ * width to vary, and only a vector layer carries width points at all.
+ */
+export function canTakeWidthProfile(node: SceneNode): boolean {
+  return node.type === 'VECTOR' && !node.strokeDashes && !node.dynamicStroke && node.brushId === undefined && strokeChain(node.vectorNetwork) !== null;
+}
+
+/**
+ * Lays a width profile down along a stroke, as shares of the stroke's own weight; the uniform profile clears
+ * the width points again. A stroke whose width varies ends in the shape it tapers to, so laying a profile down
+ * takes the end points off — which is what the reference's own table of supported properties says.
+ */
+export function setWidthProfile(tx: Transaction, node: SceneNode, profileId: string): void {
+  if (!canTakeWidthProfile(node)) return;
+  const live = tx.store.getOrThrow(node.id) as Extract<SceneNode, { type: 'VECTOR' }>;
+  const points = profileWidthPoints(profileId, live.strokeWeight);
+  tx.set(node.id, 'strokeWidths', points.length > 0 ? points : undefined);
+  if (points.length > 0) setAllEndCaps(tx, live, 'NONE');
+}
+
+/** Flip width points: the stroke's width read back along the path the other way. */
+export function flipStrokeWidths(tx: Transaction, node: SceneNode): void {
+  if (node.type !== 'VECTOR') return;
+  const points = (tx.store.getOrThrow(node.id) as typeof node).strokeWidths;
+  if (points?.length) tx.set(node.id, 'strokeWidths', flipWidthPoints(points));
 }
 
 /**

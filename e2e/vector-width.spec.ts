@@ -95,9 +95,9 @@ test('a width profile shapes the stroke, and the tapered stroke outlines as it i
   const tool = await pickVariableWidth(page);
   await expect(tool).toHaveAttribute('aria-pressed', 'true');
   const profile = page.getByTestId('field-width-profile');
-  await expect(profile).toHaveValue('uniform');
-  await profile.selectOption('taper-end');
-  await expect(profile).toHaveValue('taper-end');
+  await expect(profile).toHaveValue('UNIFORM');
+  await profile.selectOption('WEDGE');
+  await expect(profile).toHaveValue('WEDGE');
 
   // Outlining a tapered stroke follows the shape it is drawn as, so the outline is no taller than the stroke.
   await page.keyboard.press('Escape');
