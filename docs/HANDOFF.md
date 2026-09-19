@@ -524,3 +524,14 @@ Wiggle, Size jitter, Angular jitter and Rotation, and both end with Width profil
   brushes*, marks the one in use with a check, and draws a picture per brush — `brushStrokeOutlines` over a
   straight chain, the same trick the width-profile pictures use, so a brush's picture and its stroke cannot
   drift apart. The reference ships PNGs of its own 25 brushes; ours are the file's, made from a closed vector layer.
+- **Phase C — what a brush's kind asks for.** The captures differ by kind, and so does the tab now: a
+  stretch brush carries **Direction**, a scatter brush **Gap**, **Wiggle**, **Size jitter**, **Angular
+  jitter** and **Rotation**, and both end with **Width profile**. They are one optional `brushSettings` on
+  the layer (`BrushSettingsSchema`), stored only where they differ from `DEFAULT_BRUSH_SETTINGS` — the
+  capture's own numbers, since the reference ships 25 brushes each with its own and ours are made from a layer with
+  nothing to carry. `brushStrokeOutlines` took the settings and the width points: a stretch brush lays
+  along `reverseChain` when it runs backward and scales by the width where each part of the shape falls, a
+  scatter brush steps by the shape's length plus the gap and gives each copy its offset, size and turn from
+  a repeatable noise of its index — the rule `dynamic-stroke.ts` already follows, so a stroke draws the
+  same way every frame. `canTakeWidthProfile` no longer refuses a brushed stroke: that was ours, and the
+  documentation only rules out branching paths and dynamic or dashed strokes.

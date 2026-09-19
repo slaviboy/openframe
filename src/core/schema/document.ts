@@ -600,6 +600,26 @@ export const DynamicStrokeSchema = z.object({
   smoothen: z.number().min(0).max(100),
 });
 
+/**
+ * How a brush is laid along a stroke. A stretch brush is laid over the whole path, so it has a direction to
+ * run in; a scatter brush repeats its shape along the path, so it has a gap between the copies and the
+ * jitters that keep them from looking stamped. Absent fields mean the defaults in `DEFAULT_BRUSH_SETTINGS`.
+ */
+export const BrushSettingsSchema = z.object({
+  /** Stretch: which way along the path the shape is laid. */
+  direction: z.enum(['FORWARD', 'REVERSE']).optional(),
+  /** Scatter: the space between copies, as a share of the shape's own length. */
+  gap: z.number().min(0).max(1000).optional(),
+  /** Scatter: how far a copy is moved across the path, as a share of the stroke's weight. */
+  wiggle: z.number().min(0).max(100).optional(),
+  /** Scatter: how much a copy's size varies, as a share of it. */
+  sizeJitter: z.number().min(0).max(100).optional(),
+  /** Scatter: how far a copy is turned off the way the path goes, in degrees. */
+  angularJitter: z.number().min(0).max(360).optional(),
+  /** Scatter: a turn given to every copy, in degrees. */
+  rotation: z.number().min(0).max(360).optional(),
+});
+
 const GeometryFields = {
   fills: z.array(PaintSchema).max(256),
   strokes: z.array(PaintSchema).max(256),
@@ -627,6 +647,8 @@ const GeometryFields = {
   dynamicStroke: DynamicStrokeSchema.optional(),
   /** The custom brush the stroke is painted with, while one is applied. */
   brushId: IdSchema.optional(),
+  /** How that brush is laid along the stroke; absent means the defaults. */
+  brushSettings: BrushSettingsSchema.optional(),
 };
 
 const CornerFields = {
@@ -1392,6 +1414,8 @@ export type PageAnimation = z.infer<typeof PageAnimationSchema>;
 export type StyleNode = z.infer<typeof StyleNodeSchema>;
 export type BrushNode = z.infer<typeof BrushNodeSchema>;
 export type BrushKind = BrushNode['brushKind'];
+export type BrushSettings = z.infer<typeof BrushSettingsSchema>;
+export type BrushDirection = NonNullable<BrushSettings['direction']>;
 export type VariableCollectionNode = z.infer<typeof VariableCollectionNodeSchema>;
 export type VariableNode = z.infer<typeof VariableNodeSchema>;
 export type FrameNode = z.infer<typeof FrameNodeSchema>;

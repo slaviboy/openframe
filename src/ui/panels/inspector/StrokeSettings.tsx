@@ -17,9 +17,9 @@
 
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { DEFAULT_MITER_ANGLE, type BrushKind, type BrushNode, type DashCap, type SceneNode, type StrokeCap, type StrokeJoin } from '@/core/schema/document';
+import { DEFAULT_MITER_ANGLE, type BrushDirection, type BrushKind, type BrushNode, type BrushSettings, type DashCap, type SceneNode, type StrokeCap, type StrokeJoin } from '@/core/schema/document';
 import { DEFAULT_DYNAMIC_STROKE } from '@/core/vector/dynamic-stroke';
-import { brushStrokeOutlines } from '@/core/vector/brush';
+import { brushSettings, brushStrokeOutlines } from '@/core/vector/brush';
 import { capOfEnd, openEnds, pathEnds } from '@/core/vector/vector-caps';
 import { profileOf, WIDTH_PROFILES, type StrokeChain } from '@/core/vector/vector-width';
 import { applyBrush, localBrushes } from '@/editor/commands/brushes';
@@ -29,6 +29,7 @@ import {
   flipStrokeWidths,
   MIXED,
   setAllEndCaps,
+  setBrushSettings,
   setDashCap,
   setDynamicStroke,
   setEndCap,
@@ -505,28 +506,17 @@ function JoinRow({ nodes }: { nodes: GeometryNode[] }) {
     <Row label="Join">
       <div className={inspector.segmented} role="radiogroup" aria-label="Stroke join" data-testid="field-stroke-join" data-value={current ?? ''}>
         {JOIN_OPTIONS.map((option) => (
-          <JoinOption
+          <SegmentedOption
             key={option.join}
-            option={option}
+            name="stroke-join"
+            label={option.label}
+            icon={option.icon}
             checked={current === option.join}
             onSelect={() => editor.history.run('Change stroke join', (tx) => nodes.forEach((n) => setStrokeJoin(tx, n, option.join)))}
           />
         ))}
       </div>
     </Row>
-  );
-}
-
-function JoinOption({ option, checked, onSelect }: { option: (typeof JOIN_OPTIONS)[number]; checked: boolean; onSelect: () => void }) {
-  const { handlers, tooltip } = useHoverTooltip(option.label, undefined, 'below');
-  return (
-    <>
-      <label className={inspector.segmentedOption} data-checked={checked || undefined} {...handlers}>
-        <input type="radio" name="stroke-join" aria-label={option.label} checked={checked} onChange={onSelect} />
-        <Icon name={option.icon} />
-      </label>
-      {tooltip}
-    </>
   );
 }
 
@@ -616,8 +606,95 @@ function BrushTab({ nodes }: { nodes: GeometryNode[] }) {
           )
         }
       />
+      {/* What a brush asks for is its kind's: a stretch brush runs a way along the path, a scatter brush
+          repeats its shape a gap apart, each copy given away to chance by as much as its jitters allow. */}
+      {current?.brushKind === 'STRETCH' && <DirectionRow nodes={nodes} />}
+      {current?.brushKind === 'SCATTER' && <ScatterRows nodes={nodes} />}
+      <Divider />
       <WidthProfileRow nodes={nodes} />
       <OwnRows nodes={nodes} />
+    </>
+  );
+}
+
+/** The two ways a stretch brush can run along the path, as the reference's segmented group. */
+const DIRECTIONS: readonly { readonly value: BrushDirection; readonly label: string; readonly icon: IconName }[] = [
+  { value: 'REVERSE', label: 'Backward', icon: 'directionBackward' },
+  { value: 'FORWARD', label: 'Forward', icon: 'directionForward' },
+];
+
+function DirectionRow({ nodes }: { nodes: GeometryNode[] }) {
+  const editor = useEditor();
+  const current = val(shared(nodes, (n) => brushSettings(n.brushSettings).direction)) ?? null;
+  return (
+    <Row label="Direction">
+      <div className={inspector.segmented} role="radiogroup" aria-label="Direction" data-testid="field-brush-direction" data-value={current ?? ''}>
+        {DIRECTIONS.map((option) => (
+          <SegmentedOption
+            key={option.value}
+            name="brush-direction"
+            label={option.label}
+            icon={option.icon}
+            checked={current === option.value}
+            onSelect={() => editor.history.run('Change brush direction', (tx) => nodes.forEach((n) => setBrushSettings(tx, n, { direction: option.value })))}
+          />
+        ))}
+      </div>
+    </Row>
+  );
+}
+
+/** What a scatter brush asks for: how far apart its copies are, and how far each may stray. */
+function ScatterRows({ nodes }: { nodes: GeometryNode[] }) {
+  const gesture = useGesture('Change brush settings');
+  const settings = brushSettings(val(shared(nodes, (n) => n.brushSettings, (a, b) => canonicalBrushSettings(a) === canonicalBrushSettings(b))));
+  const write = (patch: Parameters<typeof setBrushSettings>[2]) => gesture.change((tx) => nodes.forEach((n) => setBrushSettings(tx, n, patch)));
+  const fields = [
+    { label: 'Gap', icon: 'brushGap', suffix: '%', max: 1000, value: settings.gap, write: (v: number) => write({ gap: v }) },
+    { label: 'Wiggle', icon: 'strokeWiggle', suffix: '%', max: 100, value: settings.wiggle, write: (v: number) => write({ wiggle: v }) },
+    { label: 'Size jitter', icon: 'brushSizeJitter', suffix: '%', max: 100, value: settings.sizeJitter, write: (v: number) => write({ sizeJitter: v }) },
+    { label: 'Angular jitter', icon: 'brushAngularJitter', suffix: '°', max: 360, value: settings.angularJitter, write: (v: number) => write({ angularJitter: v }) },
+    { label: 'Rotation', icon: 'miterAngle', suffix: '°', max: 360, value: settings.rotation, write: (v: number) => write({ rotation: v }) },
+  ] as const;
+  return (
+    <>
+      {fields.map((field) => (
+        <Row key={field.label} label={field.label}>
+          <NumberField
+            label={<Icon name={field.icon} />}
+            ariaLabel={field.label}
+            testId={`field-brush-${field.label.toLowerCase().replace(' ', '-')}`}
+            suffix={field.suffix}
+            min={0}
+            max={field.max}
+            decimals={0}
+            value={field.value}
+            onGestureStart={gesture.start}
+            onGestureEnd={gesture.end}
+            onChange={field.write}
+          />
+        </Row>
+      ))}
+    </>
+  );
+}
+
+/** Brush settings as one string, so a shared value can be compared without caring about the field order. */
+const canonicalBrushSettings = (settings: BrushSettings | undefined) => {
+  const filled = brushSettings(settings);
+  return `${filled.direction}/${filled.gap}/${filled.wiggle}/${filled.sizeJitter}/${filled.angularJitter}/${filled.rotation}`;
+};
+
+/** One option of a segmented group: a radio covering its glyph, so a click and a keypress both reach it. */
+function SegmentedOption({ name, label, icon, checked, onSelect }: { name: string; label: string; icon: IconName; checked: boolean; onSelect: () => void }) {
+  const { handlers, tooltip } = useHoverTooltip(label, undefined, 'below');
+  return (
+    <>
+      <label className={inspector.segmentedOption} data-checked={checked || undefined} {...handlers}>
+        <input type="radio" name={name} aria-label={label} checked={checked} onChange={onSelect} />
+        <Icon name={icon} />
+      </label>
+      {tooltip}
     </>
   );
 }

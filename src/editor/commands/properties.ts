@@ -27,6 +27,7 @@ import {
   hasGeometry,
   isSceneNode,
   type BlendMode,
+  type BrushSettings,
   type CornerRadii,
   type DashCap,
   type Effect,
@@ -39,6 +40,7 @@ import {
 } from '@/core/schema/document';
 import { openEnds, pathEnds } from '@/core/vector/vector-caps';
 import { flipWidthPoints, profileWidthPoints, strokeChain } from '@/core/vector/vector-width';
+import { DEFAULT_BRUSH_SETTINGS } from '@/core/vector/brush';
 import { matrixRotationDegrees, roundTransform, toTransform } from '../interactions/transform';
 
 export const MIXED = Symbol('mixed');
@@ -290,11 +292,21 @@ export function canTakeEndPoints(node: SceneNode): boolean {
 
 /**
  * Whether a stroke can be given a width profile. The documentation names what cannot: a vector network whose
- * path branches, and a dynamic or dashed stroke. A brush paints the stroke as its own shape, which leaves no
- * width to vary, and only a vector layer carries width points at all.
+ * path branches, and a dynamic or dashed stroke. A brushed stroke can — the reference offers the control in
+ * its Brush tab — and the brush's shape is scaled by the width where it is laid. Only a vector layer carries
+ * width points at all.
  */
 export function canTakeWidthProfile(node: SceneNode): boolean {
-  return node.type === 'VECTOR' && !node.strokeDashes && !node.dynamicStroke && node.brushId === undefined && strokeChain(node.vectorNetwork) !== null;
+  return node.type === 'VECTOR' && !node.strokeDashes && !node.dynamicStroke && strokeChain(node.vectorNetwork) !== null;
+}
+
+/** How a brush is laid along a stroke; only what differs from the defaults is stored. */
+export function setBrushSettings(tx: Transaction, node: SceneNode, patch: BrushSettings): void {
+  if (!hasGeometry(node)) return;
+  const current = (tx.store.getOrThrow(node.id) as typeof node).brushSettings;
+  const merged = { ...current, ...patch } as Record<string, unknown>;
+  const next = Object.fromEntries(Object.entries(merged).filter(([key, value]) => value !== undefined && value !== (DEFAULT_BRUSH_SETTINGS as Record<string, unknown>)[key]));
+  tx.set(node.id, 'brushSettings', Object.keys(next).length > 0 ? (next as BrushSettings) : undefined);
 }
 
 /**

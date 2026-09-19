@@ -171,6 +171,17 @@ export function strokeChain(network: VectorNetwork, segmentsPerCurve = 16): Stro
   return { points, lengths, closed, vertexPositions: vertexIndices.map((i) => lengths[i]! / total) };
 }
 
+/**
+ * The chain walked from the other end: the same line, read backwards. A stretch brush laid along it starts
+ * where it used to stop, which is what Direction asks for.
+ */
+export function reverseChain(chain: StrokeChain): StrokeChain {
+  const points = [...chain.points].reverse();
+  const lengths = [0];
+  for (let i = 1; i < points.length; i++) lengths.push(lengths[i - 1]! + Math.hypot(points[i]!.x - points[i - 1]!.x, points[i]!.y - points[i - 1]!.y));
+  return { points, lengths, closed: chain.closed, vertexPositions: [...chain.vertexPositions].map((position) => 1 - position).reverse() };
+}
+
 const smooth = (t: number) => t * t * (3 - 2 * t);
 
 /**

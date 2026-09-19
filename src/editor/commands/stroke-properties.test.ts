@@ -25,6 +25,7 @@ import { Editor } from '../editor';
 import {
   canTakeWidthProfile,
   flipStrokeWidths,
+  setBrushSettings,
   setAllEndCaps,
   setDashCap,
   setEndCap,
@@ -148,6 +149,18 @@ describe('stroke properties', () => {
       expect(flipped[0]!.width).toBeLessThan(flipped[flipped.length - 1]!.width);
       editor.history.run('profile', (tx) => setWidthProfile(tx, get(vector), 'UNIFORM'));
       expect(get<VectorNode>(vector).strokeWidths).toBeUndefined();
+    });
+
+    test('a brush keeps only the settings that differ from the ones it starts with', () => {
+      const vector = addVector(path());
+      editor.history.run('brush', (tx) => setBrushSettings(tx, get(vector), { gap: 25 }));
+      expect('brushSettings' in get(vector)).toBe(false);
+      editor.history.run('brush', (tx) => setBrushSettings(tx, get(vector), { gap: 80, direction: 'REVERSE' }));
+      expect(get<VectorNode>(vector).brushSettings).toEqual({ gap: 80, direction: 'REVERSE' });
+      // Set back to what it starts as, the field goes again rather than being stored as a default.
+      editor.history.run('brush', (tx) => setBrushSettings(tx, get(vector), { gap: 25 }));
+      expect(get<VectorNode>(vector).brushSettings).toEqual({ direction: 'REVERSE' });
+      expect((deserializeDocument(serializeDocument(editor.doc)).getOrThrow(vector) as VectorNode).brushSettings).toEqual({ direction: 'REVERSE' });
     });
 
     test('a dashed, dynamic or branching stroke takes no width profile', () => {

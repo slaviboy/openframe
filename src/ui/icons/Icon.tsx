@@ -350,6 +350,50 @@ const FILLED: Record<FilledName, { readonly viewBox: 16 | 24 | 200; readonly bod
       />
     ),
   },
+  // What a brush's own kind asks for: a stretch brush's Direction, and a scatter brush's Gap, Size jitter
+  // and Angular jitter. Its Wiggle is `strokeWiggle` and its Rotation `miterAngle`, which the reference
+  // draws twice over.
+  directionBackward: {
+    viewBox: 24,
+    body: (
+      <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M16.5 11.5a.5.5 0 0 1-.5.5H9.207l3.147 3.146a.5.5 0 0 1-.708.708l-4-4a.5.5 0 0 1 0-.708l4-4a.5.5 0 0 1 .708.708L9.207 11H16a.5.5 0 0 1 .5.5" />
+    ),
+  },
+  directionForward: {
+    viewBox: 24,
+    body: (
+      <path fill="currentColor" fillRule="evenodd" clipRule="evenodd" d="M7.5 11.5A.5.5 0 0 1 8 11h6.793l-3.147-3.146a.5.5 0 0 1 .708-.708l4 4a.5.5 0 0 1 0 .708l-4 4a.5.5 0 0 1-.708-.708L14.793 12H8a.5.5 0 0 1-.5-.5" />
+    ),
+  },
+  brushGap: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M7.5 7A1.5 1.5 0 0 1 9 8.5v7A1.5 1.5 0 0 1 7.5 17a.5.5 0 0 1-.1-.99l.2-.02a.5.5 0 0 0 .4-.49v-7a.5.5 0 0 0-.4-.49l-.2-.02A.5.5 0 0 1 7.5 7m9 0a.5.5 0 0 1 .1.99l-.2.02a.5.5 0 0 0-.4.49v7a.5.5 0 0 0 .4.49l.2.02a.5.5 0 0 1-.1.99 1.5 1.5 0 0 1-1.5-1.5v-7A1.5 1.5 0 0 1 16.5 7M12 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2"
+      />
+    ),
+  },
+  brushSizeJitter: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        d="M15 12a3 3 0 1 1 0 6 3 3 0 0 1 0-6m0 1a2 2 0 1 0 0 4 2 2 0 0 0 0-4m-3.977-4.878a4 4 0 0 1 4.639 2.268c.131.3-.109.61-.436.61h-.044a.56.56 0 0 1-.491-.326 3.001 3.001 0 0 0-5.6 2.06 3 3 0 0 0 1.583 1.956c.19.094.325.28.326.49v.047c0 .328-.31.567-.61.435a4 4 0 0 1 .633-7.54M8.5 5.996c.676 0 1.289.27 1.738.707.226.22.093.575-.197.698-.211.09-.46.033-.643-.105a1.5 1.5 0 0 0-2.1 2.096c.137.184.195.43.105.642-.124.29-.478.425-.698.198A2.5 2.5 0 0 1 6 8.496a2.5 2.5 0 0 1 2.5-2.5"
+      />
+    ),
+  },
+  brushAngularJitter: {
+    viewBox: 24,
+    body: (
+      <path
+        fill="currentColor"
+        d="M10.6 6.01a.5.5 0 0 1 .4.49v4a.5.5 0 0 1-1 0V7.416a5.001 5.001 0 1 0 6.976 5.083A.54.54 0 0 1 17.5 12a.47.47 0 0 1 .48.5A6 6 0 1 1 8.685 7H6.5a.5.5 0 0 1 0-1h4zM15.5 8a.5.5 0 0 1 0 1h-.858a3.998 3.998 0 0 1-3.892 6.799 4 4 0 0 1-2.718-3.3c-.034-.274.193-.499.469-.499s.496.226.542.498a3 3 0 0 0 5.807.44c.384-1.167.01-2.4-.85-3.171v.733a.5.5 0 0 1-1 0v-2l.01-.1a.5.5 0 0 1 .49-.4z"
+      />
+    ),
+  },
   flipWidthPoints: {
     viewBox: 24,
     body: (
@@ -1200,6 +1244,11 @@ type FilledName =
   | 'strokeFrequency'
   | 'strokeWiggle'
   | 'strokeSmoothen'
+  | 'directionBackward'
+  | 'directionForward'
+  | 'brushGap'
+  | 'brushSizeJitter'
+  | 'brushAngularJitter'
   | 'vectorMove'
   | 'vectorPaint'
   | 'lasso'

@@ -1875,13 +1875,15 @@ export class SceneRenderer {
       }
     }
     const widths = node.strokeWidths;
-    const chain = widths && widths.length > 0 && !node.strokeDashes ? strokeChain(node.vectorNetwork) : null;
+    // A brush paints the stroke as its own shape, and takes the width points with it; the variable-width
+    // outline is for a stroke drawn as a line.
+    const chain = widths && widths.length > 0 && !node.strokeDashes && node.brushId === undefined ? strokeChain(node.vectorNetwork) : null;
     // A custom brush paints the stroke as its own shape along the path, filled with the stroke's paints.
     const brush = node.brushId === undefined ? undefined : store.get(node.brushId);
     const brushChain = isBrush(brush) && node.strokeWeight > 0 ? strokeChain(node.vectorNetwork) : null;
     if (isBrush(brush) && brushChain) {
       const builder = new this.ck.PathBuilder();
-      for (const polygon of brushStrokeOutlines(brushChain, brush.vectorNetwork, brush.size, brush.brushKind, node.strokeWeight))
+      for (const polygon of brushStrokeOutlines(brushChain, brush.vectorNetwork, brush.size, brush.brushKind, node.strokeWeight, { settings: node.brushSettings, widths: node.strokeWidths }))
         builder.addPolygon(
           polygon.flatMap((q) => [q.x, q.y]),
           true,

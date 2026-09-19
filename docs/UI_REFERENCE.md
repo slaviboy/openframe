@@ -634,6 +634,51 @@ all. End points need an open end that is drawn as a cap: a stroke drawn as an ar
 that varies — ends in the shape it tapers to, which is why the reference's support table says a width
 profile removes an arrowhead.
 
+### The Dynamic and Brush tabs
+
+From the user's captures of both tabs and the two saved pages `brushes_streched.html` and
+`brushes_scatered.html` (2026-09-19), which also hold the Brushes list.
+
+**Dynamic** is three `advancedStrokeRow inlineLabels` rows — Frequency, Wiggle, Smoothen — each a
+scrubbable share with its glyph inside the field on the left, then `<hr>` and the same End points row the
+Basic tab draws. The capture reads 75%, 30%, 50%; ours start at 50% each, which is what a dynamic stroke
+has always started at.
+
+**Brush** opens with a control the width of the tab — `role="combobox" aria-haspopup="dialog"
+aria-controls="brush-listbox"` — drawing the stroke that brush makes, the chevron after it, and the brush's
+name in its tooltip rather than beside it. What follows is the brush's kind:
+
+| Kind | Rows | Capture |
+| --- | --- | --- |
+| Stretch | **Direction**, a segmented group: `REVERSE` *Backward*, then `FORWARD` *Forward* | Forward |
+| Scatter | **Gap** `%`, **Wiggle** `%`, **Size jitter** `%`, **Angular jitter** `°`, **Rotation** `°` | 25%, 0%, 30%, 180°, 0° |
+
+Both then draw `<hr>` and the Width profile row — so a brushed stroke takes a profile, which our
+`canTakeWidthProfile` had been refusing on its own account; the documentation only rules out branching
+paths and dynamic or dashed strokes.
+
+**The Brushes list** (`data-testid="brush-list-modal"`) is a dialog of its own, 15rem wide and 510px tall,
+placed beside the settings dialog, with an `<h2>` **Brushes** and a `role="grid"` (`id="brush-listbox"`) of
+sticky `<h3>` headings — *Stretch brushes*, then *Scatter brushes* — over a row per brush: a check mark
+when it is the one in use, the brush's name, and a picture of the stroke it makes.
+
+**Measured.** The eight glyphs (three Dynamic, two Direction, Gap, Size jitter, Angular jitter) are the
+reference's own path data; Rotation's glyph is the Miter angle field's and the scatter Wiggle's is the
+Dynamic tab's, which the reference draws twice over, so ours are named for what they draw rather than for
+the row. The row order per kind, the values and their units, the two headings and the list's shape are the
+capture's.
+
+**Derived.** The brush pictures are PNGs in the reference, so ours are drawn from the brush's own shape laid
+along a straight stroke — the same trick the width-profile pictures use. The settings a brush starts with
+are the capture's own numbers, since the reference ships 25 brushes each with its own and ours are made from a
+closed vector layer, with nothing to carry. What each setting does to the drawing — a gap as a share of the
+shape's length, a wiggle as a share of the stroke's weight, size and angle given away to a repeatable
+noise of the copy's index, as `dynamic-stroke.ts` already does — is ours.
+
+**Deviations.** The list holds the file's own brushes rather than the reference's 25, whose artwork is theirs.
+Hovering a brush to preview it on the selection, which the documentation describes (and describes for
+stroke positions too), is not built: nothing in the editor previews on hover yet, and the matrix says so.
+
 ### Still open on the pen tool
 
 - Corner radius rounds a point where two straight lines meet, which is the corner the documentation
