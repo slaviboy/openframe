@@ -22,7 +22,7 @@ import { DEFAULT_DYNAMIC_STROKE } from '@/core/vector/dynamic-stroke';
 import { brushSettings, brushStrokeOutlines } from '@/core/vector/brush';
 import { capOfEnd, openEnds, pathEnds } from '@/core/vector/vector-caps';
 import { profileOf, WIDTH_PROFILES, type StrokeChain } from '@/core/vector/vector-width';
-import { applyBrush, localBrushes } from '@/editor/commands/brushes';
+import { applyBrush, availableBrushes } from '@/editor/commands/brushes';
 import {
   canTakeEndPoints,
   canTakeWidthProfile,
@@ -182,7 +182,7 @@ export function AdvancedStrokeSettings({ nodes }: { nodes: GeometryNode[] }) {
 function StrokeSettingsDialog({ nodes, rootRef, onClose }: { nodes: GeometryNode[]; rootRef: React.RefObject<HTMLDivElement | null>; onClose: () => void }) {
   const editor = useEditor();
   const headingId = useId();
-  const brushes = localBrushes(editor.doc);
+  const brushes = availableBrushes(editor.doc);
   const type = val(shared(nodes, typeOf)) ?? 'Basic';
 
   const changeType = (next: StrokeType) => {
@@ -217,7 +217,7 @@ function StrokeSettingsDialog({ nodes, rootRef, onClose }: { nodes: GeometryNode
       <fieldset className={styles.types} role="radiogroup">
         <legend className="visually-hidden">Stroke Type</legend>
         {STROKE_TYPES.map((option) => (
-          <StrokeTypeOption key={option} type={option} checked={type === option} disabled={option === 'Brush' && brushes.length === 0} onSelect={() => changeType(option)} />
+          <StrokeTypeOption key={option} type={option} checked={type === option} onSelect={() => changeType(option)} />
         ))}
       </fieldset>
       <div className={styles.body}>
@@ -230,12 +230,12 @@ function StrokeSettingsDialog({ nodes, rootRef, onClose }: { nodes: GeometryNode
 }
 
 /** One of Basic / Dynamic / Brush: a radio that covers its label, so pointer and keyboard both reach it. */
-function StrokeTypeOption({ type, checked, disabled, onSelect }: { type: StrokeType; checked: boolean; disabled: boolean; onSelect: () => void }) {
+function StrokeTypeOption({ type, checked, onSelect }: { type: StrokeType; checked: boolean; onSelect: () => void }) {
   const { handlers, tooltip } = useHoverTooltip(type, undefined, 'below');
   return (
     <>
-      <label className={styles.type} data-checked={checked || undefined} aria-disabled={disabled || undefined} {...handlers}>
-        <input type="radio" name="stroke-type" aria-label={type} checked={checked} disabled={disabled} onChange={onSelect} />
+      <label className={styles.type} data-checked={checked || undefined} {...handlers}>
+        <input type="radio" name="stroke-type" aria-label={type} checked={checked} onChange={onSelect} />
         <span>{type}</span>
       </label>
       {tooltip}
@@ -591,7 +591,7 @@ function DynamicTab({ nodes }: { nodes: GeometryNode[] }) {
 /** Brush: the stroke is painted with a brush's own shape. Brushes are made from a closed vector layer. */
 function BrushTab({ nodes }: { nodes: GeometryNode[] }) {
   const editor = useEditor();
-  const brushes = localBrushes(editor.doc);
+  const brushes = availableBrushes(editor.doc);
   const current = brushes.find((brush) => brush.id === val(shared(nodes, (n) => n.brushId)));
   return (
     <>

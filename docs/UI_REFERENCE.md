@@ -675,7 +675,14 @@ closed vector layer, with nothing to carry. What each setting does to the drawin
 shape's length, a wiggle as a share of the stroke's weight, size and angle given away to a repeatable
 noise of the copy's index, as `dynamic-stroke.ts` already does — is ours.
 
-**Deviations.** The list holds the file's own brushes rather than the reference's 25, whose artwork is theirs.
+**Deviations.** the reference's own 25 brushes are its artwork, so the list holds eight of ours — Leaf, Wedge,
+Chisel and Ribbon to stretch, Dot, Dash, Triangle and Petal to scatter — and then whatever the file itself
+holds, under the same two headings. They are not layers in the file: `BUILTIN_BRUSHES` is the same in every
+file, takes up no room in what is saved, and `brushById` looks there before the document, so a layer that
+names one still finds it after a save and an open. Their ids sit in the `0` replica, which is the root's and
+which no editing session takes. Because there is always a brush to apply, the Brush tab is never disabled —
+it was, until the brushes shipped, which was the one thing in the tab the reference does not do.
+
 Hovering a brush to preview it on the selection, which the documentation describes (and describes for
 stroke positions too), is not built: nothing in the editor previews on hover yet, and the matrix says so.
 

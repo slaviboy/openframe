@@ -56,12 +56,13 @@ test('a closed vector layer becomes a brush, which paints another layer’s stro
   const brush = page.getByTestId('field-brush');
   await expect(brush).not.toHaveAttribute('data-value', '');
 
-  // The control opens the Brushes list, which groups what the file has by kind and marks the one in use.
+  // The control opens the Brushes list, which groups the brushes by kind and marks the one in use. The
+  // file's own comes after the ones every file has, under the heading for its kind.
   await brush.click();
   const brushes = page.getByTestId('brush-list-modal');
   await expect(brushes.getByRole('heading', { name: 'Brushes', exact: true })).toBeVisible();
   await expect(brushes.getByRole('heading', { name: 'Scatter brushes' })).toBeVisible();
-  await brushes.getByRole('button').first().click();
+  await brushes.getByRole('button').last().click();
   await expect(brushes).toHaveCount(0);
 
   // A scatter brush carries what a scatter brush asks for: the gap between its copies, and the jitters.
@@ -127,4 +128,41 @@ test('a stretch brush runs a way along the path, which Direction turns around', 
   await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
   await expect(page.getByTestId('field-brush-direction')).toHaveAttribute('data-value', 'REVERSE');
   await expect(page.getByTestId('field-width-profile')).toHaveAttribute('data-value', 'WEDGE');
+});
+
+test('a file starts with brushes of both kinds, which a stroke can be painted with straight away', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  // Nothing made yet: the brushes a file starts with are the reference's own tab, never a dead one.
+  await page.keyboard.press('p');
+  await page.mouse.click(box.x + 420, box.y + 300);
+  await page.mouse.click(box.x + 560, box.y + 380);
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.getByRole('treeitem', { name: /Vector 1/ }).click();
+  await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Stroke settings' });
+  await expect(dialog.getByRole('radio', { name: 'Brush' })).toBeEnabled();
+  await dialog.getByRole('radio', { name: 'Brush' }).check();
+  await expect(page.getByTestId('field-brush')).not.toHaveAttribute('data-value', '');
+
+  // Both kinds are there, and picking a scattered one brings its own settings with it.
+  await page.getByTestId('field-brush').click();
+  const brushes = page.getByTestId('brush-list-modal');
+  await expect(brushes.getByRole('heading', { name: 'Stretch brushes' })).toBeVisible();
+  await expect(brushes.getByRole('heading', { name: 'Scatter brushes' })).toBeVisible();
+  await brushes.getByRole('button', { name: 'Dot' }).click();
+  await expect(page.getByTestId('field-brush-gap')).toHaveValue('25%');
+
+  // The brush is kept by name, so it is still there when the file is opened again.
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+  await page.reload();
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  await page.getByRole('treeitem', { name: /Vector 1/ }).click();
+  await page.getByRole('region', { name: 'Stroke' }).getByRole('button', { name: 'Advanced stroke settings' }).click();
+  await expect(page.getByRole('dialog', { name: 'Stroke settings' }).getByRole('radio', { name: 'Brush' })).toBeChecked();
+  await page.getByTestId('field-brush').click();
+  await expect(page.getByTestId('brush-list-modal').getByRole('button', { name: 'Dot' })).toBeVisible();
 });

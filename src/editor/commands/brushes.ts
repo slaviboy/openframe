@@ -24,13 +24,19 @@ import { isBrush as isBrushNode } from '@/core/vector/brush';
 import type { Editor } from '../editor';
 
 export { isBrush } from '@/core/vector/brush';
+import { brushById, BUILTIN_BRUSHES } from '@/core/vector/brushes-builtin';
 
-/** The file's custom brushes, in the order they were made. */
+/** The file's own brushes, in the order they were made. */
 export function localBrushes(store: DocumentStore): BrushNode[] {
   return store
     .children(ROOT_ID)
     .map((id) => store.get(id))
     .filter(isBrushNode);
+}
+
+/** Every brush a stroke can be painted with: the ones every file has, then the ones this file holds. */
+export function availableBrushes(store: DocumentStore): BrushNode[] {
+  return [...BUILTIN_BRUSHES, ...localBrushes(store)];
 }
 
 /** Whether every loop of a network is closed: only a closed shape can be a brush, as it is filled rather than stroked. */
@@ -86,7 +92,7 @@ export function setLayerBrush(tx: Transaction, node: SceneNode, brushId: Id | un
 /** Applies a brush to layers, as one undo step. */
 export function applyBrush(editor: Editor, ids: readonly Id[], brushId: Id | undefined): boolean {
   const layers = ids.map((id) => editor.doc.get(id)).filter((node): node is SceneNode => node !== undefined && isSceneNode(node) && hasGeometry(node));
-  if (layers.length === 0 || (brushId !== undefined && !isBrushNode(editor.doc.get(brushId)))) return false;
+  if (layers.length === 0 || (brushId !== undefined && brushById(editor.doc, brushId) === undefined)) return false;
   editor.history.run(brushId === undefined ? 'Remove brush' : 'Apply brush', (tx) => layers.forEach((node) => setLayerBrush(tx, node, brushId)));
   return true;
 }

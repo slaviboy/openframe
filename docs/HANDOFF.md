@@ -535,3 +535,10 @@ Wiggle, Size jitter, Angular jitter and Rotation, and both end with Width profil
   a repeatable noise of its index — the rule `dynamic-stroke.ts` already follows, so a stroke draws the
   same way every frame. `canTakeWidthProfile` no longer refuses a brushed stroke: that was ours, and the
   documentation only rules out branching paths and dynamic or dashed strokes.
+- **The brushes every file has.** The Brush tab was disabled in a file with no brushes, since ours are made
+  from a closed vector layer while the reference ships 25 of its own — the one thing in the tab the
+  reference does not do. `src/core/vector/brushes-builtin.ts` now holds eight of ours (Leaf, Wedge, Chisel,
+  Ribbon; Dot, Dash, Triangle, Petal). They are not layers in the file: the same eight in every file,
+  nothing added to what is saved, ids in the root's own `0` replica, and `brushById` looks at them before
+  the document — so the three places a brush is read (the renderer, `applyBrush`, the list) go through it
+  and a layer that names one still finds it after a save and an open.

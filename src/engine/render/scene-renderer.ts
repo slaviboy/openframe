@@ -30,6 +30,7 @@ import type { Vec2 } from '@/core/math/vec';
 import type { OffsetJoin, ShapeFace } from '@/core/vector/geometry-service';
 import { bumpedEnds, dynamicStrokePath, hasDynamicStroke } from '@/core/vector/dynamic-stroke';
 import { brushStrokeOutlines, isBrush } from '@/core/vector/brush';
+import { brushById } from '@/core/vector/brushes-builtin';
 import { pathRunFor } from '@/core/vector/text-path';
 import { repeatMatrices, repeats } from '@/core/geometry/repeat';
 import type { BooleanOperationNode, VectorNode } from '@/core/schema/document';
@@ -1879,7 +1880,7 @@ export class SceneRenderer {
     // outline is for a stroke drawn as a line.
     const chain = widths && widths.length > 0 && !node.strokeDashes && node.brushId === undefined ? strokeChain(node.vectorNetwork) : null;
     // A custom brush paints the stroke as its own shape along the path, filled with the stroke's paints.
-    const brush = node.brushId === undefined ? undefined : store.get(node.brushId);
+    const brush = node.brushId === undefined ? undefined : brushById(store, node.brushId);
     const brushChain = isBrush(brush) && node.strokeWeight > 0 ? strokeChain(node.vectorNetwork) : null;
     if (isBrush(brush) && brushChain) {
       const builder = new this.ck.PathBuilder();
