@@ -72,8 +72,24 @@ type RunStyle = Pick<RunsStyle, 'fontName' | 'fontSize' | 'lineHeight' | 'letter
 const UNBOUNDED = 1e6;
 /** Stands in for an empty paragraph, so it keeps one line's height and a caret. */
 const EMPTY = '​';
-/** Laid-out text kept for caret and hit queries. */
+/**
+ * Laid-out text kept for caret and hit queries: how many blocks are held once the layers using them are off screen.
+ * What a frame draws is never counted against it — a frame that shapes more text than this keeps all of it, because
+ * dropping a block a later frame draws again means shaping that layer once a frame, which is what `beginFrame` sweeps
+ * around.
+ */
 const CACHE_LIMIT = 256;
+/**
+ * The most blocks held without frames going by, which only a shaper nothing ever draws through can reach (measuring
+ * text headlessly). It bounds the native paragraphs the cache owns when no sweep is coming.
+ */
+const CACHE_CEILING = 8192;
+/**
+ * Device pixels to the em below which a text layer is drawn as a bar per line instead of being shaped. At a third of
+ * a pixel to the em nothing of a glyph survives rasterizing, so shaping the layer buys a smudge — and a page zoomed
+ * out far enough to hold thousands of text layers would pay for every one of them.
+ */
+const GREEK_MIN_EM_PX = 3;
 const VERTICAL: Record<TextAlignVertical, number> = { TOP: 0, CENTER: 0.5, BOTTOM: 1 };
 /** List indentation per level, in ems of the item's font size. */
 const LIST_INDENT_EM = 1.5;
@@ -118,6 +134,24 @@ interface BlockLayout {
 interface CachedLayout {
   readonly node: TextNode;
   readonly block: BlockLayout;
+  /** The frame the block was last used in, so a frame never drops a block it is still drawing. */
+  frame: number;
+}
+
+/** What a font's lines measure at a size: the reach above and below the baseline, its leading, and a mean advance. */
+interface FontLineMetrics {
+  readonly ascent: number;
+  readonly descent: number;
+  readonly leading: number;
+  readonly advance: number;
+}
+
+/** A bar standing in for one line of text too small to read, in the layer's own space. */
+export interface GreekedLine {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
 }
 
 /**
@@ -138,6 +172,10 @@ export class TextShaper implements TextLayoutService {
   private readonly userFamilies = new Map<string, { styles: Set<string>; variable: boolean }>();
   /** Laid-out blocks by `${node id}` for measuring, and `${node id}\n${paint key}` for drawing. */
   private readonly layouts = new Map<string, CachedLayout>();
+  /** Counts the frames drawn through this shaper, which is what blocks are kept by (see `beginFrame`). */
+  private frame = 0;
+  /** Line metrics by "family\nsize", for the bars text too small to read is drawn as. */
+  private readonly metricsCache = new Map<string, FontLineMetrics>();
   /** Supported OpenType features by "family\nstyle". */
   private readonly featureSupport = new Map<string, readonly string[]>();
   /** Variation axes of user families, read from their font files. */
@@ -336,6 +374,90 @@ export class TextShaper implements TextLayoutService {
     if (typeface) this.typefaces.set(family, typeface);
   }
 
+  /**
+   * A family's line metrics at a font size: how far its lines reach above and below their baseline, the gap the font
+   * asks for after each, and the width of an average lowercase letter. Read from the font, with the proportions of a
+   * text face standing in for a family that isn't loaded.
+   */
+  private lineMetrics(family: string, fontSize: number): FontLineMetrics {
+    const key = `${family}\n${fontSize}`;
+    const cached = this.metricsCache.get(key);
+    if (cached) return cached;
+    let metrics: FontLineMetrics = { ascent: fontSize * 0.97, descent: fontSize * 0.24, leading: 0, advance: fontSize * 0.5 };
+    const typeface = this.typefaces.get(family);
+    if (typeface) {
+      const font = new this.ck.Font(typeface, fontSize);
+      const m = font.getMetrics();
+      const widths = font.getGlyphWidths(font.getGlyphIDs('abcdefghijklmnopqrstuvwxyz '));
+      font.delete();
+      const advance = widths.length > 0 ? [...widths].reduce((sum, w) => sum + w, 0) / widths.length : 0;
+      metrics = {
+        ascent: Math.abs(m.ascent) || metrics.ascent,
+        descent: Math.abs(m.descent) || metrics.descent,
+        leading: Math.abs(m.leading ?? 0),
+        advance: advance > 0 ? advance : metrics.advance,
+      };
+    }
+    this.metricsCache.set(key, metrics);
+    return metrics;
+  }
+
+  /**
+   * The bars that stand in for a text layer's lines while it is drawn too small to read — below `GREEK_MIN_EM_PX`
+   * device pixels to the em, where a glyph is a fraction of a pixel and every line comes out a smudge. Null when the
+   * layer is big enough to be worth shaping, which is what the renderer takes as "draw this as text".
+   *
+   * The lines are where the font's own metrics say they fall; how far each one runs is worked out from how many
+   * characters it holds, since shaping is the thing being skipped. A layer of one line — a label, which is most of
+   * them — is its box, and so exact; a wrapped paragraph's last line is the only real guess.
+   */
+  greekedLines(node: TextNode, scale: number): readonly GreekedLine[] | null {
+    const fontSize = Math.max(node.fontSize, ...(node.styleRuns ?? []).map((run) => run.style.fontSize ?? 0));
+    if (node.characters === '' || fontSize * scale >= GREEK_MIN_EM_PX) return null;
+    const { ascent, descent, leading, advance } = this.lineMetrics(node.fontName.family, node.fontSize);
+    const lineHeight =
+      node.lineHeight.unit === 'PIXELS' ? node.lineHeight.value : node.lineHeight.unit === 'PERCENT' ? (node.lineHeight.value / 100) * node.fontSize : ascent + descent + leading;
+    const paragraphs = node.characters.split('\n');
+    const longest = Math.max(1, ...paragraphs.map((p) => p.length));
+    // Auto width never wraps: a paragraph is a line, and the box is as wide as the longest of them.
+    const wraps = node.textAutoResize !== 'WIDTH_AND_HEIGHT';
+    const perLine = Math.max(1, Math.floor(node.size.width / Math.max(advance, 0.001)));
+    const shares: number[][] = paragraphs.map((paragraph) => {
+      const characters = paragraph.length;
+      if (!wraps) return [characters / longest];
+      if (characters === 0) return [0];
+      const lines = Math.ceil(characters / perLine);
+      return Array.from({ length: lines }, (_, i) => (i < lines - 1 ? 1 : (characters - (lines - 1) * perLine) / perLine));
+    });
+    const limit = node.maxLines;
+    if (limit !== undefined) {
+      let left = limit;
+      for (let i = 0; i < shares.length; i++) {
+        shares[i] = shares[i]!.slice(0, Math.max(0, left));
+        left -= shares[i]!.length;
+      }
+    }
+    const count = shares.reduce((sum, paragraph) => sum + paragraph.length, 0);
+    if (count === 0) return [];
+    const spacing = node.paragraphSpacing ?? 0;
+    const height = count * lineHeight + spacing * (paragraphs.length - 1);
+    const cap = this.capHeight(node.fontName.family, node.fontSize);
+    const lines: GreekedLine[] = [];
+    let y = (node.size.height - height) * VERTICAL[node.textAlignVertical];
+    for (const paragraph of shares) {
+      for (const share of paragraph) {
+        // Half leading, as the shaped lines are laid out with.
+        const baseline = y + (lineHeight - (ascent + descent)) / 2 + ascent;
+        const width = Math.max(0, Math.min(1, share)) * node.size.width;
+        const x = node.textAlignHorizontal === 'CENTER' ? (node.size.width - width) / 2 : node.textAlignHorizontal === 'RIGHT' ? node.size.width - width : 0;
+        if (width > 0) lines.push({ x, y: baseline - cap, width, height: cap });
+        y += lineHeight;
+      }
+      y += spacing;
+    }
+    return lines;
+  }
+
   /** A family's cap height at a font size, from the bounds of its "H" (70% of the size when the font can't be read). */
   private capHeight(family: string, fontSize: number): number {
     const typeface = this.typefaces.get(family);
@@ -371,8 +493,10 @@ export class TextShaper implements TextLayoutService {
    */
   underlines(node: TextNode): UnderlinePiece[] {
     if (node.characters === '') return [];
-    const block = this.layout(node);
     const segments = textSegments(node).filter((s) => s.textDecoration === 'UNDERLINE');
+    // Nothing is underlined, which is the usual case: the layer is not laid out a second time to find that out.
+    if (segments.length === 0) return [];
+    const block = this.layout(node);
     const pieces: UnderlinePiece[] = [];
     for (const layout of block.paragraphs) {
       if (layout.hidden) continue;
@@ -784,13 +908,17 @@ export class TextShaper implements TextLayoutService {
    * built and thrown away, which is right for a painter that cannot be named.
    */
   draw(canvas: Canvas, node: TextNode, painter: TextPainter, paintKey?: string): void {
-    const block = paintKey === undefined ? this.stack(node, 'box', painter) : this.cachedBlock(`${node.id}\n${paintKey}`, node, () => this.stack(node, 'box', painter));
+    const key = paintKey === undefined ? null : `${node.id}\n${paintKey}`;
+    // Past the ceiling a frame shapes what it still needs and throws it away, which is slow but bounded: the
+    // paragraphs a block holds are native memory, and a frame that kept every one of thousands would run out.
+    const keep = key !== null && (this.layouts.has(key) || this.layouts.size < CACHE_CEILING);
+    const block = keep ? this.cachedBlock(key, node, () => this.stack(node, 'box', painter)) : this.stack(node, 'box', painter);
     for (const p of block.paragraphs) {
       if (p.hidden) continue;
       this.drawParagraphLines(canvas, p, block.dy);
       if (p.marker) canvas.drawParagraph(p.marker.paragraph, p.marker.x, block.dy + p.marker.y);
     }
-    if (paintKey === undefined) deleteBlock(block);
+    if (!keep) deleteBlock(block);
     if (painter.decorations !== false) this.drawUnderlines(canvas, node, painter);
   }
 
@@ -798,21 +926,46 @@ export class TextShaper implements TextLayoutService {
     return this.cachedBlock(node.id, node, () => this.stack(node, 'box'));
   }
 
-  /** A laid-out block, kept until its layer changes; the oldest goes when there are too many. */
+  /**
+   * Starts a frame: what the frame before it drew is kept, and blocks older than that go once there are more than
+   * `CACHE_LIMIT` of them.
+   *
+   * A frame draws the layers of a page in the same order every time, so evicting by age alone drops the block the
+   * next frame asks for first. Past the cache's size that costs every visible layer a full shaping pass a frame —
+   * seconds a frame on a page with a few hundred text layers, which is what zooming out until they are all on screen
+   * does. Keeping what the last frame used holds the working set however big it is, and only what has gone off screen
+   * is dropped.
+   */
+  beginFrame(): void {
+    const previous = this.frame++;
+    if (this.layouts.size <= CACHE_LIMIT) return;
+    for (const [key, entry] of this.layouts) {
+      if (entry.frame >= previous) continue;
+      deleteBlock(entry.block);
+      this.layouts.delete(key);
+    }
+  }
+
+  /** A laid-out block, kept until its layer changes or the frames it is drawn in stop. */
   private cachedBlock(key: string, node: TextNode, make: () => BlockLayout): BlockLayout {
     const cached = this.layouts.get(key);
-    if (cached?.node === node) return cached.block;
+    if (cached?.node === node) {
+      cached.frame = this.frame;
+      return cached.block;
+    }
     if (cached) {
       deleteBlock(cached.block);
       this.layouts.delete(key);
     }
     const block = make();
-    this.layouts.set(key, { node, block });
-    if (this.layouts.size > CACHE_LIMIT) {
-      const [oldest] = this.layouts.keys();
-      const evicted = this.layouts.get(oldest!);
-      if (evicted) deleteBlock(evicted.block);
-      this.layouts.delete(oldest!);
+    this.layouts.set(key, { node, block, frame: this.frame });
+    // Nothing is drawing through this shaper, so no sweep is coming: everything but this frame's own work goes.
+    if (this.layouts.size > CACHE_CEILING) {
+      for (const [old, entry] of this.layouts) {
+        if (entry.frame === this.frame) continue;
+        deleteBlock(entry.block);
+        this.layouts.delete(old);
+      }
     }
     return block;
   }

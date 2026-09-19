@@ -132,6 +132,11 @@ export interface RenderOptions {
    * combines them rather than the layer's box; without them the box is what it combines, as it always did.
    */
   readonly textOutline?: (node: SceneNode) => readonly PathCommand[] | null;
+  /**
+   * Draw text too small to read as a bar a line rather than shaping it (see `drawGreekedText`). It is for a surface
+   * a person pans and zooms; an export writes what the layers say, however small it is asked to draw them.
+   */
+  readonly greekText?: boolean;
 }
 
 interface DrawContext {
@@ -157,6 +162,12 @@ half4 main(float2 p) {
   return ramp.eval(float2(t, 0.5));
 }`;
 
+/**
+ * How much of a bar standing in for a line of text too small to read is ink. Latin text covers about this share of
+ * the box its glyphs sit in, and it is what keeps a page of greeked text as light as the same page of real text.
+ * Measured against shaped text in `scene-renderer.test.ts`.
+ */
+const GREEK_INK = 0.38;
 /** Sections have slightly rounded corners and no radius control. */
 export const SECTION_CORNER_RADIUS = 2;
 /** How many shapes the Shape builder reads at once: every group of them is tried, so the work doubles with each. */
@@ -200,6 +211,8 @@ export class SceneRenderer {
   private resampling: 'DETAILED' | 'BASIC' | null = null;
   /** Glyph outlines of text layers, when the caller has them ready; null combines a text layer's box instead. */
   private textOutline: ((node: SceneNode) => readonly PathCommand[] | null) | null = null;
+  /** Whether text too small to read stands in as bars, which only an interactive surface asks for. */
+  private greekText = false;
 
   constructor(
     private readonly ck: CanvasKit,
@@ -255,6 +268,7 @@ export class SceneRenderer {
     this.imageFrame = options.imageFrame ?? null;
     this.resampling = options.resampling ?? null;
     this.textOutline = options.textOutline ?? null;
+    this.greekText = options.greekText ?? false;
     this.drawStore = store;
     const stats: RenderStats = { drawn: 0, culled: 0, ms: 0 };
     const page = store.get(pageId);
@@ -606,12 +620,13 @@ export class SceneRenderer {
     path.delete();
   }
 
-  private drawGeometry(canvas: Canvas, node: GeometryNode, _pixelSize: number, store: DocumentStore): void {
+  private drawGeometry(canvas: Canvas, node: GeometryNode, pixelSize: number, store: DocumentStore): void {
     if (node.type === 'LINE') {
       this.drawLine(canvas, node);
       return;
     }
     if (node.type === 'TEXT') {
+      if (this.drawGreekedText(canvas, node, pixelSize)) return;
       // Fill layers bottom to top; each paragraph paints every segment with its own fill at that layer.
       const segments = textSegments(node);
       const layers = Math.max(0, ...segments.map((s) => s.fills.length));
@@ -1148,6 +1163,33 @@ export class SceneRenderer {
   /** Installs the text shaper that lays out and paints text layers (they don't draw until then). */
   setTextShaper(shaper: TextShaper | null): void {
     this.textShaper = shaper;
+  }
+
+  /**
+   * A text layer drawn too small to read: a bar per line in the layer's own fills, rather than shaped glyphs. True
+   * when the layer was drawn this way, so text is shaped only where it can be read (see `TextShaper.greekedLines`).
+   *
+   * A bar is as wide as its line and as tall as the font's cap height, at a share of the fill's strength — glyphs
+   * cover about a third of the box they sit in, and a solid bar would read as a much darker page than the text does.
+   */
+  private drawGreekedText(canvas: Canvas, node: TextNode, pixelSize: number): boolean {
+    const shaper = this.textShaper;
+    // Text on a path doesn't sit in its box, so its lines are not the box's lines.
+    if (!shaper || !this.greekText || node.textPath) return false;
+    // A layer painted only through its style runs is left to the text path, rather than drawn in fills it hasn't got.
+    if (!node.fills.some((paint) => paint.visible && paint.opacity > 0)) return false;
+    const m = canvas.getTotalMatrix();
+    // The scale the layer is really drawn at, which its parents' transforms are part of.
+    const scale = Math.sqrt(Math.abs(m[0]! * m[4]! - m[1]! * m[3]!)) || 1 / pixelSize;
+    const lines = shaper.greekedLines(node, scale);
+    if (!lines) return false;
+    for (const paint of node.fills) {
+      if (!paint.visible || paint.opacity <= 0) continue;
+      this.configurePaint(this.fillPaint, paint, node.size);
+      this.fillPaint.setAlphaf(this.fillPaint.getColor()[3]! * GREEK_INK);
+      for (const line of lines) canvas.drawRect(this.ck.XYWHRect(line.x, line.y, line.width, line.height), this.fillPaint);
+    }
+    return true;
   }
 
   private transparentPaint(): CkPaint {

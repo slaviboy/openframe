@@ -326,3 +326,66 @@ describe('text shaping', () => {
     expect(shaper.caretAt(centered, 0).x).toBeCloseTo(50, 0);
   });
 });
+
+describe('text too small to read', () => {
+  /** A label sized to its own text, which is what an auto-width layer is once the editor has fitted it. */
+  const label = (patch: Partial<TextNode> = {}) => {
+    const node = text({ characters: 'Balance', fontSize: 12, ...patch });
+    return { ...node, size: shaper.measure(node, null) };
+  };
+
+  test('is shaped while a glyph is worth drawing, and stands in as bars below that', () => {
+    // 12 px text: 3 device pixels to the em falls at a scale of 0.25.
+    expect(shaper.greekedLines(label(), 0.25)).toBeNull();
+    expect(shaper.greekedLines(label(), 1)).toBeNull();
+    const bars = shaper.greekedLines(label(), 0.24);
+    expect(bars).toHaveLength(1);
+    // A layer of one line is its own box, so the bar is the line: as wide as the text, inside the box.
+    const [bar] = bars!;
+    expect(bar!.x).toBeCloseTo(0, 5);
+    expect(bar!.width).toBeCloseTo(label().size.width, 5);
+    expect(bar!.height).toBeGreaterThan(0);
+    expect(bar!.y).toBeGreaterThanOrEqual(0);
+    expect(bar!.y + bar!.height).toBeLessThanOrEqual(label().size.height + 0.01);
+    // A layer with nothing in it has nothing to stand in for, and is left to the text path, which draws nothing.
+    expect(shaper.greekedLines(label({ characters: '' }), 0.01)).toBeNull();
+  });
+
+  test('gives a line per paragraph, the shorter ones shorter', () => {
+    const node = label({ characters: 'Total balance\nEUR' });
+    const bars = shaper.greekedLines({ ...node, size: shaper.measure(node, null) }, 0.02)!;
+    expect(bars).toHaveLength(2);
+    expect(bars[1]!.width).toBeLessThan(bars[0]!.width);
+    expect(bars[1]!.y).toBeGreaterThan(bars[0]!.y);
+  });
+
+  test('wraps a fixed-width paragraph into as many bars as it has lines', () => {
+    const characters = 'A garden grows best when the soil is kept loose and watered nightly.';
+    const width = 120;
+    const node = text({ characters, fontSize: 12, textAutoResize: 'HEIGHT', size: { width, height: 0 } });
+    const laid = { ...node, size: shaper.measure(node, width) };
+    // The height of one line, which the laid-out height divides into the number of lines the shaper made.
+    const oneLine = shaper.measure(text({ characters: 'A', fontSize: 12 }), null).height;
+    const shaped = Math.round(laid.size.height / oneLine);
+    const bars = shaper.greekedLines(laid, 0.02)!;
+    // The bars are worked out from the characters rather than shaped, so they land within a line of the real count.
+    expect(Math.abs(bars.length - shaped)).toBeLessThanOrEqual(1);
+    expect(bars.every((bar) => bar.width <= width + 0.01)).toBe(true);
+    expect(bars.length).toBeGreaterThan(1);
+  });
+
+  test('follows the alignment of the layer and its line height', () => {
+    // A fixed box wider than its text: the bar is the line, not the box.
+    const centered = text({ characters: 'Balance', fontSize: 12, textAlignHorizontal: 'CENTER', textAutoResize: 'NONE', size: { width: 200, height: 40 } });
+    const [bar] = shaper.greekedLines(centered, 0.02)!;
+    expect(bar!.width).toBeGreaterThan(0);
+    expect(bar!.width).toBeLessThan(200);
+    expect(bar!.x).toBeCloseTo((200 - bar!.width) / 2, 5);
+    const right = shaper.greekedLines({ ...centered, textAlignHorizontal: 'RIGHT' }, 0.02)!;
+    expect(right[0]!.x + right[0]!.width).toBeCloseTo(200, 5);
+    // A taller line height puts the second line further down.
+    const tall = text({ characters: 'one\ntwo', fontSize: 12, lineHeight: { unit: 'PIXELS', value: 40 }, textAutoResize: 'NONE', size: { width: 200, height: 200 } });
+    const lines = shaper.greekedLines(tall, 0.02)!;
+    expect(lines[1]!.y - lines[0]!.y).toBeCloseTo(40, 5);
+  });
+});

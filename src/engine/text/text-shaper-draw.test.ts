@@ -103,3 +103,38 @@ describe('drawing underlines', () => {
     expect(redPixels({ textDecoration: 'NONE' })).toBe(0);
   });
 });
+
+describe('laid-out text kept between frames', () => {
+  /** Draws `count` layers in one frame, as a page of them does, and reports how many blocks the shaper kept. */
+  function frame(shaper: TextShaper, count: number): number {
+    const surface = ck.MakeSurface(10, 10)!;
+    const canvas = surface.getCanvas();
+    const paint = new ck.Paint();
+    const background = new ck.Paint();
+    background.setColor(ck.TRANSPARENT);
+    shaper.beginFrame();
+    for (let i = 0; i < count; i++) {
+      const base = { ...makeText({ id: `f:${i}`, parent: { id: 'f:0', key: 'V' }, name: 'T', x: 0, y: 0, width: 0, height: 0 }), fontSize: 12, characters: `Layer ${i}` };
+      shaper.draw(canvas, { ...base, size: { width: 60, height: 16 } }, { background, paint: () => paint }, 'fill:0');
+    }
+    paint.delete();
+    background.delete();
+    surface.delete();
+    return (shaper as unknown as { layouts: Map<string, unknown> }).layouts.size;
+  }
+
+  test('a frame keeps every layer it drew, however many that is, and lets go once they stop being drawn', () => {
+    const own = new TextShaper(ck, []);
+    // More layers than the cache holds when nothing is being drawn: dropping any of them would mean shaping it
+    // again on the next frame, and every frame after that.
+    const drawn = 400;
+    expect(frame(own, drawn)).toBe(drawn);
+    // Drawn again, the blocks are the ones the frame before laid out: nothing new is kept.
+    expect(frame(own, drawn)).toBe(drawn);
+    // Frames that draw none of them let them go.
+    frame(own, 0);
+    frame(own, 0);
+    expect((own as unknown as { layouts: Map<string, unknown> }).layouts.size).toBe(0);
+    own.dispose();
+  });
+});

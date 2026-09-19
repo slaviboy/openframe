@@ -109,3 +109,34 @@ test('panning and zooming a text-heavy page keeps up', async ({ page }) => {
   // Shaping once a frame blocked for about 200 ms over this pan; keeping the shaped text blocks for none.
   expect(blocked).toBeLessThan(100);
 });
+
+test('a page of more text layers than the shaper holds keeps up zoomed out', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+
+  // 212 text layers on one board: more than the laid-out blocks the shaper holds when nothing is drawing them.
+  await page.setInputFiles('input[aria-label="Open an Openframe file"]', 'reference/app/sample-large.openframe');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true', { timeout: 30_000 });
+  await expect(page.getByRole('treeitem', { name: /Sample Page/ })).toBeVisible({ timeout: 30_000 });
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  // Zoom to fit puts every one of them on screen, which is where each frame used to shape all of them again.
+  await page.keyboard.press('Shift+1');
+  await page.waitForTimeout(600);
+  await page.evaluate(() => {
+    const w = window as unknown as { __long: number[] };
+    w.__long = [];
+    new PerformanceObserver((list) => {
+      for (const e of list.getEntries()) w.__long.push(e.duration);
+    }).observe({ entryTypes: ['longtask'] });
+  });
+  await page.mouse.move(box.x + 700, box.y + 400);
+  for (let i = 0; i < 20; i++) await page.mouse.wheel(0, 20);
+  await page.waitForTimeout(800);
+  const blocked = await page.evaluate(() => {
+    const w = window as unknown as { __long: number[] };
+    return Math.round(w.__long.reduce((s, d) => s + d, 0));
+  });
+  // Shaping every layer every frame blocked this pan for tens of seconds; drawing the kept blocks blocks for none.
+  expect(blocked).toBeLessThan(1000);
+});

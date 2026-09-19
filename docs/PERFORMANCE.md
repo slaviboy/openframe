@@ -58,6 +58,42 @@ A median of 14.8 ms is the display's own 60 Hz cadence, so the canvas keeps up w
 this size is panned in full. The p95 is where a frame is missed — a garbage collection or a long task elsewhere in
 the page, not the scene walk, which is why caching the drawn page made no difference to it.
 
+## Text: what a frame keeps, and what it doesn't draw at all
+
+Shaping a text layer — HarfBuzz through SkParagraph, a paragraph at a time — is the most expensive thing a frame can
+do per layer, so a frame does it as rarely as it can.
+
+**Laid-out text is kept by the frame that drew it** ([`beginFrame`](../src/engine/text/text-shaper.ts)). The shaper
+holds a laid-out block per drawn layer, and a sweep at the start of each frame drops the blocks the frame before it
+didn't draw, down to 256. The count is a floor, not a cap: a frame that draws a thousand text layers keeps a thousand
+blocks, because dropping any of them means shaping that layer again on the next frame, and the next.
+
+This replaced a cache of 256 blocks that evicted by age. A page draws its layers in the same order every frame, so
+the block it dropped was the one the next frame asked for first — a cyclic scan through a cache smaller than the scan
+never hits. Two blocks were held per layer, so the cliff came at **128 text layers on screen at once**, which is what
+zooming out far enough to see a whole board does:
+
+| Text layers on screen (Chromium, `reference/app/sample-large.openframe`) | 126 | 128 | 130 | 212 |
+|---|---:|---:|---:|---:|
+| Frame time while panning, before | 16.4 ms | 16.5 ms | 988 ms | 1548 ms |
+| Frame time while panning, after | 16.4 ms | 16.5 ms | 16.5 ms | 15.9 ms |
+
+Two more layers cost sixty times the frame time, at any zoom — the number on screen was what mattered, not how far
+out the canvas was. [`e2e/text-repaint.spec.ts`](../e2e/text-repaint.spec.ts) holds both ends of this: ten layers
+kept between frames, and a board of 212 fitted on screen and panned.
+
+**Text too small to read is never shaped** ([`greekedLines`](../src/engine/text/text-shaper.ts)). Below three device
+pixels to the em a glyph cannot survive rasterizing, so the layer draws as a bar per line in its own fills instead —
+the lines where the font's metrics put them, as wide as their characters make them. A board of 2,120 text layers at
+2% draws in 65 ms a frame this way, and holds no laid-out text at all.
+
+Bars would be a heavier page than glyphs if they were solid, so a bar is `GREEK_INK` (0.38) of its fill — the share
+of its line box Latin text covers. `scene-renderer.test.ts` renders the same layers either side of the threshold and
+holds the two within 10% of the same mean ink; they measure 0.5% apart.
+
+Only a surface a person pans and zooms asks for this (`greekText`). An export writes what the layers say however
+small it is asked to draw them, and so does a thumbnail.
+
 ## How to measure
 
 ```bash

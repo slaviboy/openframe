@@ -297,6 +297,8 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
       // Changing the file's color profile recreates the surface in the new color space.
       if (surface && documentColorProfile(editor.doc) !== surfaceProfile) createSurface();
       if (!surface || !renderer) return;
+      // The frame the shaper keeps its laid-out text by: what this one draws survives into the next.
+      shaper?.beginFrame();
       const v = editor.state.viewport;
       const view: RenderView = { ...v, ...size };
       try {
@@ -307,6 +309,8 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
             cropping: editor.state.getSnapshot().croppingId,
             colorProfile: surfaceProfile,
             textOutline: (layer) => editor.glyphOutlines.get(layer),
+            // Zoomed out far enough that the glyphs are a fraction of a pixel, text stands in as a bar a line.
+            greekText: true,
           });
         }
         surface.flush();

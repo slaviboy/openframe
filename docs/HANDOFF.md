@@ -433,3 +433,29 @@ The note the previous pass left behind was half wrong, and re-reading the captur
 **Still open, recorded in `docs/UI_REFERENCE.md` and the matrix:** endpoints are offered for lines alone —
 the documentation wants them per point on a vector, which needs a cap on each vector point and arrowheads
 drawn on the open ends of a network; and a corner whose neighbouring segment is a curve stays sharp.
+
+## The frame time of a page of text (2026-09-19)
+
+The user reported that zooming out made panning and zooming lag, on
+`reference/app/sample-large.openframe`. Measured in Chromium against the production build, every
+frame of a pan on that board took **1548 ms** — at 6%, 5%, 3% and 2% alike. Zoom was never what mattered.
+
+- **What it was.** `TextShaper` kept 256 laid-out blocks and evicted the oldest inserted. A page draws its
+  layers in the same order every frame, so the block dropped was the one the next frame wanted first: a
+  cyclic scan through a cache smaller than the scan hits nothing. Two blocks were held per layer (one for
+  measuring, one for painting), so the cliff came at **128 text layers drawn at once**: 128 layers cost
+  16.5 ms a frame, 130 cost 988 ms. Zooming out is simply how a board of 212 gets on screen at once.
+- **What it is now.** Blocks are kept by the frame that drew them (`beginFrame`, swept at the start of the
+  next frame); 256 is a floor for what nothing is drawing, never a cap on a frame's own working set. The
+  board now pans at **15.9 ms** a frame.
+- **Also.** `underlines()` laid a layer out a second time before checking whether anything was underlined,
+  which is what made it two blocks a layer rather than one. Text under three device pixels to the em is
+  now drawn as a bar per line and never shaped (`greekedLines`, `GREEK_INK` measured against shaped text
+  in `scene-renderer.test.ts`), which is what keeps a 2,120-layer board at 65 ms a frame instead of
+  exhausting CanvasKit's memory. Only the canvas and presentation view ask for it: `greekText` is off for
+  exports and thumbnails, which draw the glyphs however small they are.
+- **Guarded by** `e2e/text-repaint.spec.ts`, which fits the reference board on screen and pans it; it was
+  checked against the unfixed code first and fails there. The previous text-repaint spec used ten layers,
+  under the old cliff, which is why none of this showed up in the suite.
+
+Numbers and the method are in `docs/PERFORMANCE.md`; the renderer's side is in `docs/RENDERING.md`.

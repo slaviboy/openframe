@@ -218,7 +218,14 @@ export class PresentationRenderer {
         index,
         editor.pageId,
         { x: origin.x, y: origin.y, zoom: scale, width, height, dpr: this.size.dpr },
-        { only: frameId, colorProfile: documentColorProfile(editor.doc), videoFrame: (hash) => this.videoImage(hash), imageFrame: (hash) => this.gifImage(hash) },
+        {
+          only: frameId,
+          colorProfile: documentColorProfile(editor.doc),
+          videoFrame: (hash) => this.videoImage(hash),
+          imageFrame: (hash) => this.gifImage(hash),
+          // Scaled down far enough that the glyphs are a fraction of a pixel, text stands in as a bar a line.
+          greekText: true,
+        },
       );
       surface.flush();
       return surface.makeImageSnapshot();
@@ -491,6 +498,8 @@ export class PresentationRenderer {
   draw(scene: PresentedScene | null, background: Color, hints: readonly Rect[], scroll: ReadonlyMap<Id, Vec2> = new Map()): void {
     const { ck, surface, paint } = this;
     if (!ck || !surface || !paint) return;
+    // The frame the shaper keeps its laid-out text by: what this one draws survives into the next.
+    this.shaper?.beginFrame();
     const canvas = surface.getCanvas();
     canvas.clear(ck.Color4f(background.r, background.g, background.b, 1));
     canvas.save();

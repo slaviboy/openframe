@@ -16,13 +16,16 @@
  */
 
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import type { CanvasKit } from 'canvaskit-wasm';
 import { beforeAll, describe, expect, test } from 'vitest';
-import { createEmptyDocument, keyOnTop, makeEllipse, makeFrame, makeRectangle, solid } from '@/core/document/factory';
+import { createEmptyDocument, keyOnTop, makeEllipse, makeFrame, makeRectangle, makeText, solid } from '@/core/document/factory';
 import { IdGenerator } from '@/core/ids/ids';
 import { SceneIndex } from '@/core/scene/scene-index';
 import type { Node } from '@/core/schema/document';
+import { BUNDLED_FONT_FILES, isFallbackFamily } from '../text/font-files';
+import { TextShaper } from '../text/text-shaper';
 import { SceneRenderer } from './scene-renderer';
 
 const require = createRequire(import.meta.url);
@@ -106,5 +109,62 @@ describe('SceneRenderer (CanvasKit CPU surface)', () => {
     const { at } = renderToPixels({ x: 0, y: 0, zoom: 2, width: 200, height: 140, dpr: 1 });
     // Frame now spans x 20..220 → white at (60, 60)
     expect(at(60, 60)).toEqual([255, 255, 255, 255]);
+  });
+});
+
+describe('text too small to read', () => {
+  /** A page of `count` labels, each sized to its own text, spread down the canvas. */
+  function labels(count: number, shaper: TextShaper) {
+    const ids = new IdGenerator('t');
+    const store = createEmptyDocument({ name: 'T', now: 'n', appVersion: 't', ids });
+    const page = store.pages()[0]!;
+    for (let i = 0; i < count; i++) {
+      const node = makeText({ id: ids.next(), parent: { id: page, key: keyOnTop(store, page) }, name: 'L', x: 20, y: 10 + i * 30, width: 0, height: 0 });
+      const text = { ...node, characters: `Total balance ${i}`, fontSize: 12 };
+      store.applyOp({ kind: 'create', node: { ...text, size: shaper.measure(text, null) } });
+    }
+    return { store, page, index: new SceneIndex(store) };
+  }
+
+  /** Mean ink on the page (0 is the bare canvas, 1 a black one) with the scene drawn at `zoom`. */
+  function ink(count: number, zoom: number, greekText: boolean): number {
+    const fonts = BUNDLED_FONT_FILES.filter((f) => !isFallbackFamily(f.family)).map(({ family, file, package: pkg }) => ({
+      family,
+      bytes: new Uint8Array(readFileSync(require.resolve(`${pkg}/files/${file}`))),
+    }));
+    const shaper = new TextShaper(ck, fonts);
+    const { store, page, index } = labels(count, shaper);
+    const width = 400;
+    const height = 300;
+    const surface = ck.MakeSurface(width, height)!;
+    const renderer = new SceneRenderer(ck);
+    renderer.setTextShaper(shaper);
+    renderer.render(surface.getCanvas(), store, index, page, { x: 0, y: 0, zoom, width, height, dpr: 1 }, { greekText });
+    surface.flush();
+    const image = surface.makeImageSnapshot();
+    const pixels = image.readPixels(0, 0, { width, height, colorType: ck.ColorType.RGBA_8888, alphaType: ck.AlphaType.Unpremul, colorSpace: ck.ColorSpace.SRGB }) as Uint8Array;
+    let sum = 0;
+    for (let i = 0; i < pixels.length; i += 4) sum += 1 - (0.2126 * pixels[i]! + 0.7152 * pixels[i + 1]! + 0.0722 * pixels[i + 2]!) / 255;
+    image.delete();
+    surface.delete();
+    renderer.dispose();
+    shaper.dispose();
+    return sum / (pixels.length / 4);
+  }
+
+  test('greeked text leaves the page as dark as the shaped text it stands in for', () => {
+    // 12 px text: the threshold (3 device px to the em) falls at a zoom of 0.25, so these two draw the same
+    // layers the same size, one shaped and one as bars. GREEK_INK is what holds them together.
+    const shaped = ink(20, 0.2501, true);
+    const greeked = ink(20, 0.2499, true);
+    expect(greeked).toBeGreaterThan(0);
+    expect(Math.abs(greeked - shaped) / shaped).toBeLessThan(0.1);
+  });
+
+  test('an export draws the glyphs however small it is asked to draw them', () => {
+    // The same scene the canvas would greek, rendered as an export does: text, not bars.
+    const asExport = ink(20, 0.2499, false);
+    const shaped = ink(20, 0.2501, false);
+    expect(Math.abs(asExport - shaped) / shaped).toBeLessThan(0.25);
   });
 });
