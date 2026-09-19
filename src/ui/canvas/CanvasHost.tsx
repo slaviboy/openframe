@@ -920,8 +920,10 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
             bottom: editor.canvasInsets.bottom + 8,
           }}
         >
-          <span className={styles.dropLabel}>Drop to add to this file</span>
-          <span className={styles.dropHint}>An Openframe file asks first; images, videos and SVGs land where you drop them</span>
+          <div className={styles.dropCard}>
+            <span className={styles.dropLabel}>Drop to add to this file</span>
+            <span className={styles.dropHint}>An Openframe file asks first; images, videos and SVGs land where you drop them</span>
+          </div>
         </div>
       )}
       {status.kind === 'error' && (
