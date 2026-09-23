@@ -39,7 +39,7 @@ import { apply } from '@/core/math/matrix';
 import { pastedUrl } from '@/core/text/links';
 import { containsEmoji } from '@/core/text/emoji';
 import { containsSymbols } from '@/core/text/symbols';
-import { loadEmojiFont } from '@/engine/text/bundled-fonts';
+
 import { loadCjkSubsets } from '@/engine/text/cjk-fonts';
 import { cjkScriptFor, containsCjk } from '@/core/text/cjk';
 import { viewPrefs } from '../view/view-prefs';
@@ -69,7 +69,7 @@ import { stepTextProperty, toggleFontStyle, toggleTextDecoration } from '@/edito
 import { autoLineHeight } from '@/editor/commands/builtin';
 import type { Transaction } from '@/core/history/history';
 import { addFontFaces } from '../fonts/font-faces';
-import { readSymbolFallbacks } from '../fonts/google-fonts';
+import { readEmojiSubsets, readSymbolFallbacks } from '../fonts/google-fonts';
 import { imageFilesOf } from '../images/import-image';
 import { videoFilesOf } from '../images/import-video';
 import { svgFilesOf } from '../import/svg-files';
@@ -475,24 +475,21 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
         };
         registerUserFonts();
         unsubscribeFonts = editor.fonts.subscribe(registerUserFonts);
-        // The color emoji font is large, so it loads only once some text contains emoji.
-        let emojiRequested = false;
+        // Emoji are ordinary text: each is drawn from the Noto Color Emoji subset it is in, read as it is typed.
+        const requestedEmoji = new Set<number>();
         const loadEmojiWhenUsed = () => {
-          if (emojiRequested) return;
           for (const node of editor.doc.nodes()) {
             if (node.type !== 'TEXT' || !containsEmoji(node.characters)) continue;
-            emojiRequested = true;
-            loadEmojiFont()
-              .then((font) => {
-                if (disposed || !shaper) return;
-                shaper.registerFallbackFonts([font]);
+            readEmojiSubsets(node.characters, requestedEmoji)
+              .then((fonts) => {
+                if (disposed || !shaper || fonts.length === 0) return;
+                shaper.registerFallbackFonts(fonts);
+                // Auto-sized boxes measured while the emoji were blank fit them now.
                 editor.refitText();
                 editor.requestRender();
               })
               .catch((error: unknown) => console.error(error));
-            break;
           }
-          if (emojiRequested) unsubscribeEmoji();
         };
         unsubscribeEmoji = editor.history.subscribe(loadEmojiWhenUsed);
         loadEmojiWhenUsed();

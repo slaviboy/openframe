@@ -22,9 +22,10 @@ import { beforeAll, describe, expect, test } from 'vitest';
 import { makeText } from '@/core/document/factory';
 import type { TextNode } from '@/core/schema/document';
 import { SMART_SYMBOLS } from '@/core/text/smart-symbols';
-import { BUNDLED_FONT_FILES, EMOJI_FAMILY, EMOJI_FONT_FILE, SYMBOL_FALLBACK_FILES, symbolFallbackFamily } from './font-files';
+import { BUNDLED_FONT_FILES, emojiSubsetFamily, SYMBOL_FALLBACK_FILES, symbolFallbackFamily } from './font-files';
 import { TextShaper } from './text-shaper';
 import { loadCjkSubsets } from './cjk-fonts';
+import { subsetsFor } from '@/core/text/font-subsets';
 
 const require = createRequire(import.meta.url);
 let shaper: TextShaper;
@@ -32,6 +33,17 @@ let canvasKit: CanvasKit;
 
 /** The bundled fonts, read from the packages they ship in. */
 const bundledFonts = () => BUNDLED_FONT_FILES.map(({ family, file, package: pkg }) => ({ family, bytes: new Uint8Array(readFileSync(require.resolve(`${pkg}/files/${file}`))) }));
+
+/**
+ * The library's Noto Color Emoji subsets a text needs, read from disk — what `readEmojiSubsets`
+ * fetches over the app's own origin.
+ */
+const EMOJI_DIR = new URL('../../../public/fonts/google/noto-color-emoji/', import.meta.url);
+const emojiSubsets = (text: string) => {
+  const files = JSON.parse(readFileSync(new URL('files.json', EMOJI_DIR), 'utf8')) as { file: string; unicodeRange?: string }[];
+  const table = files.map((f, i) => [i, (f.unicodeRange ?? '').replace(/U\+/gi, '').replace(/\s+/g, '')] as const);
+  return subsetsFor(text, table).map((index) => ({ family: emojiSubsetFamily(index), bytes: new Uint8Array(readFileSync(new URL(files[index]!.file.split('/').pop()!, EMOJI_DIR))) }));
+};
 
 beforeAll(async () => {
   const init = require('canvaskit-wasm/bin/full/canvaskit.js') as (opts: { locateFile: (f: string) => string }) => Promise<CanvasKit>;
@@ -153,9 +165,15 @@ describe('text shaping', () => {
   test('emoji shape with the color emoji fallback once it is registered, flags and sequences included', () => {
     const emoji = text({ characters: '😀👍🏽🇺🇸' });
     const before = shaper.measure(emoji, null).width;
-    shaper.registerFallbackFonts([{ family: EMOJI_FAMILY, bytes: new Uint8Array(readFileSync(require.resolve(`${EMOJI_FONT_FILE.package}/files/${EMOJI_FONT_FILE.file}`))) }]);
-    expect(shaper.registeredFamilies).toContain(EMOJI_FAMILY);
-    expect(shaper.availableFonts().map((f) => f.family)).not.toContain(EMOJI_FAMILY);
+    // Only the subsets these emoji are in are read: the font is 5.7 MB whole, and they are 2.0 MB.
+    const fonts = emojiSubsets(emoji.characters);
+    expect(fonts.length).toBeGreaterThan(0);
+    expect(fonts.length).toBeLessThan(5);
+    shaper.registerFallbackFonts(fonts);
+    for (const font of fonts) {
+      expect(shaper.registeredFamilies).toContain(font.family);
+      expect(shaper.availableFonts().map((f) => f.family)).not.toContain(font.family);
+    }
     const laid = { ...emoji, size: shaper.measure(emoji, null) };
     expect(laid.size.width).not.toBeCloseTo(before, 0);
     // Three glyph clusters: the skin tone and the flag letters join their sequences.

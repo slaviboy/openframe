@@ -52,3 +52,35 @@ test('emoji search and smart quotes/symbols', async ({ page }) => {
   await page.keyboard.press('Escape');
   await expect(page.getByRole('treeitem', { name: /Go → “Acme™”/ })).toHaveCount(1);
 });
+
+/**
+ * An emoji is ordinary text: typing one has to give a picture, not the missing-glyph box. Its own
+ * subset of Noto Color Emoji is read out of the library for it — see docs/FONTS.md.
+ *
+ * The box is the yardstick. A private-use character is one nothing can ever draw, and every missing
+ * glyph has the same advance, so a line of them measures exactly what a line of undrawn emoji would.
+ */
+test('an emoji is drawn, not left as the missing-glyph box', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+  const input = page.getByTestId('text-input');
+  // Built from its code point: a character no editor shows can be dropped from a file silently.
+  const undrawable = String.fromCodePoint(0xe000).repeat(8);
+
+  const write = async (characters: string, y: number) => {
+    await page.mouse.click(box.x + 900, box.y + 600);
+    await page.keyboard.press('t');
+    await page.mouse.click(box.x + 500, box.y + y);
+    await expect(input).toBeFocused();
+    await page.keyboard.type(characters);
+    await page.keyboard.press('Escape');
+    await expect(input).not.toBeFocused();
+    return Number(await page.getByTestId('field-w').inputValue());
+  };
+
+  const boxes = await write(undrawable, 150);
+  const emoji = await write('😭😭😭😭😭😭😭😭', 280);
+  expect(boxes).toBeGreaterThan(0);
+  expect(emoji).not.toBeCloseTo(boxes, 1);
+});

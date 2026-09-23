@@ -39,9 +39,10 @@ export function serviceWorkerPlugin(): Plugin {
       const sw = bundle['sw.js'];
       if (!sw || sw.type !== 'chunk') throw new Error('openframe-sw: sw.js chunk missing');
       const files = Object.keys(bundle).filter((name) => name !== 'sw.js' && !name.endsWith('.map'));
-      // The color emoji font is cached after the app has started rather than at install, so the install
-      // doesn't download it while the page loads the CanvasKit wasm.
-      const isDeferred = (name: string) => /(^|\/)emoji-font-data-[^/]*\.js$/.test(name);
+      // Nothing is deferred any more: the colour emoji font used to be one 7.6 MB chunk, cached after
+      // the app had started, and it is read out of the library under public/ a subset at a time now,
+      // which the fetch handler caches like the rest of the library.
+      const isDeferred = (_name: string) => false;
       // The 454 Noto Sans CJK subsets (23 MB) aren't precached at all: each is cached by the fetch handler
       // when text first needs it, instead of every visitor downloading all of them.
       // The plain font files that glyph outlines are read from are fetched only when text is turned into paths.

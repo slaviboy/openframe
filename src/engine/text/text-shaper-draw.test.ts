@@ -21,7 +21,8 @@ import type { CanvasKit } from 'canvaskit-wasm';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { makeText } from '@/core/document/factory';
 import type { TextNode } from '@/core/schema/document';
-import { BUNDLED_FONT_FILES } from './font-files';
+import { BUNDLED_FONT_FILES, emojiSubsetFamily } from './font-files';
+import { subsetsFor } from '@/core/text/font-subsets';
 import { TextShaper } from './text-shaper';
 
 const require = createRequire(import.meta.url);
@@ -135,6 +136,61 @@ describe('laid-out text kept between frames', () => {
     frame(own, 0);
     frame(own, 0);
     expect((own as unknown as { layouts: Map<string, unknown> }).layouts.size).toBe(0);
+    own.dispose();
+  });
+});
+
+/**
+ * Emoji are ordinary text: typing one has to give a colour picture, not a box. The font is 5.7 MB
+ * whole, so it is read as the subsets the text's own emoji fall in — see docs/FONTS.md.
+ */
+describe('colour emoji', () => {
+  /** The library's Noto Color Emoji subsets, as they are on disk (the app reads them over its own origin). */
+  const EMOJI_DIR = new URL('../../../public/fonts/google/noto-color-emoji/', import.meta.url);
+  interface EmojiFile {
+    readonly file: string;
+    readonly unicodeRange?: string;
+  }
+  const emojiFiles = (): EmojiFile[] => JSON.parse(readFileSync(new URL('files.json', EMOJI_DIR), 'utf8')) as EmojiFile[];
+  const emojiSubsetsFor = (text: string): number[] => subsetsFor(text, emojiFiles().map((f, i) => [i, (f.unicodeRange ?? '').replace(/U\+/gi, '').replace(/\s+/g, '')] as const));
+  const emojiSubsetBytes = (index: number): Uint8Array => new Uint8Array(readFileSync(new URL(emojiFiles()[index]!.file.split('/').pop()!, EMOJI_DIR)));
+
+  /** Draws a text layer and counts the pixels whose channels differ, which only colour can do. */
+  const colouredPixels = (own: TextShaper, characters: string): number => {
+    const base = { ...makeText({ id: 'x:9', parent: { id: 'x:0', key: 'V' }, name: 'T', x: 0, y: 0, width: 0, height: 0 }), fontSize: 48, characters };
+    const node: TextNode = { ...base, size: own.measure(base, null) };
+    const surface = ck.MakeSurface(W, H)!;
+    const canvas = surface.getCanvas();
+    canvas.clear(ck.WHITE);
+    const glyph = new ck.Paint();
+    glyph.setColor(ck.BLACK);
+    const background = new ck.Paint();
+    background.setColor(ck.TRANSPARENT);
+    own.draw(canvas, node, { background, paint: () => glyph });
+    const pixels = surface.makeImageSnapshot().readPixels(0, 0, { width: W, height: H, colorType: ck.ColorType.RGBA_8888, alphaType: ck.AlphaType.Unpremul, colorSpace: ck.ColorSpace.SRGB })!;
+    let coloured = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      const [r, g, b] = [pixels[i]!, pixels[i + 1]!, pixels[i + 2]!];
+      if (Math.max(r, g, b) - Math.min(r, g, b) > 30) coloured++;
+    }
+    glyph.delete();
+    background.delete();
+    surface.delete();
+    return coloured;
+  };
+
+  test('an emoji draws in colour once its own subset is registered, and it is a fraction of the font', () => {
+    const own = new TextShaper(ck, BUNDLED_FONT_FILES.map(({ family, file, package: pkg }) => ({ family, bytes: new Uint8Array(readFileSync(require.resolve(`${pkg}/files/${file}`))) })));
+    // 😭 alone: nothing in the bundled fonts draws it, so it is the missing-glyph box — black, not colour.
+    expect(colouredPixels(own, '😭')).toBe(0);
+
+    const [index] = emojiSubsetsFor('😭');
+    expect(index).toBeDefined();
+    const bytes = emojiSubsetBytes(index!);
+    // One subset out of eleven: a fraction of the 5.7 MB the whole font weighs.
+    expect(bytes.byteLength).toBeLessThan(1_000_000);
+    own.registerFallbackFonts([{ family: emojiSubsetFamily(index!), bytes }]);
+    expect(colouredPixels(own, '😭')).toBeGreaterThan(500);
     own.dispose();
   });
 });

@@ -36,10 +36,11 @@ import { containsSymbols } from '@/core/text/symbols';
 import type { Editor } from '@/editor/editor';
 import { loadCanvasKit } from '@/engine/ck/canvaskit';
 import { SceneRenderer } from '@/engine/render/scene-renderer';
-import { loadBundledFonts, loadEmojiFont } from '@/engine/text/bundled-fonts';
+import { loadBundledFonts } from '@/engine/text/bundled-fonts';
+
 import { loadCjkSubsets } from '@/engine/text/cjk-fonts';
 import { TextShaper } from '@/engine/text/text-shaper';
-import { readSymbolFallbacks } from '../fonts/google-fonts';
+import { readEmojiSubsets, readSymbolFallbacks } from '../fonts/google-fonts';
 
 const HINT_COLOR = { r: 13 / 255, g: 153 / 255, b: 1 };
 
@@ -151,7 +152,7 @@ export class PresentationRenderer {
   /** The color emoji font, the CJK subsets and the symbol fallbacks load when the file's text needs them. */
   private loadTextFonts(): void {
     const requestedCjk = new Set<string>();
-    let emoji = false;
+    const requestedEmoji = new Set<number>();
     let symbols = false;
     for (const node of this.editor.doc.nodes()) {
       if (node.type !== 'TEXT') continue;
@@ -165,12 +166,11 @@ export class PresentationRenderer {
           })
           .catch((error: unknown) => console.warn(error));
       }
-      if (!emoji && containsEmoji(node.characters)) {
-        emoji = true;
-        loadEmojiFont()
-          .then((font) => {
-            if (this.disposed || !this.shaper) return;
-            this.shaper.registerFallbackFonts([font]);
+      if (containsEmoji(node.characters)) {
+        readEmojiSubsets(node.characters, requestedEmoji)
+          .then((fonts) => {
+            if (this.disposed || !this.shaper || fonts.length === 0) return;
+            this.shaper.registerFallbackFonts(fonts);
             this.invalidate();
           })
           .catch((error: unknown) => console.warn(error));

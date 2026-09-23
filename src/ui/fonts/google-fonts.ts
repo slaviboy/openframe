@@ -17,7 +17,8 @@
 
 import { sha256Hex } from '@/core/image/hash';
 import type { UserFont } from '@/editor/fonts/font-registry';
-import { SYMBOL_FALLBACK_FILES, symbolFallbackFamily } from '@/engine/text/font-files';
+import { subsetsFor } from '@/core/text/font-subsets';
+import { emojiSubsetFamily, SYMBOL_FALLBACK_FILES, symbolFallbackFamily } from '@/engine/text/font-files';
 import type { FontSource } from '@/engine/text/text-shaper';
 
 /**
@@ -35,6 +36,8 @@ interface IndexFile {
   readonly style: string;
   readonly weight: string;
   readonly bytes: number;
+  /** The code points the file carries, as the library's CSS declares them ("U+1f1e6-1f1ff, …"). */
+  readonly unicodeRange?: string;
 }
 
 export interface GoogleFamily {
@@ -94,6 +97,40 @@ export async function readGoogleFamily(family: string): Promise<UserFont[]> {
   // One family, many subsets: the same weight turns up more than once, and only the first is needed to
   // name the style. The rest register under the same name and serve as fallbacks for their characters.
   return fonts;
+}
+
+const EMOJI_SLUG = 'noto-color-emoji';
+let emojiFiles: Promise<readonly IndexFile[]> | null = null;
+
+/**
+ * Noto Color Emoji, in the eleven subsets the library holds it in — 2.0 MB together, and 10 KB to
+ * 709 KB each. Emoji are ordinary text, so what matters is how soon the character being typed stops
+ * being a box: only the subsets its own emoji fall in are read, the way the CJK families work.
+ *
+ * It has to be the library's copy. Fontsource splits the same font too, but its subsets carry no
+ * `COLR`/`CPAL` table — registered with CanvasKit they draw nothing at all, not even in black —
+ * while the library's render in full colour. `src/engine/text/text-shaper-draw.test.ts` holds that
+ * down by counting coloured pixels.
+ */
+export async function readEmojiSubsets(text: string, requested: Set<number>): Promise<FontSource[]> {
+  emojiFiles ??= fetch(`${BASE}/${EMOJI_SLUG}/files.json`)
+    .then((response) => (response.ok ? (response.json() as Promise<IndexFile[]>) : []))
+    .catch(() => {
+      emojiFiles = null;
+      return [] as IndexFile[];
+    });
+  const files = await emojiFiles;
+  const table = files.map((file, index) => [index, (file.unicodeRange ?? '').replace(/U\+/gi, '').replace(/\s+/g, '')] as const);
+  const indices = subsetsFor(text, table).filter((index) => !requested.has(index));
+  for (const index of indices) requested.add(index);
+  return Promise.all(
+    indices.map(async (index) => {
+      const entry = files[index]!;
+      const response = await fetch(`${BASE}/${entry.file}`);
+      if (!response.ok) throw new Error(`The emoji subset ${entry.file} could not be read.`);
+      return { family: emojiSubsetFamily(index), bytes: new Uint8Array(await response.arrayBuffer()) };
+    }),
+  );
 }
 
 /**

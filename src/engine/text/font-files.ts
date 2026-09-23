@@ -37,9 +37,12 @@ export const BUNDLED_FONT_FILES: readonly { readonly family: string; readonly fi
   { family: `${BUNDLED_FAMILY} (noto-hebrew)`, file: 'noto-sans-hebrew-hebrew-wght-normal.woff2', package: '@fontsource-variable/noto-sans-hebrew' },
 ];
 
-/** The bundled color emoji fallback (Noto Color Emoji), registered once text contains emoji. */
-export const EMOJI_FAMILY = `${BUNDLED_FAMILY} (noto-color-emoji)`;
-export const EMOJI_FONT_FILE = { file: 'noto-color-emoji-emoji-400-normal.woff2', package: '@fontsource/noto-color-emoji' } as const;
+/**
+ * The colour emoji fallback (Noto Color Emoji), registered once text contains emoji. It is read from
+ * the library under `public/fonts/google/noto-color-emoji/`, in the eleven subsets it is split into,
+ * and only the ones a text's own emoji fall in — the arrangement the CJK families already use.
+ */
+export const emojiSubsetFamily = (index: number): string => `${BUNDLED_FAMILY} (noto-color-emoji-${index})`;
 
 /**
  * The symbol fallbacks, taken from the Google Fonts library that ships under `public/fonts/google/`:

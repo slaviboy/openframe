@@ -173,7 +173,7 @@ are cursors, avatars and the reference brand mark, all excluded). The reference 
 secondary of `var(--color-icon-color-3)`, which becomes `var(--fg-tertiary)`.
 
 `scripts/extract-reference-icons.mjs` does the reading. It prints a TSX fragment and never writes
-`src/ui/icons/icons.tsx`, because the reference's labels are not directly keyable: all four mode icons report the
+`src/ui/icons/Icon.tsx`, because the reference's labels are not directly keyable: all four mode icons report the
 same label, and `Comment` arrives as `Comment (515 unread)`.
 
 The reference brand mark is **not** copied. Our `logo` icon stays ours.

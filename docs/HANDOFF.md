@@ -501,6 +501,32 @@ markup. The pass is being built in phases, each its own commit.
   timeout — it failed on all three browsers under a full run and passed on its own. The bytes now cross once,
   as base64, and the test runs in 1.5s instead of 15.7s.
 
+## An emoji is ordinary text (2026-09-23)
+
+The user's rule for it: *"emoji is part of text — pasting an emoji should act as a text field, so a
+user can add text with or without emojis."* The engine was never the problem: 😭 shapes to glyph 2385
+and drew in full colour as soon as the font was registered. Getting the font there was.
+
+- **It was one 7.6 MB chunk.** `emoji-font-data.ts` inlined the whole 5.7 MB
+  `noto-color-emoji-emoji-400-normal.woff2` as base64, so the character sat as a box while that was
+  fetched, parsed and `atob`-decoded. It is read from the library under `public/fonts/google/` now,
+  in the eleven subsets it is split into, and only the ones a text's own emoji fall in:
+  `readEmojiSubsets` (`src/ui/fonts/google-fonts.ts`) picks them with `subsetsFor` from each file's
+  `unicodeRange`. **😭 costs 141 KB instead of 5.7 MB.** The `@fontsource/noto-color-emoji`
+  dependency is gone, and so is the service worker's deferred-precache list (`isDeferred` is empty
+  now) — these are ordinary library files the fetch handler caches as they are asked for.
+- **The trap, and why it has a test.** The obvious route was Fontsource's own subsets of the same
+  font, reached through the CJK subset plugin. Their `cmap` reports the glyph — `getGlyphIDs` on
+  subset 9 gives 89 for 😭 — but they carry no `COLR`/`CPAL` table, so CanvasKit paints **nothing at
+  all**, not even in black. It looks like a working font right up until it is drawn. The library's
+  subsets paint in full colour. `text-shaper-draw.test.ts` now counts coloured pixels, which is the
+  only assertion that would have caught it.
+- **`subsetsFor`** moved out of `cjk.ts` into `src/core/text/font-subsets.ts`, since the emoji
+  subsets and the CJK subsets pick the same way. `cjk.ts` re-exports it, so nothing else moved.
+- **The E2E leans on the box again**, and needs a yardstick that can never be drawn: a private-use
+  character. Every missing glyph has the same advance, so a line of them measures exactly what a line
+  of undrawn emoji would. It was run with the emoji loading switched off first and fails there.
+
 ## A character no font covers gets one (2026-09-23)
 
 The user pasted "The tab chips and ← stay usable" into a text layer and got a box. It was never an

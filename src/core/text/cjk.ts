@@ -15,6 +15,8 @@
  * limitations under the License.
  */
 
+import { subsetsFor, type SubsetTable } from './font-subsets';
+
 /** Chinese (Simplified, Traditional), Japanese and Korean, as the bundled Noto Sans fonts name them. */
 export type CjkScript = 'SC' | 'TC' | 'JP' | 'KR';
 
@@ -29,7 +31,7 @@ export const CJK_FAMILY_SCRIPTS: Readonly<Record<string, CjkScript>> = {
 export const CJK_FAMILIES: readonly string[] = Object.keys(CJK_FAMILY_SCRIPTS);
 
 /** One subset of a script: [subset index, comma-separated hex code point ranges]. */
-export type CjkSubsetTable = readonly (readonly [number, string])[];
+export type CjkSubsetTable = SubsetTable;
 
 const CJK = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}\u3000-\u303f\uff00-\uffef]/u;
 const KANA = /[\p{Script=Hiragana}\p{Script=Katakana}]/u;
@@ -53,32 +55,5 @@ export const cjkSubsetFamily = (script: CjkScript, index: number): string => `No
 /** Whether a registered family is a CJK subset (an internal fallback, not a font users pick). */
 export const isCjkSubsetFamily = (family: string): boolean => /^Noto Sans (SC|TC|JP|KR) \(\d+\)$/.test(family);
 
-const parsedTables = new WeakMap<CjkSubsetTable, readonly (readonly [number, readonly (readonly [number, number])[]])[]>();
-
-function parsed(table: CjkSubsetTable): readonly (readonly [number, readonly (readonly [number, number])[]])[] {
-  let result = parsedTables.get(table);
-  if (!result) {
-    result = table.map(([index, compact]) => [
-      index,
-      compact
-        .split(',')
-        .filter(Boolean)
-        .map((part): [number, number] => {
-          const [lo, hi] = part.split('-');
-          const start = parseInt(lo!, 16);
-          return [start, hi ? parseInt(hi, 16) : start];
-        }),
-    ]);
-    parsedTables.set(table, result);
-  }
-  return result;
-}
-
 /** The subsets whose ranges cover any non-ASCII character of a text, in table order. */
-export function cjkSubsetsFor(text: string, table: CjkSubsetTable): number[] {
-  const codePoints = [...new Set([...text].map((c) => c.codePointAt(0)!).filter((cp) => cp > 0x7f))];
-  if (codePoints.length === 0) return [];
-  return parsed(table)
-    .filter(([, ranges]) => codePoints.some((cp) => ranges.some(([lo, hi]) => cp >= lo && cp <= hi)))
-    .map(([index]) => index);
-}
+export const cjkSubsetsFor = subsetsFor;

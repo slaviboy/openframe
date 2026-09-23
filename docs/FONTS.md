@@ -60,6 +60,7 @@ consults them:
 | The layer's font | the one it names | with the file, or when picked |
 | Bundled script subsets | `Inter (latin-ext)`, `(cyrillic)`, `(greek)`, `(vietnamese)`, `(noto-arabic)`, `(noto-hebrew)` | at startup, with Inter |
 | CJK | `Noto Sans SC/TC/JP/KR (n)` | per subset, per layer, for the characters in it |
+| Emoji | `Inter (noto-color-emoji-n)` | per subset, for the emoji in the text |
 | Symbols | `Inter (noto-symbols-0…2)` | once any text has a character nothing covers |
 
 `isFallbackFamily` keeps all of them out of the picker: they are drawn from, never picked.
@@ -93,6 +94,26 @@ characters that are emoji anyway and come from the colour emoji font. Those stil
 
 Loading is triggered by `TextShaper.uncoveredCodePoints`, which asks every registered typeface for a
 glyph, so text with only ™ or ↑ — which Inter *does* carry — never pulls the 580 KB.
+
+### Emoji
+
+An emoji is ordinary text: what matters is how soon the character just typed stops being a box.
+Noto Color Emoji is 5.7 MB whole, and it used to ship that way — inlined as base64 into a **7.6 MB
+JavaScript chunk** that was fetched, parsed and `atob`-decoded before the first emoji could be
+drawn. It is read from the library now, in the eleven subsets it is split into (2.0 MB together, 10
+KB to 709 KB each), and only the subsets a text's own emoji fall in: 😭 costs **141 KB**.
+`readEmojiSubsets` picks them from each file's `unicodeRange` in `noto-color-emoji/files.json`,
+through the same `subsetsFor` the CJK families use.
+
+**It has to be the library's copy.** `@fontsource/noto-color-emoji` splits the same font into ten
+subsets, and those carry no `COLR`/`CPAL` table: registered with CanvasKit they draw *nothing at
+all*, not even in black, while their `cmap` still reports a glyph — so the font looks fine right up
+until it is painted. The library's subsets draw in full colour.
+`src/engine/text/text-shaper-draw.test.ts` holds that down by counting coloured pixels, and the
+Fontsource package is no longer a dependency.
+
+The declared ranges were checked against the glyphs the files actually carry — 1,322 code points, no
+disagreement — which is why they can be trusted here while the symbol families' cannot.
 
 ## Reading the assets
 
