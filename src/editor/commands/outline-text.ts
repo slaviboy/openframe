@@ -46,7 +46,8 @@ export async function textOutline(editor: Editor, node: TextNode, load: FontLoad
   const placements = layout?.glyphPlacements?.(node) ?? [];
   if (placements.length === 0) return null;
   // Characters the layer's own font can't draw came from a fallback on the canvas, so they are read from one here.
-  const fallbacks = (layout?.availableFonts?.() ?? []).map((font) => font.family).filter((family) => family !== node.fontName.family);
+  // The internal fallbacks come first: a symbol or an emoji was drawn from one, and no pickable font has it.
+  const fallbacks = [...(layout?.fallbackFamilies?.() ?? []), ...(layout?.availableFonts?.() ?? []).map((font) => font.family)].filter((family) => family !== node.fontName.family);
   const { commands } = await outlineGlyphs(placements, load, fallbacks);
   return commands.length > 0 ? commands : null;
 }

@@ -49,6 +49,51 @@ Greek before Latin. The shaper takes the first face registered for a family as t
 registering them in that order draws Latin text in the fallback font. `readGoogleFamily` puts the widest
 face first — the one `css2` leaves unnamed — then Latin, then the rest.
 
+## The fallback chain
+
+A text layer names one family. Everything its font cannot draw comes from a fallback, and the fallbacks
+are loaded for the characters that need them rather than held all at once. In the order the shaper
+consults them:
+
+| | Families | Loaded |
+|---|---|---|
+| The layer's font | the one it names | with the file, or when picked |
+| Bundled script subsets | `Inter (latin-ext)`, `(cyrillic)`, `(greek)`, `(vietnamese)`, `(noto-arabic)`, `(noto-hebrew)` | at startup, with Inter |
+| CJK | `Noto Sans SC/TC/JP/KR (n)` | per subset, per layer, for the characters in it |
+| Symbols | `Inter (noto-symbols-0…2)` | once any text has a character nothing covers |
+
+`isFallbackFamily` keeps all of them out of the picker: they are drawn from, never picked.
+`TextShaper.fallbackFamilies()` lists them for **Outline text** and the SVG export, which have to read a
+glyph out of the font it was actually drawn from.
+
+### Symbols
+
+Inter's Latin subset is declared `U+0000-00FF, …, U+2191, U+2193, …`: it carries **↑ and ↓ but not ←
+or →**, and no other bundled subset has them either, so arrows, maths, box drawing and dingbats shaped
+as the missing-glyph box. The editor's own *Use smart quotes/symbols* makes three of them — `->` → `→`,
+`<-` → `←`, `[ ]` → `▢`.
+
+Three files out of the library cover them, listed in `SYMBOL_FALLBACK_FILES`
+(`src/engine/text/font-files.ts`) and read by `readSymbolFallbacks`:
+
+| File | Size | Code points it adds |
+|---|---:|---:|
+| `noto-sans-math/…-default-0.woff2` | 196 KB | 746 (← → ≈ ∑) |
+| `noto-sans-symbols-2/…-latin-ext-3.woff2` | 235 KB | 446 (✓ ★ ▢ ♥ ☑ ⚠) |
+| `noto-sans-symbols/…-latin-ext-0.woff2` | 148 KB | 385 |
+
+**They are picked by measured glyph coverage, not by the `unicodeRange` they declare.** That range
+claims the `mayan-numerals` subset of Noto Sans Symbols 2 carries U+2190; opening the file and asking
+for the glyph says otherwise. `src/engine/text/text-shaper.test.ts` checks the coverage against the real
+files, so a change to the list has to earn it.
+
+Together they cover **1,577 of the 1,741** code points in those blocks, for ~580 KB read once, on
+demand. What is left is mostly the heavy and doubled box-drawing variants (U+2501–U+257F) and a few
+characters that are emoji anyway and come from the colour emoji font. Those still draw as the box.
+
+Loading is triggered by `TextShaper.uncoveredCodePoints`, which asks every registered typeface for a
+glyph, so text with only ™ or ↑ — which Inter *does* carry — never pulls the 580 KB.
+
 ## Reading the assets
 
 `src/ui/fonts/google-fonts.ts` reads these files with `fetch`, which the repository otherwise forbids

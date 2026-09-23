@@ -41,5 +41,24 @@ export const BUNDLED_FONT_FILES: readonly { readonly family: string; readonly fi
 export const EMOJI_FAMILY = `${BUNDLED_FAMILY} (noto-color-emoji)`;
 export const EMOJI_FONT_FILE = { file: 'noto-color-emoji-emoji-400-normal.woff2', package: '@fontsource/noto-color-emoji' } as const;
 
+/**
+ * The symbol fallbacks, taken from the Google Fonts library that ships under `public/fonts/google/`:
+ * arrows, mathematical operators, technical marks, box drawing, geometric shapes and dingbats, which
+ * the bundled text fonts largely do not carry — Inter's Latin subset has ↑ and ↓ but not ← or →, and
+ * the editor's own smart symbols make both.
+ *
+ * Picked by measured glyph coverage, not by the `unicodeRange` these families declare: that range
+ * says the `mayan-numerals` subset carries U+2190 and it does not. Between them these three cover
+ * 1,577 of the 1,741 code points in those blocks, for ~580 KB read once, on demand. See docs/FONTS.md.
+ */
+export const SYMBOL_FALLBACK_FILES: readonly string[] = [
+  'noto-sans-math/noto-sans-math-normal-400-default-0.woff2',
+  'noto-sans-symbols-2/noto-sans-symbols-2-normal-400-latin-ext-3.woff2',
+  'noto-sans-symbols/noto-sans-symbols-normal-100_900-latin-ext-0.woff2',
+];
+
+/** The internal family name a symbol fallback is registered under: drawn from, never picked. */
+export const symbolFallbackFamily = (index: number): string => `${BUNDLED_FAMILY} (noto-symbols-${index})`;
+
 /** Whether a registered family is an internal fallback subset rather than a font users pick. */
 export const isFallbackFamily = (family: string): boolean => family.startsWith(`${BUNDLED_FAMILY} (`) || isCjkSubsetFamily(family);

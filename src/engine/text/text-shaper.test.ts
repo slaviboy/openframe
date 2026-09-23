@@ -21,18 +21,22 @@ import type { CanvasKit } from 'canvaskit-wasm';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { makeText } from '@/core/document/factory';
 import type { TextNode } from '@/core/schema/document';
-import { BUNDLED_FONT_FILES, EMOJI_FAMILY, EMOJI_FONT_FILE } from './font-files';
+import { SMART_SYMBOLS } from '@/core/text/smart-symbols';
+import { BUNDLED_FONT_FILES, EMOJI_FAMILY, EMOJI_FONT_FILE, SYMBOL_FALLBACK_FILES, symbolFallbackFamily } from './font-files';
 import { TextShaper } from './text-shaper';
 import { loadCjkSubsets } from './cjk-fonts';
 
 const require = createRequire(import.meta.url);
 let shaper: TextShaper;
+let canvasKit: CanvasKit;
+
+/** The bundled fonts, read from the packages they ship in. */
+const bundledFonts = () => BUNDLED_FONT_FILES.map(({ family, file, package: pkg }) => ({ family, bytes: new Uint8Array(readFileSync(require.resolve(`${pkg}/files/${file}`))) }));
 
 beforeAll(async () => {
   const init = require('canvaskit-wasm/bin/full/canvaskit.js') as (opts: { locateFile: (f: string) => string }) => Promise<CanvasKit>;
-  const ck = await init({ locateFile: (f) => require.resolve(`canvaskit-wasm/bin/full/${f}`) });
-  const fonts = BUNDLED_FONT_FILES.map(({ family, file, package: pkg }) => ({ family, bytes: new Uint8Array(readFileSync(require.resolve(`${pkg}/files/${file}`))) }));
-  shaper = new TextShaper(ck, fonts);
+  canvasKit = await init({ locateFile: (f) => require.resolve(`canvaskit-wasm/bin/full/${f}`) });
+  shaper = new TextShaper(canvasKit, bundledFonts());
 });
 
 let serial = 0;
@@ -387,5 +391,42 @@ describe('text too small to read', () => {
     const tall = text({ characters: 'one\ntwo', fontSize: 12, lineHeight: { unit: 'PIXELS', value: 40 }, textAutoResize: 'NONE', size: { width: 200, height: 200 } });
     const lines = shaper.greekedLines(tall, 0.02)!;
     expect(lines[1]!.y - lines[0]!.y).toBeCloseTo(40, 5);
+  });
+});
+
+/**
+ * Arrows, maths and dingbats: the bundled Inter Latin subset carries ↑ and ↓ but not ← or →, and
+ * nothing else registered covers them either, so they shaped as the missing-glyph box until the
+ * symbol fallbacks were loaded for them. See docs/FONTS.md.
+ */
+describe('symbol fallbacks', () => {
+  const SYMBOLS = '←→✓★▢≈∑♥';
+  let symbols: TextShaper;
+
+  beforeAll(() => {
+    symbols = new TextShaper(canvasKit, bundledFonts());
+  });
+
+  test('reports the characters no registered font covers', () => {
+    expect(symbols.uncoveredCodePoints(SYMBOLS)).toHaveLength([...SYMBOLS].length);
+    // ↑, ™ and — are in Inter's own Latin subset, and Cyrillic is in a bundled fallback subset.
+    expect(symbols.uncoveredCodePoints('Hello ↑™—')).toEqual([]);
+    expect(symbols.uncoveredCodePoints('Привет')).toEqual([]);
+    expect(symbols.uncoveredCodePoints('plain ASCII')).toEqual([]);
+  });
+
+  test('draws every symbol once its fallbacks are registered', () => {
+    const before = symbols.measure(text({ characters: SYMBOLS }), null).width;
+    symbols.registerSymbolFallbacks(
+      SYMBOL_FALLBACK_FILES.map((file, index) => ({ family: symbolFallbackFamily(index), bytes: new Uint8Array(readFileSync(new URL(`../../../public/fonts/google/${file}`, import.meta.url))) })),
+    );
+    expect(symbols.uncoveredCodePoints(SYMBOLS)).toEqual([]);
+    // The boxes were all one width; real glyphs are not, so the line measures differently.
+    expect(symbols.measure(text({ characters: SYMBOLS }), null).width).not.toBeCloseTo(before, 1);
+  });
+
+  test('covers the symbols the editor itself types', () => {
+    // Smart quotes/symbols turns -> into an arrow and [ ] into a ballot box: both must have a glyph.
+    for (const [, symbol] of SMART_SYMBOLS) expect(symbols.uncoveredCodePoints(symbol)).toEqual([]);
   });
 });

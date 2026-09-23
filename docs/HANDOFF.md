@@ -501,6 +501,40 @@ markup. The pass is being built in phases, each its own commit.
   timeout — it failed on all three browsers under a full run and passed on its own. The bytes now cross once,
   as base64, and the test runs in 1.5s instead of 15.7s.
 
+## A character no font covers gets one (2026-09-23)
+
+The user pasted "The tab chips and ← stay usable" into a text layer and got a box. It was never an
+input problem — the character goes in, there is simply no glyph for it. The bundled Inter Latin subset
+is declared `U+0000-00FF, …, U+2191, U+2193, …`: it carries **↑ and ↓ but not ← or →**, and nothing
+else registered had them either. Probed against the app's own font set, `A` shapes to glyph 2, `↑` to
+479, and `←`, `→`, `✓` and `★` all to 0.
+
+Self-inflicted, too: *Use smart quotes/symbols* types `→` from `->`, `←` from `<-` and `▢` from `[ ]`,
+so three of its eight replacements drew a box — and `e2e/emoji.spec.ts` asserted the `->` conversion
+while never checking it drew.
+
+- **The fix** mirrors the CJK subsets. `SYMBOL_FALLBACK_FILES` (`src/engine/text/font-files.ts`) names
+  three files already shipped under `public/fonts/google/` — Noto Sans Math, Noto Sans Symbols 2 and
+  Noto Sans Symbols, ~580 KB together — which `readSymbolFallbacks` (`src/ui/fonts/google-fonts.ts`,
+  the file that already holds the `fetch` exemption for same-origin reads of what ships with the app)
+  reads on demand. `TextShaper.registerSymbolFallbacks` keeps them out of `this.families`, since a long
+  per-run fallback list is what makes layout slow; `symbolFallbacksFor` adds them only to layers whose
+  text has symbols (`containsSymbols`, `src/core/text/symbols.ts`).
+- **The trigger is exact, not a guess at ranges.** `TextShaper.uncoveredCodePoints` asks every
+  registered typeface for a glyph with CanvasKit's `Typeface.getGlyphIDs`, so text with only ™ or ↑ —
+  which Inter *does* carry — never pulls the 580 KB. `CanvasHost` watches for it on the same
+  `editor.history.subscribe` the CJK loader uses (preview ops emit too, so it fires while typing);
+  `PresentationRenderer.loadTextFonts` does the same for presentation view.
+- **The files are picked by measured coverage, not by their declared `unicodeRange`** — that range says
+  the `mayan-numerals` subset of Noto Sans Symbols 2 carries U+2190, and opening the file says it does
+  not. The unit test checks coverage against the real files.
+- **Also:** `outlineTextSelection` built its fallback list from `availableFonts()`, which excludes every
+  internal fallback — so **Outline text** on a symbol, an emoji or CJK silently dropped the character.
+  `TextShaper.fallbackFamilies()` (new, optional on `TextLayoutService`) is now consulted first.
+- **The test that would have caught it:** `e2e/symbols.spec.ts` leans on the box being *uniform* — every
+  missing glyph has the same advance, so a line of arrows and a line of stars measured exactly alike.
+  It was run against the unfixed code first and fails there.
+
 ## The Dynamic and Brush tabs, from their own captures (2026-09-19)
 
 The user supplied the Dynamic tab, the Brush tab and two saved pages — `reference/app/brushes_streched.html`

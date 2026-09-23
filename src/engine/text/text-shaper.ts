@@ -24,6 +24,7 @@ import { readFontAxes, type FontAxis } from '@/core/text/font-names';
 import { BUNDLED_FONT_AXES, mergeAxes, variationSettings } from '@/core/text/font-variations';
 import { resolveDirection } from '@/core/text/direction';
 import { CJK_FAMILIES, cjkScriptFor, containsCjk } from '@/core/text/cjk';
+import { containsSymbols } from '@/core/text/symbols';
 import { balancedWidth, prettyWidth } from '@/core/text/wrap-style';
 import { fallbackUnderlineMetrics, underlineLine, wavySegments, type UnderlineMetrics } from '@/core/text/underline';
 import { parseFontStyle, VARIABLE_FONT_STYLES } from '@/core/text/font-style';
@@ -186,6 +187,8 @@ export class TextShaper implements TextLayoutService {
   private readonly fontFiles = new Map<string, Uint8Array>();
   /** Registered Noto Sans CJK subsets: fallbacks added only to text of their script. */
   private readonly cjkSubsets = new Set<string>();
+  /** Registered symbol fallbacks (arrows, maths, dingbats): added only to text that has symbols. */
+  private readonly symbolFallbacks = new Set<string>();
   private readonly underlineCache = new Map<string, UnderlineMetrics>();
 
   constructor(
@@ -203,6 +206,15 @@ export class TextShaper implements TextLayoutService {
   /** Registered family names, in registration order. */
   get registeredFamilies(): readonly string[] {
     return this.families;
+  }
+
+  /**
+   * The internal fallback families — the bundled script subsets, the colour emoji font, the CJK
+   * subsets and the symbol fallbacks. They are drawn from but never picked, so `availableFonts`
+   * leaves them out; reading a character's outline has to look in them all the same.
+   */
+  fallbackFamilies(): readonly string[] {
+    return [...this.families.filter(isFallbackFamily), ...this.cjkSubsets, ...this.symbolFallbacks];
   }
 
   /**
@@ -308,6 +320,53 @@ export class TextShaper implements TextLayoutService {
       this.cjkSubsets.add(font.family);
     }
     this.clearCache();
+  }
+
+  /**
+   * Registers the symbol fallback fonts (arrows, mathematical operators, technical marks, box
+   * drawing, geometric shapes and dingbats), loaded once text uses a character no registered font
+   * covers; cached layouts are dropped so that text reshapes with them.
+   */
+  registerSymbolFallbacks(fonts: readonly FontSource[]): void {
+    for (const font of fonts) {
+      if (this.symbolFallbacks.has(font.family)) continue;
+      this.rememberTypeface(font.family, font.bytes);
+      this.provider.registerFont(font.bytes, font.family);
+      this.symbolFallbacks.add(font.family);
+    }
+    this.clearCache();
+  }
+
+  /**
+   * The code points of a text that no registered font has a glyph for, so the caller knows whether
+   * loading a fallback would help. ASCII is skipped, and so is a code point some font covers.
+   */
+  uncoveredCodePoints(text: string): number[] {
+    const out: number[] = [];
+    const seen = new Set<number>();
+    for (const char of text) {
+      const cp = char.codePointAt(0)!;
+      if (cp <= 0x7f || seen.has(cp)) continue;
+      seen.add(cp);
+      let covered = false;
+      for (const typeface of this.typefaces.values()) {
+        if (typeface.getGlyphIDs(char)[0]) {
+          covered = true;
+          break;
+        }
+      }
+      if (!covered) out.push(cp);
+    }
+    return out;
+  }
+
+  /**
+   * The symbol fallback families a layer's text falls back to. Like the CJK subsets they aren't in
+   * every run's fallback list, since a long list makes layout slow.
+   */
+  private symbolFallbacksFor(node: TextNode): readonly string[] {
+    if (this.symbolFallbacks.size === 0 || !containsSymbols(node.characters)) return [];
+    return [...this.symbolFallbacks];
   }
 
   /**
@@ -680,9 +739,9 @@ export class TextShaper implements TextLayoutService {
     const align = { LEFT: ck.TextAlign.Left, CENTER: ck.TextAlign.Center, RIGHT: ck.TextAlign.Right, JUSTIFIED: ck.TextAlign.Justify }[node.textAlignHorizontal];
     // An empty paragraph takes the style of the character before it (what typing there would get).
     const emptyStyle = textStyleAt(node, paragraphStyleOffset(range));
-    const cjk = this.cjkFallbacksFor(node);
+    const fallbacks = [...this.cjkFallbacksFor(node), ...this.symbolFallbacksFor(node)];
     const style = new ck.ParagraphStyle({
-      textStyle: this.textStyle(range.end > range.start ? textStyleAt(node, range.start) : emptyStyle, undefined, cjk),
+      textStyle: this.textStyle(range.end > range.start ? textStyleAt(node, range.start) : emptyStyle, undefined, fallbacks),
       textAlign: align,
       // The base direction for bidi reordering of the paragraph's runs.
       textDirection: rtl ? ck.TextDirection.RTL : ck.TextDirection.LTR,
@@ -694,7 +753,7 @@ export class TextShaper implements TextLayoutService {
     const builder = ck.ParagraphBuilder.MakeFromFontProvider(style, this.provider);
     if (indent > 0) builder.addPlaceholder(indent, 0, ck.PlaceholderAlignment.Baseline, ck.TextBaseline.Alphabetic, 0);
     const add = (segment: TextSegment, text: string) => {
-      const textStyle = this.textStyle(segment, painter?.decorationColor?.(segment), cjk);
+      const textStyle = this.textStyle(segment, painter?.decorationColor?.(segment), fallbacks);
       // Painters may reuse one paint object: pushing copies it into the run.
       if (painter) builder.pushPaintStyle(textStyle, painter.paint(segment), painter.background);
       else builder.pushStyle(textStyle);

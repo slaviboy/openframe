@@ -38,6 +38,7 @@ import { TextShaper } from '@/engine/text/text-shaper';
 import { apply } from '@/core/math/matrix';
 import { pastedUrl } from '@/core/text/links';
 import { containsEmoji } from '@/core/text/emoji';
+import { containsSymbols } from '@/core/text/symbols';
 import { loadEmojiFont } from '@/engine/text/bundled-fonts';
 import { loadCjkSubsets } from '@/engine/text/cjk-fonts';
 import { cjkScriptFor, containsCjk } from '@/core/text/cjk';
@@ -68,6 +69,7 @@ import { stepTextProperty, toggleFontStyle, toggleTextDecoration } from '@/edito
 import { autoLineHeight } from '@/editor/commands/builtin';
 import type { Transaction } from '@/core/history/history';
 import { addFontFaces } from '../fonts/font-faces';
+import { readSymbolFallbacks } from '../fonts/google-fonts';
 import { imageFilesOf } from '../images/import-image';
 import { videoFilesOf } from '../images/import-video';
 import { svgFilesOf } from '../import/svg-files';
@@ -226,6 +228,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
     let unsubscribeFonts = () => {};
     let unsubscribeEmoji = () => {};
     let unsubscribeCjk = () => {};
+    let unsubscribeSymbols = () => {};
     let unsubscribeSpelling = () => {};
     const textInput = textInputRef.current!;
     // Caret blink phase while editing text; restarts visible whenever the selection changes.
@@ -511,6 +514,29 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
         };
         unsubscribeCjk = editor.history.subscribe(loadCjkWhenUsed);
         loadCjkWhenUsed();
+        // Arrows, maths and dingbats: the symbol fallbacks load once text uses a character no font here covers.
+        let symbolsRequested = false;
+        const loadSymbolsWhenUsed = () => {
+          if (symbolsRequested || !shaper) return;
+          for (const node of editor.doc.nodes()) {
+            if (node.type !== 'TEXT' || !containsSymbols(node.characters)) continue;
+            if (shaper.uncoveredCodePoints(node.characters).length === 0) continue;
+            symbolsRequested = true;
+            readSymbolFallbacks()
+              .then((fonts) => {
+                if (disposed || !shaper) return;
+                shaper.registerSymbolFallbacks(fonts);
+                // Auto-sized boxes measured while the characters were blank fit them now.
+                editor.refitText();
+                editor.requestRender();
+              })
+              .catch((error: unknown) => console.error(error));
+            break;
+          }
+          if (symbolsRequested) unsubscribeSymbols();
+        };
+        unsubscribeSymbols = editor.history.subscribe(loadSymbolsWhenUsed);
+        loadSymbolsWhenUsed();
         // Spelling: the dictionary loads the first time text is edited with Check spelling on, and follows the preference.
         const syncSpelling = () => {
           const wanted = viewPrefs.getSnapshot().spellCheck && editor.state.getSnapshot().textEdit !== null;
@@ -876,6 +902,7 @@ export function CanvasHost({ editor, tools, theme, rulers, pixelGrid, pixelPrevi
       unsubscribeFonts();
       unsubscribeEmoji();
       unsubscribeCjk();
+      unsubscribeSymbols();
       unsubscribeSpelling();
       editor.setSpellChecker(null);
       renderer?.dispose();

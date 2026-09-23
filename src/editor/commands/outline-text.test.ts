@@ -87,6 +87,17 @@ describe('convert text to vector paths', () => {
     expect(vector().size).toEqual({ width: 20, height: 10 });
   });
 
+  test('a symbol drawn from an internal fallback is read out of it too', async () => {
+    // ← is in no font a user can pick — it came from a symbol fallback on the canvas, and the
+    // outline has to look there as well, or Outline text would silently drop the character.
+    editor.setTextLayout({
+      ...layoutService(placementsFor('a←')),
+      fallbackFamilies: () => ['Inter (noto-symbols-0)'],
+    } as TextLayoutService);
+    await outlineTextSelection(editor, async (family) => (family === 'Inter (noto-symbols-0)' ? boxFont('←') : boxFont('a')));
+    expect(vector().size).toEqual({ width: 20, height: 10 });
+  });
+
   test('a character no font on offer can draw is left out', async () => {
     editor.setTextLayout(layoutService(placementsFor('ab')) as TextLayoutService);
     await outlineTextSelection(editor, async () => boxFont('a'));

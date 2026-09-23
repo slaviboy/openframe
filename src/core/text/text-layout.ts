@@ -60,6 +60,8 @@ export interface TextLayoutService {
   lineRange(node: TextNode, offset: number): [number, number];
   /** Font families that can be picked, in display order. */
   availableFonts(): readonly FontFamilyInfo[];
+  /** The internal fallback families text falls back to (script subsets, emoji, CJK, symbols), which aren't picked. */
+  fallbackFamilies?(): readonly string[];
   /** The family name inside a font file, or null when the engine can't read it. */
   fontFamilyOf?(bytes: Uint8Array): string | null;
   /** The OpenType feature tags that change how a font shapes text. */

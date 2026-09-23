@@ -17,6 +17,8 @@
 
 import { sha256Hex } from '@/core/image/hash';
 import type { UserFont } from '@/editor/fonts/font-registry';
+import { SYMBOL_FALLBACK_FILES, symbolFallbackFamily } from '@/engine/text/font-files';
+import type { FontSource } from '@/engine/text/text-shaper';
 
 /**
  * The Google Fonts library, which ships with Openframe under `public/fonts/google/` (see docs/FONTS.md and
@@ -92,6 +94,20 @@ export async function readGoogleFamily(family: string): Promise<UserFont[]> {
   // One family, many subsets: the same weight turns up more than once, and only the first is needed to
   // name the style. The rest register under the same name and serve as fallbacks for their characters.
   return fonts;
+}
+
+/**
+ * The symbol fallback fonts, read out of the library (see `SYMBOL_FALLBACK_FILES`). They are named
+ * so that `isFallbackFamily` keeps them out of the picker: they are drawn from, never picked.
+ */
+export async function readSymbolFallbacks(): Promise<FontSource[]> {
+  return Promise.all(
+    SYMBOL_FALLBACK_FILES.map(async (file, index) => {
+      const response = await fetch(`${BASE}/${file}`);
+      if (!response.ok) throw new Error(`The symbol fallback ${file} could not be read.`);
+      return { family: symbolFallbackFamily(index), bytes: new Uint8Array(await response.arrayBuffer()) };
+    }),
+  );
 }
 
 /** The reference's name for a weight and slant — "Bold Italic", "Regular" — which is how styles are picked. */
