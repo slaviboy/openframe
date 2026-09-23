@@ -139,9 +139,23 @@ pixels to the em a glyph cannot survive rasterizing, so the layer draws as a bar
 the lines where the font's metrics put them, as wide as their characters make them. A board of 2,120 text layers at
 2% draws in 65 ms a frame this way, and holds no laid-out text at all.
 
+**The bars are drawn a word at a time**, not one to a line. A solid bar a line is a rectangle, which is what it
+looked like; breaking it at the spaces is what makes it read as text, because word lengths and the gaps between
+them are what the eye picks up at that size. The line is walked in characters — one character is `unit` wide, so a
+word starting at the line's *i*th character starts at `i * unit` — which is the same approximation the shares were,
+said in a way that can also place the gaps.
+
+Below **half a device pixel to the space** the gaps cannot be seen, so the line goes back to one bar. That keeps the
+2,120-layer board above cheap: it is drawn at 2%, where a gap would be a fraction of a pixel.
+
 Bars would be a heavier page than glyphs if they were solid, so a bar is `GREEK_INK` (0.38) of its fill — the share
 of its line box Latin text covers. `scene-renderer.test.ts` renders the same layers either side of the threshold and
-holds the two within 10% of the same mean ink; they measure 0.5% apart.
+holds the two within 10% of the same mean ink. Dropping the spaces made the bars *closer* to the real thing, not
+further from it — **2.0% heavier than shaped text, against 3.0% for the solid bar** — so `GREEK_INK` did not move.
+
+One thing to keep: `ck.XYWHRect` allocates, and a board of greeked text now draws thousands of rectangles a frame
+rather than hundreds. The renderer fills one reused `Float32Array` instead. On the sample board the whole change
+costs nothing measurable — median 16.6 ms, p95 18.5 ms, worst 19.7 ms, against 16.6 / 18.2 / 19.2 before.
 
 Only a surface a person pans and zooms asks for this (`greekText`). An export writes what the layers say however
 small it is asked to draw them, and so does a thumbnail.

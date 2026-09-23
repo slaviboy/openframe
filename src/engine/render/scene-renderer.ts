@@ -194,6 +194,8 @@ export class SceneRenderer {
   private readonly shadowPaint: CkPaint;
   private diamondEffect: RuntimeEffect | null | undefined;
   /** Decoded images by content hash (null when the bytes could not be decoded). */
+  /** Reused for every bar of greeked text: left, top, right, bottom. */
+  private readonly greekRect = new Float32Array(4);
   private readonly imageCache = new Map<string, CkImage | null>();
   private checker: CkImage | null = null;
   private adjustEffect: RuntimeEffect | null | undefined;
@@ -1193,7 +1195,16 @@ export class SceneRenderer {
       if (!paint.visible || paint.opacity <= 0) continue;
       this.configurePaint(this.fillPaint, paint, node.size);
       this.fillPaint.setAlphaf(this.fillPaint.getColor()[3]! * GREEK_INK);
-      for (const line of lines) canvas.drawRect(this.ck.XYWHRect(line.x, line.y, line.width, line.height), this.fillPaint);
+      // One rectangle reused: `XYWHRect` allocates, and a board of greeked text draws thousands of
+      // these a frame — a word at a time — so allocating one apiece is the whole cost of drawing them.
+      const rect = this.greekRect;
+      for (const line of lines) {
+        rect[0] = line.x;
+        rect[1] = line.y;
+        rect[2] = line.x + line.width;
+        rect[3] = line.y + line.height;
+        canvas.drawRect(rect, this.fillPaint);
+      }
     }
     return true;
   }

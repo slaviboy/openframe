@@ -98,6 +98,12 @@ const GREEK_MIN_EM_PX = 3;
  * back and forth, and each flip is a shaping pass.
  */
 const UNGREEK_MIN_EM_PX = 3.6;
+/**
+ * How wide a space has to be, in device pixels, before the bars are drawn a word at a time. Below it the
+ * gaps are under half a pixel and cannot be told from a solid line, so a whole line is one bar — which is
+ * what keeps a page of thousands of text layers cheap when it is zoomed right out.
+ */
+const GREEK_WORD_MIN_PX = 0.5;
 const VERTICAL: Record<TextAlignVertical, number> = { TOP: 0, CENTER: 0.5, BOTTOM: 1 };
 /** List indentation per level, in ems of the item's font size. */
 const LIST_INDENT_EM = 1.5;
@@ -109,6 +115,26 @@ const PRETTY_MAX_SHRINK = 0.2;
 const OPENING_QUOTES = new Set(['"', "'", '“', '‘', '«', '‹', '„', '‚', '「', '『']);
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
+
+/**
+ * The runs of non-space characters in `[from, to)` of a paragraph — the words a line holds, which is
+ * what a greeked line is drawn as. Text with no spaces in it (Chinese, Japanese, Korean) is one run,
+ * which is the whole line, exactly as it was drawn before.
+ */
+function wordRuns(paragraph: string, from: number, to: number): { readonly from: number; readonly to: number }[] {
+  const runs: { from: number; to: number }[] = [];
+  let start = -1;
+  for (let i = from; i < to; i++) {
+    const space = paragraph[i] === ' ' || paragraph[i] === '\t';
+    if (!space && start < 0) start = i;
+    else if (space && start >= 0) {
+      runs.push({ from: start, to: i });
+      start = -1;
+    }
+  }
+  if (start >= 0) runs.push({ from: start, to });
+  return runs;
+}
 
 /** One paragraph of a text layer, laid out. */
 interface ParagraphLayout {
@@ -150,6 +176,8 @@ interface CachedLayout {
 interface CachedGreeked {
   readonly node: TextNode;
   readonly lines: readonly GreekedLine[];
+  /** Whether these are a bar per word or one bar a line; the only thing about them the zoom decides. */
+  readonly words: boolean;
   frame: number;
 }
 
@@ -498,19 +526,32 @@ export class TextShaper implements TextLayoutService {
       // Still on screen, just big enough to read now: its shaped block is about to be wanted.
       return null;
     }
-    // The bars are in the layer's own space, so they don't depend on the zoom that asked for them.
+    // Close enough in that a space is worth a gap, the bars are drawn a word at a time, which is what
+    // makes them read as text rather than as a filled block. Further out than that a gap is less than
+    // half a device pixel and cannot be seen, so the line is one bar again — far cheaper on a page of
+    // thousands of layers, and identical on screen.
+    const { advance } = this.lineMetrics(node.fontName.family, node.fontSize);
+    const words = advance * scale >= GREEK_WORD_MIN_PX;
+    // The bars are in the layer's own space, so they don't depend on the zoom that asked for them —
+    // only on whether the words are far enough apart to be told apart.
     const cached = this.greeked.get(node.id);
-    if (cached?.node === node) {
+    if (cached?.node === node && cached.words === words) {
       cached.frame = this.frame;
       return cached.lines;
     }
-    const lines = this.makeGreekedLines(node);
-    this.greeked.set(node.id, { node, lines, frame: this.frame });
+    const lines = this.makeGreekedLines(node, words);
+    this.greeked.set(node.id, { node, lines, words, frame: this.frame });
     return lines;
   }
 
-  /** Works the bars out from the font's metrics and the characters; see `greekedLines`. */
-  private makeGreekedLines(node: TextNode): readonly GreekedLine[] {
+  /**
+   * Works the bars out from the font's metrics and the characters; see `greekedLines`.
+   *
+   * Everything is in characters: one character is `unit` wide, so a line that holds `n` of them is
+   * `n * unit` across and a word starting at the line's `i`th character starts at `i * unit`. That is the
+   * same approximation the shares were, said in a way that can also place the gaps between words.
+   */
+  private makeGreekedLines(node: TextNode, words: boolean): readonly GreekedLine[] {
     const { ascent, descent, leading, advance } = this.lineMetrics(node.fontName.family, node.fontSize);
     const lineHeight =
       node.lineHeight.unit === 'PIXELS' ? node.lineHeight.value : node.lineHeight.unit === 'PERCENT' ? (node.lineHeight.value / 100) * node.fontSize : ascent + descent + leading;
@@ -519,35 +560,39 @@ export class TextShaper implements TextLayoutService {
     // Auto width never wraps: a paragraph is a line, and the box is as wide as the longest of them.
     const wraps = node.textAutoResize !== 'WIDTH_AND_HEIGHT';
     const perLine = Math.max(1, Math.floor(node.size.width / Math.max(advance, 0.001)));
-    const shares: number[][] = paragraphs.map((paragraph) => {
-      const characters = paragraph.length;
-      if (!wraps) return [characters / longest];
-      if (characters === 0) return [0];
-      const lines = Math.ceil(characters / perLine);
-      return Array.from({ length: lines }, (_, i) => (i < lines - 1 ? 1 : (characters - (lines - 1) * perLine) / perLine));
+    const unit = node.size.width / (wraps ? perLine : longest);
+    /** Each line of each paragraph, as the span of its own paragraph's characters. */
+    const rows: { readonly paragraph: string; readonly from: number; readonly to: number }[][] = paragraphs.map((paragraph) => {
+      if (!wraps) return [{ paragraph, from: 0, to: paragraph.length }];
+      if (paragraph.length === 0) return [{ paragraph, from: 0, to: 0 }];
+      const count = Math.ceil(paragraph.length / perLine);
+      return Array.from({ length: count }, (_, i) => ({ paragraph, from: i * perLine, to: Math.min(paragraph.length, (i + 1) * perLine) }));
     });
     const limit = node.maxLines;
     if (limit !== undefined) {
       let left = limit;
-      for (let i = 0; i < shares.length; i++) {
-        shares[i] = shares[i]!.slice(0, Math.max(0, left));
-        left -= shares[i]!.length;
+      for (let i = 0; i < rows.length; i++) {
+        rows[i] = rows[i]!.slice(0, Math.max(0, left));
+        left -= rows[i]!.length;
       }
     }
-    const count = shares.reduce((sum, paragraph) => sum + paragraph.length, 0);
+    const count = rows.reduce((sum, paragraph) => sum + paragraph.length, 0);
     if (count === 0) return [];
     const spacing = node.paragraphSpacing ?? 0;
     const height = count * lineHeight + spacing * (paragraphs.length - 1);
     const cap = this.capHeight(node.fontName.family, node.fontSize);
     const lines: GreekedLine[] = [];
     let y = (node.size.height - height) * VERTICAL[node.textAlignVertical];
-    for (const paragraph of shares) {
-      for (const share of paragraph) {
+    for (const paragraph of rows) {
+      for (const row of paragraph) {
         // Half leading, as the shaped lines are laid out with.
         const baseline = y + (lineHeight - (ascent + descent)) / 2 + ascent;
-        const width = Math.max(0, Math.min(1, share)) * node.size.width;
-        const x = node.textAlignHorizontal === 'CENTER' ? (node.size.width - width) / 2 : node.textAlignHorizontal === 'RIGHT' ? node.size.width - width : 0;
-        if (width > 0) lines.push({ x, y: baseline - cap, width, height: cap });
+        const width = Math.min(node.size.width, (row.to - row.from) * unit);
+        const left = node.textAlignHorizontal === 'CENTER' ? (node.size.width - width) / 2 : node.textAlignHorizontal === 'RIGHT' ? node.size.width - width : 0;
+        for (const run of words ? wordRuns(row.paragraph, row.from, row.to) : [{ from: row.from, to: row.to }]) {
+          const runWidth = Math.min(width, (run.to - run.from) * unit);
+          if (runWidth > 0) lines.push({ x: left + (run.from - row.from) * unit, y: baseline - cap, width: runWidth, height: cap });
+        }
         y += lineHeight;
       }
       y += spacing;

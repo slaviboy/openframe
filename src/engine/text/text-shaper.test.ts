@@ -193,10 +193,39 @@ describe('text shaping', () => {
     own.dispose();
   });
 
+  /**
+   * The bars read as text because they are drawn a word at a time. A solid bar a line reads as a
+   * rectangle, which is what this replaced.
+   */
+  test('a greeked line is drawn as its words, with the gaps between them', () => {
+    const node = text({ characters: 'one two three', fontSize: 12, textAutoResize: 'NONE', size: { width: 120, height: 20 } });
+    const bars = shaper.greekedLines(node, 0.2)!;
+    expect(bars).toHaveLength(3);
+    // In order, none overlapping, each starting after the one before it ends: those are the gaps.
+    for (let i = 1; i < bars.length; i++) expect(bars[i]!.x).toBeGreaterThan(bars[i - 1]!.x + bars[i - 1]!.width);
+    // "three" is the longest word, so it is the widest bar.
+    expect(bars[2]!.width).toBeGreaterThan(bars[0]!.width);
+    // They stay inside the layer's box.
+    expect(bars[0]!.x).toBeGreaterThanOrEqual(0);
+    expect(bars.at(-1)!.x + bars.at(-1)!.width).toBeLessThanOrEqual(node.size.width + 0.01);
+    // One word is one bar, and text with no spaces in it — Chinese here — is one bar too.
+    const box = { textAutoResize: 'NONE' as const, fontSize: 12, size: { width: 120, height: 20 } };
+    expect(shaper.greekedLines(text({ ...box, characters: 'single' }), 0.2)).toHaveLength(1);
+    expect(shaper.greekedLines(text({ ...box, characters: '世界你好世界' }), 0.2)).toHaveLength(1);
+  });
+
+  test('far enough out the gaps cannot be seen, and a line is one bar again', () => {
+    const node = text({ characters: 'one two three\nfour five six', fontSize: 12, textAutoResize: 'NONE', size: { width: 120, height: 40 } });
+    // Close in, six words over two lines.
+    expect(shaper.greekedLines(node, 0.2)).toHaveLength(6);
+    // Far out, a space is a fraction of a pixel: two lines, two bars, and far less to draw.
+    expect(shaper.greekedLines(node, 0.02)).toHaveLength(2);
+  });
+
   test('the bars a layer is drawn as do not depend on the zoom that asked for them', () => {
     const node = text({ characters: 'one two three\nfour five', fontSize: 12 });
-    const far = shaper.greekedLines(node, 0.05);
-    const near = shaper.greekedLines(node, 0.1);
+    const far = shaper.greekedLines(node, 0.2);
+    const near = shaper.greekedLines(node, 0.24);
     expect(far).not.toBeNull();
     expect(near).toEqual(far);
     // Hysteresis: bars hold on a little past the point where they would first have been drawn as bars.

@@ -501,6 +501,33 @@ markup. The pass is being built in phases, each its own commit.
   timeout — it failed on all three browsers under a full run and passed on its own. The bytes now cross once,
   as base64, and the test runs in 1.5s instead of 15.7s.
 
+## Small text reads as words, not as a rectangle (2026-09-23)
+
+The user, after the zoom fix: *"when I zoom out I see like rectangle on the text area … in the
+reference they do not show rectangle yet its very fast, text does not look sharp when zooming way out,
+but it still looks like it's some kinda text, for us its rectangles."* Fair — it was literally one
+solid rectangle per line, cap-height tall at 38% opacity.
+
+- **A bar per word.** `makeGreekedLines` worked in *shares* — the fraction of a line that is filled —
+  which cannot place a gap. It works in characters now: one character is `unit` wide, so a line of `n`
+  of them is `n * unit` across and a word starting at the line's `i`th character starts at `i * unit`.
+  Same approximation, said so that the spaces can be left out. Text with no spaces (CJK) is one run,
+  exactly as before.
+- **Two tiers, because the far one has to stay cheap.** Below half a device pixel to the space the gaps
+  cannot be seen, so a line is one bar again — `docs/PERFORMANCE.md` records a 2,120-layer board drawn
+  at 2%, and that case must not pay for a difference nobody can see. The tier is part of the cached
+  entry, so changing zoom past it rebuilds rather than returning the wrong bars.
+- **`GREEK_INK` did not move, and that was measured, not assumed.** Dropping the spaces was expected to
+  need a higher alpha; it turned out the solid bar had been *over*-inking, because it spanned the
+  spaces too. Word bars are **2.0% heavier than shaped text against 3.0% for the solid bar** — closer to
+  the real thing. The existing ink test is what settled it.
+- **The one real cost.** `ck.XYWHRect` allocates, and the board went from ~808 bars a frame to ~3,638.
+  The renderer fills one reused `Float32Array` now instead of allocating a rectangle apiece.
+- **A warning about measuring.** The first numbers after this change looked terrible — p95 77.6 ms,
+  worst 232 ms — and they were entirely a full Playwright suite running on the same machine. Idle, the
+  change costs nothing: 16.6 / 18.5 / 19.7 ms against 16.6 / 18.2 / 19.2 before. Check what else is
+  running before believing a performance regression.
+
 ## Zooming stopped dead for two seconds (2026-09-23)
 
 The user: zooming in and out lags, worst with a lot on screen, on a document of images and text. They
