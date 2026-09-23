@@ -60,3 +60,51 @@ test('a family from the Google Fonts library is listed, picked and drawn', async
   await page.getByRole('treeitem', { name: /Hamburgefonstiv/ }).click();
   await expect(page.getByRole('button', { name: 'Font family' })).toContainText('Roboto Slab');
 });
+
+/**
+ * The picker lists 1,946 families into a box that shows about a dozen, so only the rows in view are
+ * rendered; and hovering a row previews that family on the selected text, whether or not it has been
+ * loaded yet. Leaving the row puts the old font back, and only a click keeps the new one.
+ */
+test('the font list renders only what is in view, and hovering a family previews it on the canvas', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');
+  const box = (await page.getByTestId('canvas').boundingBox())!;
+
+  await page.keyboard.press('t');
+  await page.mouse.click(box.x + 400, box.y + 300);
+  await page.keyboard.type('Hamburgefonstiv');
+  await page.keyboard.press('Escape');
+  const width = Number(await page.getByTestId('field-w').inputValue());
+
+  const button = page.getByRole('button', { name: 'Font family' });
+  await button.click();
+  const picker = page.getByRole('dialog', { name: 'Font picker' });
+  const list = picker.getByRole('listbox', { name: 'Fonts' });
+
+  // Every family is there to scroll and search; only the rows in view are in the page.
+  await expect(list.getByRole('option').first()).toBeVisible();
+  expect(await list.getByRole('option').count()).toBeLessThan(60);
+  // The family in use is scrolled to, so it is one of the rows that is rendered.
+  await expect(list.getByRole('option', { name: 'Inter', exact: true })).toBeVisible();
+
+  // Hovering a family from the library reads its files and previews it on the selected text. The
+  // button says "Missing" for a family the engine can't shape with, so its absence is the tell that
+  // the preview is the real typeface rather than a fallback standing in for it.
+  await picker.getByRole('textbox', { name: 'Search fonts' }).fill('Roboto Slab');
+  const option = list.getByRole('option').filter({ hasText: 'Roboto Slab' }).first();
+  await option.hover();
+  await expect(button).toContainText('Roboto Slab');
+  await expect(button).not.toContainText('Missing');
+
+  // Moving off the list puts the old font back: hovering never commits anything.
+  await picker.getByRole('textbox', { name: 'Search fonts' }).hover();
+  await expect(button).toContainText('Inter');
+
+  // Clicking is what keeps it, and the text is laid out in it.
+  await option.hover();
+  await option.click();
+  await expect(button).toContainText('Roboto Slab');
+  await expect.poll(async () => Number(await page.getByTestId('field-w').inputValue())).not.toBe(width);
+  await expect(page.getByTestId('save-status')).toHaveText('Saved locally');
+});

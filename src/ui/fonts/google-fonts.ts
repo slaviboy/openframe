@@ -99,6 +99,39 @@ export async function readGoogleFamily(family: string): Promise<UserFont[]> {
   return fonts;
 }
 
+let previews: Promise<Readonly<Record<string, string>>> | null = null;
+const previewFaces = new Map<string, Promise<void>>();
+
+/**
+ * Draws a library family's own name in its own typeface in the font picker. The picker shows about a
+ * dozen of 1,946 rows at a time, so a face is asked for only as a row comes into view: one file per
+ * family (`previews.json`, written by `scripts/build-font-previews.mjs`), 22.7 KB on average.
+ *
+ * The browser fetches it itself from a `FontFace` URL — a CSS font load, which `font-src 'self'`
+ * allows and the service worker caches like the rest of the library. Registering a family that is
+ * already loaded would shadow its real faces, so those are left alone.
+ */
+export function loadPreviewFace(family: string, slug: string): Promise<void> {
+  const existing = previewFaces.get(slug);
+  if (existing) return existing;
+  const pending = (async () => {
+    if (typeof FontFace === 'undefined' || typeof document === 'undefined') return;
+    previews ??= fetch(`${BASE}/previews.json`)
+      .then((response) => (response.ok ? (response.json() as Promise<Record<string, string>>) : {}))
+      .catch(() => {
+        previews = null;
+        return {};
+      });
+    const file = (await previews)[slug];
+    if (!file) return;
+    const face = new FontFace(family, `url(${BASE}/${file})`);
+    document.fonts.add(face);
+    await face.load();
+  })().catch(() => undefined);
+  previewFaces.set(slug, pending);
+  return pending;
+}
+
 const EMOJI_SLUG = 'noto-color-emoji';
 let emojiFiles: Promise<readonly IndexFile[]> | null = null;
 

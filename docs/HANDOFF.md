@@ -501,6 +501,43 @@ markup. The pass is being built in phases, each its own commit.
   timeout — it failed on all three browsers under a full run and passed on its own. The bytes now cross once,
   as base64, and the test runs in 1.5s instead of 15.7s.
 
+## The font dropdown: what it renders, and what hovering it does (2026-09-23)
+
+The user: *"when I open drop down to change fonts it lags — we need some type of preview, and if
+possible when user hovers with mouse over a font in drop down it changes the font of the selected
+text field as preview; if user then clicks it changes the font actually, if not it uses the old font."*
+
+- **It rendered every family.** `FontPicker` put all 1,946 library families in the page as `<li>`s, into
+  a list the stylesheet caps at 280 px — about a dozen rows. It is windowed now, the same way
+  `LayersPanel` already does it (`ROW_HEIGHT`, `OVERSCAN`, a spacer `li` holding the scroll height,
+  absolutely positioned rows). **Opening the picker: 116 ms → 40 ms**, median of five in Chromium
+  against the production build. The spec counts the rows in the page — under 60, against 1,943 before.
+- **And it rebuilt the list on every render.** `entries` in `TypographyFields` concatenated and
+  `localeCompare`-sorted ~1,950 families each time the panel rendered, which a hover does, since a
+  hover writes a preview to the document. It is a `useMemo` on the font registry's revision now.
+- **Hovering a library family did nothing at all.** The preview was skipped for any family not loaded,
+  which is all 1,946 of them, and the row drew in the UI font because no `@font-face` existed for it.
+  Both are fixed: `previews.json` (new, `npm run fonts:previews`, written from the library on disk
+  without fetching anything) names one file per family, and a row in view asks for it after 120 ms.
+- **Hovering now reads the family and previews it for real** — after the pointer rests 150 ms, so a
+  sweep doesn't read one per row. The gotcha worth keeping: it registers with the *engine* only.
+  `editor.fonts.add` persists a font into the file's store, so previewing through it would keep every
+  font the pointer crossed. Picking is what stores it. Fonts installed on the device are never read on
+  hover — that goes through the Local Font Access API.
+- **What the E2E can assert, and what it can't.** An auto-width box is only refitted when the change
+  commits, so the width field does *not* move during a hover preview — the first draft of the spec
+  asserted that and failed for the right reason. What does move is the **Missing** badge: the button
+  shows it for a family the engine cannot shape with, so its absence after a hover is the tell that the
+  preview is the real typeface and not a fallback.
+- **Windowing broke two specs, and one of them was a real gap.** A row that isn't in view is no longer
+  in the page, so `getByRole('option', …)` finds nothing unless the search narrows the list first.
+  `e2e/cjk.spec.ts` searched "Noto Sans", which matches a hundred library families, and now searches
+  each of the four in turn. `e2e/icon-fonts.spec.ts` clicked the family it had just uploaded — and an
+  upload lands somewhere alphabetical in 1,947 families, nowhere near what the user is looking at. The
+  picker takes a `reveal` family now and scrolls to it, which is what the reference does and what the
+  spec was quietly relying on. The active row follows `reveal ?? current` until the user moves it, and
+  the row they moved to is remembered against the reveal it belonged to — so no effect has to reset it.
+
 ## An emoji is ordinary text (2026-09-23)
 
 The user's rule for it: *"emoji is part of text — pasting an emoji should act as a text field, so a

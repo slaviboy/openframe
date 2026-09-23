@@ -62,6 +62,11 @@ export interface TextLayoutService {
   availableFonts(): readonly FontFamilyInfo[];
   /** The internal fallback families text falls back to (script subsets, emoji, CJK, symbols), which aren't picked. */
   fallbackFamilies?(): readonly string[];
+  /**
+   * Makes fonts available to shape with, without storing them in the file. The font picker uses it to
+   * preview a family the pointer is on: only picking one saves it (`editor.fonts.add`).
+   */
+  registerFonts?(fonts: readonly { readonly family: string; readonly style: string; readonly bytes: ArrayBuffer | Uint8Array; readonly variable: boolean }[]): void;
   /** The family name inside a font file, or null when the engine can't read it. */
   fontFamilyOf?(bytes: Uint8Array): string | null;
   /** The OpenType feature tags that change how a font shapes text. */

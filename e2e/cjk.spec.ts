@@ -32,9 +32,17 @@ test('CJK text uses the bundled Noto Sans fonts', async ({ page }) => {
   // The Noto Sans CJK families can be picked.
   await page.getByLabel('Font family').click();
   const picker = page.getByRole('dialog', { name: 'Font picker' });
-  await picker.getByLabel('Search fonts').fill('Noto Sans');
   const fonts = picker.getByRole('listbox', { name: 'Fonts' });
-  for (const family of ['Noto Sans SC', 'Noto Sans TC', 'Noto Sans JP', 'Noto Sans KR']) await expect(fonts.getByRole('option', { name: family })).toBeVisible();
+  // Searched one at a time: "Noto Sans" matches a hundred of the library's families, and the list
+  // only renders the rows in view.
+  for (const family of ['Noto Sans SC', 'Noto Sans TC', 'Noto Sans JP', 'Noto Sans KR']) {
+    await picker.getByLabel('Search fonts').fill(family);
+    await expect(fonts.getByRole('option', { name: family })).toBeVisible();
+  }
+  await fonts.getByRole('option', { name: 'Noto Sans KR' }).click();
+  await expect(page.getByLabel('Font family')).toHaveText('Noto Sans KR');
+  await page.getByLabel('Font family').click();
+  await picker.getByLabel('Search fonts').fill('Noto Sans JP');
   await fonts.getByRole('option', { name: 'Noto Sans JP' }).click();
   await expect(page.getByLabel('Font family')).toHaveText('Noto Sans JP');
 });

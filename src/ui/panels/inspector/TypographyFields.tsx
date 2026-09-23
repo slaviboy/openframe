@@ -15,11 +15,13 @@
  * limitations under the License.
  */
 
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { usedFontFamilies } from '@/core/text/document-fonts';
 import { FONT_ACCEPT, readFontFiles } from '../../fonts/import-fonts';
+import { addFontFaces } from '../../fonts/font-faces';
+import type { UserFont } from '@/editor/fonts/font-registry';
 import { canListInstalledFonts, knownInstalledFamilies, listInstalledFamilies, readInstalledFamily } from '../../fonts/local-fonts';
-import { googleFamilies, loadGoogleCatalogue, readGoogleFamily } from '../../fonts/google-fonts';
+import { googleFamilies, loadGoogleCatalogue, readGoogleFamily, type GoogleFamily } from '../../fonts/google-fonts';
 import type { Box } from '../../primitives/position';
 import { FontPicker, type FontPickerFamily } from './FontPicker';
 import { OpenTypeFields } from './OpenTypeFields';
@@ -109,6 +111,9 @@ export const RESIZE_MODES: readonly (readonly [TextAutoResize, IconName, string]
   ['NONE', 'fixedSize', 'Fixed size'],
   ['TRUNCATE', 'truncate', 'Truncate text'],
 ];
+
+/** How long the pointer has to rest on a font before its files are read for the preview. */
+const HOVER_READ_MS = 150;
 
 /** Families to offer: the available fonts, plus the selection's family when it is not available (a missing font). */
 function familyOptions(available: readonly FontFamilyInfo[], family: string | undefined, style: string | undefined): readonly FontFamilyInfo[] {
@@ -521,28 +526,47 @@ function FamilyControl({ nodes, range, family, available }: { nodes: readonly Te
   const editor = useEditor();
   const preview = useGesture('Change font');
   const [anchor, setAnchor] = useState<Box | null>(null);
+  /** Families read for a hover preview, so picking one afterwards costs nothing. */
+  const previewed = useRef(new Map<string, UserFont[]>());
+  /** The family the pointer is on, so a read that finishes late doesn't preview the wrong one. */
+  const hovered = useRef<string | null>(null);
+  /** The waiting read for the row under the pointer, cancelled when it moves on. */
+  const pendingRead = useRef<number | undefined>(undefined);
   const [installed, setInstalled] = useState<readonly string[]>(knownInstalledFamilies);
-  const [library, setLibrary] = useState<readonly string[]>(() => googleFamilies().map((f) => f.family));
+  const [library, setLibrary] = useState<readonly GoogleFamily[]>(() => googleFamilies());
   const [error, setError] = useState<string | null>(null);
+  /** The family just uploaded, which the picker scrolls to. */
+  const [uploaded, setUploaded] = useState<string | undefined>(undefined);
   // The library's index is small; its families are listed from it, and their files read only when picked.
   useEffect(() => {
     if (library.length > 0) return;
-    void loadGoogleCatalogue().then((families) => setLibrary(families.map((f) => f.family)));
+    void loadGoogleCatalogue().then(setLibrary);
   }, [library.length]);
   // Re-render when fonts are added (the engine registers them first).
-  useSyncExternalStore(
+  const revision = useSyncExternalStore(
     (listener) => editor.fonts.subscribe(listener),
     () => editor.fonts.revision,
   );
   const fonts = editor.textLayout?.availableFonts() ?? available;
-  const names = new Set(fonts.map((f) => f.family));
-  const used = anchor ? usedFontFamilies(editor.doc) : [];
-  const entries: FontPickerFamily[] = [
-    ...fonts.map((f) => ({ family: f.family, user: f.user ?? false, variable: f.variable ?? false, inFile: used.includes(f.family) })),
-    ...installed.filter((f) => !names.has(f)).map((f) => ({ family: f, user: true, variable: false, inFile: used.includes(f), notLoaded: true, from: 'installed' as const })),
-    ...library.filter((f) => !names.has(f) && !installed.includes(f)).map((f) => ({ family: f, user: false, variable: false, inFile: used.includes(f), notLoaded: true, from: 'google' as const })),
-    ...(family !== undefined && !names.has(family) && !installed.includes(family) ? [{ family, user: false, variable: false, inFile: true }] : []),
-  ].sort((a, b) => a.family.localeCompare(b.family));
+  const open = anchor !== null;
+  // Rebuilt only when the list itself could have changed: sorting 1,946 families on every render of
+  // the panel is what made hovering a row crawl, since each hover re-renders it.
+  const entries: readonly FontPickerFamily[] = useMemo(() => {
+    const names = new Set(fonts.map((f) => f.family));
+    const used = open ? usedFontFamilies(editor.doc) : [];
+    return [
+      ...fonts.map((f) => ({ family: f.family, user: f.user ?? false, variable: f.variable ?? false, inFile: used.includes(f.family) })),
+      ...installed.filter((f) => !names.has(f)).map((f) => ({ family: f, user: true, variable: false, inFile: used.includes(f), notLoaded: true, from: 'installed' as const })),
+      ...library
+        .filter((f) => !names.has(f.family) && !installed.includes(f.family))
+        .map((f) => ({ family: f.family, user: false, variable: (f.axes?.length ?? 0) > 0, inFile: used.includes(f.family), notLoaded: true, from: 'google' as const, slug: f.slug })),
+      ...(family !== undefined && !names.has(family) && !installed.includes(family) ? [{ family, user: false, variable: false, inFile: true }] : []),
+    ].sort((a, b) => a.family.localeCompare(b.family));
+    // `fonts` is a fresh array each render; the registry's revision says when it really changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [revision, installed, library, family, open, editor]);
+  /** Whether the engine can already shape with a family (so a preview needs nothing read). */
+  const isRegistered = (target: string) => (editor.textLayout?.availableFonts() ?? fonts).some((f) => f.family === target);
   const apply = (target: string) => (tx: Transaction) => {
     const current = editor.textLayout?.availableFonts() ?? fonts;
     nodes.forEach((n) => setFontFamily(tx, n, target, current, range));
@@ -552,6 +576,32 @@ function FamilyControl({ nodes, range, family, available }: { nodes: readonly Te
     preview.change(apply(target));
     preview.end();
   };
+
+  /**
+   * Hovering a family that isn't loaded reads its files and shapes the text with them, so the
+   * preview on the canvas is the real thing. They are registered with the engine only — adding them
+   * to `editor.fonts` would store every font the pointer passed over in the file's own font store.
+   * Picking one is what saves it, and by then the bytes are already here.
+   */
+  const readFamily = async (target: string): Promise<UserFont[]> => {
+    const cached = previewed.current.get(target);
+    if (cached) return cached;
+    const fromLibrary = !installed.includes(target) && library.some((f) => f.family === target);
+    const loaded = await (fromLibrary ? readGoogleFamily(target) : readInstalledFamily(target));
+    previewed.current.set(target, loaded);
+    editor.textLayout?.registerFonts?.(loaded);
+    addFontFaces(loaded);
+    editor.refitText();
+    editor.requestRender();
+    return loaded;
+  };
+
+  /**
+   * Whether hovering a family may read it. Only the library's, which ship with the app: a font
+   * installed on this device is read through the Local Font Access API, and the pointer passing over
+   * a row is no reason to ask the browser for it.
+   */
+  const canReadOnHover = (target: string) => !installed.includes(target) && library.some((f) => f.family === target);
 
   return (
     <>
@@ -567,7 +617,7 @@ function FamilyControl({ nodes, range, family, available }: { nodes: readonly Te
         }}
       >
         <span style={family ? { fontFamily: `"${family}", var(--font-ui, sans-serif)` } : undefined}>{family ?? 'Mixed'}</span>
-        {family !== undefined && !names.has(family) && <span className={styles.missing}>Missing</span>}
+        {family !== undefined && !isRegistered(family) && <span className={styles.missing}>Missing</span>}
       </button>
       {error && (
         <p role="alert" className={styles.hint}>
@@ -581,26 +631,45 @@ function FamilyControl({ nodes, range, family, available }: { nodes: readonly Te
           current={family}
           accept={FONT_ACCEPT}
           onPreview={(target) => {
+            hovered.current = target;
+            window.clearTimeout(pendingRead.current);
             if (target === null) {
               preview.cancel();
               return;
             }
-            preview.start();
-            preview.change(apply(target));
+            const show = () => {
+              // The pointer may have moved on while the family was being read.
+              if (hovered.current !== target) return;
+              preview.start();
+              preview.change(apply(target));
+            };
+            // A family already here previews at once, as it always has.
+            if (isRegistered(target)) {
+              show();
+              return;
+            }
+            // One that isn't has to be read first, so the preview is the real typeface rather than a
+            // fallback standing in for it. Only once the pointer has settled: a sweep down the list
+            // would otherwise read a family a row.
+            if (!canReadOnHover(target)) return;
+            pendingRead.current = window.setTimeout(() => {
+              if (hovered.current === target) void readFamily(target).then(show, () => undefined);
+            }, HOVER_READ_MS);
           }}
           onPick={(target) => {
-            if (names.has(target)) {
+            hovered.current = null;
+            if (isRegistered(target) && !previewed.current.has(target)) {
               commit(target);
               return;
             }
-            // Not registered yet: read the family's files, then commit the change with them in hand.
-            const fromLibrary = !installed.includes(target) && library.includes(target);
-            if (!fromLibrary && !installed.includes(target)) {
+            const fromLibrary = !installed.includes(target) && library.some((f) => f.family === target);
+            if (!fromLibrary && !installed.includes(target) && !previewed.current.has(target)) {
               commit(target);
               return;
             }
+            // Picking is what stores the family in the file. Hovering it first has the bytes here already.
             preview.cancel();
-            void (fromLibrary ? readGoogleFamily(target) : readInstalledFamily(target))
+            void readFamily(target)
               .then((loaded) => editor.fonts.add(loaded))
               .then(
                 () => commit(target),
@@ -608,11 +677,15 @@ function FamilyControl({ nodes, range, family, available }: { nodes: readonly Te
               );
           }}
           onClose={() => setAnchor(null)}
+          reveal={uploaded}
           onUpload={(files) => {
             void readFontFiles(files, (bytes) => editor.textLayout?.fontFamilyOf?.(bytes) ?? null)
               .then(async ({ fonts: read, errors }) => {
                 setError(errors.length > 0 ? errors.join(' ') : null);
                 await editor.fonts.add(read);
+                // The list is alphabetical over the whole library, so the font just added is nowhere
+                // near what the user was looking at. The picker goes to it.
+                setUploaded(read[0]?.family);
               })
               .catch((e: unknown) => setError(e instanceof Error ? e.message : 'The fonts could not be added.'));
           }}

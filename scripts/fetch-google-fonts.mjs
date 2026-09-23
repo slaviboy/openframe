@@ -26,6 +26,7 @@
 // licence is recorded in the index beside it. See docs/FONTS.md.
 import { mkdirSync, existsSync, writeFileSync, readFileSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
+import { previewFile } from './build-font-previews.mjs';
 
 const OUT = 'public/fonts/google';
 const INDEX = join(OUT, 'index.json');
@@ -186,6 +187,14 @@ function writeIndex(families) {
   }
   const slim = sorted.map(({ files, ...rest }) => ({ ...rest, slug: slug(rest.family), fileCount: files.length, bytes: files.reduce((sum, f) => sum + f.bytes, 0) }));
   writeFileSync(INDEX, JSON.stringify({ source: 'fonts.google.com', fetched: new Date().toISOString().slice(0, 10), families: slim }));
+  // The one file per family the picker draws its name in: see scripts/build-font-previews.mjs, which
+  // writes the same thing from the library already on disk.
+  const previews = {};
+  for (const entry of sorted) {
+    const file = previewFile(entry.files);
+    if (file) previews[slug(entry.family)] = file;
+  }
+  writeFileSync(join(OUT, 'previews.json'), JSON.stringify(previews));
 }
 
 await main();

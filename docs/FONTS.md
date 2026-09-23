@@ -38,6 +38,36 @@ The library is far too large to hold at once, so it is read in two steps, which 
    34,000 files here instead made it 21 MB.
 2. **`<family>/files.json`** lists that family's files, and is read only when the family is picked, along
    with the woff2 files themselves. They register as user fonts, exactly as an uploaded font does.
+3. **`previews.json`** names one file per family — the one the picker draws that family's name in.
+   133 KB, and the file it names averages 22.7 KB.
+
+## The picker
+
+The list is 1,946 families into a box that shows about a dozen, so it is **windowed**: only the rows in
+view are in the page, the same way the layers panel works. Rendering all of them cost 116 ms every time
+the picker opened; it is 40 ms now (median of five, Chromium, production build). `e2e/google-fonts.spec.ts`
+guards it by counting the rows in the page — under 60 rather than 1,943.
+
+Each row is drawn **in its own typeface**. For a family that is already loaded that is just CSS; for one
+of the library's, `loadPreviewFace` adds a `FontFace` pointing at that family's preview file, once the
+row has stayed in view for 120 ms. A `FontFace` URL is a CSS font load, not `fetch`, so it needs no
+exemption, `font-src 'self'` allows it, and the service worker caches it like any other library file.
+
+**A font just uploaded is scrolled to.** The list is alphabetical over the whole library, so an upload
+lands nowhere near what the user was looking at. The picker takes a `reveal` family and goes to it; the
+active row follows `reveal ?? current` until the pointer or ↑/↓ move it.
+
+`scripts/build-font-previews.mjs` (`npm run fonts:previews`) writes `previews.json` from the library
+already on disk — it fetches nothing — picking each family's upright Latin face nearest to weight 400.
+`fetch-google-fonts.mjs` writes the same field from the same function, so a refetch keeps it.
+
+**Hovering previews on the canvas.** Hovering a family lays the selected text out in it within one open
+gesture, which `preview.cancel()` reverts when the pointer leaves; only a click commits. A family that
+isn't loaded is read first, after the pointer has rested on it for 150 ms — a sweep down the list would
+otherwise read a family per row. It is registered with the engine alone: `editor.fonts.add` writes a font
+into the file's own store, and the pointer passing over a row is no reason to keep it. Picking is what
+stores it, and by then the bytes are already here. Fonts **installed on this device** are never read on
+hover: those come through the Local Font Access API, which is not something to ask for on a hover.
 
 Nothing is precached by the service worker: `vite-plugin-sw` precaches the bundled assets, and `public/`
 is copied rather than bundled, so a font is cached by the service worker's fetch handler the first time it

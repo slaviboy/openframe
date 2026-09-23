@@ -46,23 +46,38 @@
 }
 
 .list {
-  max-height: 280px;
+  position: relative;
+  height: 280px;
   margin: 0;
   padding: 0;
   overflow-y: auto;
   list-style: none;
 }
 
+/* Holds the scroll height of every row, including those not rendered. */
+.spacer {
+  display: block;
+}
+
 .option {
+  position: absolute;
+  left: 0;
+  right: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  min-height: 28px;
+  height: 28px;
   padding: 0 var(--space-2);
   border-radius: var(--radius-sm, 4px);
   font-size: var(--text-md, 13px);
+  white-space: nowrap;
   cursor: default;
+}
+
+.option > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .option[aria-selected='true'] {
