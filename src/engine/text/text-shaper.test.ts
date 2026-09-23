@@ -145,6 +145,67 @@ describe('text shaping', () => {
     expect(shaper.fontAxes('Not A Font')).toEqual([]);
   });
 
+  /**
+   * Setting `fontVariations` makes Skia instance the variable font again on every layout — measured at
+   * 1.16 ms a paragraph against 0.16 ms without. An axis already sitting at its default asks the font for
+   * exactly what it is, so it must not be set at all, and the text has to come out the same either way.
+   */
+  test('an axis at its default is left unset, and lays out identically', () => {
+    const plain = text({ characters: 'Hamburgefonstiv' });
+    // The bundled Inter's weight axis defaults to 400, which is what Regular asks for.
+    const regular = shaper.measure(plain, null);
+    const asked = shaper.measure({ ...plain, fontVariations: { wght: 400 } }, null);
+    expect(asked.width).toBeCloseTo(regular.width, 2);
+    expect(asked.height).toBeCloseTo(regular.height, 2);
+    // A weight that isn't the default still has to be set, or the font draws at 400.
+    expect(shaper.measure({ ...plain, fontVariations: { wght: 900 } }, null).width).toBeGreaterThan(regular.width + 2);
+    expect(shaper.measure({ ...plain, fontName: { family: 'Inter', style: 'Bold' } }, null).width).toBeGreaterThan(regular.width + 1);
+  });
+
+  /**
+   * A layer drawn as bars never asks for its shaped text, so the frame that draws it would drop what was
+   * shaped before — and zooming back in would shape every layer on the board again, in one frame.
+   */
+  test('layers that are only greeked keep the text they already had shaped', () => {
+    const own = new TextShaper(canvasKit, bundledFonts());
+    const blocks = () => (own as unknown as { layouts: Map<string, unknown> }).layouts.size;
+    // More than the shaper holds when nothing is drawing them, so the sweep really runs.
+    const board = Array.from({ length: 300 }, (_, i) => text({ characters: `Layer number ${i}` }));
+    own.beginFrame();
+    for (const node of board) own.caretAt(node, 0);
+    expect(blocks()).toBe(board.length);
+
+    // Frames that draw every one of them as bars: each says it is still on screen.
+    for (let frame = 0; frame < 3; frame++) {
+      own.beginFrame();
+      for (const node of board) {
+        expect(own.greekedLines(node, 0.05)).not.toBeNull();
+        own.keep(node);
+      }
+    }
+    own.beginFrame();
+    expect(blocks()).toBe(board.length);
+
+    // Frames that draw none of them: what has gone off screen is dropped, as it always was.
+    own.beginFrame();
+    own.beginFrame();
+    expect(blocks()).toBe(0);
+    own.dispose();
+  });
+
+  test('the bars a layer is drawn as do not depend on the zoom that asked for them', () => {
+    const node = text({ characters: 'one two three\nfour five', fontSize: 12 });
+    const far = shaper.greekedLines(node, 0.05);
+    const near = shaper.greekedLines(node, 0.1);
+    expect(far).not.toBeNull();
+    expect(near).toEqual(far);
+    // Hysteresis: bars hold on a little past the point where they would first have been drawn as bars.
+    expect(shaper.greekedLines(node, 3.1 / 12)).not.toBeNull();
+    expect(shaper.greekedLines(node, 3.7 / 12)).toBeNull();
+    // A layer that was never greeked takes the plain threshold.
+    expect(shaper.greekedLines(text({ characters: 'fresh', fontSize: 12 }), 3.1 / 12)).toBeNull();
+  });
+
   test('right-to-left paragraphs shape with the bundled Noto fallbacks and put the caret on the right', () => {
     expect(shaper.registeredFamilies).toEqual(expect.arrayContaining(['Inter (noto-arabic)', 'Inter (noto-hebrew)']));
     const hebrew = text({ characters: 'שלום' });

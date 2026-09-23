@@ -501,6 +501,36 @@ markup. The pass is being built in phases, each its own commit.
   timeout — it failed on all three browsers under a full run and passed on its own. The bytes now cross once,
   as base64, and the test runs in 1.5s instead of 15.7s.
 
+## Zooming stopped dead for two seconds (2026-09-23)
+
+The user: zooming in and out lags, worst with a lot on screen, on a document of images and text. They
+supplied it — `reference/app/sample-large.openframe`, which is also the file two specs had been failing
+on for want of a path. It is **725 layers: 421 text, 39 image fills, no effects, no emoji**.
+
+Zooming was never slow on average. The median frame was already 16.7 ms — the display's own cadence.
+It stopped for **2,102 ms** at one point in the sweep, every time.
+
+- **The mechanism.** Text below three device pixels to the em is drawn as bars and never shaped.
+  `drawGreekedText` returned before ever asking for the shaped text, so `beginFrame`'s sweep dropped
+  every block on the board; zooming back in then shaped all 421 layers in one frame. Nine font sizes
+  means nine thresholds, across roughly 9 %–30 % zoom. `TextShaper.keep(node)` now says a greeked layer
+  is still on screen without building anything, which is what takes the **second** sweep to 19.2 ms.
+- **The part worth remembering.** Setting `fontVariations` makes Skia **instance the variable font again
+  on every layout** — 1.155 ms a paragraph against 0.160 ms without, and it does not cache. And
+  `variationSettings` always emitted `wght`, including 400 on a font whose weight axis defaults to 400,
+  so every layer on every board was paying it for nothing. An axis at its default is left unset now:
+  shaping the board went 1,615 ms → 605 ms, and Regular layers 3.07 ms → 0.35 ms each.
+  **`fontStyle.weight` alone will not do instead** — a variable font renders at its default whatever the
+  style says (measured: Thin, Bold and Black all came out 435.39 wide, exactly Regular), so a real weight
+  still has to set the axis.
+- **How the cost was found.** Instrumenting `stack` put 1,584 ms of 1,631 in `layout(UNBOUNDED)` — but a
+  raw CanvasKit paragraph laid out at 1e6 takes 0.023 ms, and the fallback family count barely mattered.
+  The difference was `fontVariations`, which the raw comparison had not been setting. Worth repeating:
+  the instrumentation pointed at the layout call, and the layout call was innocent.
+- **What is left:** 833 ms on the first crossing, from the 255 layers whose style runs are Semi Bold.
+  CanvasKit cannot register a pre-instanced variable font, so a non-default weight has to set the axis.
+  It is paid once per document now instead of on every crossing.
+
 ## The docs, held against what is actually here (2026-09-23)
 
 The user asked for every MD file to be checked against the code as it stands. Most of them were

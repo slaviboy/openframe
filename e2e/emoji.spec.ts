@@ -80,7 +80,8 @@ test('an emoji is drawn, not left as the missing-glyph box', async ({ page }) =>
   };
 
   const boxes = await write(undrawable, 150);
-  const emoji = await write('😭😭😭😭😭😭😭😭', 280);
   expect(boxes).toBeGreaterThan(0);
-  expect(emoji).not.toBeCloseTo(boxes, 1);
+  await write('😭😭😭😭😭😭😭😭', 280);
+  // The subset is read when the first emoji is typed, so the line widens once it arrives.
+  await expect.poll(async () => Number(await page.getByTestId('field-w').inputValue()) !== boxes).toBe(true);
 });

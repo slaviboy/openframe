@@ -16,6 +16,7 @@
  */
 
 import type { Canvas, CanvasKit, EmbindEnumEntity, LineMetrics, Paint as CkPaint, Paragraph, TextStyle, Typeface, TypefaceFontProvider } from 'canvaskit-wasm';
+import type { Id } from '@/core/ids/ids';
 import type { Rect } from '@/core/math/rect';
 import type { Vec2 } from '@/core/math/vec';
 import type { FontName, OpenTypeFeatures, Size, TextAlignVertical, TextNode } from '@/core/schema/document';
@@ -91,6 +92,12 @@ const CACHE_CEILING = 8192;
  * out far enough to hold thousands of text layers would pay for every one of them.
  */
 const GREEK_MIN_EM_PX = 3;
+/**
+ * Above this many device pixels to the em a layer that is being drawn as bars goes back to glyphs. The gap from
+ * `GREEK_MIN_EM_PX` is hysteresis: a zoom resting on the threshold would otherwise flip every layer of that size
+ * back and forth, and each flip is a shaping pass.
+ */
+const UNGREEK_MIN_EM_PX = 3.6;
 const VERTICAL: Record<TextAlignVertical, number> = { TOP: 0, CENTER: 0.5, BOTTOM: 1 };
 /** List indentation per level, in ems of the item's font size. */
 const LIST_INDENT_EM = 1.5;
@@ -139,6 +146,13 @@ interface CachedLayout {
   frame: number;
 }
 
+/** A layer's greeked bars, which depend on the layer alone and not on the zoom that asked for them. */
+interface CachedGreeked {
+  readonly node: TextNode;
+  readonly lines: readonly GreekedLine[];
+  frame: number;
+}
+
 /** What a font's lines measure at a size: the reach above and below the baseline, its leading, and a mean advance. */
 interface FontLineMetrics {
   readonly ascent: number;
@@ -173,6 +187,10 @@ export class TextShaper implements TextLayoutService {
   private readonly userFamilies = new Map<string, { styles: Set<string>; variable: boolean }>();
   /** Laid-out blocks by `${node id}` for measuring, and `${node id}\n${paint key}` for drawing. */
   private readonly layouts = new Map<string, CachedLayout>();
+  /** The bars a layer is drawn as while it is too small to read, kept by the frame that drew them. */
+  private readonly greeked = new Map<Id, CachedGreeked>();
+  /** The cache keys each layer has blocks under, so `keep` needn't scan them all. */
+  private readonly layoutKeys = new Map<Id, string[]>();
   /** Counts the frames drawn through this shaper, which is what blocks are kept by (see `beginFrame`). */
   private frame = 0;
   /** Line metrics by "family\nsize", for the bars text too small to read is drawn as. */
@@ -472,7 +490,27 @@ export class TextShaper implements TextLayoutService {
    */
   greekedLines(node: TextNode, scale: number): readonly GreekedLine[] | null {
     const fontSize = Math.max(node.fontSize, ...(node.styleRuns ?? []).map((run) => run.style.fontSize ?? 0));
-    if (node.characters === '' || fontSize * scale >= GREEK_MIN_EM_PX) return null;
+    if (node.characters === '') return null;
+    // Hysteresis: a layer already drawn as bars stays bars until it is comfortably big enough to shape.
+    const wasGreeked = this.greeked.get(node.id)?.node === node;
+    const em = fontSize * scale;
+    if (em >= (wasGreeked ? UNGREEK_MIN_EM_PX : GREEK_MIN_EM_PX)) {
+      // Still on screen, just big enough to read now: its shaped block is about to be wanted.
+      return null;
+    }
+    // The bars are in the layer's own space, so they don't depend on the zoom that asked for them.
+    const cached = this.greeked.get(node.id);
+    if (cached?.node === node) {
+      cached.frame = this.frame;
+      return cached.lines;
+    }
+    const lines = this.makeGreekedLines(node);
+    this.greeked.set(node.id, { node, lines, frame: this.frame });
+    return lines;
+  }
+
+  /** Works the bars out from the font's metrics and the characters; see `greekedLines`. */
+  private makeGreekedLines(node: TextNode): readonly GreekedLine[] {
     const { ascent, descent, leading, advance } = this.lineMetrics(node.fontName.family, node.fontSize);
     const lineHeight =
       node.lineHeight.unit === 'PIXELS' ? node.lineHeight.value : node.lineHeight.unit === 'PERCENT' ? (node.lineHeight.value / 100) * node.fontSize : ascent + descent + leading;
@@ -685,6 +723,28 @@ export class TextShaper implements TextLayoutService {
   private clearCache(): void {
     for (const { block } of this.layouts.values()) deleteBlock(block);
     this.layouts.clear();
+    this.layoutKeys.clear();
+    // A font that has just registered may change how wide the bars are, so they are worked out again too.
+    this.greeked.clear();
+  }
+
+  /**
+   * The variation axes to set on a run, and nothing at all when they would leave the font as it already is.
+   *
+   * Setting `fontVariations` makes Skia instance the variable font again on **every layout** — 1.16 ms a
+   * paragraph against 0.16 ms without, measured on the bundled Inter. A page of a few hundred text layers
+   * shaping at once is a second of that and nothing else, which is what zooming past the greeking threshold
+   * used to do. An axis already at its default asks the font for what it is, so it is left out; a static
+   * family has no axes to set at all.
+   */
+  private variations(style: RunStyle, weight: number): { fontVariations?: { axis: string; value: number }[] } {
+    const axes = this.fontAxes(style.fontName.family);
+    if (axes.length === 0) return {};
+    const wanted = variationSettings(weight, style.fontVariations).filter((setting) => {
+      const axis = axes.find((a) => a.tag === setting.axis);
+      return axis !== undefined && setting.value !== axis.default;
+    });
+    return wanted.length > 0 ? { fontVariations: wanted } : {};
   }
 
   private textStyle(style: RunStyle, decorationColor?: Float32Array, extraFamilies: readonly string[] = []): TextStyle {
@@ -708,7 +768,7 @@ export class TextShaper implements TextLayoutService {
       fontFamilies: [style.fontName.family, ...this.families.filter((f) => f !== style.fontName.family), ...extraFamilies],
       fontSize: style.fontSize,
       fontStyle: { weight: weights[Math.min(8, Math.max(0, Math.round(weight / 100) - 1))]!, slant: italic ? ck.FontSlant.Italic : ck.FontSlant.Upright },
-      fontVariations: variationSettings(weight, style.fontVariations),
+      ...this.variations(style, weight),
       letterSpacing: style.letterSpacing.unit === 'PIXELS' ? style.letterSpacing.value : (style.letterSpacing.value / 100) * style.fontSize,
       ...(lineHeight !== null ? { heightMultiplier: lineHeight, halfLeading: true } : {}),
       fontFeatures: toFontFeatures(style.openTypeFeatures ?? {}, style.textCase === 'SMALL_CAPS'),
@@ -997,11 +1057,28 @@ export class TextShaper implements TextLayoutService {
    */
   beginFrame(): void {
     const previous = this.frame++;
+    for (const [id, entry] of this.greeked) if (entry.frame < previous) this.greeked.delete(id);
     if (this.layouts.size <= CACHE_LIMIT) return;
     for (const [key, entry] of this.layouts) {
       if (entry.frame >= previous) continue;
       deleteBlock(entry.block);
       this.layouts.delete(key);
+    }
+  }
+
+  /**
+   * Says a layer is still on screen without laying it out, so the blocks it already has survive the sweep.
+   *
+   * A layer drawn as bars never asks for its shaped text, so the frame that draws it as bars would otherwise
+   * drop what was shaped before — and zooming back in past the threshold would have to shape every layer on
+   * the board again, in one frame. That is a second and more on a page of a few hundred.
+   */
+  keep(node: TextNode): void {
+    const keys = this.layoutKeys.get(node.id);
+    if (!keys) return;
+    for (const key of keys) {
+      const entry = this.layouts.get(key);
+      if (entry?.node === node) entry.frame = this.frame;
     }
   }
 
@@ -1018,6 +1095,11 @@ export class TextShaper implements TextLayoutService {
     }
     const block = make();
     this.layouts.set(key, { node, block, frame: this.frame });
+    // A layer's keys, so a greeked layer can keep its blocks without a scan (`keep`). A key that has since
+    // been swept stays in the list harmlessly: the lookup it costs is one miss, and `keep` checks the node.
+    const keys = this.layoutKeys.get(node.id);
+    if (!keys) this.layoutKeys.set(node.id, [key]);
+    else if (!keys.includes(key)) keys.push(key);
     // Nothing is drawing through this shaper, so no sweep is coming: everything but this frame's own work goes.
     if (this.layouts.size > CACHE_CEILING) {
       for (const [old, entry] of this.layouts) {

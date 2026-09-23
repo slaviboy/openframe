@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { expect, test } from './fixtures';
 
 /**
@@ -24,10 +24,14 @@ import { expect, test } from './fixtures';
  * SVGs of a drag, so a dropped .openframe was thrown away before anything could look at it, even though
  * the code behind the drop already knew how to open one.
  */
+const BOARD = 'reference/app/sample-large.openframe';
+
 test('dropping an Openframe file shows what a drop does, asks, then opens it', async ({ page }) => {
-  // Base64, and handed to the page once: the file is 1.6 MB, and sending it as an array of bytes for each
+  // The board is gitignored, so a working copy without it says so rather than failing.
+  test.skip(!existsSync(BOARD), `${BOARD} is gitignored and not in this working copy`);
+  // Base64, and handed to the page once: the file is 2.2 MB, and sending it as an array of bytes for each
   // drag serialized megabytes of JSON three times, which is what left this test hanging off its timeout.
-  const file = readFileSync('reference/app/sample-large.openframe').toString('base64');
+  const file = readFileSync(BOARD).toString('base64');
 
   await page.goto('/');
   await expect(page.getByTestId('canvas')).toHaveAttribute('data-ready', 'true');

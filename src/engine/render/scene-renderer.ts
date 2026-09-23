@@ -1186,6 +1186,9 @@ export class SceneRenderer {
     const scale = Math.sqrt(Math.abs(m[0]! * m[4]! - m[1]! * m[3]!)) || 1 / pixelSize;
     const lines = shaper.greekedLines(node, scale);
     if (!lines) return false;
+    // Drawn as bars, but still on screen: hold on to whatever was shaped for it, or zooming back in
+    // past the threshold would have to shape every layer on the board again, in one frame.
+    shaper.keep(node);
     for (const paint of node.fills) {
       if (!paint.visible || paint.opacity <= 0) continue;
       this.configurePaint(this.fillPaint, paint, node.size);

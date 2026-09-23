@@ -58,6 +58,58 @@ A median of 14.8 ms is the display's own 60 Hz cadence, so the canvas keeps up w
 this size is panned in full. The p95 is where a frame is missed — a garbage collection or a long task elsewhere in
 the page, not the scene walk, which is why caching the drawn page made no difference to it.
 
+## Zooming a real board (2026-09-23)
+
+**Setup**
+- Test: [`e2e/large-document.spec.ts`](../e2e/large-document.spec.ts), Chromium, WebGL surface, 1440 × 900
+- Document: `reference/app/sample-large.openframe` — 725 layers, of which **421 are text** (23,133 characters,
+  nine font sizes from 10 to 34 px) and 39 are image fills of 1080 × 2400 sources. Gitignored, so the
+  test skips when it isn't there.
+- The sweep zooms from fit in through 100 % and back out, twice, reading the gaps between animation frames.
+
+| | Before | After |
+|---|---:|---:|
+| Frame gap, median | 16.7 ms | 16.6 ms |
+| Frame gap, p95 | 18.8 ms | 18.2 ms |
+| **Worst frame, first sweep** | **2,102 ms** | **833 ms** |
+| **Worst frame, second sweep** | **2,102 ms** | **19.2 ms** |
+
+Zooming was never slow *on average* — the median was already the display's own cadence. It stopped dead
+for two seconds at one point in the sweep, every time, and that is the whole complaint.
+
+**Where the two seconds went.** Text below `GREEK_MIN_EM_PX` is drawn as bars and never shaped, and
+`drawGreekedText` returned before ever asking for the shaped text — so the sweep at the start of the
+next frame dropped every block on the board. Zooming back in past the threshold then had to shape all
+421 layers in one frame. Nine font sizes means nine thresholds, spread across roughly 9 % to 30 % zoom.
+
+Two things fixed it:
+
+- **A layer drawn as bars says it is still on screen** (`TextShaper.keep`). It builds nothing; it only
+  keeps what was already shaped from being swept. That is what takes the second sweep to 19.2 ms: once
+  the board has been shaped, zooming in and out is at frame rate for good.
+- **An axis already at its default is not set at all.** `variationSettings` always emitted
+  `wght` — including 400 on a font whose weight axis defaults to 400 — and setting `fontVariations` makes
+  Skia instance the variable font again **on every layout**:
+
+  | One paragraph, 54 characters, first layout | |
+  |---|---:|
+  | No `fontVariations` | **0.160 ms** |
+  | `fontVariations: wght 400` (the font's own default) | **1.155 ms** |
+  | `fontVariations: wght 600` | 1.135 ms |
+
+  Shaping the board's 421 layers went from **1,615 ms to 605 ms**; the layers with no style runs, which
+  are all Regular, went from 3.07 ms each to **0.35 ms** — 8.7× — because they now ask for nothing.
+
+**What is left.** The first crossing still costs 833 ms, and it is the 255 layers whose style runs are
+Semi Bold: a weight that isn't the axis default genuinely has to be set, and CanvasKit has no way to
+register a pre-instanced variable font (`TypefaceFontProvider.registerFont` takes bytes and a family
+name, nothing else). It is now paid **once per document** rather than on every crossing.
+
+**What this is not.** Rasterising is not the problem here and neither is the scene walk: on this board
+the median frame is 16.6 ms with everything on screen. The 10,000-node numbers below are a different
+regime — a page with that many nodes spends its frame in the walk, which is still worth attention, but
+it is not what made zooming stop.
+
 ## Text: what a frame keeps, and what it doesn't draw at all
 
 Shaping a text layer — HarfBuzz through SkParagraph, a paragraph at a time — is the most expensive thing a frame can
