@@ -16,7 +16,7 @@
  */
 
 // Reads the icon artwork out of the saved the reference pages in reference/app/ and prints a TSX
-// fragment for src/ui/icons/icons.tsx. Run: npm run icons:reference
+// fragment for src/ui/icons/Icon.tsx. Run: npm run icons:reference
 //
 // It prints; it never writes. The reference's own labels are not directly usable as our icon names — all four
 // mode icons report the same label, "Comment" arrives as "Comment (515 unread)" — so the naming is

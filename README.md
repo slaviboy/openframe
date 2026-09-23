@@ -30,37 +30,40 @@ Node 22+ is required. After `npm install`, no step needs internet access: fonts,
 | `npm test` | Unit and integration tests (Vitest), including CanvasKit render tests in Node |
 | `npm run test:e2e` | Playwright end-to-end tests on the production build in Chromium, Firefox and WebKit, with network and error guards |
 | `npm run check` | Typecheck + lint + unit tests |
+| `npm run fonts:fetch` | Downloads the Google Fonts library into `public/fonts/google/` (the only script that needs a network; the library is committed, so it is rarely run) |
+| `npm run fonts:previews` | Rebuilds `previews.json`, the one file per family the font picker draws its name in — offline, from the library already on disk |
 
 ## Current status
 
-| Milestone | Status |
+All 15 feature areas are built. [docs/FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md) tracks them row by row —
+214 rows, of which 7 cannot work offline (they need cloud, accounts or AI; each names the local
+equivalent that stands in for it) and 2 depend on what the browser provides. A row reaches `Implemented`
+only when the whole chain works: UI → command → document mutation → history → persistence → renderer →
+reload restores state.
+
+| Milestone | What it covers |
 |---|---|
-| M0 Tooling and spikes | Done |
-| M1 Vertical foundation | Done |
-| M2 Editing breadth | Done (a few leftovers are tracked as pending in the feature matrix) |
-| M3 Paint, effects, blend, masks, corners, color | In progress |
-| M4–M15 | Not started |
+| M0 Tooling and spikes | CSP and network guard, renderer spike ([ADR 0001](docs/adr)) |
+| M1 Vertical foundation | Document model, ops and history, persistence and recovery, CanvasKit scene, culling, hit testing, first tools, shell, layers tree, inspector |
+| M2 Editing breadth | Every shape, sections and slices, grouping, clipboard, rotate/flip/scale, snapping and smart guides, align and distribute, rulers and guides, outline mode, find, command palette, menus, shortcuts |
+| M3 Paint and effects | Gradients, image and pattern fills, strokes, shadows, blurs (including progressive), noise, texture, glass, blend modes, masks, corner radius and smoothing, colour picker, eyedropper, contrast checker, Display P3 |
+| M4 Text engine | SkParagraph shaping, mixed styles, paragraphs and lists, links, OpenType features, variable axes, RTL, CJK, emoji, spell check, the font picker and the bundled Google Fonts library |
+| M5 Auto layout | Constraints, layout guides, flow and grid layout, sizing, on-canvas padding and gap handles, reorder by drag |
+| M6 Vector | Vector networks, pen and pencil, vector edit mode, booleans, flatten, outline stroke, brushes and width profiles |
+| M7 Components | Main components, instances, variants, component properties, slots, the assets panel |
+| M8 Styles and variables | Paint/text/effect/grid styles, variables with modes and bindings |
+| M9 Files and export | Raster and SVG export, SVG import, `.openframe` save and open, the files browser, version history, PWA |
+| M10 Prototyping | Interactions, flows, overlays, smart animate, scrolling, presentation and inline preview, variables in prototypes, video and GIF |
+| M11 Draw mode | The mode switcher and Draw's own toolbar and tools |
+| M12 Motion mode | Timeline and keyframes, easing, motion paths, presets, path trim, animated instances |
+| M13 Dev Mode | The inspect panel, generated code, annotations, measurements, the playground |
+| M14 Collaboration equivalents | The local stand-ins: branches, local libraries, comments |
+| M15 Audits | Performance, accessibility, and the final feature and UI audits — **in progress** |
 
-**M1 — foundation**
-- CanvasKit (Skia WebAssembly) scene rendering with viewport culling, hit testing, selection, pan and zoom.
-- Versioned, validated document model with transactional undo/redo (one gesture is one undo step).
-- Autosave to IndexedDB with crash-recovery journal replay.
-- Pages, virtualized layers tree, design inspector, command registry and keyboard shortcuts.
-- Offline and installable: a service worker precaches the app, fonts and rendering engine.
-
-**M2 — editing breadth**
-- Tools: Move, Hand, Scale, Frame, Section, Slice, Rectangle, Line, Arrow, Ellipse, Polygon, Star.
-- Group, frame selection, ungroup, duplicate, flip, rotation, clipboard, snapping and smart guides, align and distribute, tidy up, smart selection spacing.
-- Rulers and guides, outline mode, pixel grid, Find, batch rename, select matching, measurements, command palette, main and context menus, keyboard shortcuts panel.
-
-**M3 — done so far**
-- Color picker, gradients (linear, radial, angular, diamond) with on-canvas handles, layer and paint blend modes, selection colors, eyedropper (I).
-- Strokes: dashes, caps, joins, miter angle, per-side weights. Corner radius with independent corners, including polygons and stars.
-- Effects: drop and inner shadows with blend modes, layer blur, background blur.
-- Image fills: place image (⇧⌘K), drop and paste, fill / fit / crop / tile, rotation, adjustments, on-canvas crop tool.
-- Masks (alpha, vector, luminance) with mask outlines. Copy and paste properties.
-
-**M3 — remaining:** progressive blur, noise, texture, glass, effect limits and ordering, contrast checker, pattern fills, Display P3.
+**What is being worked on now** is the visual fidelity pass: the UI was built from the documentation's
+prose, so it works without necessarily *looking* like the reference. The matrix's **Fid** column says which
+rows have been held against a saved reference page, [docs/UI_REFERENCE.md](docs/UI_REFERENCE.md) records
+every measurement, and the Dev Mode inspect panel is being rebuilt against its captures.
 
 The full roadmap is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#roadmap). Per-feature status, including features that cannot work offline, is in [docs/FEATURE_MATRIX.md](docs/FEATURE_MATRIX.md).
 
@@ -70,10 +73,15 @@ The full roadmap is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#roadmap). Per
 - [Document format](docs/DOCUMENT_FORMAT.md)
 - [Generating `.openframe` files (guide for an AI)](docs/AI_FILE_GENERATION.md)
 - [Editor: commands, transactions, tools](docs/EDITOR.md)
-- [Fonts: the Google Fonts library](docs/FONTS.md)
+- [Rendering: the CanvasKit scene, text shaping and the fallback chain](docs/RENDERING.md)
+- [Prototyping: the player, flows and presentation](docs/PROTOTYPING.md)
+- [Fonts: the Google Fonts library, the fallbacks and the picker](docs/FONTS.md)
 - [Icons: Material Symbols](docs/ICONS.md)
+- [Performance: what was measured, and how](docs/PERFORMANCE.md)
+- [UI reference: what has been held against a real page of the reference](docs/UI_REFERENCE.md)
 - [Testing](docs/TESTING.md)
 - [Feature matrix](docs/FEATURE_MATRIX.md)
+- [Handoff: how work continues after a pause](docs/HANDOFF.md)
 - Decision records: [docs/adr](docs/adr)
 
 ## Offline and privacy guarantees

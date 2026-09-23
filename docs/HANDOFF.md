@@ -501,6 +501,27 @@ markup. The pass is being built in phases, each its own commit.
   timeout — it failed on all three browsers under a full run and passed on its own. The bytes now cross once,
   as base64, and the test runs in 1.5s instead of 15.7s.
 
+## The docs, held against what is actually here (2026-09-23)
+
+The user asked for every MD file to be checked against the code as it stands. Most of them were
+current — 135 of the 136 `src/`, `e2e/`, `scripts/` and `public/` paths they quote still exist, every
+markdown link between them resolves, and HANDOFF is written on every commit.
+
+One file was badly out of date, and it is the one people read first. **README.md's "Current status"
+said M3 was in progress and M4–M15 had not started**, while the matrix reads 214 rows with everything
+implemented and this file records M4 through M12 as done. It now carries a milestone table through
+M15, says plainly that the work in hand is the visual fidelity pass, lists the docs that existed but
+were never linked (rendering, prototyping, performance, the UI reference, this file), and names the two
+font scripts. The one stale path was `src/ui/icons/icons.tsx`, in `UI_REFERENCE.md` and in
+`extract-reference-icons.mjs`'s own comment; the file is `Icon.tsx`, and the script already looked for both.
+
+The sweep that found them, worth re-running after a docs change:
+
+```sh
+grep -oh '`\(src\|e2e\|scripts\|public\)/[A-Za-z0-9_/.-]*`' README.md CONTRIBUTING.md docs/*.md docs/adr/*.md \
+  | tr -d '`' | sort -u | while read -r p; do [ -e "$p" ] || echo "MISSING $p"; done
+```
+
 ## The font dropdown: what it renders, and what hovering it does (2026-09-23)
 
 The user: *"when I open drop down to change fonts it lags — we need some type of preview, and if
